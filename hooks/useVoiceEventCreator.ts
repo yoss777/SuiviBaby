@@ -16,6 +16,38 @@ import {
   Event,
   EventType,
 } from "@/services/eventsService";
+import type { BirthDateInput } from "@/utils/ageUtils";
+import { isNetworkError } from "@/utils/networkError";
+import {
+  getMissingTemperatureMessage,
+  getTemperatureAlert,
+  pickMostSevereAlert,
+  type TemperatureAlert,
+} from "@/utils/temperatureAlert";
+
+// ---------------------------------------------------------------------------
+// Alerte santé (température) : même décision que SoinsForm
+// ---------------------------------------------------------------------------
+
+export interface HealthAlertOptions {
+  /** Date de naissance de l'enfant (âge à la date de la mesure). */
+  birthDate?: BirthDateInput;
+  /** Affiche l'alerte (modale non masquable pour les moins de 3 mois). */
+  showTemperatureAlert?: (alert: TemperatureAlert) => void;
+}
+
+/** Retourne true si une alerte a été affichée. */
+function alertForTemperature(
+  valeur: unknown,
+  measuredAt: Date,
+  options?: HealthAlertOptions,
+): boolean {
+  if (!options?.showTemperatureAlert || typeof valeur !== "number") return false;
+  const alert = getTemperatureAlert({ valeur, birthDate: options.birthDate, measuredAt });
+  if (!alert) return false;
+  options.showTemperatureAlert(alert);
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Modal feedback callback type
@@ -146,11 +178,38 @@ export async function findEventByIdentifier(
     return null;
   } catch (error) {
     console.error("Erreur recherche événement:", error);
-    return null;
+    throw new EventLookupError(isNetworkError(error) ? "network" : "other");
   }
 }
 
 export { isAmbiguous };
+
+/**
+ * La recherche de l'événement a échoué (réseau, droits...) : ce n'est PAS « il
+ * n'existe pas ». Distingué pour ne pas dire « introuvable » à tort.
+ */
+export class EventLookupError extends Error {
+  readonly kind: "network" | "other";
+  constructor(kind: "network" | "other") {
+    super(`Event lookup failed (${kind})`);
+    this.name = "EventLookupError";
+    this.kind = kind;
+  }
+}
+
+/** Message à afficher pour un échec de recherche d'événement. */
+export function lookupFailureMessage(error: unknown): { title: string; message: string } {
+  if (error instanceof EventLookupError && error.kind === "network") {
+    return {
+      title: "Connexion indisponible",
+      message: "Impossible de rechercher l'événement : vérifiez votre connexion puis réessayez.",
+    };
+  }
+  return {
+    title: "Erreur",
+    message: "La recherche de l'événement a échoué. Réessayez dans un instant.",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // executeDelete
@@ -165,11 +224,17 @@ export async function executeDelete(
   try {
     const deleteFn = type === "jalon" ? supprimerJalon : supprimerEvenement;
     if (deleteFn) {
-      await deleteFn(childId, eventId);
-      feedback.showInfo(
-        "Succès",
-        `${type.charAt(0).toUpperCase() + type.slice(1)} supprimé avec succès`,
-      );
+      const outcome = await deleteFn(childId, eventId);
+      const name = type.charAt(0).toUpperCase() + type.slice(1);
+      if (outcome === "queued") {
+        // Hors ligne : rien n'est supprimé tant que le réseau n'est pas revenu.
+        feedback.showInfo(
+          "Suppression en attente",
+          `${name} : suppression enregistrée, synchronisation en attente. Elle sera effectuée au retour du réseau.`,
+        );
+      } else {
+        feedback.showInfo("Succès", `${name} supprimé avec succès`);
+      }
       return true;
     } else {
       feedback.showInfo(
@@ -199,6 +264,7 @@ export async function executeModify(
   modifications: Partial<ParsedCommandResult>,
   previousEvent: Event | null,
   feedback: ModalFeedback,
+  healthOptions?: HealthAlertOptions,
 ): Promise<boolean> {
   try {
     if (!previousEvent) {
@@ -237,17 +303,16 @@ export async function executeModify(
       dataToUpdate.dosage = modifications.dosage;
     }
 
+    // La note de l'utilisateur n'est jamais modifiée par une commande vocale.
     dataToUpdate.updatedAt = new Date();
-    dataToUpdate.note = `Modifié par commande vocale`;
 
     if (previousEvent.type === type) {
       // T2.2 — extract previous updatedAt as an optimistic lock token.
       // If a concurrent edit landed since we read the event, the CF will
       // reject with code "aborted" and the optimistic store rolls back the
       // visual change. The user sees the original value reappear (via the
-      // existing failOptimistic path) — a clearer toast would require
-      // plumbing failure metadata through optimisticEventsStore, which is
-      // tracked separately.
+      // existing failOptimistic path) with a toast naming the event type and
+      // offering « Réessayer » (S6, 6.4).
       const expectedUpdatedAt = extractUpdatedAtMillis(previousEvent);
 
       modifierEvenementOptimistic(
@@ -257,10 +322,19 @@ export async function executeModify(
         previousEvent,
         expectedUpdatedAt,
       );
-      feedback.showInfo(
-        "Succès",
-        `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
-      );
+      const alerted =
+        type === "temperature" &&
+        alertForTemperature(
+          dataToUpdate.valeur,
+          eventDateToDate(previousEvent),
+          healthOptions,
+        );
+      if (!alerted) {
+        feedback.showInfo(
+          "Succès",
+          `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
+        );
+      }
       return true;
     } else {
       feedback.showInfo(
@@ -290,6 +364,7 @@ export async function executeCommand(
   avecCouche?: boolean,
   excretionSelection?: { pipi: boolean; popo: boolean },
   targetEvent?: Event | null,
+  healthOptions?: HealthAlertOptions,
 ): Promise<boolean> {
   try {
     const action = command.action || "add";
@@ -319,12 +394,12 @@ export async function executeCommand(
         modifications,
         targetEvent,
         feedback,
+        healthOptions,
       );
     }
 
     // ==== AJOUT (action === "add") ====
     const data = VoiceCommandService.formatDataForFirebase(command);
-    console.log("💾 Ajout dans Firebase:", { type: command.type, data });
 
     switch (command.type) {
       case "tetee":
@@ -501,13 +576,32 @@ export async function executeCommand(
         feedback.showInfo("Succès", "Bain ajouté avec succès");
         return true;
 
-      case "temperature":
+      case "temperature": {
+        const measuredAt = eventDateToDate({
+          date: (data as { date?: Date }).date ?? new Date(),
+        } as Event);
+        // Sans valeur valide, on n'enregistre RIEN en silence : on redemande la
+        // valeur et on oriente selon l'âge (même paliers que l'alerte).
+        if (typeof (data as { valeur?: unknown }).valeur !== "number" ||
+            !Number.isFinite((data as { valeur: number }).valeur)) {
+          feedback.showInfo(
+            "Température non enregistrée",
+            getMissingTemperatureMessage({ birthDate: healthOptions?.birthDate, measuredAt }),
+          );
+          return false;
+        }
         ajouterEvenementOptimistic(childId, {
           ...data,
           type: "temperature" as const,
         });
-        feedback.showInfo("Succès", "Température ajoutée avec succès");
+        // L'alerte santé remplace le message de succès (une seule modale).
+        if (
+          !alertForTemperature((data as { valeur?: unknown }).valeur, measuredAt, healthOptions)
+        ) {
+          feedback.showInfo("Succès", "Température ajoutée avec succès");
+        }
         return true;
+      }
 
       case "medicament":
         ajouterEvenementOptimistic(childId, {
@@ -547,4 +641,70 @@ export async function executeCommand(
     );
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// executeMultipleCommands — plusieurs événements dans une phrase
+// ---------------------------------------------------------------------------
+
+export interface MultipleCommandsResult {
+  successCount: number;
+  /** Types d'événements non enregistrés. */
+  errors: string[];
+  /** Messages d'orientation des événements non enregistrés (ex. température sans valeur). */
+  notices: string[];
+  /** Alerte santé la plus grave, à afficher APRÈS (ou à la place de) le résumé. */
+  alert: TemperatureAlert | null;
+}
+
+/**
+ * Exécute les commandes une par une sans rien afficher : les alertes santé sont
+ * collectées et renvoyées pour que l'appelant les montre en dernier, dans la
+ * même modale que le résumé (jamais sous celui-ci). Une commande qui renvoie
+ * false (rien d'enregistré) n'est pas comptée comme un succès.
+ */
+export async function executeMultipleCommands(
+  commands: ParsedCommandResult[],
+  childId: string,
+  healthOptions?: HealthAlertOptions, // showTemperatureAlert est ignoré : les alertes sont renvoyées
+): Promise<MultipleCommandsResult> {
+  let successCount = 0;
+  const errors: string[] = [];
+  const notices: string[] = [];
+  const alerts: TemperatureAlert[] = [];
+  let lastMessage = "";
+  const quietFeedback: ModalFeedback = {
+    showInfo: (_title, message) => {
+      lastMessage = message;
+    },
+  };
+
+  for (const command of commands) {
+    lastMessage = "";
+    try {
+      const ok = await executeCommand(
+        command,
+        childId,
+        quietFeedback,
+        true,
+        { pipi: command.pipi || false, popo: command.popo || false },
+        undefined,
+        {
+          birthDate: healthOptions?.birthDate,
+          showTemperatureAlert: (alert) => alerts.push(alert),
+        },
+      );
+      if (ok) {
+        successCount++;
+      } else {
+        errors.push(command.type);
+        if (lastMessage) notices.push(lastMessage);
+      }
+    } catch (error) {
+      console.error(`Erreur ajout ${command.type}:`, error);
+      errors.push(command.type);
+    }
+  }
+
+  return { successCount, errors, notices, alert: pickMostSevereAlert(alerts) };
 }

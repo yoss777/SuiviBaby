@@ -1,4 +1,5 @@
 // components/forms/CroissanceForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -193,8 +194,8 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          showToast("Mesure supprimée");
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          showToast(deleteToastMessage(outcome, "Mesure supprimée"));
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

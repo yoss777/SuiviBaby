@@ -12,6 +12,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -221,7 +222,8 @@ export default function GrowthScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const navigation = useNavigation();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
@@ -1056,39 +1058,32 @@ export default function GrowthScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
-    showUndoToast(
-      "Mesure supprimée",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Mesure supprimée",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerCroissance(childId, eventId);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerCroissance(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(eventId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerCroissance(childId, eventId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerCroissance(childId, eventId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(eventId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1110,39 +1105,32 @@ export default function GrowthScreen() {
       return next;
     });
 
-    showUndoToast(
-      `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`,
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           ids.forEach((id) => next.delete(id));
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await Promise.all(ids.map((id) => supprimerCroissance(childId, id)));
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => Promise.all(ids.map((id) => supprimerCroissance(childId, id))),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerCroissance(childId, id))).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerCroissance(childId, id)));
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.add(id));
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, scheduleDelete]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });

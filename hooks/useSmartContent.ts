@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAgeInMonths, getAgeInWeeks, type BirthDateInput } from "@/utils/ageUtils";
-import { getTopInsights } from "@/services/insightEngine";
+import { generateHealthAlertInsights, getTopInsights } from "@/services/insightEngine";
 import { generateCorrelations } from "@/services/correlationService";
 import {
   fetchAllMilestones,
@@ -46,6 +46,8 @@ interface SmartContentParams {
     jalonType?: string;
     titre?: string;
     note?: string;
+    /** Date de dernière modification (Date, Timestamp Firestore, nombre) : fait changer l'empreinte. */
+    updatedAt?: unknown;
   }>;
   childId: string | null;
   babyBirthDate: BirthDateInput;
@@ -76,6 +78,37 @@ const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const TIP_HISTORY_KEY = "samaye_tip_history"; // { [tipId]: lastShownTimestamp }
 const MAX_CAROUSEL_TIPS = 5;
 const TIP_COOLDOWN_DAYS = 7; // Don't show the same tip again for 7 days
+
+// ============================================
+// EMPREINTE DES ÉVÉNEMENTS
+// ============================================
+
+function toMillis(value: unknown): number {
+  if (value == null) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const t = new Date(value).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
+  const v = value as { toMillis?: () => number; toDate?: () => Date; seconds?: number; _seconds?: number };
+  if (typeof v.toMillis === "function") return v.toMillis();
+  if (typeof v.toDate === "function") return v.toDate().getTime();
+  const seconds = v.seconds ?? v._seconds;
+  return typeof seconds === "number" ? seconds * 1000 : 0;
+}
+
+/**
+ * Empreinte qui change à chaque modification utile d'un événement : id + type +
+ * valeur + date + updatedAt. Une température corrigée (même id, même nombre
+ * d'événements) recalcule donc l'alerte de santé.
+ */
+export function computeEventsFingerprint(events: SmartContentParams["events"]): string {
+  if (events.length === 0) return "";
+  return events
+    .map((e) => `${e.id}|${e.type}|${e.valeur ?? ""}|${toMillis(e.date)}|${toMillis(e.updatedAt)}`)
+    .join(";");
+}
 
 // ============================================
 // HOOK
@@ -205,49 +238,55 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
     return unsubscribe;
   }, [childId]);
 
-  // Generate insights from events (client-side, no Firestore)
-  // Stabilize insights: only recompute when the event count changes significantly,
-  // not on every optimistic→real ID swap. Use a stable key based on event count + types.
-  const eventsFingerprint = useMemo(() => {
-    if (events.length === 0) return '';
-    const typeCounts: Record<string, number> = {};
-    for (const e of events) {
-      const t = (e as any).type || 'unknown';
-      typeCounts[t] = (typeCounts[t] || 0) + 1;
-    }
-    return `${events.length}_${Object.entries(typeCounts).sort().map(([k, v]) => `${k}:${v}`).join(',')}`;
-  }, [events]);
+  // Empreinte : id + valeur + date + updatedAt (voir computeEventsFingerprint).
+  const eventsFingerprint = useMemo(() => computeEventsFingerprint(events), [events]);
 
-  const insightsRef = useRef<ReturnType<typeof getTopInsights>>([]);
-  const correlationsRef = useRef<ReturnType<typeof generateCorrelations>>([]);
-  const lastInsightsFp = useRef('');
-  const lastCorrelationsFp = useRef('');
+  // Alertes santé (température élevée ou basse) : calculées même si les insights
+  // sont désactivés dans les réglages et même sans date de naissance (message
+  // « âge inconnu »). Seules les alertes santé échappent à ces deux conditions.
+  const healthAlerts = useMemo(() => {
+    if (events.length === 0) return [];
+    return generateHealthAlertInsights({
+      events: events as Parameters<typeof getTopInsights>[0]["events"],
+      babyName,
+      ageMonths,
+      birthDate: babyBirthDate,
+    });
+    // `events` est couvert par l'empreinte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventsFingerprint, babyName, ageMonths, babyBirthDate]);
 
-  const insights = useMemo(() => {
-    if (!insightsEnabled || !babyBirthDate || events.length === 0) return insightsRef.current = [];
-    if (eventsFingerprint === lastInsightsFp.current) return insightsRef.current;
-    lastInsightsFp.current = eventsFingerprint;
-    insightsRef.current = getTopInsights(
+  // Autres insights : toujours soumis au réglage et à la date de naissance.
+  const otherInsights = useMemo(() => {
+    if (!insightsEnabled || !babyBirthDate || events.length === 0) return [];
+    return getTopInsights(
       {
         events: events as Parameters<typeof getTopInsights>[0]["events"],
         babyName,
         ageMonths,
+        birthDate: babyBirthDate,
+        includeHealth: false,
       },
       3,
     );
-    return insightsRef.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventsFingerprint, babyName, ageMonths, babyBirthDate, insightsEnabled]);
+
+  // Les alertes santé passent toujours en premier et ne sont jamais coupées.
+  const insights = useMemo(
+    () => [...healthAlerts, ...otherInsights].slice(0, Math.max(3, healthAlerts.length)),
+    [healthAlerts, otherInsights],
+  );
 
   // Generate correlations (needs 30+ days of data)
   const correlations = useMemo(() => {
-    if (!correlationsEnabled || !babyBirthDate || events.length < 20) return correlationsRef.current = [];
-    if (eventsFingerprint === lastCorrelationsFp.current) return correlationsRef.current;
-    lastCorrelationsFp.current = eventsFingerprint;
-    correlationsRef.current = generateCorrelations({
+    if (!correlationsEnabled || !babyBirthDate || events.length < 20) return [];
+    return generateCorrelations({
       events: events as Parameters<typeof generateCorrelations>[0]["events"],
       babyName,
+      birthDate: babyBirthDate,
     });
-    return correlationsRef.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventsFingerprint, babyName, babyBirthDate, correlationsEnabled]);
 
   // Tip history: { [tipId]: timestamp } — loaded from AsyncStorage

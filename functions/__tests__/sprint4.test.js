@@ -384,6 +384,32 @@ describe("4.8 events: roles and update sanitising", () => {
 });
 
 // ---------------------------------------------------------------------------
+describe("5.6 temperature bounds 34-43 (same as the form, utils/eventBounds.ts)", () => {
+  let docs;
+  beforeEach(() => {
+    docs = memoryStore({
+      "children/c1/access/own": { role: "owner", userId: "own" },
+      "events/t1": { childId: "c1", userId: "own", type: "temperature", valeur: 37, createdAt: "T0" },
+    });
+  });
+
+  it.each([33.9, 43.1, 45, 0, -1, "38", NaN])("create rejects %p", async (valeur) => {
+    expect(await codeOf(fns.validateAndCreateEvent(call("own", { childId: "c1", type: "temperature", valeur })))).toBe("invalid-argument");
+  });
+
+  it.each([33.9, 43.1, 45])("update rejects %p", async (valeur) => {
+    expect(await codeOf(fns.validateAndUpdateEvent(call("own", { childId: "c1", eventId: "t1", valeur })))).toBe("invalid-argument");
+    expect(docs.get("events/t1").valeur).toBe(37);
+  });
+
+  it.each([34, 38, 43])("create and update accept %p", async (valeur) => {
+    expect(await codeOf(fns.validateAndCreateEvent(call("own", { childId: "c1", type: "temperature", valeur })))).toBeNull();
+    await fns.validateAndUpdateEvent(call("own", { childId: "c1", eventId: "t1", valeur }));
+    expect(docs.get("events/t1").valeur).toBe(valeur);
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe("4.9 removed functions", () => {
   it.each(["generateAiInsight", "migrateUsersPublicRemoveEmail", "grandfatherExistingUsers"])("%s is no longer exported", (name) => {
     expect(fns[name]).toBeUndefined();

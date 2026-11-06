@@ -19,6 +19,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { batchDeleteRun } from "@/utils/deleteWithRetry";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
@@ -251,7 +253,8 @@ export default function MealsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent = canManageEvents(permissions.role);
@@ -1135,39 +1138,32 @@ export default function MealsScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(mealId));
 
-    showUndoToast(
-      "Repas supprimé",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Repas supprimé",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(mealId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerEvenement(childId, mealId);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerEvenement(childId, mealId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(mealId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerEvenement(childId, mealId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerEvenement(childId, mealId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.meal, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(mealId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.meal, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, meal: null });
@@ -1193,38 +1189,32 @@ export default function MealsScreen() {
       return next;
     });
 
-    showUndoToast(
-      `${ids.length} repas supprimé${ids.length > 1 ? "s" : ""}`,
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: `${ids.length} repas supprimé${ids.length > 1 ? "s" : ""}`,
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           ids.forEach((id) => next.delete(id));
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
-        } catch {
-          setSoftDeletedIds((prev) => {
+      run: batchDeleteRun(ids, (id) => supprimerEvenement(childId, id)),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.add(id));
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, batchDeleteConfirm.ids, exitSelectionMode, scheduleDelete]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });

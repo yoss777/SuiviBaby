@@ -24,7 +24,9 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { useBaby } from "@/contexts/BabyContext";
 import { DeletionRequestNotifier } from "@/components/suivibaby/DeletionRequestNotifier";
-import { onQueueChange } from "@/services/offlineQueueService";
+import { InfoModal } from "@/components/ui/InfoModal";
+import { FAILED_WRITES_READ_ERROR, useFailedWrites } from "@/hooks/useFailedWrites";
+import { onExhaustedChange, onQueueChange } from "@/services/offlineQueueService";
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
@@ -124,6 +126,14 @@ export default function DrawerLayout() {
   const [pendingWrites, setPendingWrites] = useState(0);
   useEffect(() => onQueueChange(setPendingWrites), []);
 
+  // Écritures abandonnées (refus définitif, conflit, serveur en échec répété) :
+  // jamais perdues en silence, l'utilisateur peut les voir, les réessayer ou
+  // les supprimer.
+  const [failedWrites, setFailedWrites] = useState(0);
+  const failed = useFailedWrites();
+  useEffect(() => onExhaustedChange(setFailedWrites), []);
+  const openFailedList = failed.open;
+
   const setHeaderRight = useCallback(
     (component: React.ReactElement | null, ownerId?: string) => {
       setHeaderRightState((prev) => {
@@ -201,6 +211,31 @@ export default function DrawerLayout() {
               <Text style={[styles.offlineText, { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" }]} accessibilityRole="alert">Hors ligne</Text>
             </View>
           )}
+          {failedWrites > 0 && (
+            <Pressable
+              onPress={openFailedList}
+              accessibilityRole="button"
+              accessibilityLabel={`${failedWrites} enregistrement${failedWrites > 1 ? "s" : ""} non envoyé${failedWrites > 1 ? "s" : ""}. Appuyez pour voir le détail.`}
+              style={[
+                styles.syncBanner,
+                {
+                  paddingTop: isOffline ? 4 : insets.top + 4,
+                  backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.syncText,
+                  { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" },
+                ]}
+              >
+                {failedWrites > 1
+                  ? `${failedWrites} enregistrements non envoyés · Appuyez pour voir`
+                  : "1 enregistrement non envoyé · Appuyez pour voir"}
+              </Text>
+            </Pressable>
+          )}
           {showSyncBanner && (
             <View
               style={[
@@ -239,6 +274,37 @@ export default function DrawerLayout() {
               </Text>
             </View>
           )}
+          <InfoModal
+            visible={failed.state.status !== "closed"}
+            title="Enregistrements non envoyés"
+            message={
+              <View>
+                <Text style={{ color: Colors[colorScheme].text }}>
+                  {failed.state.status === "error"
+                    ? FAILED_WRITES_READ_ERROR
+                    : failed.state.status === "ready" && failed.state.rows.length > 0
+                      ? `${failed.state.rows.map((row) => row.label).join("\n")}\n\nCes saisies n'ont pas pu être envoyées au serveur. Réessayez, ou supprimez-les si elles ne sont plus utiles.`
+                      : "Aucun enregistrement en échec."}
+                </Text>
+                {failed.state.status === "ready" && failed.state.rows.length > 0 && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={failed.deleteShown}
+                    style={{ marginTop: 12 }}
+                  >
+                    <Text style={{ color: "#b42318", fontWeight: "700" }}>Supprimer ces saisies</Text>
+                  </Pressable>
+                )}
+              </View>
+            }
+            confirmText="Réessayer"
+            dismissText="Fermer"
+            backgroundColor={Colors[colorScheme].background}
+            textColor={Colors[colorScheme].text}
+            allowBackdropDismiss
+            onClose={failed.close}
+            onConfirm={() => void failed.retry()}
+          />
           <Drawer
             initialRouteName="baby"
             backBehavior="initialRoute"

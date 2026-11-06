@@ -17,6 +17,8 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
+import { generateIdempotencyKey } from "@/utils/idempotencyKey";
+import { isConflictError, isNetworkError, isNotFoundError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -26,7 +28,10 @@ import {
   failOptimistic,
   generateTempId,
   markOptimisticQueued,
+  notifyOptimisticFailure,
+  setOptimisticInFlight,
   updateOptimisticCreate,
+  type OptimisticFailure,
 } from "./optimisticEventsStore";
 
 const getUserId = () => {
@@ -127,6 +132,9 @@ import type {
 
 const COLLECTION_NAME = "events";
 
+/** "queued" : hors ligne, la suppression partira à la reconnexion. */
+export type DeleteOutcome = "deleted" | "queued";
+
 function buildCreatePayload(
   childId: string,
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt"> | any,
@@ -194,7 +202,14 @@ export async function ajouterEvenement(
   childId: string,
   data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
 ): Promise<string> {
-  const payload = buildCreatePayload(childId, data);
+  // La clé est fixée AVANT la mise en file : le rejeu hors ligne et un éventuel
+  // nouvel essai envoient la même, le serveur ne crée l'événement qu'une fois.
+  const payload = buildCreatePayload(childId, {
+    ...data,
+    idempotencyKey:
+      (data as { idempotencyKey?: string }).idempotencyKey ??
+      generateIdempotencyKey(auth.currentUser?.uid),
+  });
 
   // Si offline, mettre en queue
   const online = await isOnline();
@@ -467,12 +482,13 @@ export async function modifierEvenement(
 export async function supprimerEvenement(
   childId: string,
   id: string,
-): Promise<void> {
-  // Si offline, mettre en queue
+): Promise<DeleteOutcome> {
+  // Si offline, mettre en queue : la suppression n'est PAS faite, l'appelant
+  // doit le dire (« synchronisation en attente »).
   const online = await isOnline();
   if (!online) {
     await enqueueEvent("delete", { childId, eventId: id });
-    return;
+    return "queued";
   }
 
   const deleteEvent = httpsCallable<
@@ -480,7 +496,14 @@ export async function supprimerEvenement(
     { success: boolean; deleted: { event: number; likes: number; comments: number } }
   >(functions, "deleteEventCascade");
 
-  await deleteEvent({ childId, eventId: id });
+  try {
+    await deleteEvent({ childId, eventId: id });
+  } catch (error) {
+    // Suppression idempotente : « introuvable » = l'événement n'existe plus
+    // (un envoi précédent a abouti, ou un autre appareil l'a supprimé).
+    if (!isNotFoundError(error)) throw error;
+  }
+  return "deleted";
 }
 
 // ============================================
@@ -804,25 +827,6 @@ export type { Stats24h } from "./events/stats";
 // Retry helper: 2 retries with increasing delay (1s, 3s)
 const RETRY_DELAYS = [1000, 3000];
 
-function isNetworkError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  return (
-    msg.includes('network') ||
-    msg.includes('timeout') ||
-    msg.includes('fetch') ||
-    msg.includes('failed to connect') ||
-    msg.includes('internet') ||
-    msg.includes('offline') ||
-    msg.includes('unavailable') ||
-    // Saturation / indisponibilité serveur : l'écriture est valide et doit
-    // repartir en queue offline plutôt que d'être perdue via failOptimistic.
-    msg.includes('no available instance') ||
-    msg.includes('resource-exhausted') ||
-    msg.includes('deadline-exceeded') ||
-    msg.includes('billing')
-  );
-}
-
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
   // First attempt (no delay)
@@ -844,17 +848,79 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Rappels optionnels d'une écriture optimiste (nettoyage de photo téléversée,
+ * par exemple). `onConfirmed` : le serveur a accepté l'écriture (jamais appelé
+ * pour une écriture mise en file hors ligne). `onFailed` : refus définitif ou
+ * mise en file impossible.
+ */
+export interface OptimisticWriteOptions {
+  onConfirmed?: () => void;
+  onFailed?: (error: unknown) => void;
+  /** false : « Réessayer » n'a pas de sens (ex. photo supprimée après l'échec). */
+  retryable?: boolean;
+}
+
+function runCallback(fn: (() => void) | undefined, operation: string) {
+  try {
+    fn?.();
+  } catch (error) {
+    captureServiceError(error, { service: "events", operation });
+  }
+}
+
+/**
+ * L'écriture n'a pu ni partir ni être mise en file : la signaler (entrée
+ * annulée, message avec le type, Sentry) au lieu de la laisser croire réussie.
+ */
+function failWrite(
+  operation: "create" | "update",
+  operationId: string,
+  error: unknown,
+  eventType: unknown,
+  options: OptimisticWriteOptions | undefined,
+  retryable: boolean,
+  /** De quoi reconstruire l'échec si l'entrée optimiste a disparu entre-temps. */
+  fallback: { childId: string; eventId?: string; retryData: any; previousEvent?: any },
+) {
+  captureServiceError(error, {
+    service: "events",
+    operation: operation === "create" ? "ajouterEvenementOptimistic" : "modifierEvenementOptimistic",
+    extra: { eventType: typeof eventType === "string" ? eventType : null },
+  });
+  const canRetry = retryable && options?.retryable !== false;
+  const failure = failOptimistic(operationId, { retryable: canRetry });
+  if (!failure) {
+    // Entrée déjà retirée (purge, réconciliation) : l'utilisateur doit quand
+    // même savoir que l'écriture a échoué, avec de quoi la refaire.
+    notifyOptimisticFailure({
+      operation,
+      eventType: typeof eventType === "string" ? eventType : null,
+      childId: fallback.childId,
+      eventId: operation === "update" ? fallback.eventId : undefined,
+      retryData: fallback.retryData,
+      previousEvent: fallback.previousEvent,
+      event: operation === "update" ? fallback.previousEvent : fallback.retryData,
+      retryable: canRetry,
+    });
+  }
+  runCallback(() => options?.onFailed?.(error), "onFailed");
+}
+
+/**
  * Ajoute un événement avec affichage optimiste immédiat.
  * Retourne un tempId synchrone ; le CF tourne en arrière-plan avec 2 retries.
  */
 export function ajouterEvenementOptimistic(
   childId: string,
   data: any,
+  options?: OptimisticWriteOptions,
 ): string {
   const tempId = generateTempId();
   // Idempotency key: if the CF succeeds but the response is lost, retries
-  // will send the same key — the CF deduplicates instead of creating a second event.
-  const idempotencyKey = `${auth.currentUser?.uid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  // (and the offline replay) send the same key — the server deduplicates
+  // instead of creating a second event.
+  const idempotencyKey: string =
+    data?.idempotencyKey ?? generateIdempotencyKey(auth.currentUser?.uid);
   const optimisticEvent = convertDateFields({
     ...data,
     idempotencyKey,
@@ -870,6 +936,10 @@ export function ajouterEvenementOptimistic(
   const dataWithKey = { ...data, idempotencyKey };
   const payload = buildCreatePayload(childId, dataWithKey);
 
+  const createFallback = { childId, retryData: optimisticEvent };
+  // En vol : l'entrée n'est pas purgée comme « périmée » pendant les essais.
+  setOptimisticInFlight(tempId, true);
+
   void (async () => {
     try {
       if (!(await isOnline())) {
@@ -880,6 +950,7 @@ export function ajouterEvenementOptimistic(
 
       const realId = await withRetry(() => callCreateEventCF(payload));
       confirmOptimistic(tempId, realId);
+      runCallback(options?.onConfirmed, "onConfirmed");
       const pendingUpdate = pendingOptimisticCreateUpdates.get(tempId);
       if (pendingUpdate) {
         pendingOptimisticCreateUpdates.delete(tempId);
@@ -895,13 +966,18 @@ export function ajouterEvenementOptimistic(
         try {
           await enqueueEvent('create', payload);
           markOptimisticQueued(tempId);
-        } catch {
-          // enqueue failed — keep optimistic entry visible as last resort
+        } catch (enqueueError) {
+          // Ni envoyée ni mise en file : ne surtout pas la laisser affichée
+          // comme enregistrée.
+          pendingOptimisticCreateUpdates.delete(tempId);
+          failWrite("create", tempId, enqueueError, data?.type, options, true, createFallback);
         }
         return;
       }
       pendingOptimisticCreateUpdates.delete(tempId);
-      failOptimistic(tempId);
+      failWrite("create", tempId, error, data?.type, options, true, createFallback);
+    } finally {
+      setOptimisticInFlight(tempId, false);
     }
   })();
 
@@ -912,16 +988,13 @@ export function ajouterEvenementOptimistic(
  * Modifie un événement avec affichage optimiste immédiat.
  * Le CF tourne en arrière-plan avec 2 retries.
  */
-/**
- * Modifie un événement avec affichage optimiste immédiat.
- * Le CF tourne en arrière-plan avec 2 retries.
- */
 export function modifierEvenementOptimistic(
   childId: string,
   eventId: string,
   data: Partial<Event>,
   previousEvent: any,
   expectedUpdatedAt?: number,
+  options?: OptimisticWriteOptions,
 ): string {
   const cleanData = stripUndefinedFields(
     data as Record<string, unknown>,
@@ -952,32 +1025,68 @@ export function modifierEvenementOptimistic(
   );
 
   const payload = buildUpdatePayload(childId, eventId, cleanData, expectedUpdatedAt);
+  const eventType = previousEvent?.type ?? (cleanData as { type?: unknown }).type;
+
+  const updateFallback = {
+    childId,
+    eventId,
+    retryData: updatedEvent,
+    previousEvent,
+  };
+  setOptimisticInFlight(operationId, true);
 
   void (async () => {
     try {
       if (!(await isOnline())) {
         await enqueueEvent('update', payload as Record<string, unknown>);
         markOptimisticQueued(operationId);
-        return operationId;
+        return;
       }
 
       await withRetry(() => callUpdateEventCF(payload as Record<string, unknown>));
       confirmOptimistic(operationId);
+      runCallback(options?.onConfirmed, "onConfirmed");
     } catch (error) {
       if (isNetworkError(error)) {
         try {
           await enqueueEvent('update', payload as Record<string, unknown>);
           markOptimisticQueued(operationId);
-        } catch {
-          // enqueue failed — keep optimistic entry visible as last resort
+        } catch (enqueueError) {
+          failWrite("update", operationId, enqueueError, eventType, options, true, updateFallback);
         }
-        return operationId;
+        return;
       }
-      failOptimistic(operationId);
+      // Conflit de version : le même envoi échouera toujours, « Réessayer »
+      // écraserait la modification faite ailleurs.
+      failWrite("update", operationId, error, eventType, options, !isConflictError(error), updateFallback);
+    } finally {
+      setOptimisticInFlight(operationId, false);
     }
   })();
 
   return operationId;
+}
+
+/**
+ * « Réessayer » après un échec signalé par failOptimistic : renvoie les données
+ * conservées. Une création garde sa clé d'idempotence (si elle était partie
+ * malgré tout, le serveur ne la double pas).
+ */
+export function retryFailedOptimistic(failure: OptimisticFailure): void {
+  if (!failure.retryable) return;
+  const { id: _id, userId: _userId, createdAt: _createdAt, childId: _childId, ...data } =
+    failure.retryData ?? {};
+  if (failure.operation === "create") {
+    ajouterEvenementOptimistic(failure.childId, data);
+    return;
+  }
+  if (!failure.eventId) return;
+  modifierEvenementOptimistic(
+    failure.childId,
+    failure.eventId,
+    data,
+    failure.previousEvent ?? failure.event,
+  );
 }
 
 // ============================================

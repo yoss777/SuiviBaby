@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -1645,7 +1646,8 @@ export default function ChronoScreen() {
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent = canManageEvents(permissions.role);
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;
     event: Event | null;
@@ -2325,48 +2327,32 @@ export default function ChronoScreen() {
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
     // P5: Show undo toast
-    showUndoToast(
-      "Événement supprimé",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Événement supprimé",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerEvenement(childId, eventId);
-        } catch {
-          // P27: Restore on error + retry action toast
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerEvenement(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(eventId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerEvenement(childId, eventId).catch(() => {
-              showActionToast(
-                "Erreur lors de la suppression",
-                "Réessayer",
-                () => {
-                  supprimerEvenement(childId, eventId);
-                },
-              );
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [
-    activeChild?.id,
-    deleteConfirm.event,
-    showUndoToast,
-    showActionToast,
-  ]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(eventId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });

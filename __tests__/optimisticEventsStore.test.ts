@@ -380,12 +380,17 @@ describe("optimisticEventsStore", () => {
 
     const result = failOptimistic(eventId);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       event: previousEvent,
       operation: "update",
+      eventType: "sommeil",
+      childId,
+      eventId,
+      retryable: true,
     });
     expect(onFailure).toHaveBeenCalledWith(
-      "Erreur lors de la modification. Veuillez réessayer.",
+      "Échec de la modification : sommeil.",
+      expect.objectContaining({ operation: "update", eventType: "sommeil" }),
     );
   });
 
@@ -461,6 +466,71 @@ describe("optimisticEventsStore", () => {
       is_timed_stop_rollback_candidate: false,
       previous_had_heureFin: false,
       next_had_heureFin: false,
+    });
+  });
+
+  describe("failOptimistic carries the event type and the data to retry", () => {
+    afterEach(() => setOnFailure(null));
+
+    it("names the event type in a create failure and keeps the data kept for a retry", () => {
+      const onFailure = jest.fn();
+      setOnFailure(onFailure);
+      const event = { type: "biberon", quantite: 120, idempotencyKey: "k1", date: new Date() };
+      addOptimisticCreate("child-1", event, "__optimistic_fail_1");
+
+      const result = failOptimistic("__optimistic_fail_1");
+
+      expect(result).toMatchObject({
+        operation: "create",
+        eventType: "biberon",
+        childId: "child-1",
+        retryable: true,
+        retryData: expect.objectContaining({ quantite: 120, idempotencyKey: "k1" }),
+      });
+      expect(onFailure).toHaveBeenCalledWith(
+        "Échec de l'ajout : biberon.",
+        expect.objectContaining({ eventType: "biberon", retryable: true }),
+      );
+    });
+
+    it("keeps the new values of a failed update for the retry, and the previous event for the rollback", () => {
+      const previous = { id: "e1", type: "biberon", childId: "c", quantite: 100 };
+      addOptimisticUpdate("e1", "c", { ...previous, quantite: 150 }, previous);
+
+      const result = failOptimistic("e1");
+
+      expect(result?.event).toEqual(previous);
+      expect(result?.retryData).toMatchObject({ quantite: 150 });
+      expect(result?.previousEvent).toEqual(previous);
+    });
+
+    it("flags a failure as not retryable and says so", () => {
+      const onFailure = jest.fn();
+      setOnFailure(onFailure);
+      addOptimisticCreate("c", { type: "jalon", photos: ["children/c/jalons/x.jpg"] }, "__optimistic_fail_2");
+
+      const result = failOptimistic("__optimistic_fail_2", { retryable: false });
+
+      expect(result?.retryable).toBe(false);
+      expect(onFailure).toHaveBeenCalledWith(
+        "Échec de l'ajout : jalon. Veuillez recommencer.",
+        expect.objectContaining({ retryable: false }),
+      );
+    });
+
+    it("falls back to a generic message for an unknown type", () => {
+      const onFailure = jest.fn();
+      setOnFailure(onFailure);
+      addOptimisticCreate("c", { type: "inconnu" }, "__optimistic_fail_3");
+      failOptimistic("__optimistic_fail_3");
+      expect(onFailure).toHaveBeenCalledWith("Échec de l'ajout.", expect.anything());
+    });
+
+    it("returns null and stays silent for an unknown entry", () => {
+      const onFailure = jest.fn();
+      setOnFailure(onFailure);
+      expect(failOptimistic("nope")).toBeNull();
+      expect(onFailure).not.toHaveBeenCalled();
     });
   });
 });

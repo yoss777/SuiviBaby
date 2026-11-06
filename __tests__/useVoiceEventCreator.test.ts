@@ -22,9 +22,17 @@ jest.mock("@/services/voiceCommandService", () => ({
 import {
   ajouterEvenementOptimistic,
   obtenirEvenements,
+  supprimerEvenement,
+  supprimerJalon,
 } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
-import { executeCommand } from "@/hooks/useVoiceEventCreator";
+import {
+  EventLookupError,
+  executeCommand,
+  executeDelete,
+  findEventByIdentifier,
+  lookupFailureMessage,
+} from "@/hooks/useVoiceEventCreator";
 
 const feedback = {
   showInfo: jest.fn(),
@@ -90,5 +98,83 @@ describe("useVoiceEventCreator", () => {
       "Sommeil déjà en cours",
       "Un sommeil est déjà en cours. Terminez-le avant d'en commencer un nouveau.",
     );
+  });
+});
+
+describe("executeDelete : message honnête (6.5)", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("says the deletion is done when the server did it", async () => {
+    (supprimerEvenement as jest.Mock).mockResolvedValueOnce("deleted");
+    await expect(executeDelete("biberon", "c1", "e1", feedback)).resolves.toBe(true);
+    expect(feedback.showInfo).toHaveBeenCalledWith("Succès", "Biberon supprimé avec succès");
+  });
+
+  it("says 'synchronisation en attente' when the deletion was only queued offline", async () => {
+    (supprimerEvenement as jest.Mock).mockResolvedValueOnce("queued");
+    await expect(executeDelete("biberon", "c1", "e1", feedback)).resolves.toBe(true);
+    expect(feedback.showInfo).toHaveBeenCalledWith(
+      "Suppression en attente",
+      "Biberon : suppression enregistrée, synchronisation en attente. Elle sera effectuée au retour du réseau.",
+    );
+    expect(feedback.showInfo).not.toHaveBeenCalledWith("Succès", expect.anything());
+  });
+
+  it("also covers milestones (jalon)", async () => {
+    (supprimerJalon as jest.Mock).mockResolvedValueOnce("queued");
+    await executeDelete("jalon", "c1", "e1", feedback);
+    expect(feedback.showInfo).toHaveBeenCalledWith("Suppression en attente", expect.stringContaining("synchronisation en attente"));
+  });
+
+  it("keeps treating a legacy void result as done", async () => {
+    (supprimerEvenement as jest.Mock).mockResolvedValueOnce(undefined);
+    await executeDelete("biberon", "c1", "e1", feedback);
+    expect(feedback.showInfo).toHaveBeenCalledWith("Succès", "Biberon supprimé avec succès");
+  });
+});
+
+describe("findEventByIdentifier : introuvable ou erreur réseau (6.5)", () => {
+  beforeEach(() => jest.clearAllMocks());
+  const identifier = { type: "biberon", isLast: true } as any;
+
+  it("returns null only when nothing matches", async () => {
+    (obtenirEvenements as jest.Mock).mockResolvedValueOnce([]);
+    await expect(findEventByIdentifier(identifier, "c1")).resolves.toBeNull();
+  });
+
+  it("throws a network lookup error instead of pretending the event does not exist", async () => {
+    (obtenirEvenements as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error("network request failed"), { code: "unavailable" }),
+    );
+    await expect(findEventByIdentifier(identifier, "c1")).rejects.toMatchObject({
+      name: "EventLookupError",
+      kind: "network",
+    });
+  });
+
+  it("throws an 'other' lookup error for any other failure", async () => {
+    (obtenirEvenements as jest.Mock).mockRejectedValueOnce(new Error("permission-denied"));
+    const error = await findEventByIdentifier(identifier, "c1").catch((e) => e);
+    expect(error).toBeInstanceOf(EventLookupError);
+    expect(error.kind).toBe("other");
+  });
+});
+
+describe("lookupFailureMessage", () => {
+  it("gives a connection message for a network failure", () => {
+    expect(lookupFailureMessage(new EventLookupError("network"))).toEqual({
+      title: "Connexion indisponible",
+      message: "Impossible de rechercher l'événement : vérifiez votre connexion puis réessayez.",
+    });
+  });
+
+  it("gives a generic message otherwise, and for non-lookup errors", () => {
+    const generic = {
+      title: "Erreur",
+      message: "La recherche de l'événement a échoué. Réessayez dans un instant.",
+    };
+    expect(lookupFailureMessage(new EventLookupError("other"))).toEqual(generic);
+    expect(lookupFailureMessage(new Error("x"))).toEqual(generic);
+    expect(lookupFailureMessage(null)).toEqual(generic);
   });
 });

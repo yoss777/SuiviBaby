@@ -214,6 +214,8 @@ export interface Insight {
   relatedTipId?: string;
   priority: number;
   category: TipCategory;
+  /** false : l'insight ne peut pas être masqué (alerte santé). Absent = masquable. */
+  dismissible?: boolean;
 }
 
 // ============================================

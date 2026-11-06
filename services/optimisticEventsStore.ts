@@ -3,6 +3,7 @@
 // show them instantly while the CF runs in the background.
 
 import { addBreadcrumb } from "@/utils/errorReporting";
+import { getEventTypeLabel } from "@/utils/eventTypeLabels";
 
 export type OptimisticOperation = 'create' | 'update';
 export type OptimisticStatus =
@@ -22,7 +23,35 @@ export interface OptimisticEntry {
   createdAt: number;
   confirmedAt?: number;
   reconciledAt?: number;
+  /**
+   * L'appel serveur de cette écriture est encore en cours (y compris ses
+   * nouveaux essais). Une entrée en vol n'est jamais purgée comme « périmée » :
+   * sa réponse (succès OU échec) doit pouvoir être traitée.
+   */
+  inFlight?: boolean;
 }
+
+/**
+ * What a failed optimistic operation leaves behind: enough for the UI to say
+ * which event failed and to offer « Réessayer » without asking the user to type
+ * everything again.
+ */
+export interface OptimisticFailure {
+  /** Data to roll back to (previous event for an update, the event for a create). */
+  event: any;
+  operation: OptimisticOperation;
+  eventType: string | null;
+  childId: string;
+  /** Firestore id for an update; undefined for a create. */
+  eventId?: string;
+  /** Data to send again: the optimistic event (new values for an update). */
+  retryData: any;
+  previousEvent?: any;
+  /** False when a retry cannot work (e.g. the uploaded photo was deleted). */
+  retryable: boolean;
+}
+
+export type OptimisticFailureCallback = (message: string, failure?: OptimisticFailure) => void;
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -30,7 +59,7 @@ export interface OptimisticEntry {
 
 const entries = new Map<string, OptimisticEntry>();
 const subscribers = new Set<() => void>();
-let onFailureCallback: ((message: string) => void) | null = null;
+let onFailureCallback: OptimisticFailureCallback | null = null;
 
 const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts without premature purge
 
@@ -38,7 +67,7 @@ const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts with
  * Register a callback to be called when an optimistic operation fails.
  * Used to show a toast/error to the user.
  */
-export function setOnFailure(cb: ((message: string) => void) | null): void {
+export function setOnFailure(cb: OptimisticFailureCallback | null): void {
   onFailureCallback = cb;
 }
 
@@ -217,7 +246,8 @@ export function markOptimisticQueued(tempIdOrEventId: string): void {
  */
 export function failOptimistic(
   tempIdOrEventId: string,
-): { event: any; operation: string } | null {
+  options: { retryable?: boolean } = {},
+): (OptimisticFailure & { event: any; operation: OptimisticOperation }) | null {
   let entry = entries.get(tempIdOrEventId);
 
   if (!entry) {
@@ -232,9 +262,16 @@ export function failOptimistic(
   if (!entry) return null;
 
   entry.status = 'failed';
+  entry.inFlight = false;
   const result = {
     event: entry.operation === 'update' ? entry.previousEvent : entry.event,
     operation: entry.operation,
+    eventType: (entry.event?.type ?? entry.previousEvent?.type ?? null) as string | null,
+    childId: entry.childId,
+    eventId: entry.operation === 'update' ? entry.realId : undefined,
+    retryData: entry.event,
+    previousEvent: entry.previousEvent,
+    retryable: options.retryable !== false,
   };
 
   const previousHadHeureFin = hasHeureFin(entry.previousEvent);
@@ -268,11 +305,66 @@ export function failOptimistic(
   entries.delete(entry.tempId);
 
   // Notify the user via the registered failure callback.
-  const action = entry.operation === 'create' ? "l'enregistrement" : 'la modification';
-  onFailureCallback?.(`Erreur lors de ${action}. Veuillez réessayer.`);
+  notifyOptimisticFailure(result);
 
   notify();
   return result;
+}
+
+/**
+ * Tell the user a write failed, through the registered failure callback.
+ * Used by failOptimistic, and directly by callers whose entry is gone (purged,
+ * reconciled…) but whose failure must still be shown: the caller rebuilds the
+ * failure (type, data) instead of letting it pass in silence.
+ */
+export function notifyOptimisticFailure(failure: OptimisticFailure): void {
+  const label = getEventTypeLabel(failure.eventType);
+  const what = failure.operation === 'create' ? "l'ajout" : 'la modification';
+  const message =
+    `Échec de ${what}${label ? ` : ${label}` : ''}.` +
+    (failure.retryable ? '' : ' Veuillez recommencer.');
+  onFailureCallback?.(message, failure);
+}
+
+/**
+ * Mark whether the server call of an entry is still running. A running entry
+ * is exempt from the stale purge.
+ */
+export function setOptimisticInFlight(tempId: string, inFlight: boolean): void {
+  const entry = entries.get(tempId);
+  if (entry) entry.inFlight = inFlight;
+}
+
+/**
+ * Silently remove the optimistic entry of a queued write the offline queue has
+ * given up on, so the timeline stops showing it as saved (the user is told by
+ * the queue itself). Creates match by idempotency key, updates by event id;
+ * a delete has no entry.
+ */
+export function purgeQueuedOptimistic(match: {
+  action?: string;
+  idempotencyKey?: string;
+  eventId?: string;
+}): number {
+  let removed = 0;
+  for (const [key, e] of entries) {
+    const isCreateMatch =
+      match.action === 'create' &&
+      !!match.idempotencyKey &&
+      e.operation === 'create' &&
+      e.event?.idempotencyKey === match.idempotencyKey;
+    const isUpdateMatch =
+      match.action === 'update' &&
+      !!match.eventId &&
+      e.operation === 'update' &&
+      e.realId === match.eventId;
+    if (isCreateMatch || isUpdateMatch) {
+      entries.delete(key);
+      removed++;
+    }
+  }
+  if (removed > 0) notify();
+  return removed;
 }
 
 /**
@@ -514,7 +606,9 @@ function cleanupSilent(): void {
   for (const [key, entry] of entries) {
     const reconciled = entry.status === 'confirmed' && entry.reconciledAt;
     const pendingStale =
-      entry.status === 'pending' && now - entry.createdAt > STALE_THRESHOLD_MS;
+      entry.status === 'pending' &&
+      !entry.inFlight &&
+      now - entry.createdAt > STALE_THRESHOLD_MS;
     if (reconciled || pendingStale) {
       if (pendingStale) {
         addBreadcrumb(

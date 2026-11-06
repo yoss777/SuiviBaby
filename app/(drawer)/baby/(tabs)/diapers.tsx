@@ -19,6 +19,8 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { batchDeleteRun } from "@/utils/deleteWithRetry";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -305,7 +307,8 @@ export default function DiapersScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const headerOwnerId = useRef(
     `diapers-${Math.random().toString(36).slice(2)}`
@@ -1109,39 +1112,32 @@ export default function DiapersScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(id));
 
-    showUndoToast(
-      "Couche supprimée",
-      // onUndo - restore visibility
-      () => {
+    scheduleDelete({
+      message: "Couche supprimée",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
         });
       },
-      // onExpire - actually delete from Firestore
-      async () => {
-        try {
-          await supprimerEvenement(childId, id);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerEvenement(childId, id),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(id);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerEvenement(childId, id).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerEvenement(childId, id);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.excretion, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.excretion, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, excretion: null });
@@ -1160,22 +1156,20 @@ export default function DiapersScreen() {
     exitSelectionMode();
     setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
     const msg = `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`;
-    showUndoToast(msg,
-      () => { setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; }); },
-      async () => {
-        try { await Promise.all(ids.map((id) => supprimerEvenement(childId, id))); }
-        catch {
-          setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
-              });
-            });
-          });
-        }
-      }, 4000);
-  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showActionToast]);
+    scheduleDelete({
+      message: msg,
+      onUndo: () => {
+        setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
+      },
+      run: batchDeleteRun(ids, (id) => supprimerEvenement(childId, id)),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
+      },
+      onHide: () => {
+        setSoftDeletedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next; });
+      },
+    });
+  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, scheduleDelete]);
 
   const cancelBatchDelete = useCallback(() => { setBatchDeleteConfirm({ visible: false, ids: [] }); }, []);
 

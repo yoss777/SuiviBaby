@@ -3,16 +3,19 @@ import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { OMSMetric, OMSSex } from "@/constants/omsPercentiles";
 import {
-  OMS_MAX_DAY,
-  OMS_PERCENTILES,
-  OMSMetric,
-  OMSSex,
-} from "@/constants/omsPercentiles";
+  OMS_BAND_LABELS,
+  OMS_LEGEND_NOTE,
+  OMS_RANGE_NOTE,
+  getOmsSeries,
+  hasMeasurementsBeyondOms,
+} from "@/utils/omsCurve";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -817,7 +820,8 @@ export default function CroissanceScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = useMemo(() => getNeutralColors(colorScheme), [colorScheme]);
   const { openSheet } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { openModal, returnTo } = useLocalSearchParams();
   const navigation = useNavigation();
   const headerOwnerId = useRef(
@@ -907,24 +911,21 @@ export default function CroissanceScreen() {
 
   const omsPalette = useMemo(
     () => ({
-      // Bandes colorées pour les zones de percentiles
-      bandExtreme:
+      // Bandes de percentiles : teintes neutres (gris-bleu), sans signification
+      // de couleur « bon / mauvais » ; la bande centrale est simplement plus dense.
+      bandOuter:
         colorScheme === "dark"
-          ? "rgba(251, 146, 60, 0.12)" // orange très pâle
-          : "rgba(251, 146, 60, 0.08)",
-      bandLimit:
+          ? "rgba(148, 163, 184, 0.10)"
+          : "rgba(100, 116, 139, 0.07)",
+      bandMiddle:
         colorScheme === "dark"
-          ? "rgba(252, 211, 77, 0.15)" // jaune pâle
-          : "rgba(252, 211, 77, 0.10)",
-      bandNormal:
-        colorScheme === "dark"
-          ? "rgba(134, 239, 172, 0.18)" // vert pâle
-          : "rgba(134, 239, 172, 0.12)",
+          ? "rgba(148, 163, 184, 0.22)"
+          : "rgba(100, 116, 139, 0.16)",
       // Lignes des percentiles
       lineP50:
         colorScheme === "dark"
-          ? "rgba(34, 197, 94, 0.6)" // vert médian bien visible
-          : "rgba(34, 197, 94, 0.5)",
+          ? "rgba(148, 163, 184, 0.75)" // médiane : gris-bleu, ligne plus marquée
+          : "rgba(71, 85, 105, 0.6)",
       lineOther:
         colorScheme === "dark"
           ? "rgba(148, 163, 184, 0.35)" // gris pour autres percentiles
@@ -1077,39 +1078,32 @@ export default function CroissanceScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
 
-    showUndoToast(
-      "Mesure supprimée",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Mesure supprimée",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerCroissance(childId, eventId);
-        } catch {
-          // Restore if delete fails
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerCroissance(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(eventId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerCroissance(childId, eventId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerCroissance(childId, eventId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.event, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(eventId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -1346,12 +1340,13 @@ export default function CroissanceScreen() {
     );
   }, [chartWidth, labels.length]);
 
-  const { chartPoints, yAxisLabels, maxValue, oms } = useMemo(() => {
+  const { chartPoints, yAxisLabels, maxValue, oms, omsBeyondRange } = useMemo(() => {
     if (!hasData || plotWidth <= 0) {
       return {
         chartPoints: [] as ChartPoint[],
         yAxisLabels: [] as { value: number; y: number }[],
         maxValue: 0,
+        omsBeyondRange: false,
         oms: null as null | {
           lines: Record<
             "p3" | "p15" | "p50" | "p85" | "p97",
@@ -1368,23 +1363,14 @@ export default function CroissanceScreen() {
       birthDate && omsSex
         ? metricEntries.map((entry) => getAgeInDays(birthDate, entry.date))
         : null;
-    const omsAvailable =
-      ageDays &&
-      ageDays.length === values.length &&
-      ageDays.every((day) => day >= 0 && day <= OMS_MAX_DAY);
-    const omsSource =
-      omsAvailable && omsSex
-        ? OMS_PERCENTILES[omsSex as OMSSex][metric as OMSMetric]
+    // Les tables OMS embarquées couvrent 0-731 jours : les mesures au-delà
+    // n'ont pas de référence, mais ne font plus disparaître celles qui en ont.
+    const omsSeries =
+      ageDays && ageDays.length === values.length && omsSex
+        ? getOmsSeries(omsSex as OMSSex, metric as OMSMetric, ageDays)
         : null;
-    const omsValues = omsSource
-      ? {
-          p3: ageDays!.map((day) => omsSource.p3[day]),
-          p15: ageDays!.map((day) => omsSource.p15[day]),
-          p50: ageDays!.map((day) => omsSource.p50[day]),
-          p85: ageDays!.map((day) => omsSource.p85[day]),
-          p97: ageDays!.map((day) => omsSource.p97[day]),
-        }
-      : null;
+    const omsValues = omsSeries ? omsSeries.values : null;
+    const omsIndices = omsSeries ? omsSeries.indices : [];
 
     const rangeValues = [
       ...values,
@@ -1427,24 +1413,24 @@ export default function CroissanceScreen() {
 
     const omsLines = omsValues
       ? {
-          p3: omsValues.p3.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p3: omsValues.p3.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p15: omsValues.p15.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p15: omsValues.p15.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p50: omsValues.p50.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p50: omsValues.p50.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p85: omsValues.p85.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p85: omsValues.p85.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p97: omsValues.p97.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p97: omsValues.p97.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
         }
@@ -1468,6 +1454,7 @@ export default function CroissanceScreen() {
       chartPoints: points,
       yAxisLabels: yLabels,
       maxValue: babyMax,
+      omsBeyondRange: !!ageDays && !!omsSex && hasMeasurementsBeyondOms(ageDays),
       oms: omsLines ? { lines: omsLines, bands: omsBands } : null,
     };
   }, [
@@ -1800,12 +1787,12 @@ export default function CroissanceScreen() {
                                 </RoundedRect>
 
                                 {oms?.bands.map((band, index) => {
+                                  // P3–P15 et P85–P97 : bandes extérieures ;
+                                  // P15–P50 et P50–P85 : bande centrale P15–P85.
                                   const bandColor =
                                     index === 0 || index === 3
-                                      ? omsPalette.bandExtreme
-                                      : index === 1 || index === 2
-                                        ? omsPalette.bandLimit
-                                        : omsPalette.bandNormal;
+                                      ? omsPalette.bandOuter
+                                      : omsPalette.bandMiddle;
                                   return (
                                     <Path
                                       key={`oms-band-${index}`}
@@ -1986,6 +1973,15 @@ export default function CroissanceScreen() {
                       </View>
                     )}
 
+                    {hasData && omsBeyondRange && (
+                      <Text
+                        style={[styles.omsLegendText, { color: palette.muted, marginTop: 8 }]}
+                        accessibilityRole="text"
+                      >
+                        {OMS_RANGE_NOTE}
+                      </Text>
+                    )}
+
                     {hasData && oms && (
                       <View
                         style={[
@@ -2022,7 +2018,7 @@ export default function CroissanceScreen() {
                             <View
                               style={[
                                 styles.omsLegendBox,
-                                { backgroundColor: omsPalette.bandLimit },
+                                { backgroundColor: omsPalette.bandOuter },
                               ]}
                             />
                             <Text
@@ -2031,14 +2027,14 @@ export default function CroissanceScreen() {
                                 { color: palette.muted },
                               ]}
                             >
-                              Normal
+                              {OMS_BAND_LABELS[0]}
                             </Text>
                           </View>
                           <View style={styles.omsLegendItem}>
                             <View
                               style={[
                                 styles.omsLegendBox,
-                                { backgroundColor: omsPalette.bandExtreme },
+                                { backgroundColor: omsPalette.bandMiddle },
                               ]}
                             />
                             <Text
@@ -2047,10 +2043,35 @@ export default function CroissanceScreen() {
                                 { color: palette.muted },
                               ]}
                             >
-                              Extrême
+                              {OMS_BAND_LABELS[1]}
+                            </Text>
+                          </View>
+                          <View style={styles.omsLegendItem}>
+                            <View
+                              style={[
+                                styles.omsLegendBox,
+                                { backgroundColor: omsPalette.bandOuter },
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.omsLegendText,
+                                { color: palette.muted },
+                              ]}
+                            >
+                              {OMS_BAND_LABELS[2]}
                             </Text>
                           </View>
                         </View>
+                        <Text
+                          style={[
+                            styles.omsLegendText,
+                            { color: palette.muted, marginTop: 6 },
+                          ]}
+                          accessibilityRole="text"
+                        >
+                          {OMS_LEGEND_NOTE}
+                        </Text>
                       </View>
                     )}
                   </View>

@@ -29,7 +29,8 @@ import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
 import { cleanupStaleExports } from "@/services/tempShareService";
-import { startAutoSync } from "@/services/offlineQueueService";
+import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService";
+import { retryFailedOptimistic } from "@/services/eventsService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
 import { filterBreadcrumb, filterEvent, filterTransaction } from "@/utils/sentryFilters";
@@ -121,14 +122,25 @@ function RootLayout() {
 export default Sentry.wrap(RootLayout);
 
 function OptimisticFailureToastBridge() {
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
 
   useEffect(() => {
-    setOptimisticOnFailure((message) => showToast(message));
+    // Échec d'une saisie : on dit laquelle, et on propose « Réessayer » avec
+    // les données conservées (sauf si un nouvel envoi ne peut pas réussir).
+    setOptimisticOnFailure((message, failure) => {
+      if (failure?.retryable) {
+        showActionToast(message, "Réessayer", () => retryFailedOptimistic(failure), 8000);
+      } else {
+        showToast(message, 5000);
+      }
+    });
+    // Saisies hors ligne abandonnées par la file : message, détail dans la bannière.
+    setOnQueueFailure(({ message }) => showToast(message, 6000));
     return () => {
       setOptimisticOnFailure(null);
+      setOnQueueFailure(null);
     };
-  }, [showToast]);
+  }, [showToast, showActionToast]);
 
   return null;
 }

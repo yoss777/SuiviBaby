@@ -19,6 +19,7 @@ import { MOMENT_REPAS_LABELS, MOOD_EMOJIS } from "@/constants/dashboardConfig";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
@@ -27,6 +28,8 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
+import { getOptimisticEntries, subscribe as subscribeOptimistic } from "@/services/optimisticEventsStore";
+import { mergeOptimisticTemperatures } from "@/utils/mergeOptimisticTemperatures";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
@@ -175,7 +178,8 @@ export default function HomeDashboard() {
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const warningStateRef = useRef<
     Record<
       string,
@@ -364,35 +368,31 @@ export default function HomeDashboard() {
     setDeleteConfirm({ visible: false, event: null });
     // P5: soft-delete + undo
     setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-    const timer = setTimeout(async () => {
-      try {
-        await supprimerEvenement(activeChild.id!, eventId);
-      } catch {
+    const childId = activeChild.id;
+    // La suppression part après le délai d'annulation, ou tout de suite si
+    // l'app passe en arrière-plan ; « Réessayer » relance sans fermeture périmée.
+    scheduleDelete({
+      message: "Événement supprimé",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(eventId);
           return next;
         });
-        // P27: error retry toast
-        showActionToast("Erreur lors de la suppression", "Réessayer", () =>
-          confirmDelete(),
-        );
-      }
-    }, 3000);
-    showUndoToast("Événement supprimé", () => {
-      clearTimeout(timer);
-      setSoftDeletedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(eventId);
-        return next;
-      });
+      },
+      run: () => supprimerEvenement(childId, eventId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(eventId);
+          return next;
+        });
+      },
+      onHide: () => {
+        setSoftDeletedIds((prev) => new Set(prev).add(eventId));
+      },
     });
-  }, [
-    activeChild?.id,
-    deleteConfirm.event,
-    showUndoToast,
-    showActionToast,
-  ]);
+  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, event: null });
@@ -609,6 +609,7 @@ export default function HomeDashboard() {
     valeur?: number;
     jalonType?: string;
     titre?: string;
+    updatedAt?: unknown;
   }[]>([]);
 
   useEffect(() => {
@@ -640,6 +641,7 @@ export default function HomeDashboard() {
             valeur: e.valeur,
             jalonType: e.typeJalon ?? e.jalonType,
             titre: e.titre,
+            updatedAt: e.updatedAt,
           })),
         );
       })
@@ -648,7 +650,19 @@ export default function HomeDashboard() {
     return () => { cancelled = true; };
   }, [activeChild?.id, refreshTick, toDate]);
 
-  const allEventsForInsights = weeklyEvents;
+  // Températures optimistes ou en file hors ligne : elles comptent pour l'alerte
+  // santé dès la saisie (lecture seule de l'API publique du store optimiste).
+  const [optimisticTick, setOptimisticTick] = useState(0);
+  useEffect(() => subscribeOptimistic(() => setOptimisticTick((t) => t + 1)), []);
+  const allEventsForInsights = useMemo(
+    () =>
+      activeChild?.id
+        ? mergeOptimisticTemperatures(weeklyEvents, getOptimisticEntries(activeChild.id), toDate)
+        : weeklyEvents,
+    // optimisticTick : le store n'est pas réactif par lui-même.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weeklyEvents, activeChild?.id, optimisticTick, toDate],
+  );
 
   const smartContent = useSmartContent({
     events: allEventsForInsights,

@@ -1,10 +1,10 @@
 // components/forms/MilestonesForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useFormScroll } from "@/components/ui/FormScrollContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
-import { auth } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
@@ -12,15 +12,14 @@ import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { supprimerJalon } from "@/services/eventsService";
 import {
-  ajouterEvenementOptimistic,
-  modifierEvenementOptimistic,
-  supprimerJalon,
-} from "@/services/eventsService";
-import { FIREBASE_STORAGE_BUCKET, isLocalPhotoUri } from "@/utils/photoStorage";
+  photoUploadErrorMessage,
+  submitMilestone,
+} from "@/services/events/milestonePhoto";
+import { isLocalPhotoUri } from "@/utils/photoStorage";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -153,55 +152,6 @@ const toDate = (value: any): Date => {
 };
 
 const IMAGE_QUALITY = 0.8;
-
-const uploadMilestonePhoto = async (
-  childId: string,
-  uri: string,
-  onProgress?: (progress: number) => void,
-): Promise<string> => {
-  try {
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const filePath = `children/${childId}/jalons/${fileName}.jpg`;
-
-    onProgress?.(10);
-
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error("Utilisateur non connecté");
-    }
-    const token = await user.getIdToken();
-
-    onProgress?.(20);
-
-    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name=${encodeURIComponent(filePath)}`;
-
-    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
-      httpMethod: "POST",
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "image/jpeg",
-      },
-    });
-
-    if (response.status !== 200) {
-      throw new Error(`Upload failed with status ${response.status}`);
-    }
-
-    onProgress?.(80);
-
-    const responseData = JSON.parse(response.body) as { name?: string };
-    if (responseData.name && responseData.name !== filePath) {
-      console.warn("[UPLOAD] Chemin Storage inattendu:", responseData.name);
-    }
-
-    onProgress?.(100);
-    return filePath;
-  } catch (error) {
-    console.error("[UPLOAD] Erreur:", error);
-    throw error;
-  }
-};
 
 // ============================================
 // COMPONENT
@@ -406,17 +356,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
     try {
       setIsSubmitting(true);
-      let photoRefs: string[] | undefined = photoUri ? [photoUri] : undefined;
-
       if (photoUri && isLocalPhotoUri(photoUri)) {
         setPhotoUploading(true);
         setUploadProgress(0);
-        const uploadedPath = await uploadMilestonePhoto(
-          activeChild.id,
-          photoUri,
-          (progress) => setUploadProgress(Math.round(progress)),
-        );
-        photoRefs = [uploadedPath];
       }
 
       const titreToSave =
@@ -432,23 +374,27 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
         description: description.trim() ? description.trim() : undefined,
         note: note.trim() ? note.trim() : undefined,
         humeur: mood ?? undefined,
-        photos: photoRefs,
       });
 
-      if (editData) {
-        modifierEvenementOptimistic(activeChild.id, editData.id, data, editData);
-        showSuccess("milestone", "Jalon modifié");
-      } else {
-        ajouterEvenementOptimistic(activeChild.id, data);
-        showSuccess("milestone", "Jalon ajouté");
-      }
+      // Téléversement (délai maximal), puis écriture ; la photo orpheline est
+      // supprimée si l'écriture échoue, l'ancienne si elle est remplacée.
+      await submitMilestone({
+        childId: activeChild.id,
+        editData,
+        photoUri,
+        data,
+        onProgress: (progress) => setUploadProgress(Math.round(progress)),
+      });
+      showSuccess("milestone", editData ? "Jalon modifié" : "Jalon ajouté");
 
       setPhotoUploading(false);
       setIsSubmitting(false);
       onSuccess?.();
     } catch (error) {
       console.error("Erreur lors de la sauvegarde:", error);
-      showAlert("Erreur", "Impossible de sauvegarder.");
+      // Réseau coupé ou trop lent : message distinct d'une erreur de sauvegarde.
+      const { title, message } = photoUploadErrorMessage(error);
+      showAlert(title, message);
       setPhotoUploading(false);
       setIsSubmitting(false);
     }
@@ -463,8 +409,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerJalon(activeChild.id, editData.id);
-          showToast("Jalon supprimé");
+          const outcome = await supprimerJalon(activeChild.id, editData.id);
+          showToast(deleteToastMessage(outcome, "Jalon supprimé"));
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

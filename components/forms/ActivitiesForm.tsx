@@ -1,4 +1,5 @@
 // components/forms/ActivitiesForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
@@ -429,8 +430,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          showToast("Activité supprimée");
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          showToast(deleteToastMessage(outcome, "Activité supprimée"));
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

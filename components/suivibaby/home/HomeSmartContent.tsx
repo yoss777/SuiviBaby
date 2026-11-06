@@ -54,14 +54,19 @@ export function HomeSmartContent({
   return (
     <View style={{ paddingHorizontal: 20, gap: 12, marginBottom: 12 }}>
       {/* Data-driven insights */}
-      {hasAnyTodayData &&
-        smartContent.insights
-          .filter((ins) => !dismissedInsightIds.has(ins.id))
+      {/* Les alertes santé non masquables (dismissible === false) s'affichent
+          même sans donnée aujourd'hui et n'ont ni croix ni balayage. */}
+      {smartContent.insights
+          .filter((ins) =>
+            ins.dismissible === false
+              ? true
+              : hasAnyTodayData && !dismissedInsightIds.has(ins.id),
+          )
           .map((insight) => (
             <StaggeredCard key={insight.id}>
               <InsightCard
                 insight={insight}
-                onDismiss={onDismissInsight}
+                onDismiss={insight.dismissible === false ? undefined : onDismissInsight}
                 onLearnMore={(ins) => {
                   if (ins.relatedTipId) {
                     onOpenInsightTip(ins.relatedTipId);

@@ -13,6 +13,8 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { batchDeleteRun } from "@/utils/deleteWithRetry";
+import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -223,7 +225,8 @@ export default function PumpingScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { openSheet, closeSheet, isOpen } = useSheet();
-  const { showToast, showUndoToast, showActionToast } = useToast();
+  const { showToast } = useToast();
+  const scheduleDelete = useDeleteWithUndo();
   const { swipeableRef, triggerHint } = useSwipeHint();
   const { selectionMode, selectedIds, selectedCount, toggleSelectionMode, exitSelectionMode, toggleId, selectAll, clearSelection } = useBatchSelect();
   const headerOwnerId = useRef(
@@ -978,38 +981,32 @@ export default function PumpingScreen() {
     // Soft-delete: hide immediately from UI
     setSoftDeletedIds((prev) => new Set(prev).add(pompageId));
 
-    showUndoToast(
-      "Pompage supprimé",
-      // onUndo — restore visibility
-      () => {
+    scheduleDelete({
+      message: "Pompage supprimé",
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           next.delete(pompageId);
           return next;
         });
       },
-      // onExpire — actually delete from Firestore
-      async () => {
-        try {
-          await supprimerEvenement(childId, pompageId);
-        } catch {
-          setSoftDeletedIds((prev) => {
+      run: () => supprimerEvenement(childId, pompageId),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             next.delete(pompageId);
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            supprimerEvenement(childId, pompageId).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                supprimerEvenement(childId, pompageId);
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [activeChild?.id, deleteConfirm.pompage, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            next.add(pompageId);
+            return next;
+          });
+      },
+    });
+  }, [activeChild?.id, deleteConfirm.pompage, scheduleDelete]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1031,38 +1028,32 @@ export default function PumpingScreen() {
     });
 
     const msg = `${ids.length} élément${ids.length > 1 ? "s" : ""} supprimé${ids.length > 1 ? "s" : ""}`;
-    showUndoToast(
-      msg,
-      // onUndo
-      () => {
+    scheduleDelete({
+      message: msg,
+      onUndo: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);
           ids.forEach((id) => next.delete(id));
           return next;
         });
       },
-      // onExpire
-      async () => {
-        try {
-          await Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
-        } catch {
-          setSoftDeletedIds((prev) => {
+      run: batchDeleteRun(ids, (id) => supprimerEvenement(childId, id)),
+      onRestore: () => {
+        setSoftDeletedIds((prev) => {
             const next = new Set(prev);
             ids.forEach((id) => next.delete(id));
             return next;
           });
-          showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-            Promise.all(ids.map((id) => supprimerEvenement(childId, id))).catch(() => {
-              showActionToast("Erreur lors de la suppression", "Réessayer", () => {
-                Promise.all(ids.map((id) => supprimerEvenement(childId, id)));
-              });
-            });
-          });
-        }
       },
-      4000,
-    );
-  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, showUndoToast, showActionToast]);
+      onHide: () => {
+        setSoftDeletedIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.add(id));
+            return next;
+          });
+      },
+    });
+  }, [batchDeleteConfirm.ids, activeChild?.id, exitSelectionMode, scheduleDelete]);
 
   const cancelBatchDelete = useCallback(() => {
     setBatchDeleteConfirm({ visible: false, ids: [] });

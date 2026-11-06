@@ -1,3 +1,4 @@
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -206,8 +207,8 @@ export function PumpingForm({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          showToast("Session supprimée");
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          showToast(deleteToastMessage(outcome, "Session supprimée"));
           onDelete?.();
         } catch (error) {
           console.error("Erreur lors de la suppression:", error);
