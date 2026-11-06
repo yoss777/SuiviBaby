@@ -1,10 +1,18 @@
 // services/offlineQueueService.ts
 // Queue de synchronisation offline avec SQLite
 import NetInfo from "@react-native-community/netinfo";
+import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
+import { AppState } from "react-native";
 import { auth, functions } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
 import { captureServiceError } from "@/utils/errorReporting";
+import {
+  isConflictError as isConflictCode,
+  isNetworkError,
+  isNotFoundError,
+} from "@/utils/networkError";
+import { purgeQueuedOptimistic } from "@/services/optimisticEventsStore";
 
 // ============================================
 // TYPES
@@ -52,10 +60,8 @@ export const MAX_TRANSIENT_FAILURES = 8;
  * Testé sur le CODE : le message « The request was aborted because there was no
  * available instance » est, lui, une panne d'infrastructure.
  */
-function isConflictError(error: any): boolean {
-  const code = String(error?.code ?? "").toLowerCase();
-  return code === "aborted" || code === "functions/aborted";
-}
+const isConflictError = isConflictCode;
+
 /**
  * Erreurs d'infrastructure : le serveur est temporairement indisponible mais
  * l'écriture reste parfaitement valide. Incrémenter retryCount dessus fait
@@ -64,74 +70,94 @@ function isConflictError(error: any): boolean {
  *
  * A contrario, une erreur permanente (invalid-argument, permission-denied)
  * échouera identiquement à chaque rejeu : elle consomme une tentative.
+ *
+ * Même définition que les écritures optimistes (utils/networkError) : une
+ * erreur ne peut plus être « réseau » pour l'une et « définitive » pour l'autre.
  */
 function isTransientError(error: any): boolean {
-  if (isConflictError(error)) return false;
-  const code = String(error?.code ?? "").toLowerCase();
-  const message = String(error?.message ?? "").toLowerCase();
-  const haystack = `${code} ${message}`;
-
-  return (
-    haystack.includes("unavailable") ||
-    haystack.includes("resource-exhausted") ||
-    haystack.includes("deadline-exceeded") ||
-    haystack.includes("internal") ||
-    haystack.includes("no available instance") ||
-    haystack.includes("billing") ||
-    haystack.includes("network") ||
-    haystack.includes("timeout") ||
-    haystack.includes("fetch") ||
-    haystack.includes("failed to connect") ||
-    haystack.includes("offline")
-  );
+  return isNetworkError(error);
 }
 
 // ============================================
 // DATABASE SETUP
 // ============================================
 
+/** Publiée UNIQUEMENT une fois l'initialisation terminée. */
 let db: SQLite.SQLiteDatabase | null = null;
+/** Initialisation partagée : des appels simultanés n'ouvrent/migrent qu'une fois. */
+let dbInit: Promise<SQLite.SQLiteDatabase> | null = null;
 
-async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync("offlineQueue.db");
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS pending_events (
-        id TEXT PRIMARY KEY,
-        uid TEXT NOT NULL DEFAULT '',
-        action TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        retryCount INTEGER NOT NULL DEFAULT 0,
-        lastError TEXT,
-        createdAt INTEGER NOT NULL
-      );
-    `);
-    // Migration: ajouter colonne uid si absente (tables existantes)
-    try {
-      await db.execAsync(`ALTER TABLE pending_events ADD COLUMN uid TEXT NOT NULL DEFAULT ''`);
-    } catch {
-      // Colonne existe déjà — OK
-    }
-    // Migration S6 : compteur d'échecs d'infrastructure par écriture.
-    try {
-      await db.execAsync(
-        `ALTER TABLE pending_events ADD COLUMN transientFailures INTEGER NOT NULL DEFAULT 0`,
-      );
-    } catch {
-      // Colonne existe déjà — OK
-    }
+/** Ajoute la colonne si elle manque (lecture de PRAGMA table_info, pas d'ALTER à l'aveugle). */
+async function addColumnIfMissing(
+  database: SQLite.SQLiteDatabase,
+  existing: Set<string>,
+  name: string,
+  definition: string,
+): Promise<void> {
+  if (existing.has(name)) return;
+  try {
+    await database.execAsync(`ALTER TABLE pending_events ADD COLUMN ${name} ${definition}`);
+  } catch (error) {
+    // Une exécution concurrente a pu l'ajouter entre-temps : seul cas toléré.
+    if (/duplicate column/i.test(String((error as Error)?.message ?? error))) return;
+    captureServiceError(error, {
+      service: "offlineQueue",
+      operation: "migrateColumn",
+      extra: { column: name },
+    });
+    throw error;
+  }
+}
 
-    // Une écriture marquée 'syncing' dont le process est mort (app tuée,
-    // crash, kill iOS pendant l'appel réseau) restait invisible à jamais :
-    // getPendingEvents et getQueueSize ne lisent que 'pending'/'failed'.
-    // Au démarrage, plus aucun envoi n'est en vol : on les repasse en
-    // 'pending' pour qu'elles soient rejouées.
-    await db.runAsync(
-      `UPDATE pending_events SET status = 'pending' WHERE status = 'syncing'`,
+async function initDb(): Promise<SQLite.SQLiteDatabase> {
+  const database = await SQLite.openDatabaseAsync("offlineQueue.db");
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS pending_events (
+      id TEXT PRIMARY KEY,
+      uid TEXT NOT NULL DEFAULT '',
+      action TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      retryCount INTEGER NOT NULL DEFAULT 0,
+      lastError TEXT,
+      createdAt INTEGER NOT NULL
+    );
+  `);
+  const columns = new Set(
+    (
+      (await database.getAllAsync<{ name: string }>(`PRAGMA table_info(pending_events)`)) ?? []
+    ).map((c) => c.name),
+  );
+  // Migration : colonne uid (tables créées avant l'isolation par utilisateur).
+  await addColumnIfMissing(database, columns, "uid", `TEXT NOT NULL DEFAULT ''`);
+  // Migration S6 : compteur d'échecs d'infrastructure par écriture.
+  await addColumnIfMissing(database, columns, "transientFailures", `INTEGER NOT NULL DEFAULT 0`);
+
+  // Une écriture marquée 'syncing' dont le process est mort (app tuée,
+  // crash, kill iOS pendant l'appel réseau) restait invisible à jamais :
+  // getPendingEvents et getQueueSize ne lisent que 'pending'/'failed'.
+  // Au démarrage, plus aucun envoi n'est en vol : on les repasse en
+  // 'pending' pour qu'elles soient rejouées.
+  await database.runAsync(`UPDATE pending_events SET status = 'pending' WHERE status = 'syncing'`);
+  return database;
+}
+
+function getDb(): Promise<SQLite.SQLiteDatabase> {
+  if (db) return Promise.resolve(db);
+  if (!dbInit) {
+    dbInit = initDb().then(
+      (ready) => {
+        db = ready;
+        return ready;
+      },
+      (error) => {
+        // Échec : le prochain appel retente, au lieu de garder une base à moitié migrée.
+        dbInit = null;
+        throw error;
+      },
     );
   }
-  return db;
+  return dbInit;
 }
 
 // ============================================
@@ -167,6 +193,31 @@ const BACKOFF_BASE_MS = 5000;
 const BACKOFF_MAX_MS = 5 * 60 * 1000;
 let consecutiveTransientFailures = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+/** Un déclenchement est arrivé pendant un cycle : il ne doit pas être perdu. */
+let rerunRequested = false;
+
+/** Délai avant le rejeu qui suit un enfilement (laisse le réseau/serveur souffler). */
+const ENQUEUE_RETRY_DELAY_MS = 3000;
+
+/** Lance un cycle sans jamais laisser une erreur remonter en rejet non géré. */
+function runCycle(): void {
+  processQueue().catch((error) =>
+    captureServiceError(error, { service: "offlineQueue", operation: "runCycle" }),
+  );
+}
+
+/**
+ * Programme un cycle dans un instant. Sans ça, une écriture enfilée après une
+ * erreur serveur passagère (réseau pourtant connecté) restait en attente
+ * jusqu'au prochain changement d'état réseau, qui peut ne jamais venir.
+ */
+function scheduleSoon(delayMs: number = ENQUEUE_RETRY_DELAY_MS): void {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    runCycle();
+  }, delayMs);
+}
 
 /**
  * Reprogramme un cycle après une erreur d'infrastructure, avec backoff
@@ -187,7 +238,7 @@ function scheduleRetry(): void {
 
   retryTimer = setTimeout(() => {
     retryTimer = null;
-    void processQueue();
+    runCycle();
   }, delay);
 }
 
@@ -201,9 +252,16 @@ function notifyListeners(size: number) {
  * supprimer par l'utilisateur).
  */
 async function emitState(): Promise<void> {
-  notifyListeners(await getWaitingCount());
-  const exhausted = await getExhaustedCount();
-  exhaustedListeners.forEach((listener) => listener(exhausted));
+  // Ne lève jamais : la ligne est déjà en base quand on arrive ici, un échec de
+  // simple notification ne doit pas faire croire à l'appelant que l'écriture
+  // n'a pas été enregistrée.
+  try {
+    notifyListeners(await getWaitingCount());
+    const exhausted = await getExhaustedCount();
+    exhaustedListeners.forEach((listener) => listener(exhausted));
+  } catch (error) {
+    captureServiceError(error, { service: "offlineQueue", operation: "emitState" });
+  }
 }
 
 /**
@@ -237,6 +295,9 @@ export async function enqueueEvent(
   );
 
   await emitState();
+  // Rien d'autre ne relance la file après un enfilement « en ligne » (erreur
+  // serveur passagère) : on programme le rejeu nous-mêmes.
+  scheduleSoon();
 
   return id;
 }
@@ -296,11 +357,34 @@ export async function getPendingEvents(): Promise<QueuedEvent[]> {
   return rows;
 }
 
+function safeParse(payload: string): any {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+/** Remet une ligne bloquée 'syncing' en 'pending' (au mieux : signale si même cela échoue). */
+async function restorePending(database: SQLite.SQLiteDatabase, id: string): Promise<void> {
+  try {
+    await database.runAsync(
+      `UPDATE pending_events SET status = 'pending' WHERE id = ? AND status = 'syncing'`,
+      id,
+    );
+  } catch (error) {
+    captureServiceError(error, { service: "offlineQueue", operation: "restorePending" });
+  }
+}
+
 /**
  * Traite la queue — envoie les événements en attente au serveur
  */
 export async function processQueue(): Promise<number> {
-  if (isProcessing) return 0;
+  if (isProcessing) {
+    rerunRequested = true;
+    return 0;
+  }
 
   const networkState = await NetInfo.fetch();
   if (!networkState.isConnected) return 0;
@@ -327,13 +411,21 @@ export async function processQueue(): Promise<number> {
       }
       isFirst = false;
 
+      // Marquer comme en cours de sync. Si même cette écriture en base échoue,
+      // rien n'est parti : la ligne reste 'pending', on rend la main.
       try {
-        // Marquer comme en cours de sync
         await database.runAsync(
           `UPDATE pending_events SET status = 'syncing' WHERE id = ?`,
           event.id,
         );
+      } catch (dbError) {
+        captureServiceError(dbError, { service: "offlineQueue", operation: "markSyncing" });
+        hitTransient = true;
+        break;
+      }
 
+      let sendError: any = null;
+      try {
         const payload = JSON.parse(event.payload);
 
         // Appeler la Cloud Function appropriée
@@ -353,18 +445,37 @@ export async function processQueue(): Promise<number> {
           }
           case "delete": {
             const del = httpsCallable(functions, "deleteEventCascade");
-            await del(payload);
+            try {
+              await del(payload);
+            } catch (error) {
+              // Suppression idempotente : « introuvable » = déjà supprimé
+              // (un envoi précédent a abouti, sa réponse s'est perdue).
+              if (!isNotFoundError(error)) throw error;
+            }
             break;
           }
         }
+      } catch (error) {
+        sendError = error;
+      }
 
-        // Succès : supprimer de la queue
-        await database.runAsync(
-          `DELETE FROM pending_events WHERE id = ?`,
-          event.id,
-        );
-        synced++;
-      } catch (error: any) {
+      if (!sendError) {
+        // Succès : supprimer de la queue. Si ce retrait échoue, l'écriture est
+        // partie mais la ligne resterait 'syncing' (donc invisible) : on la
+        // remet en 'pending', le rejeu est sans danger (clé d'idempotence,
+        // suppression idempotente).
+        try {
+          await database.runAsync(`DELETE FROM pending_events WHERE id = ?`, event.id);
+          synced++;
+        } catch (dbError) {
+          captureServiceError(dbError, { service: "offlineQueue", operation: "removeSynced" });
+          await restorePending(database, event.id);
+        }
+        continue;
+      }
+
+      {
+        const error: any = sendError;
         const errorMessage =
           error?.message || error?.code || "Erreur inconnue";
         const conflict = isConflictError(error);
@@ -372,6 +483,7 @@ export async function processQueue(): Promise<number> {
         let exhausted = false;
         let reason: "conflict" | "permanent" | "transient-cap" = "permanent";
 
+        try {
         if (conflict) {
           // Conflit de version : définitif tout de suite, inutile de réessayer.
           exhausted = true;
@@ -414,9 +526,32 @@ export async function processQueue(): Promise<number> {
             event.id,
           );
         }
+        } catch (dbError) {
+          // Le statut n'a pas pu être écrit : sans filet la ligne resterait
+          // 'syncing', donc invisible pour toujours.
+          captureServiceError(dbError, { service: "offlineQueue", operation: "processQueue" });
+          await restorePending(database, event.id);
+          if (transient) {
+            hitTransient = true;
+            break;
+          }
+          continue;
+        }
 
         if (exhausted) {
           newlyExhausted++;
+          const parsed = safeParse(event.payload);
+          // L'écran ne doit plus montrer cette saisie comme enregistrée.
+          purgeQueuedOptimistic({
+            action: event.action,
+            idempotencyKey:
+              parsed?.idempotencyKey ?? (event.action === "create" ? event.id : undefined),
+            eventId: parsed?.eventId,
+          });
+          // Photos déjà téléversées d'une écriture abandonnée : non supprimées
+          // ici (« Réessayer » peut la réarmer, la photo serait alors perdue).
+          // On les signale pour en mesurer l'ampleur, sans le chemin.
+          const orphanPhotos = Array.isArray(parsed?.photos) ? parsed.photos.length : 0;
           // Plus rejouée : on le dit à Sentry (sans la charge utile, qui est
           // une donnée de santé) et, plus bas, à l'utilisateur.
           captureServiceError(error, {
@@ -427,6 +562,7 @@ export async function processQueue(): Promise<number> {
               reason,
               code: String(error?.code ?? ""),
               retryCount: event.retryCount ?? 0,
+              ...(orphanPhotos > 0 ? { orphanPhotos } : {}),
             },
           });
         }
@@ -454,6 +590,12 @@ export async function processQueue(): Promise<number> {
     return synced;
   } finally {
     isProcessing = false;
+    // Un déclenchement est arrivé pendant ce cycle (ex. écriture enfilée) : un
+    // cycle de plus, sans quoi elle attendrait le prochain événement externe.
+    if (rerunRequested) {
+      rerunRequested = false;
+      if (!hitTransient) scheduleSoon();
+    }
     // Hors du try : on veut reprogrammer même si getQueueSize a levé.
     if (hitTransient) {
       consecutiveTransientFailures++;
@@ -501,7 +643,7 @@ export async function retryExhaustedEvents(): Promise<number> {
   );
   if (result.changes > 0) {
     await emitState();
-    void processQueue();
+    runCycle();
   }
   return result.changes;
 }
@@ -584,6 +726,8 @@ export async function onAccountDelete(uid: string): Promise<void> {
 // ============================================
 
 let unsubscribeNetInfo: (() => void) | null = null;
+let unsubscribeAuth: (() => void) | null = null;
+let appStateSubscription: { remove: () => void } | null = null;
 
 /**
  * S'abonner aux changements de taille de la queue
@@ -591,7 +735,11 @@ let unsubscribeNetInfo: (() => void) | null = null;
 export function onQueueChange(listener: QueueChangeListener): () => void {
   listeners.add(listener);
   // Envoyer la taille actuelle immédiatement (écritures encore en attente)
-  getWaitingCount().then((size) => listener(size));
+  getWaitingCount()
+    .then((size) => listener(size))
+    .catch((error) =>
+      captureServiceError(error, { service: "offlineQueue", operation: "onQueueChange" }),
+    );
   return () => listeners.delete(listener);
 }
 
@@ -600,7 +748,11 @@ export function onQueueChange(listener: QueueChangeListener): () => void {
  */
 export function onExhaustedChange(listener: QueueChangeListener): () => void {
   exhaustedListeners.add(listener);
-  getExhaustedCount().then((count) => listener(count));
+  getExhaustedCount()
+    .then((count) => listener(count))
+    .catch((error) =>
+      captureServiceError(error, { service: "offlineQueue", operation: "onExhaustedChange" }),
+    );
   return () => exhaustedListeners.delete(listener);
 }
 
@@ -613,9 +765,49 @@ export function startAutoSync(): void {
   unsubscribeNetInfo = NetInfo.addEventListener((state) => {
     if (state.isConnected) {
       // Délai court pour laisser le réseau se stabiliser
-      setTimeout(() => processQueue(), 1000);
+      setTimeout(runCycle, 1000);
     }
   });
+
+  // Démarrage à froid : startAutoSync tourne avant la restauration de la
+  // session, et l'appel suivant (AuthContext) est sans effet. Sans cette
+  // écoute, la file d'une session précédente attendait un changement réseau.
+  // Firebase rappelle aussi l'écoute immédiatement si l'utilisateur est connu.
+  const stopAuth = onAuthStateChanged(auth, (user) => {
+    if (user) runCycle();
+  });
+  unsubscribeAuth = typeof stopAuth === "function" ? stopAuth : null;
+
+  // Retour au premier plan : un rejeu programmé a pu être gelé avec l'app.
+  appStateSubscription = AppState.addEventListener("change", (state) => {
+    if (state === "active") runCycle();
+  });
+}
+
+/**
+ * Supprime, parmi les écritures abandonnées de l'utilisateur courant, celles
+ * dont l'identifiant est donné — et elles seules. Contrairement à
+ * cleanupFailedEvents, une écriture devenue « abandonnée » entre-temps (non
+ * affichée à l'utilisateur) n'est jamais supprimée sans qu'il l'ait vue.
+ */
+export async function deleteExhaustedEventsByIds(ids: string[]): Promise<number> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || ids.length === 0) return 0;
+  const database = await getDb();
+  let deleted = 0;
+  // Limite SQLite de variables : par paquets.
+  for (let i = 0; i < ids.length; i += 400) {
+    const chunk = ids.slice(i, i + 400);
+    const result = await database.runAsync(
+      `DELETE FROM pending_events WHERE uid = ? AND retryCount >= ? AND id IN (${chunk.map(() => "?").join(",")})`,
+      uid,
+      MAX_RETRIES,
+      ...chunk,
+    );
+    deleted += result.changes;
+  }
+  if (deleted > 0) await emitState();
+  return deleted;
 }
 
 /**
@@ -626,6 +818,11 @@ export function stopAutoSync(): void {
     unsubscribeNetInfo();
     unsubscribeNetInfo = null;
   }
+  unsubscribeAuth?.();
+  unsubscribeAuth = null;
+  appStateSubscription?.remove();
+  appStateSubscription = null;
+  rerunRequested = false;
   // Annuler un rejeu programmé : sans ça, un cycle peut se déclencher après
   // le signOut et écrire avec les credentials du user suivant.
   if (retryTimer) {

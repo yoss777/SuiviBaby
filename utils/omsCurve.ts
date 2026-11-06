@@ -54,3 +54,10 @@ export const OMS_RANGE_NOTE = "Courbes OMS disponibles jusqu'à 24 mois";
 export function hasMeasurementsBeyondOms(ageDays: number[]): boolean {
   return ageDays.some((d) => Number.isFinite(d) && Math.round(d) > OMS_MAX_DAY);
 }
+
+// Légende de la courbe : libellés NEUTRES des bandes de percentiles. Aucun
+// « normal » / « extrême » : seul un professionnel de santé interprète la
+// courbe (décision propriétaire Q4, orientation uniquement). Repères : courbes
+// de croissance OMS ; choix OMS ou AFPA à valider par un pédiatre (Q3).
+export const OMS_BAND_LABELS = ["P3–P15", "P15–P85", "P85–P97"] as const;
+export const OMS_LEGEND_NOTE = "Repères OMS — seul un professionnel de santé interprète la courbe";

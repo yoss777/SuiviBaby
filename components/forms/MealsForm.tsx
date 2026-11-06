@@ -1,3 +1,4 @@
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -426,13 +427,17 @@ export function MealsForm({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          if (editData.type === "tetee") {
-            showToast("Tétée supprimée");
-          } else if (editData.type === "biberon") {
-            showToast("Biberon supprimé");
-          } else if (editData.type === "solide") {
-            showToast("Repas solide supprimé");
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          const deletedText =
+            editData.type === "tetee"
+              ? "Tétée supprimée"
+              : editData.type === "biberon"
+                ? "Biberon supprimé"
+                : editData.type === "solide"
+                  ? "Repas solide supprimé"
+                  : null;
+          if (outcome === "queued" || deletedText) {
+            showToast(deleteToastMessage(outcome, deletedText ?? ""));
           }
           onDelete?.();
         } catch (error) {

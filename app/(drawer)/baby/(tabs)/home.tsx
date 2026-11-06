@@ -28,6 +28,8 @@ import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
+import { getOptimisticEntries, subscribe as subscribeOptimistic } from "@/services/optimisticEventsStore";
+import { mergeOptimisticTemperatures } from "@/utils/mergeOptimisticTemperatures";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
@@ -607,6 +609,7 @@ export default function HomeDashboard() {
     valeur?: number;
     jalonType?: string;
     titre?: string;
+    updatedAt?: unknown;
   }[]>([]);
 
   useEffect(() => {
@@ -638,6 +641,7 @@ export default function HomeDashboard() {
             valeur: e.valeur,
             jalonType: e.typeJalon ?? e.jalonType,
             titre: e.titre,
+            updatedAt: e.updatedAt,
           })),
         );
       })
@@ -646,7 +650,19 @@ export default function HomeDashboard() {
     return () => { cancelled = true; };
   }, [activeChild?.id, refreshTick, toDate]);
 
-  const allEventsForInsights = weeklyEvents;
+  // Températures optimistes ou en file hors ligne : elles comptent pour l'alerte
+  // santé dès la saisie (lecture seule de l'API publique du store optimiste).
+  const [optimisticTick, setOptimisticTick] = useState(0);
+  useEffect(() => subscribeOptimistic(() => setOptimisticTick((t) => t + 1)), []);
+  const allEventsForInsights = useMemo(
+    () =>
+      activeChild?.id
+        ? mergeOptimisticTemperatures(weeklyEvents, getOptimisticEntries(activeChild.id), toDate)
+        : weeklyEvents,
+    // optimisticTick : le store n'est pas réactif par lui-même.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weeklyEvents, activeChild?.id, optimisticTick, toDate],
+  );
 
   const smartContent = useSmartContent({
     events: allEventsForInsights,

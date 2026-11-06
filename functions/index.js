@@ -2736,9 +2736,15 @@ exports.validateAndCreateEvent = onCall(
       .where("idempotencyKey", "==", idempotencyKey)
       .limit(1);
 
+    const tombstoneRef = db.doc(`deleted_idem/${eventId}`);
+
     return await db.runTransaction(async (tx) => {
       const existing = await tx.get(eventRef);
       if (existing.exists) return { id: eventId };
+      // Supprimé depuis (deleteEventCascade) : un rejeu tardif de la création
+      // (file hors ligne, réponse perdue) ne doit pas ressusciter l'événement.
+      const tombstone = await tx.get(tombstoneRef);
+      if (tombstone.exists) return { id: eventId };
       // Événement créé par une version précédente du serveur (identifiant
       // aléatoire) avec la même clé : on le reconnaît aussi.
       const legacy = await tx.get(legacyQuery);
@@ -2904,6 +2910,17 @@ exports.deleteEventCascade = onCall(
       deleteDocsByFieldBatched(db, "eventLikes", "eventId", eventId),
       deleteDocsByFieldBatched(db, "eventComments", "eventId", eventId),
     ]);
+
+    // Identifiant déterministe (création idempotente) : on laisse une pierre
+    // tombale AVANT de supprimer, pour qu'un rejeu de la création ne recrée pas
+    // l'événement. Ordre voulu : si la suppression échoue ensuite, l'événement
+    // existe toujours et la suppression peut être rejouée. Aucune donnée dedans
+    // (l'identifiant est un hachage), seulement la date.
+    if (eventId.startsWith("idem_")) {
+      await db.doc(`deleted_idem/${eventId}`).set({
+        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
 
     // Supprimer l'événement lui-même
     await eventRef.delete();

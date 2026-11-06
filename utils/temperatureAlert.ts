@@ -16,7 +16,10 @@ import { parseBirthDateOrNull, type BirthDateInput } from "@/utils/ageUtils";
 // du nourrisson.
 export const FEVER_THRESHOLD_C = 38;
 
-// Température basse : < 36 °C, tout âge (seuil du plan S5, 5.1).
+// Température basse : < 36 °C (seuil du plan S5, 5.1). À FAIRE VALIDER PAR UN
+// PÉDIATRE (Q3) : je n'ai pas de source officielle française vérifiée pour ce
+// seuil ; il est conservé en orientation seulement (« appelez un médecin ou le
+// 15 ») et figure dans la liste des questions pédiatre du plan.
 export const HYPOTHERMIA_THRESHOLD_C = 36;
 
 // Moins de 3 mois et >= 38 °C : consultation en urgence / 15. Source : HAS et
@@ -46,19 +49,28 @@ export interface TemperatureAlert {
   signs: readonly string[];
 }
 
-// Signes de gravité : orientation uniquement.
+// Signes de gravité : orientation uniquement. Source : ameli.fr, « La fièvre de
+// l'enfant », rubrique signes d'alerte (appeler le 15). Liste volontairement
+// courte ; liste finale à valider par un pédiatre (Q3).
 export const WARNING_SIGNS: readonly string[] = [
   "difficultés à respirer",
-  "somnolence inhabituelle ou bébé mou",
-  "refus de s'alimenter",
+  "peau pâle, grise ou marbrée",
+  "bébé mou, très difficile à réveiller ou qui gémit",
+  "fontanelle bombée ou nuque raide",
+  "signes de déshydratation (moins de couches mouillées, refus de boire)",
   "vomissements répétés",
   "éruption qui ne s'efface pas à la pression",
   "pleurs inhabituels",
   "convulsions",
 ];
 
+export const WARNING_SIGNS_HEADING = "Appelez le 15 sans attendre si :";
+
+// Phrase commune à chaque palier : si un des signes apparaît, on appelle le 15.
+const CALL_15_IF_SIGN = "Si un des signes ci-dessous apparaît, appelez le 15.";
+
 export function formatWarningSigns(signs: readonly string[] = WARNING_SIGNS): string {
-  return `Signes à surveiller : ${signs.join(", ")}.`;
+  return `${WARNING_SIGNS_HEADING} ${signs.join(", ")}.`;
 }
 
 const startOfLocalDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -98,6 +110,24 @@ export interface TemperatureAlertInput {
   measuredAt?: Date;
 }
 
+// Gravité croissante, pour retenir l'alerte la plus grave d'une liste.
+export const ALERT_SEVERITY: Record<TemperatureAlertLevel, number> = {
+  fievre: 1,
+  rapide: 2,
+  hypothermie: 3,
+  urgent: 4,
+};
+
+export function pickMostSevereAlert(
+  alerts: readonly TemperatureAlert[],
+): TemperatureAlert | null {
+  let worst: TemperatureAlert | null = null;
+  for (const alert of alerts) {
+    if (!worst || ALERT_SEVERITY[alert.level] > ALERT_SEVERITY[worst.level]) worst = alert;
+  }
+  return worst;
+}
+
 export function getTemperatureAlert({
   valeur,
   birthDate,
@@ -105,20 +135,43 @@ export function getTemperatureAlert({
 }: TemperatureAlertInput): TemperatureAlert | null {
   if (typeof valeur !== "number" || !Number.isFinite(valeur)) return null;
 
+  const tier = getAgeTierAt(birthDate, measuredAt);
+
   if (valeur < HYPOTHERMIA_THRESHOLD_C) {
+    const base = `Température de ${valeur} °C, inférieure à ${HYPOTHERMIA_THRESHOLD_C} °C`;
+    // Moins de 3 mois (M7) ou âge inconnu (M8) : urgent et non masquable.
+    // Seuil et formulation à valider par un pédiatre (Q3).
+    if (tier === "under3m") {
+      return {
+        level: "hypothermie",
+        dismissible: false,
+        callEmergency: true,
+        title: "Température basse",
+        message: `${base} chez un bébé de moins de 3 mois. Appelez le 15 ou consultez en urgence un médecin. ${CALL_15_IF_SIGN}`,
+        signs: WARNING_SIGNS,
+      };
+    }
+    if (tier === null) {
+      return {
+        level: "hypothermie",
+        dismissible: false,
+        callEmergency: true,
+        title: "Température basse",
+        message: `${base}. L'âge de l'enfant n'est pas renseigné : s'il a moins de 3 mois, appelez le 15 ou consultez en urgence un médecin. Sinon, appelez un médecin ou le 15. ${CALL_15_IF_SIGN}`,
+        signs: WARNING_SIGNS,
+      };
+    }
     return {
       level: "hypothermie",
       dismissible: true,
       callEmergency: true,
       title: "Température basse",
-      message: `Température de ${valeur} °C, inférieure à ${HYPOTHERMIA_THRESHOLD_C} °C. Appelez un médecin ou le 15.`,
+      message: `${base}. Appelez un médecin ou le 15. ${CALL_15_IF_SIGN}`,
       signs: WARNING_SIGNS,
     };
   }
 
   if (valeur < FEVER_THRESHOLD_C) return null;
-
-  const tier = getAgeTierAt(birthDate, measuredAt);
 
   if (tier === "under3m") {
     return {
@@ -126,7 +179,7 @@ export function getTemperatureAlert({
       dismissible: false,
       callEmergency: true,
       title: "Température élevée",
-      message: `Température de ${valeur} °C chez un bébé de moins de 3 mois. Consultez en urgence un médecin ou appelez le 15.`,
+      message: `Température de ${valeur} °C chez un bébé de moins de 3 mois. Consultez en urgence un médecin ou appelez le 15. ${CALL_15_IF_SIGN}`,
       signs: WARNING_SIGNS,
     };
   }
@@ -137,7 +190,7 @@ export function getTemperatureAlert({
       dismissible: true,
       callEmergency: false,
       title: "Température élevée",
-      message: `Température de ${valeur} °C chez un bébé de 3 à 6 mois : consultez rapidement un médecin. En cas de doute ou si un des signes ci-dessous apparaît, appelez le 15.`,
+      message: `Température de ${valeur} °C chez un bébé de 3 à 6 mois : consultez rapidement un médecin. ${CALL_15_IF_SIGN} En cas de doute, appelez le 15.`,
       signs: WARNING_SIGNS,
     };
   }
@@ -148,19 +201,77 @@ export function getTemperatureAlert({
       dismissible: true,
       callEmergency: false,
       title: "Température élevée",
-      message: `Température de ${valeur} °C. Consultez un médecin si la fièvre persiste ou si un des signes ci-dessous apparaît. En cas de doute, appelez le 15.`,
+      message: `Température de ${valeur} °C. Consultez un médecin si la fièvre persiste. ${CALL_15_IF_SIGN} En cas de doute, appelez le 15.`,
       signs: WARNING_SIGNS,
     };
   }
 
-  // Date de naissance inconnue : message générique qui couvre le cas
-  // « moins de 3 mois ».
+  // Âge inconnu (M8) : message générique qui couvre le cas « moins de 3 mois »,
+  // alerte non masquable.
   return {
     level: "fievre",
-    dismissible: true,
+    dismissible: false,
     callEmergency: true,
     title: "Température élevée",
-    message: `Température de ${valeur} °C. L'âge de l'enfant n'est pas renseigné : s'il a moins de 3 mois, consultez en urgence un médecin ou appelez le 15. Sinon, consultez un médecin si la fièvre persiste ou si un des signes ci-dessous apparaît.`,
+    message: `Température de ${valeur} °C. L'âge de l'enfant n'est pas renseigné : s'il a moins de 3 mois, consultez en urgence un médecin ou appelez le 15. Sinon, consultez un médecin si la fièvre persiste. ${CALL_15_IF_SIGN}`,
     signs: WARNING_SIGNS,
   };
+}
+
+export interface TemperatureEditAlertInput {
+  previousValeur: number | null | undefined;
+  previousDate: Date;
+  nextValeur: number | null | undefined;
+  nextDate: Date;
+  birthDate: BirthDateInput;
+}
+
+/**
+ * Alerte à afficher après la MODIFICATION d'une température : si la valeur a
+ * changé, ou si seule la date a changé et que cela change le palier d'alerte
+ * (ex. une mesure de 38,5 °C déplacée de « 3 à 6 mois » à « moins de 3 mois »).
+ */
+export function getTemperatureEditAlert(input: TemperatureEditAlertInput): TemperatureAlert | null {
+  const next = getTemperatureAlert({
+    valeur: input.nextValeur,
+    birthDate: input.birthDate,
+    measuredAt: input.nextDate,
+  });
+  if (!next) return null;
+  if (input.nextValeur !== input.previousValeur) return next;
+  const previous = getTemperatureAlert({
+    valeur: input.previousValeur,
+    birthDate: input.birthDate,
+    measuredAt: input.previousDate,
+  });
+  if (!previous) return next;
+  return previous.level !== next.level || previous.dismissible !== next.dismissible ? next : null;
+}
+
+/**
+ * Texte d'orientation quand une température vocale n'a pas de valeur : la
+ * mesure n'est PAS enregistrée, on demande la valeur et on oriente selon l'âge
+ * (mêmes paliers que getTemperatureAlert). Orientation uniquement, jamais
+ * rassurant. Texte à relire par un pédiatre (Q3).
+ */
+export function getMissingTemperatureMessage({
+  birthDate,
+  measuredAt = new Date(),
+}: {
+  birthDate: BirthDateInput;
+  measuredAt?: Date;
+}): string {
+  const head =
+    "La température n'a pas été enregistrée : la valeur n'a pas été comprise. Redites-la, par exemple « température 38,5 ».";
+  const tier = getAgeTierAt(birthDate, measuredAt);
+  if (tier === "under3m") {
+    return `${head} Si votre bébé de moins de 3 mois a de la fièvre, consultez en urgence un médecin ou appelez le 15.`;
+  }
+  if (tier === "from3to6m") {
+    return `${head} Si votre bébé a de la fièvre, consultez rapidement un médecin. En cas de doute, appelez le 15.`;
+  }
+  if (tier === "from6m") {
+    return `${head} Si votre enfant a de la fièvre, consultez un médecin. En cas de doute, appelez le 15.`;
+  }
+  return `${head} L'âge de l'enfant n'est pas renseigné : s'il a moins de 3 mois et de la fièvre, consultez en urgence un médecin ou appelez le 15.`;
 }

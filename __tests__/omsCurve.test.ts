@@ -63,3 +63,27 @@ describe("note de plage OMS", () => {
     expect(hasMeasurementsBeyondOms([NaN])).toBe(false);
   });
 });
+
+describe("H3 légende neutre de la courbe de croissance", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { OMS_BAND_LABELS, OMS_LEGEND_NOTE } = require("@/utils/omsCurve");
+  const fs = require("fs");
+  const path = require("path");
+  const screen = fs.readFileSync(path.join(__dirname, "..", "app/(drawer)/baby/(tabs)/croissance.tsx"), "utf8");
+
+  it("bandes P3–P15, P15–P85, P85–P97", () => {
+    expect(OMS_BAND_LABELS).toEqual(["P3–P15", "P15–P85", "P85–P97"]);
+  });
+
+  it("ligne de légende : seul un professionnel de santé interprète la courbe", () => {
+    expect(OMS_LEGEND_NOTE).toBe("Repères OMS — seul un professionnel de santé interprète la courbe");
+  });
+
+  it("l'écran n'affiche plus « Normal » ni « Extrême » et utilise les libellés neutres", () => {
+    expect(screen).not.toMatch(/>\s*Normal\s*</);
+    expect(screen).not.toMatch(/>\s*Extrême\s*</);
+    expect(screen).not.toMatch(/bandExtreme|bandNormal|bandLimit/);
+    expect(screen).toContain("OMS_BAND_LABELS");
+    expect(screen).toContain("OMS_LEGEND_NOTE");
+  });
+});

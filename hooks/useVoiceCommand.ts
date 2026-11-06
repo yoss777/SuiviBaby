@@ -23,6 +23,7 @@ import {
   findEventByIdentifier,
   lookupFailureMessage,
   executeCommand,
+  executeMultipleCommands,
   isAmbiguous,
   type ModalFeedback,
 } from "./useVoiceEventCreator";
@@ -105,39 +106,27 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       title: "Confirmer les ajouts",
       message: confirmMessage,
       onConfirm: async () => {
-        let successCount = 0;
-        const errors: string[] = [];
+        const { successCount, errors, notices, alert } = await executeMultipleCommands(
+          commands,
+          childId,
+          healthOptions,
+        );
 
-        for (const cmd of commands) {
-          try {
-            await executeCommand(
-              cmd,
-              childId,
-              feedback,
-              true,
-              { pipi: cmd.pipi || false, popo: cmd.popo || false },
-              undefined,
-              healthOptions,
-            );
-            successCount++;
-          } catch (error) {
-            console.error(`Erreur ajout ${cmd.type}:`, error);
-            errors.push(cmd.type);
-          }
-        }
+        const summary =
+          errors.length === 0
+            ? `${successCount} événement(s) ajouté(s) avec succès`
+            : `${successCount} événement(s) ajouté(s)\n${errors.length} erreur(s): ${errors.join(", ")}` +
+              (notices.length > 0 ? `\n\n${notices.join("\n")}` : "");
 
-        if (errors.length === 0) {
-          setInfoModal({
-            visible: true,
-            title: "Succès",
-            message: `${successCount} événement(s) ajouté(s) avec succès`,
-          });
+        if (alert) {
+          // L'alerte santé remplace la fenêtre de résumé : une seule modale, le
+          // résumé en tête, l'alerte jamais cachée dessous.
+          setInfoModal((prev) => ({ ...prev, visible: false }));
+          showTemperatureAlertDialog(showAlert, alert, summary);
+        } else if (errors.length === 0) {
+          setInfoModal({ visible: true, title: "Succès", message: summary });
         } else {
-          setInfoModal({
-            visible: true,
-            title: "Résultat partiel",
-            message: `${successCount} événement(s) ajouté(s)\n${errors.length} erreur(s): ${errors.join(", ")}`,
-          });
+          setInfoModal({ visible: true, title: "Résultat partiel", message: summary });
         }
 
         setIsProcessing(false);
@@ -152,7 +141,6 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   const processVoiceCommand = async (text: string) => {
     try {
       setTranscription(text);
-      console.log("🔍 Analyse de la commande:", text);
 
       const { commands, truncated, source } = await parseCommandsSmart(text);
       console.log(`🧠 Analyse: ${source}`);
@@ -231,7 +219,6 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       // Flow single-event
       const commandWithChildId = commandsWithChildId[0];
-      console.log("✅ Commande analysée:", commandWithChildId);
 
       const action = commandWithChildId.action || "add";
       let confirmTitle = "Confirmer l'ajout";

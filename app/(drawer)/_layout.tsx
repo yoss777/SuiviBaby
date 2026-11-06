@@ -25,14 +25,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBaby } from "@/contexts/BabyContext";
 import { DeletionRequestNotifier } from "@/components/suivibaby/DeletionRequestNotifier";
 import { InfoModal } from "@/components/ui/InfoModal";
-import {
-  cleanupFailedEvents,
-  getExhaustedEvents,
-  onExhaustedChange,
-  onQueueChange,
-  retryExhaustedEvents,
-} from "@/services/offlineQueueService";
-import { describeQueuedWrite } from "@/utils/queuedWriteLabel";
+import { FAILED_WRITES_READ_ERROR, useFailedWrites } from "@/hooks/useFailedWrites";
+import { onExhaustedChange, onQueueChange } from "@/services/offlineQueueService";
 
 // Contexte pour gérer le headerRight dynamiquement
 const HeaderRightContext = createContext<{
@@ -136,16 +130,9 @@ export default function DrawerLayout() {
   // jamais perdues en silence, l'utilisateur peut les voir, les réessayer ou
   // les supprimer.
   const [failedWrites, setFailedWrites] = useState(0);
-  const [failedList, setFailedList] = useState<string[] | null>(null);
+  const failed = useFailedWrites();
   useEffect(() => onExhaustedChange(setFailedWrites), []);
-  const openFailedList = useCallback(async () => {
-    try {
-      const rows = await getExhaustedEvents();
-      setFailedList(rows.map(describeQueuedWrite));
-    } catch {
-      setFailedList([]);
-    }
-  }, []);
+  const openFailedList = failed.open;
 
   const setHeaderRight = useCallback(
     (component: React.ReactElement | null, ownerId?: string) => {
@@ -288,22 +275,21 @@ export default function DrawerLayout() {
             </View>
           )}
           <InfoModal
-            visible={failedList !== null}
+            visible={failed.state.status !== "closed"}
             title="Enregistrements non envoyés"
             message={
               <View>
                 <Text style={{ color: Colors[colorScheme].text }}>
-                  {failedList && failedList.length > 0
-                    ? `${failedList.join("\n")}\n\nCes saisies n'ont pas pu être envoyées au serveur. Réessayez, ou supprimez-les si elles ne sont plus utiles.`
-                    : "Aucun enregistrement en échec."}
+                  {failed.state.status === "error"
+                    ? FAILED_WRITES_READ_ERROR
+                    : failed.state.status === "ready" && failed.state.rows.length > 0
+                      ? `${failed.state.rows.map((row) => row.label).join("\n")}\n\nCes saisies n'ont pas pu être envoyées au serveur. Réessayez, ou supprimez-les si elles ne sont plus utiles.`
+                      : "Aucun enregistrement en échec."}
                 </Text>
-                {failedList && failedList.length > 0 && (
+                {failed.state.status === "ready" && failed.state.rows.length > 0 && (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={async () => {
-                      await cleanupFailedEvents();
-                      setFailedList(null);
-                    }}
+                    onPress={failed.deleteShown}
                     style={{ marginTop: 12 }}
                   >
                     <Text style={{ color: "#b42318", fontWeight: "700" }}>Supprimer ces saisies</Text>
@@ -316,11 +302,8 @@ export default function DrawerLayout() {
             backgroundColor={Colors[colorScheme].background}
             textColor={Colors[colorScheme].text}
             allowBackdropDismiss
-            onClose={() => setFailedList(null)}
-            onConfirm={() => {
-              setFailedList(null);
-              void retryExhaustedEvents();
-            }}
+            onClose={failed.close}
+            onConfirm={() => void failed.retry()}
           />
           <Drawer
             initialRouteName="baby"

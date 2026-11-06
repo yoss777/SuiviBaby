@@ -5,7 +5,8 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
-import { getTemperatureAlert } from "@/utils/temperatureAlert";
+import { getTemperatureAlert, getTemperatureEditAlert } from "@/utils/temperatureAlert";
+import { validateSoinsSubmission } from "@/utils/soinsSubmit";
 import { showTemperatureAlertDialog } from "@/utils/temperatureAlertDialog";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
@@ -465,24 +466,25 @@ export function SoinsForm({
 
     const medicamentItems = [
       {
-        label: "Paracétamol 5 ml",
+        label: "Paracétamol",
         onPress: () => {
           setIncludeTemperature(false);
           setIncludeSymptome(false);
           setSelectedType("medicament");
           setMedicamentName("Paracétamol");
-          setMedicamentDosage("5 ml");
+          // Aucune dose préremplie : la dose se demande au médecin ou au pharmacien.
+          setMedicamentDosage("");
           setMedicamentVoie("orale");
         },
       },
       {
-        label: "Ibuprofène 2.5 ml",
+        label: "Ibuprofène",
         onPress: () => {
           setIncludeTemperature(false);
           setIncludeSymptome(false);
           setSelectedType("medicament");
           setMedicamentName("Ibuprofène");
-          setMedicamentDosage("2.5 ml");
+          setMedicamentDosage("");
           setMedicamentVoie("orale");
         },
       },
@@ -645,7 +647,16 @@ export function SoinsForm({
             editData!,
           );
           showSuccess("temperature", "Température modifiée");
-          if (valeur !== editData!.valeur) alertForTemperature(valeur);
+          // Alerte si la valeur change, ou si seule la date change le palier
+          // d'alerte (ex. une mesure déplacée avant les 3 mois de l'enfant).
+          const editAlert = getTemperatureEditAlert({
+            previousValeur: editData!.valeur,
+            previousDate: editData!.date ? toDate(editData!.date) : dateHeure,
+            nextValeur: valeur,
+            nextDate: dateHeure,
+            birthDate: activeChild?.birthDate,
+          });
+          if (editAlert) showTemperatureAlertDialog(showAlert, editAlert);
         } else {
           const list = [...symptomes];
           if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
@@ -668,54 +679,49 @@ export function SoinsForm({
           showSuccess("symptome", "Symptôme modifié");
         }
       } else {
-        if (!includeTemperature && !includeSymptome) {
-          showAlert("Erreur", "Sélectionnez au moins Température ou Symptôme.");
+        // Valider TOUTES les parties avant la moindre écriture, puis écrire,
+        // puis afficher l'alerte de température en dernier (elle ne doit pas
+        // être masquée ni remplacée par un autre message).
+        const validation = validateSoinsSubmission({
+          includeTemperature,
+          includeSymptome,
+          temperatureValue,
+          temperatureMode,
+          symptomes,
+          symptomeAutre,
+        });
+        if (!validation.ok) {
+          showAlert("Erreur", validation.message);
           setIsSubmitting(false);
           return;
         }
-        if (includeTemperature) {
-          const valeur = Number(temperatureValue);
-          if (Number.isNaN(valeur) || valeur < TEMP_BOUNDS.min || valeur > TEMP_BOUNDS.max) {
-            showAlert("Erreur", "Indiquez une température valide.");
-            setIsSubmitting(false);
-            return;
-          }
-          if (!temperatureMode) {
-            showAlert("Erreur", "Sélectionnez un mode de prise.");
-            setIsSubmitting(false);
-            return;
-          }
+        let temperatureAlertValue: number | null = null;
+        if (validation.temperature) {
           ajouterEvenementOptimistic(
             activeChild.id,
             removeUndefined({
               type: "temperature" as const,
               ...common,
-              valeur,
-              modePrise: temperatureMode,
+              valeur: validation.temperature.valeur,
+              modePrise: validation.temperature.modePrise,
             }),
           );
           showSuccess("temperature", "Température enregistrée");
-          alertForTemperature(valeur);
+          temperatureAlertValue = validation.temperature.valeur;
         }
-        if (includeSymptome) {
-          const list = [...symptomes];
-          if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
-          if (list.length === 0) {
-            showAlert("Erreur", "Sélectionnez au moins un symptôme.");
-            setIsSubmitting(false);
-            return;
-          }
+        if (validation.symptomes) {
           ajouterEvenementOptimistic(
             activeChild.id,
             removeUndefined({
               type: "symptome" as const,
               ...common,
-              symptomes: list,
+              symptomes: validation.symptomes,
               intensite: symptomeIntensite,
             }),
           );
           showSuccess("symptome", "Symptôme enregistré");
         }
+        if (temperatureAlertValue !== null) alertForTemperature(temperatureAlertValue);
       }
     } else if (selectedType === "medicament") {
       if (!medicamentName.trim()) {
@@ -836,8 +842,11 @@ export function SoinsForm({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          if (editData.type === "temperature") {
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          if (outcome === "queued") {
+            // Hors ligne : la suppression n'est PAS faite, elle est en attente.
+            showToast("Suppression enregistrée : synchronisation en attente");
+          } else if (editData.type === "temperature") {
             showToast("Température supprimée");
           } else if (editData.type === "medicament") {
             showToast("Médicament supprimé");
@@ -1408,7 +1417,7 @@ export function SoinsForm({
             <TextInput
               value={medicamentDosage}
               onChangeText={setMedicamentDosage}
-              placeholder="5 ml"
+              placeholder="Dose donnée"
               placeholderTextColor={nc.textMuted}
               maxLength={100}
               style={[

@@ -166,6 +166,16 @@ describe("submitMilestone : modification", () => {
     expect(mockDeletePhoto).toHaveBeenCalledWith("children/c1/jalons/old.jpg");
   });
 
+  it("a failed edit with a new photo is not retryable (the uploaded file is deleted on failure)", async () => {
+    await submitMilestone({ childId: "c1", editData, photoUri: "file:///new.jpg", data });
+    expect(mockModify.mock.calls[0][5]).toEqual(expect.objectContaining({ retryable: false }));
+  });
+
+  it("an edit without a new photo stays retryable", async () => {
+    await submitMilestone({ childId: "c1", editData, photoUri: null, data });
+    expect(mockModify.mock.calls[0][5].retryable).toBeUndefined();
+  });
+
   it("keeps the old photo and removes the new one when the update fails", async () => {
     await submitMilestone({ childId: "c1", editData, photoUri: "file:///new.jpg", data });
     const options = mockModify.mock.calls[0][5];

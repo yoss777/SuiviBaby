@@ -127,7 +127,7 @@ describe("getTemperatureAlert - hypothermie", () => {
     for (const age of [5, 120, 400]) {
       const a = alertFor(35.9, age)!;
       expect(a.level).toBe("hypothermie");
-      expect(a.message).toMatch(/médecin ou le 15/);
+      expect(a.message).toMatch(/médecin ou le 15|appelez le 15/i);
     }
   });
 
@@ -136,8 +136,18 @@ describe("getTemperatureAlert - hypothermie", () => {
     expect(alertFor(36.0, 400)).toBeNull();
   });
 
-  it("l'hypothermie du nouveau-né reste masquable (pas de modale bloquante)", () => {
-    expect(alertFor(35.9, 5)!.dismissible).toBe(true);
+  it("M7 : moins de 3 mois, < 36 °C : urgent, non masquable, appel du 15", () => {
+    const a = alertFor(35.9, 5)!;
+    expect(a.level).toBe("hypothermie");
+    expect(a.dismissible).toBe(false);
+    expect(a.callEmergency).toBe(true);
+    expect(a.message).toContain("moins de 3 mois");
+    expect(a.message).toContain("appelez le 15");
+  });
+
+  it("3 mois et plus : l'hypothermie reste masquable", () => {
+    expect(alertFor(35.9, 120)!.dismissible).toBe(true);
+    expect(alertFor(35.9, 400)!.dismissible).toBe(true);
   });
 });
 
@@ -147,10 +157,15 @@ describe("getTemperatureAlert - date de naissance absente", () => {
     expect(a.level).toBe("fievre");
     expect(a.message).toContain("moins de 3 mois");
     expect(a.message).toContain("appelez le 15");
-    expect(a.dismissible).toBe(true);
   });
 
-  it("l'hypothermie ne dépend pas de l'âge", () => {
+  it("M8 : tranche d'âge inconnue : alerte non masquable (fièvre et hypothermie)", () => {
+    expect(alertFor(38.2, null)!.dismissible).toBe(false);
+    expect(alertFor(35.5, null)!.dismissible).toBe(false);
+    expect(alertFor(38.2, null)!.callEmergency).toBe(true);
+  });
+
+  it("l'hypothermie ne dépend pas de l'âge pour le niveau", () => {
     expect(alertFor(35.5, null)!.level).toBe("hypothermie");
   });
 });
@@ -170,8 +185,8 @@ describe("getTemperatureAlert - entrées invalides", () => {
 });
 
 describe("contenu des alertes", () => {
-  it("liste les 7 signes de gravité dans toute alerte", () => {
-    expect(WARNING_SIGNS).toHaveLength(7);
+  it("liste les signes de gravité dans toute alerte", () => {
+    expect(WARNING_SIGNS.length).toBeGreaterThanOrEqual(7);
     for (const a of [alertFor(38, 10), alertFor(38, 120), alertFor(38, 400), alertFor(35, 10), alertFor(38, null)]) {
       expect(a!.signs).toEqual(WARNING_SIGNS);
     }

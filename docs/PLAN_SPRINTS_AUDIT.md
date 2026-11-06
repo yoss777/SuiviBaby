@@ -325,7 +325,7 @@ transcription (S12) ; exclusion iCloud de la file hors-ligne SQLite (module
 natif, S13) ; création des codes de partage par le client (S12) ; fin de la
 règle de transition 1.0 (après adoption de la version suivante).
 
-## S5 — Messages de santé sûrs · app (+ contenu) · P0 A5 · ⏳
+## S5 — Messages de santé sûrs · app (+ contenu) · P0 A5 · 🔄 code fait le 2026-11-06 (revue clinique incluse), reste la relecture pédiatre (Q3)
 
 But : aucun message de l'app ne rassure à tort ni n'encourage un couchage à
 risque.
@@ -340,17 +340,20 @@ User stories :
 - [x] **5.1** Alerte à la saisie d'une température, selon l'âge :
   < 3 mois et ≥ 38 °C → modale non masquable « consultez en urgence /
   appelez le 15 » ; 3 à 6 mois → consultation rapide ; < 36 °C → alerte
-  hypothermie ; signes de gravité affichés. (`SoinsForm.tsx:609-626`,
-  `services/insightEngine.ts:349-376`)
+  hypothermie ; signes de gravité affichés. (`alertForTemperature` dans
+  `components/forms/SoinsForm.tsx`, `temperatureAlertInsights` dans
+  `services/insightEngine.ts`, décision dans `utils/temperatureAlert.ts`)
 - [x] **5.2** Conseil « fièvre » des insights : âge pris en compte, non
   masquable pour les moins de 3 mois.
 - [x] **5.3** Retirer « C'est normal » du conseil fièvre et appétit.
-  (`services/correlationService.ts:348`)
+  (`feverAppetiteCorrelation` dans `services/correlationService.ts`)
 - [x] **5.4** « Meilleur endroit » limité au lit ; rappel de couchage sûr si
-  siestes fréquentes en voiture ou poussette. (`insightEngine.ts:298-341`)
+  siestes fréquentes en voiture, poussette ou cododo. (`sommeilInsights` dans
+  `services/insightEngine.ts`)
 - [x] **5.5** Fiche cododo réécrite (même chambre, pas le même lit avant
   4-6 mois) ; fiche fièvre complétée (« appelez le 15 ») ; coquille « Évry » ;
-  vérifier que la collection `tips` en production correspond au seed.
+  vérifier que la collection `tips` en production correspond au seed
+  (`node scripts/compareTipsWithSeed.mjs`, lecture seule).
 - [x] **5.6** Bornes de température identiques dans le formulaire et le
   serveur (34-43) ; courbes OMS qui ne disparaissent plus au-delà de
   731 jours.
@@ -361,8 +364,10 @@ Contrôle : tests unitaires des seuils par âge ; textes validés.
 
 ### Notes de réalisation S5
 
-Fait sur la branche `sprint-5/sante` (rien de commité, rien de déployé, rien
-écrit en production). Reste à faire avant la version : relecture pédiatre (Q3)
+Code livré dans le commit `ae0b5a3` (« feat(health): safe health messages
+(S5) »), présent dans la branche `sprint-6/fiabilite` ; la revue clinique
+ci-dessous est faite dans le répertoire de travail de cette branche (rien de
+commité par l'agent, rien de déployé, rien écrit en production). Reste à faire avant la version : relecture pédiatre (Q3)
 et, pour la fiche `tips`, lancer `node scripts/compareTipsWithSeed.mjs` puis
 re-semer (`seedViaFirestore.mjs`) sur accord du propriétaire.
 
@@ -370,48 +375,73 @@ re-semer (`seedViaFirestore.mjs`) sur accord du propriétaire.
 de santé sont de l'ORIENTATION uniquement (« consultez », « appelez le 15 »).
 Ils ne contiennent ni diagnostic, ni interprétation, ni formule rassurante du
 type « c'est normal ». Les seuils suivent les repères publics français (HAS,
-Santé publique France, ameli.fr) ; aucun seuil n'est ajouté au-delà du plan.
+Santé publique France, ameli.fr). Le seuil « < 36 °C » vient du plan S5 et n'a
+pas de source officielle française vérifiée : il reste signalé « à valider »
+dans le code et dans la liste pédiatre.
 
 **Seuils (`utils/temperatureAlert.ts`, source commentée à côté de chaque seuil)**
-- fièvre : ≥ 38 °C ; température basse : < 36 °C (tout âge) ;
+- fièvre : ≥ 38 °C ; température basse : < 36 °C (tout âge, non masquable avant
+  3 mois ou si l'âge est inconnu) ;
 - moins de 3 mois = date de la mesure avant le jour du 3e anniversaire mensuel
   de la naissance (mois calendaires ; fin de mois ramenée au dernier jour : né le
   31 janvier, 3 mois = 30 avril) : ≥ 38 °C, modale non masquable ;
 - 3 à 6 mois = du 3e au 6e anniversaire mensuel exclu : ≥ 38 °C, consultation rapide ;
 - 6 mois et plus : message de fièvre générique ; date de naissance inconnue :
-  message générique qui couvre le cas « moins de 3 mois » (jamais « normal »).
+  message générique qui couvre le cas « moins de 3 mois », alerte non masquable
+  (jamais « normal »).
 
 **Textes de santé modifiés (à relire par un pédiatre, Q3)**
 
-Alerte de température (saisie, `SoinsForm`) et insight « Fièvre détectée » /
-« Température basse détectée » (`{prénom} : ` précède le message dans l'insight ;
-chaque message est suivi de « Signes à surveiller : difficultés à respirer,
-somnolence inhabituelle ou bébé mou, refus de s'alimenter, vomissements
-répétés, éruption qui ne s'efface pas à la pression, pleurs inhabituels,
-convulsions. ») :
+Alerte de température (saisie, `SoinsForm`, voix) et insight « Température
+élevée enregistrée » / « Température basse enregistrée » (`{prénom} : ` précède
+le message dans l'insight). Textes à jour (revue clinique du 2026-11-06) ; chaque
+message est suivi de « Appelez le 15 sans attendre si : difficultés à respirer,
+peau pâle, grise ou marbrée, bébé mou, très difficile à réveiller ou qui gémit,
+fontanelle bombée ou nuque raide, signes de déshydratation (moins de couches
+mouillées, refus de boire), vomissements répétés, éruption qui ne s'efface pas à
+la pression, pleurs inhabituels, convulsions. » (source : ameli.fr, « La fièvre
+de l'enfant »). Chaque palier contient « Si un des signes ci-dessous apparaît,
+appelez le 15. » :
 - moins de 3 mois, titre « Température élevée », non masquable, boutons
   « J'ai compris » et « Appeler le 15 » (`tel:15`) : « Température de {T} °C
   chez un bébé de moins de 3 mois. Consultez en urgence un médecin ou appelez
-  le 15. »
+  le 15. Si un des signes ci-dessous apparaît, appelez le 15. »
 - 3 à 6 mois : « Température de {T} °C chez un bébé de 3 à 6 mois : consultez
-  rapidement un médecin. En cas de doute ou si un des signes ci-dessous
-  apparaît, appelez le 15. »
+  rapidement un médecin. Si un des signes ci-dessous apparaît, appelez le 15.
+  En cas de doute, appelez le 15. »
 - 6 mois et plus : « Température de {T} °C. Consultez un médecin si la fièvre
-  persiste ou si un des signes ci-dessous apparaît. En cas de doute, appelez le
-  15. »
-- âge inconnu : « Température de {T} °C. L'âge de l'enfant n'est pas renseigné :
-  s'il a moins de 3 mois, consultez en urgence un médecin ou appelez le 15.
-  Sinon, consultez un médecin si la fièvre persiste ou si un des signes
-  ci-dessous apparaît. »
-- hypothermie (titre « Température basse ») : « Température de {T} °C,
-  inférieure à 36 °C. Appelez un médecin ou le 15. »
+  persiste. Si un des signes ci-dessous apparaît, appelez le 15. En cas de
+  doute, appelez le 15. »
+- âge inconnu, non masquable : « Température de {T} °C. L'âge de l'enfant n'est
+  pas renseigné : s'il a moins de 3 mois, consultez en urgence un médecin ou
+  appelez le 15. Sinon, consultez un médecin si la fièvre persiste. Si un des
+  signes ci-dessous apparaît, appelez le 15. »
+- hypothermie, titre « Température basse », 3 mois et plus : « Température de
+  {T} °C, inférieure à 36 °C. Appelez un médecin ou le 15. Si un des signes
+  ci-dessous apparaît, appelez le 15. » ; moins de 3 mois (non masquable) : « …,
+  inférieure à 36 °C chez un bébé de moins de 3 mois. Appelez le 15 ou consultez
+  en urgence un médecin. Si un des signes ci-dessous apparaît, appelez le 15. » ;
+  âge inconnu (non masquable) : « …, inférieure à 36 °C. L'âge de l'enfant n'est
+  pas renseigné : s'il a moins de 3 mois, appelez le 15 ou consultez en urgence
+  un médecin. Sinon, appelez un médecin ou le 15. Si un des signes ci-dessous
+  apparaît, appelez le 15. »
 
 Autres insights (`services/insightEngine.ts`, `services/correlationService.ts`) :
 - Fièvre et appétit. Avant : « Quand {prénom} a de la fièvre, son appétit
   diminue naturellement. C'est normal — privilégiez l'hydratation. » Après :
-  « Quand {prénom} a de la fièvre, son appétit a diminué. Proposez
+  carte supprimée avant 3 mois ou si l'âge est inconnu ; de 3 à 6 mois :
+  « Quand {prénom} a de la fièvre, son appétit a diminué. Proposez le sein ou le
+  biberon plus souvent, et consultez rapidement un médecin si la fièvre persiste
+  ou si {prénom} refuse de s'alimenter. Si un des signes d'alerte de la fiche
+  fièvre apparaît, appelez le 15. » ; 6 mois et plus : « … Proposez
   régulièrement à boire et consultez un médecin si la fièvre persiste ou si
-  {prénom} refuse de s'alimenter. »
+  {prénom} refuse de boire ou de s'alimenter. Si un des signes d'alerte de la
+  fiche fièvre apparaît, appelez le 15. »
+- Baisse d'appétit : ajout de « Si cette baisse se poursuit ou si {prénom}
+  refuse de s'alimenter, demandez conseil à votre médecin. »
+- Sommeil en baisse : « Une régression de sommeil est possible à cet âge » est
+  retiré (non borné par l'âge) ; remplacé par « Si cela vous inquiète, parlez-en
+  à votre médecin. »
 - Post-vaccination. Avant : « ... Une légère fièvre ou irritabilité est normale
   dans les 48h. » Après : « {prénom} a été vacciné(e) il y a N jour(s). Si de la
   fièvre ou des signes inhabituels apparaissent, consultez un médecin ou appelez
@@ -420,12 +450,13 @@ Autres insights (`services/insightEngine.ts`, `services/correlationService.ts`) 
   cododo, poussette ou voiture) : « {prénom} dort le mieux dans son lit.
   Couchez toujours bébé sur le dos, dans son propre lit à barreaux ou berceau,
   avec un espace de couchage vide (ni oreiller, ni tour de lit, ni peluche). »
-- Couchage sûr (nouveau, au moins 3 siestes en voiture ou poussette sur 7
-  jours ; seuil produit, pas un seuil médical) : « {prénom} a fait N siestes en
-  voiture ou en poussette cette semaine. Un siège auto, une poussette ou une
-  écharpe ne remplacent pas le lit : dès que possible, recouchez bébé sur le dos
-  dans son lit à barreaux ou berceau, espace de couchage vide. Ne le laissez pas
-  dormir sans surveillance dans un siège auto à l'arrêt. »
+- Couchage sûr (nouveau, au moins 3 siestes en voiture, poussette ou cododo sur
+  7 jours ; seuil produit, pas un seuil médical) : « {prénom} a fait N siestes
+  en voiture, en poussette ou en cododo cette semaine. Un siège auto, une
+  poussette, une écharpe ou le lit des parents ne remplacent pas son lit : dès
+  que possible, recouchez bébé sur le dos dans son propre lit, dans la chambre
+  des parents (lit à barreaux ou berceau, espace de couchage vide). Ne le
+  laissez pas dormir sans surveillance dans un siège auto à l'arrêt. »
 
 Fiches `data/tips_seed.json` (textes complets dans le fichier) :
 - `sommeil_cododo_securite` : réécrite. Titre « Dormir dans la chambre des
@@ -441,7 +472,8 @@ Fiches `data/tips_seed.json` (textes complets dans le fichier) :
   ou appelez le 15 » ; « De 3 à 6 mois : dès 38°C, consultez rapidement un
   médecin » ; « Après 6 mois : consultez un médecin si la fièvre persiste ou si
   l'un des signes ci-dessous apparaît » ; « En cas de doute, à tout âge :
-  appelez le 15 » ; les 7 signes. Retirés : seuils 39/40 °C et durées 24/48 h
+  appelez le 15 » ; les 7 signes (liste portée à 9 par la revue clinique, voir
+  plus bas). Retirés : seuils 39/40 °C et durées 24/48 h
   (absents du plan), « La température varie normalement entre 36.5 et 37.5 »,
   « la fièvre n'est pas une maladie », paracétamol / ibuprofène et dosages (remplacés par
   « Ne donnez aucun médicament sans avis d'un médecin ou d'un pharmacien »),
@@ -501,6 +533,70 @@ Fiches `data/tips_seed.json` (textes complets dans le fichier) :
 6. Courbes OMS : au-delà de 731 jours, la note « Courbes OMS disponibles jusqu'à
    24 mois » s'affiche sous le graphique.
 
+**Revue clinique des 2026-11-06 (corrections après relecture)**
+
+Règle propriétaire (Q4) : orientation uniquement, jamais de diagnostic ni de
+rassurance, sources françaises (ameli.fr, Santé publique France, HAS, ANSM)
+citées en commentaire. Quand un chiffre officiel actuel n'est pas sûr, il est
+retiré, remplacé par une phrase d'orientation (« demandez à votre médecin ou à
+votre pharmacien ») et la question est ajoutée à la liste pédiatre ci-dessous.
+- H1 formulaire Soins : température + symptôme validés ensemble avant toute
+  écriture (`utils/soinsSubmit.ts`), alerte de température affichée en dernier.
+  `ModalContext` : une alerte non masquable ou avec appel du 15 n'est jamais
+  remplacée par un `showAlert` / `showConfirm` ultérieur (file d'attente) et
+  `hide()` ne la ferme pas.
+- H2 signes d'alerte : titre « Appelez le 15 sans attendre si : », 9 signes,
+  chaque palier dit d'appeler le 15 si un des signes apparaît (app et fiche
+  fièvre).
+- H3 courbe de croissance : bandes neutres « P3–P15 », « P15–P85 », « P85–P97 »,
+  ligne « Repères OMS — seul un professionnel de santé interprète la courbe »,
+  plus aucune couleur « bon / mauvais ».
+- H4 fiches : « Un tissu avec votre odeur dans le lit » retiré
+  (`dev_eveil_sensoriel`) ; doudou / tissu retiré de `sommeil_regression_8mois`
+  (remplacé par « Lit vide : avant 12 mois, ni doudou, ni tissu, ni peluche dans
+  le lit (espace de couchage vide) »).
+- M1 l'empreinte de `useSmartContent` = id + type + valeur + date + updatedAt.
+- M2 alertes de température calculées même si les insights sont désactivés et
+  sans date de naissance (message d'âge inconnu) ; les autres insights restent
+  conditionnés.
+- M3 les températures optimistes ou en file hors ligne (API publique du store
+  optimiste, lecture seule) alimentent l'alerte de l'accueil.
+- M4 température vocale sans valeur : rien n'est enregistré, message
+  « La température n'a pas été enregistrée : la valeur n'a pas été comprise.
+  Redites-la, par exemple « température 38,5 ». » suivi d'une orientation selon
+  l'âge.
+- M5 plusieurs événements vocaux : l'alerte santé est dans la même modale que le
+  résumé (résumé en tête), jamais dessous ; un événement non enregistré n'est
+  plus compté comme un succès.
+- M6 corrélation fièvre / appétit : supprimée avant 3 mois ou âge inconnu ;
+  « proposez le sein ou le biberon plus souvent » avant 6 mois (pas d'eau).
+- M7 / M8 < 36 °C avant 3 mois, ou âge inconnu : non masquable avec « Appeler le
+  15 ». Seuil à valider.
+- M9 modèles de médicaments : le nom seul (« Paracétamol », « Ibuprofène »), le
+  champ « Dosage » reste libre et éditable comme avant.
+- M10 le cododo compte dans le rappel de couchage sûr.
+- M11 fiches : `sante_vitamine_d` 400 à 800 UI/jour de 0 à 18 mois (consensus
+  français 2022, SFP) ; `sante_post_vaccination` calendrier détaillé retiré
+  (carnet de santé, médecin) ; `alim_diversification_debut` Santé publique
+  France 2021 (tous les groupes d'aliments entre 4 et 6 mois, calendrier par
+  étapes et délais de 3 jours retirés) ; `alim_conservation_lait` 48 heures au
+  réfrigérateur (ameli.fr), autres durées retirées ;
+  `alim_biberon_preparation` stérilisation non obligatoire, lavage soigneux, ~70
+  °C, dosage poudre, quantités par âge et durées retirés ; `alim_eau_hydratation`
+  boissons végétales inadaptées, quantités en ml retirées ;
+  `bienetre_baby_blues` 3114 ; `dev_tummy_time` « toujours éveillé et sous
+  surveillance ».
+- L2 alerte aussi quand seule la date d'une mesure ≥ 38 °C change le palier.
+- L4 « Température élevée enregistrée » (plus « Fièvre détectée ») ; régression
+  de sommeil retirée du texte ; « Baisse d'appétit » avec orientation.
+- L5 plus de `console.log` du contenu vocal ; la note de l'utilisateur n'est
+  plus écrasée par « Modifié par commande vocale ».
+- L7 cette section : références de lignes remplacées par des noms de fonctions,
+  statut S5, branche et seuils à jour.
+- **Hors périmètre, à faire (suivi)** : L1, fuseau horaire de la date de
+  naissance (l'âge à la date de la mesure peut différer d'un jour selon le
+  fuseau).
+
 **Questions ouvertes pour le pédiatre (Q3)**
 - Conseils médicaments retirés (paracétamol, ibuprofène, dosages) des fiches
   fièvre, dents et post-vaccination : faut-il les réintroduire, avec quelle source ?
@@ -513,6 +609,30 @@ Fiches `data/tips_seed.json` (textes complets dans le fichier) :
   (« Baby blues (normal) »), `sommeil_regression_4mois`, `sommeil_regression_8mois`,
   `dev_tummy_time`, `dev_motricite_libre`, `bienetre_couple`.
 - Textes d'alerte température : formulations et signes de gravité ci-dessus.
+
+**Questions pédiatre de la revue clinique (12)**
+1. Mois calendaires ou jours pour les paliers d'âge (< 3 mois, 3 à 6 mois) ?
+2. Source et validité du palier 3 à 6 mois (« consultez rapidement ») ?
+3. « Si la fièvre persiste » : au bout de combien de temps consulter ?
+4. Seuil « < 36 °C » (alerte température basse) : valeur et conduite à tenir,
+   y compris non masquable avant 3 mois.
+5. Mode de mesure (rectale, axillaire, frontale, tympanique) : quel mode
+   privilégier, et quelle correction éventuelle ?
+6. Liste finale des signes d'appel du 15 (9 signes aujourd'hui, sources
+   ameli.fr) : complète, trop longue ?
+7. Courbes OMS ou AFPA / Carnet de santé pour la croissance en France ?
+8. Que recouvre « cododo » pour l'app (même lit, même chambre, lit accolé) et
+   quel message pour le rappel de couchage sûr ?
+9. Textes retirés ou reformulés à valider : vitamine D (400-800 UI/jour 0-18
+   mois, vitamine K), vaccination (renvoi au carnet de santé), diversification
+   (SpF 2021, allergènes, textures), conservation du lait maternel (48 h au
+   frigo ; durées ambiante / congélation / décongélation retirées), préparation
+   du biberon (eau, quantités, durées retirées), boissons végétales.
+10. Appeler le 15 ou le 112 à l'étranger (voyage) : que dit l'alerte ?
+11. Modèles de médicaments : faut-il garder « Paracétamol » / « Ibuprofène »
+    comme noms préremplis, sans dose ?
+12. Fièvre après vaccination à 2 mois : conduite à tenir exacte (la fiche
+    renvoie à la fiche fièvre : avant 3 mois, dès 38 °C, urgence).
 
 **Relecture pédiatre (Q3) et décision MDR (Q4)**
 - [x] Décision MDR (Q4) : orientation uniquement, voir ci-dessus.

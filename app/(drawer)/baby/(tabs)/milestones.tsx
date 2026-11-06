@@ -16,6 +16,7 @@ import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
+import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -1188,7 +1189,7 @@ export default function MilestonesScreen() {
           return next;
         });
       },
-      run: () => Promise.all(ids.map((id) => supprimerJalon(childId, id))),
+      run: batchDeleteRun(ids, (id) => supprimerJalon(childId, id)),
       onRestore: () => {
         setSoftDeletedIds((prev) => {
           const next = new Set(prev);

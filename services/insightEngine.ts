@@ -8,10 +8,10 @@ import {
 import type { EventType } from "@/services/eventsService";
 import type { BirthDateInput } from "@/utils/ageUtils";
 import {
+  ALERT_SEVERITY,
   formatWarningSigns,
   getTemperatureAlert,
   type TemperatureAlert,
-  type TemperatureAlertLevel,
 } from "@/utils/temperatureAlert";
 
 // ============================================
@@ -51,6 +51,11 @@ interface InsightParams {
   /** Date de naissance : permet d'adapter les alertes de température à l'âge. */
   birthDate?: BirthDateInput;
   now?: Date;
+  /**
+   * false : n'inclut pas l'alerte de température (calculée à part, car elle ne
+   * dépend pas du réglage « insights »). Par défaut : true.
+   */
+  includeHealth?: boolean;
 }
 
 // ============================================
@@ -119,7 +124,7 @@ function alimentationInsights(
         type: "warning",
         icon: "chart-line-down",
         title: "Baisse d'appétit",
-        message: `Les repas de ${name} ont diminué de ${pct}% cette semaine par rapport à la semaine dernière.`,
+        message: `Les repas de ${name} ont diminué de ${pct}% cette semaine par rapport à la semaine dernière. Si cette baisse se poursuit ou si ${name} refuse de s'alimenter, demandez conseil à votre médecin.`,
         accentColor: color,
         priority: 2,
         category: "alimentation",
@@ -265,7 +270,7 @@ function sommeilInsights(
           type: "warning",
           icon: "clock",
           title: "Sommeil en baisse",
-          message: `${name} dort ${pct}% de moins que la semaine dernière. Une régression de sommeil est possible à cet âge.`,
+          message: `${name} dort ${pct}% de moins que la semaine dernière. Si cela vous inquiète, parlez-en à votre médecin.`,
           accentColor: color,
           priority: 2,
           category: "sommeil",
@@ -348,16 +353,21 @@ function sommeilInsights(
 
     // Siestes fréquentes hors lit (voiture, poussette, écharpe) : rappel de
     // couchage sûr. Seuil produit : au moins 3 siestes sur 7 jours.
-    const offBedNaps = recent7d.filter(
-      (s) => s.location === "voiture" || s.location === "poussette",
-    ).length;
+    // Le cododo est compté aussi : bébé doit dormir dans son propre lit, dans la
+    // chambre des parents (Santé publique France, HAS ; formulation à valider
+    // par un pédiatre, Q3).
+    const cododoNaps = recent7d.filter((s) => s.location === "cododo").length;
+    const offBedNaps =
+      recent7d.filter((s) => s.location === "voiture" || s.location === "poussette").length +
+      cododoNaps;
     if (offBedNaps >= OFF_BED_NAP_REMINDER_COUNT) {
+      const places = cododoNaps > 0 ? "en voiture, en poussette ou en cododo" : "en voiture ou en poussette";
       insights.push({
         id: nextId(),
         type: "warning",
         icon: "bed",
         title: "Couchage sûr",
-        message: `${name} a fait ${offBedNaps} siestes en voiture ou en poussette cette semaine. Un siège auto, une poussette ou une écharpe ne remplacent pas le lit : dès que possible, recouchez bébé sur le dos dans son lit à barreaux ou berceau, espace de couchage vide. Ne le laissez pas dormir sans surveillance dans un siège auto à l'arrêt.`,
+        message: `${name} a fait ${offBedNaps} siestes ${places} cette semaine. Un siège auto, une poussette, une écharpe ou le lit des parents ne remplacent pas son lit : dès que possible, recouchez bébé sur le dos dans son propre lit, dans la chambre des parents (lit à barreaux ou berceau, espace de couchage vide). Ne le laissez pas dormir sans surveillance dans un siège auto à l'arrêt.`,
         accentColor: color,
         priority: 2,
         category: "sommeil",
@@ -372,29 +382,20 @@ function sommeilInsights(
 
 const OFF_BED_NAP_REMINDER_COUNT = 3;
 
-const ALERT_SEVERITY: Record<TemperatureAlertLevel, number> = {
-  fievre: 1,
-  rapide: 2,
-  hypothermie: 3,
-  urgent: 4,
-};
-
-function santeInsights(
+/**
+ * Alerte de température des 7 derniers jours : l'âge de l'enfant pris en compte
+ * est celui AU MOMENT de la mesure (utils/temperatureAlert.ts). On garde la plus
+ * grave. Indépendante du réglage « insights » et de la date de naissance
+ * (sans date : message d'âge inconnu, non masquable).
+ */
+function temperatureAlertInsights(
   events: EventData[],
   name: string,
-  _ageMonths: number,
   now: Date,
   birthDate?: BirthDateInput,
 ): Insight[] {
-  const insights: Insight[] = [];
-  const color = TIP_CATEGORY_COLORS.sante;
-
-  const recent7d = filterByDays(events, 7, now);
-
-  // Température des 7 derniers jours : l'alerte dépend de l'âge de l'enfant
-  // AU MOMENT de la mesure (utils/temperatureAlert.ts). On garde la plus grave.
   let worst: { alert: TemperatureAlert; valeur: number } | null = null;
-  for (const e of filterByType(recent7d, "temperature")) {
+  for (const e of filterByType(filterByDays(events, 7, now), "temperature")) {
     if (typeof e.valeur !== "number") continue;
     const alert = getTemperatureAlert({
       valeur: e.valeur,
@@ -409,21 +410,50 @@ function santeInsights(
         Math.abs(e.valeur - 37) > Math.abs(worst.valeur - 37));
     if (better) worst = { alert, valeur: e.valeur };
   }
-  if (worst) {
-    const { alert } = worst;
-    insights.push({
+  if (!worst) return [];
+  const { alert } = worst;
+  return [
+    {
       id: nextId(),
       type: "warning",
       icon: alert.level === "hypothermie" ? "temperature-low" : "temperature-high",
       title:
-        alert.level === "hypothermie" ? "Température basse détectée" : "Fièvre détectée",
+        alert.level === "hypothermie"
+          ? "Température basse enregistrée"
+          : "Température élevée enregistrée",
       message: `${name} : ${alert.message} ${formatWarningSigns(alert.signs)}`,
-      accentColor: color,
+      accentColor: TIP_CATEGORY_COLORS.sante,
       priority: alert.dismissible ? 1 : 0,
       category: "sante",
       ...(alert.dismissible ? {} : { dismissible: false }),
-    });
-  }
+    },
+  ];
+}
+
+function normalizeEvents(events: EventData[]): EventData[] {
+  return events.map((e) => ({
+    ...e,
+    date: e.date instanceof Date ? e.date : new Date(e.date),
+  }));
+}
+
+/** Alertes santé seules (températures), pour l'écran d'accueil. */
+export function generateHealthAlertInsights(params: InsightParams): Insight[] {
+  const { events, babyName, birthDate, now = new Date() } = params;
+  insightCounter = 0;
+  return temperatureAlertInsights(normalizeEvents(events), babyName, now, birthDate);
+}
+
+function santeInsights(
+  events: EventData[],
+  name: string,
+  _ageMonths: number,
+  now: Date,
+): Insight[] {
+  const insights: Insight[] = [];
+  const color = TIP_CATEGORY_COLORS.sante;
+
+  const recent7d = filterByDays(events, 7, now);
 
   // Recent vaccination
   const vaccins = filterByType(recent7d, "vaccin");
@@ -554,21 +584,19 @@ function developpementInsights(
  * Returns sorted by priority (1=highest).
  */
 export function generateInsights(params: InsightParams): Insight[] {
-  const { events, babyName, ageMonths, birthDate, now = new Date() } = params;
+  const { events, babyName, ageMonths, birthDate, now = new Date(), includeHealth = true } = params;
 
   // Reset counter for consistent IDs
   insightCounter = 0;
 
   // Convert all dates to Date objects
-  const normalizedEvents: EventData[] = events.map((e) => ({
-    ...e,
-    date: e.date instanceof Date ? e.date : new Date(e.date),
-  }));
+  const normalizedEvents = normalizeEvents(events);
 
   const allInsights: Insight[] = [
     ...alimentationInsights(normalizedEvents, babyName, ageMonths, now),
     ...sommeilInsights(normalizedEvents, babyName, ageMonths, now),
-    ...santeInsights(normalizedEvents, babyName, ageMonths, now, birthDate),
+    ...(includeHealth ? temperatureAlertInsights(normalizedEvents, babyName, now, birthDate) : []),
+    ...santeInsights(normalizedEvents, babyName, ageMonths, now),
     ...developpementInsights(normalizedEvents, babyName, ageMonths, now),
   ];
 

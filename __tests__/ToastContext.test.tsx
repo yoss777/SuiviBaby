@@ -92,6 +92,28 @@ describe("showUndoToast", () => {
     expect(onExpire).not.toHaveBeenCalled();
   });
 
+  it("dismissToast runs the pending deletion once instead of leaving a stale callback behind", () => {
+    const { queryByText } = setup();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
+
+    act(() => api.dismissToast());
+
+    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(queryByText("Supprimé")).toBeNull();
+    // Un toast suivant ne rejoue pas, et le minuteur non plus.
+    act(() => api.showToast("Autre message"));
+    act(() => { jest.advanceTimersByTime(10_000); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismissToast with no undo pending only closes the toast", () => {
+    const { queryByText } = setup();
+    act(() => api.showToast("Info"));
+    act(() => api.dismissToast());
+    expect(queryByText("Info")).toBeNull();
+  });
+
   it("a second undo toast does not drop the first deletion", () => {
     setup();
     const first = jest.fn();

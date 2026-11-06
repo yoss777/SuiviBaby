@@ -5,6 +5,7 @@
 // fois (getToasts) : pas de fermeture périmée imbriquée sur 3 niveaux.
 
 import { captureServiceError } from "@/utils/errorReporting";
+import { DELETE_QUEUED_MESSAGE } from "@/utils/deleteOutcome";
 
 export const MAX_DELETE_ATTEMPTS = 3;
 
@@ -14,6 +15,44 @@ type Toasts = {
 };
 
 type DeleteResult = "deleted" | "queued" | void;
+
+/**
+ * Suppression groupée dont les nouveaux essais ne renvoient QUE les
+ * identifiants en échec (Promise.allSettled : un échec n'interrompt pas les
+ * autres, et ce qui a réussi n'est pas redemandé — sinon le serveur répond
+ * « introuvable » et l'utilisateur voit une erreur pour rien).
+ *
+ * À passer comme `run` : chaque appel traite les identifiants restants, rejette
+ * avec la première vraie erreur s'il en reste, et renvoie sinon tous les
+ * résultats (y compris ceux des essais précédents, pour le message « queued »).
+ */
+export function batchDeleteRun(
+  ids: string[],
+  deleteOne: (id: string) => Promise<DeleteResult>,
+): () => Promise<DeleteResult[]> {
+  let remaining = [...ids];
+  const outcomes: DeleteResult[] = [];
+  return async () => {
+    const settled = await Promise.allSettled(remaining.map((id) => deleteOne(id)));
+    const failedIds: string[] = [];
+    let firstError: unknown;
+    let hasError = false;
+    settled.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        outcomes.push(result.value);
+      } else {
+        failedIds.push(remaining[index]);
+        if (!hasError) {
+          hasError = true;
+          firstError = result.reason;
+        }
+      }
+    });
+    remaining = failedIds;
+    if (hasError) throw firstError;
+    return outcomes;
+  };
+}
 
 export interface RunDeleteOptions {
   /**
@@ -37,7 +76,7 @@ export async function runDeleteWithRetry(options: RunDeleteOptions): Promise<voi
     const outcome = await options.run();
     const queued = Array.isArray(outcome) ? outcome.includes("queued") : outcome === "queued";
     if (queued) {
-      options.getToasts().showToast("Suppression enregistrée : synchronisation en attente.");
+      options.getToasts().showToast(DELETE_QUEUED_MESSAGE);
     }
   } catch (error) {
     captureServiceError(error, options.context);

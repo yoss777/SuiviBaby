@@ -18,7 +18,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
-import { isConflictError, isNetworkError } from "@/utils/networkError";
+import { isConflictError, isNetworkError, isNotFoundError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -28,6 +28,8 @@ import {
   failOptimistic,
   generateTempId,
   markOptimisticQueued,
+  notifyOptimisticFailure,
+  setOptimisticInFlight,
   updateOptimisticCreate,
   type OptimisticFailure,
 } from "./optimisticEventsStore";
@@ -494,7 +496,13 @@ export async function supprimerEvenement(
     { success: boolean; deleted: { event: number; likes: number; comments: number } }
   >(functions, "deleteEventCascade");
 
-  await deleteEvent({ childId, eventId: id });
+  try {
+    await deleteEvent({ childId, eventId: id });
+  } catch (error) {
+    // Suppression idempotente : « introuvable » = l'événement n'existe plus
+    // (un envoi précédent a abouti, ou un autre appareil l'a supprimé).
+    if (!isNotFoundError(error)) throw error;
+  }
   return "deleted";
 }
 
@@ -869,15 +877,32 @@ function failWrite(
   operationId: string,
   error: unknown,
   eventType: unknown,
-  options?: OptimisticWriteOptions,
-  retryable = true,
+  options: OptimisticWriteOptions | undefined,
+  retryable: boolean,
+  /** De quoi reconstruire l'échec si l'entrée optimiste a disparu entre-temps. */
+  fallback: { childId: string; eventId?: string; retryData: any; previousEvent?: any },
 ) {
   captureServiceError(error, {
     service: "events",
     operation: operation === "create" ? "ajouterEvenementOptimistic" : "modifierEvenementOptimistic",
     extra: { eventType: typeof eventType === "string" ? eventType : null },
   });
-  failOptimistic(operationId, { retryable: retryable && options?.retryable !== false });
+  const canRetry = retryable && options?.retryable !== false;
+  const failure = failOptimistic(operationId, { retryable: canRetry });
+  if (!failure) {
+    // Entrée déjà retirée (purge, réconciliation) : l'utilisateur doit quand
+    // même savoir que l'écriture a échoué, avec de quoi la refaire.
+    notifyOptimisticFailure({
+      operation,
+      eventType: typeof eventType === "string" ? eventType : null,
+      childId: fallback.childId,
+      eventId: operation === "update" ? fallback.eventId : undefined,
+      retryData: fallback.retryData,
+      previousEvent: fallback.previousEvent,
+      event: operation === "update" ? fallback.previousEvent : fallback.retryData,
+      retryable: canRetry,
+    });
+  }
   runCallback(() => options?.onFailed?.(error), "onFailed");
 }
 
@@ -911,6 +936,10 @@ export function ajouterEvenementOptimistic(
   const dataWithKey = { ...data, idempotencyKey };
   const payload = buildCreatePayload(childId, dataWithKey);
 
+  const createFallback = { childId, retryData: optimisticEvent };
+  // En vol : l'entrée n'est pas purgée comme « périmée » pendant les essais.
+  setOptimisticInFlight(tempId, true);
+
   void (async () => {
     try {
       if (!(await isOnline())) {
@@ -941,12 +970,14 @@ export function ajouterEvenementOptimistic(
           // Ni envoyée ni mise en file : ne surtout pas la laisser affichée
           // comme enregistrée.
           pendingOptimisticCreateUpdates.delete(tempId);
-          failWrite("create", tempId, enqueueError, data?.type, options);
+          failWrite("create", tempId, enqueueError, data?.type, options, true, createFallback);
         }
         return;
       }
       pendingOptimisticCreateUpdates.delete(tempId);
-      failWrite("create", tempId, error, data?.type, options);
+      failWrite("create", tempId, error, data?.type, options, true, createFallback);
+    } finally {
+      setOptimisticInFlight(tempId, false);
     }
   })();
 
@@ -996,6 +1027,14 @@ export function modifierEvenementOptimistic(
   const payload = buildUpdatePayload(childId, eventId, cleanData, expectedUpdatedAt);
   const eventType = previousEvent?.type ?? (cleanData as { type?: unknown }).type;
 
+  const updateFallback = {
+    childId,
+    eventId,
+    retryData: updatedEvent,
+    previousEvent,
+  };
+  setOptimisticInFlight(operationId, true);
+
   void (async () => {
     try {
       if (!(await isOnline())) {
@@ -1013,13 +1052,15 @@ export function modifierEvenementOptimistic(
           await enqueueEvent('update', payload as Record<string, unknown>);
           markOptimisticQueued(operationId);
         } catch (enqueueError) {
-          failWrite("update", operationId, enqueueError, eventType, options);
+          failWrite("update", operationId, enqueueError, eventType, options, true, updateFallback);
         }
         return;
       }
       // Conflit de version : le même envoi échouera toujours, « Réessayer »
       // écraserait la modification faite ailleurs.
-      failWrite("update", operationId, error, eventType, options, !isConflictError(error));
+      failWrite("update", operationId, error, eventType, options, !isConflictError(error), updateFallback);
+    } finally {
+      setOptimisticInFlight(operationId, false);
     }
   })();
 

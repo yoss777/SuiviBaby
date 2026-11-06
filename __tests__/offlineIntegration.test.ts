@@ -322,6 +322,9 @@ describe("échec visible et file qui ne bloque plus", () => {
     const off2 = onExhaustedChange((n) => exhausted.push(n));
 
     await enqueueEvent("create", queuedCreate(9999));
+    // L'enfilement programme un rejeu automatique ; ce test compte les cycles
+    // un à un, on l'annule pour qu'il ne s'intercale pas.
+    stopAutoSync();
     server.rejectWhen = () => err("Quantité biberon doit être entre 0 et 500 ml.", "functions/invalid-argument");
 
     for (let i = 0; i < MAX_RETRIES - 1; i++) {

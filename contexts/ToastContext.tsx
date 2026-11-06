@@ -55,12 +55,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const dismiss = useCallback(() => {
-    setMessage(null);
-    setAction(null);
-    clearTimer();
-  }, [clearTimer]);
-
   // Exécute tout de suite la suppression qui attendait la fin du délai
   // d'annulation. Appelé quand un autre toast prend la place du toast
   // d'annulation (sinon la suppression serait perdue : l'élément resterait
@@ -75,6 +69,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setAction(null);
     pending();
   }, [clearTimer]);
+
+  // Fermer le toast pendant un délai d'annulation : la suppression part (flush)
+  // plutôt que de laisser un rappel périmé qui se déclencherait au toast suivant.
+  const dismiss = useCallback(() => {
+    flushPendingUndo();
+    setMessage(null);
+    setAction(null);
+    clearTimer();
+  }, [clearTimer, flushPendingUndo]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {

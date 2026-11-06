@@ -173,6 +173,9 @@ export async function submitMilestone(params: {
         // elle est refusée, le jalon pointe toujours dessus.
         onConfirmed: replaced ? () => cleanupPhoto(oldPhoto) : undefined,
         onFailed: cleanupNew,
+        // Même raison qu'à la création : la photo téléversée est supprimée
+        // après l'échec, « Réessayer » renverrait un chemin disparu.
+        retryable: uploadedPath ? false : undefined,
       });
     } else {
       ajouterEvenementOptimistic(childId, payload, {

@@ -10,10 +10,12 @@
 // unavailable. Best-effort: a 404 is treated as success.
 
 import { auth } from "@/config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import { PHOTO_STORAGE_BUCKETS, extractStoragePath } from "@/utils/photoStorage";
 import {
   obtenirEvenement,
   supprimerEvenement,
+  type DeleteOutcome,
 } from "@/services/eventsService";
 
 export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
@@ -54,22 +56,36 @@ export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
     }
   } catch (error) {
     console.error("[DELETE_PHOTO] Erreur:", error);
+    captureServiceError(error, { service: "events", operation: "deletePhotoFromStorage" });
   }
 }
 
-/** Supprime un jalon avec nettoyage des photos Firebase Storage. */
-export async function supprimerJalon(childId: string, id: string) {
+/**
+ * Supprime un jalon, puis nettoie ses photos Firebase Storage.
+ *
+ * L'événement est supprimé EN PREMIER : si la suppression échoue (refus,
+ * réseau) ou n'est que mise en file (« queued »), le jalon existe toujours et
+ * doit garder ses photos. Elles ne partent que quand la suppression a abouti
+ * (« deleted »). Les chemins sont lus avant, car l'événement n'existera plus.
+ */
+export async function supprimerJalon(childId: string, id: string): Promise<DeleteOutcome> {
+  let photos: string[] = [];
   try {
     const event = await obtenirEvenement(childId, id);
-    if ((event as any)?.photos && Array.isArray((event as any).photos)) {
-      for (const photoRef of (event as any).photos) {
-        if (photoRef) {
-          await deletePhotoFromStorage(photoRef);
-        }
-      }
-    }
+    const refs = (event as { photos?: unknown } | null)?.photos;
+    if (Array.isArray(refs)) photos = refs.filter((ref): ref is string => Boolean(ref));
   } catch (error) {
-    console.error("[SUPPRIMER_JALON] Erreur récupération événement:", error);
+    // La suppression continue (l'utilisateur la veut), mais des photos peuvent
+    // rester orphelines dans Storage : on le signale au lieu de l'avaler.
+    captureServiceError(error, { service: "events", operation: "supprimerJalonRead" });
   }
-  return supprimerEvenement(childId, id);
+
+  const outcome = await supprimerEvenement(childId, id);
+
+  if (outcome === "deleted") {
+    for (const photoRef of photos) {
+      await deletePhotoFromStorage(photoRef);
+    }
+  }
+  return outcome;
 }

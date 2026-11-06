@@ -148,7 +148,7 @@ describe("5.3 pas de rassurance dans les insights et corrélations", () => {
         });
       }
     }
-    const out = generateCorrelations({ events, babyName: "Léa", now } as any);
+    const out = generateCorrelations({ events, babyName: "Léa", birthDate: new Date(now.getTime() - 400 * 86_400_000), now } as any);
     const c = out.find((x) => x.title === "Fièvre et appétit");
     expect(c).toBeDefined();
     expect(c!.message.toLowerCase()).not.toMatch(/normal|rassur|naturellement/);

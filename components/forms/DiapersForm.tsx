@@ -1,4 +1,5 @@
 // components/forms/DiapersForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -236,12 +237,13 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          if (editData.type === "miction") {
-            showToast("Miction supprimée");
-          } else {
-            showToast("Selle supprimée");
-          }
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          showToast(
+            deleteToastMessage(
+              outcome,
+              editData.type === "miction" ? "Miction supprimée" : "Selle supprimée",
+            ),
+          );
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

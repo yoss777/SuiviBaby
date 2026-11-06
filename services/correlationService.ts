@@ -3,6 +3,8 @@
 
 import type { Insight } from "@/types/content";
 import { TIP_CATEGORY_COLORS } from "@/types/content";
+import type { BirthDateInput } from "@/utils/ageUtils";
+import { getAgeTierAt } from "@/utils/temperatureAlert";
 
 // ============================================
 // TYPES
@@ -27,6 +29,8 @@ interface CorrelationEvent {
 interface CorrelationParams {
   events: CorrelationEvent[];
   babyName: string;
+  /** Date de naissance : la carte fièvre / appétit dépend de l'âge. */
+  birthDate?: BirthDateInput;
   now?: Date;
 }
 
@@ -296,9 +300,23 @@ function feverAppetiteCorrelation(
   events: CorrelationEvent[],
   name: string,
   now: Date,
+  birthDate?: BirthDateInput,
 ): Insight | null {
   const cutoff = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const recentEvents = events.filter((e) => e.date >= cutoff);
+
+  // Âge-dépendant : avant 3 mois, la conduite à tenir est l'alerte de
+  // température (urgence, 15) et non un conseil d'appétit : carte supprimée.
+  // Âge inconnu : supprimée aussi. Conseil adapté ensuite (ameli.fr : avant
+  // 6 mois, le lait couvre les besoins, on ne donne pas d'eau). Texte à valider
+  // par un pédiatre (Q3).
+  const feverMeasures = recentEvents.filter(
+    (e) => e.type === "temperature" && e.valeur && e.valeur >= 38,
+  );
+  if (feverMeasures.length === 0) return null;
+  const earliestFever = feverMeasures.reduce((a, b) => (a.date <= b.date ? a : b));
+  const tier = getAgeTierAt(birthDate, earliestFever.date);
+  if (tier === null || tier === "under3m") return null;
 
   const feverDays = new Set<string>();
   for (const e of recentEvents) {
@@ -341,12 +359,16 @@ function feverAppetiteCorrelation(
   const avgNormal = normalMeals / normalDayCount;
 
   if (avgNormal > 0 && avgFever / avgNormal < 0.7) {
+    const advice =
+      tier === "from3to6m"
+        ? `proposez le sein ou le biberon plus souvent, et consultez rapidement un médecin si la fièvre persiste ou si ${name} refuse de s'alimenter`
+        : `Proposez régulièrement à boire et consultez un médecin si la fièvre persiste ou si ${name} refuse de boire ou de s'alimenter`;
     return {
       id: nextId(),
       type: "info",
       icon: "temperature-half",
       title: "Fièvre et appétit",
-      message: `Quand ${name} a de la fièvre, son appétit a diminué. Proposez régulièrement à boire et consultez un médecin si la fièvre persiste ou si ${name} refuse de s'alimenter.`,
+      message: `Quand ${name} a de la fièvre, son appétit a diminué. ${tier === "from3to6m" ? advice.charAt(0).toUpperCase() + advice.slice(1) : advice}. Si un des signes d'alerte de la fiche fièvre apparaît, appelez le 15.`,
       accentColor: TIP_CATEGORY_COLORS.sante,
       priority: 2,
       category: "sante",
@@ -365,7 +387,7 @@ function feverAppetiteCorrelation(
  * Requires at least 30 days of data for meaningful analysis.
  */
 export function generateCorrelations(params: CorrelationParams): Insight[] {
-  const { events, babyName, now = new Date() } = params;
+  const { events, babyName, birthDate, now = new Date() } = params;
 
   corrCounter = 0;
 
@@ -390,7 +412,7 @@ export function generateCorrelations(params: CorrelationParams): Insight[] {
   const actSleep = activitySleepCorrelation(normalized, babyName, now);
   if (actSleep) insights.push(actSleep);
 
-  const feverApp = feverAppetiteCorrelation(normalized, babyName, now);
+  const feverApp = feverAppetiteCorrelation(normalized, babyName, now, birthDate);
   if (feverApp) insights.push(feverApp);
 
   return insights;

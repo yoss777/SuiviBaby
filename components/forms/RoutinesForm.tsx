@@ -1,4 +1,5 @@
 // components/forms/RoutinesForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
@@ -564,14 +565,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerEvenement(activeChild.id, editData.id);
-          if (editData.type === "nettoyage_nez") {
-            showToast("Nettoyage nez supprimé");
-          } else if (editData.type === "bain") {
-            showToast("Bain supprimé");
-          } else {
-            showToast("Sommeil supprimé");
-          }
+          const outcome = await supprimerEvenement(activeChild.id, editData.id);
+          const deletedText =
+            editData.type === "nettoyage_nez"
+              ? "Nettoyage nez supprimé"
+              : editData.type === "bain"
+                ? "Bain supprimé"
+                : "Sommeil supprimé";
+          showToast(deleteToastMessage(outcome, deletedText));
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

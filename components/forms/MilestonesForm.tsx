@@ -1,4 +1,5 @@
 // components/forms/MilestonesForm.tsx
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useFormScroll } from "@/components/ui/FormScrollContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
@@ -408,8 +409,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       async () => {
         try {
           setIsSubmitting(true);
-          await supprimerJalon(activeChild.id, editData.id);
-          showToast("Jalon supprimé");
+          const outcome = await supprimerJalon(activeChild.id, editData.id);
+          showToast(deleteToastMessage(outcome, "Jalon supprimé"));
           onDelete?.();
         } catch (error) {
           console.error("Erreur suppression:", error);

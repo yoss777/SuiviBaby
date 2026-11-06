@@ -1,3 +1,4 @@
+import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
@@ -1172,14 +1173,11 @@ export default function ImmunizationsScreen() {
 
     try {
       setIsSubmitting(true);
-      const isVitamine = editingImmuno.type === "vitamine";
-      if (isVitamine) {
-        await supprimerEvenement(activeChild.id, editingImmuno.id);
-      } else {
-        await supprimerEvenement(activeChild.id, editingImmuno.id);
-      }
-      if (isOffline) {
-        showToast("Suppression en attente de synchronisation");
+      // Vaccin ou vitamine : même suppression. Le message dépend du RÉSULTAT
+      // (« queued » = pas encore supprimé), pas de l'état réseau supposé.
+      const outcome = await supprimerEvenement(activeChild.id, editingImmuno.id);
+      if (outcome === "queued") {
+        showToast(deleteToastMessage(outcome, ""));
       }
       setShowDeleteModal(false);
       closeModal();

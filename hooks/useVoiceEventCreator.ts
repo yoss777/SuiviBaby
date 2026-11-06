@@ -18,7 +18,12 @@ import {
 } from "@/services/eventsService";
 import type { BirthDateInput } from "@/utils/ageUtils";
 import { isNetworkError } from "@/utils/networkError";
-import { getTemperatureAlert, type TemperatureAlert } from "@/utils/temperatureAlert";
+import {
+  getMissingTemperatureMessage,
+  getTemperatureAlert,
+  pickMostSevereAlert,
+  type TemperatureAlert,
+} from "@/utils/temperatureAlert";
 
 // ---------------------------------------------------------------------------
 // Alerte santé (température) : même décision que SoinsForm
@@ -298,8 +303,8 @@ export async function executeModify(
       dataToUpdate.dosage = modifications.dosage;
     }
 
+    // La note de l'utilisateur n'est jamais modifiée par une commande vocale.
     dataToUpdate.updatedAt = new Date();
-    dataToUpdate.note = `Modifié par commande vocale`;
 
     if (previousEvent.type === type) {
       // T2.2 — extract previous updatedAt as an optimistic lock token.
@@ -395,7 +400,6 @@ export async function executeCommand(
 
     // ==== AJOUT (action === "add") ====
     const data = VoiceCommandService.formatDataForFirebase(command);
-    console.log("💾 Ajout dans Firebase:", { type: command.type, data });
 
     switch (command.type) {
       case "tetee":
@@ -572,22 +576,32 @@ export async function executeCommand(
         feedback.showInfo("Succès", "Bain ajouté avec succès");
         return true;
 
-      case "temperature":
+      case "temperature": {
+        const measuredAt = eventDateToDate({
+          date: (data as { date?: Date }).date ?? new Date(),
+        } as Event);
+        // Sans valeur valide, on n'enregistre RIEN en silence : on redemande la
+        // valeur et on oriente selon l'âge (même paliers que l'alerte).
+        if (typeof (data as { valeur?: unknown }).valeur !== "number" ||
+            !Number.isFinite((data as { valeur: number }).valeur)) {
+          feedback.showInfo(
+            "Température non enregistrée",
+            getMissingTemperatureMessage({ birthDate: healthOptions?.birthDate, measuredAt }),
+          );
+          return false;
+        }
         ajouterEvenementOptimistic(childId, {
           ...data,
           type: "temperature" as const,
         });
         // L'alerte santé remplace le message de succès (une seule modale).
         if (
-          !alertForTemperature(
-            (data as { valeur?: unknown }).valeur,
-            eventDateToDate({ date: (data as { date?: Date }).date ?? new Date() } as Event),
-            healthOptions,
-          )
+          !alertForTemperature((data as { valeur?: unknown }).valeur, measuredAt, healthOptions)
         ) {
           feedback.showInfo("Succès", "Température ajoutée avec succès");
         }
         return true;
+      }
 
       case "medicament":
         ajouterEvenementOptimistic(childId, {
@@ -627,4 +641,70 @@ export async function executeCommand(
     );
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// executeMultipleCommands — plusieurs événements dans une phrase
+// ---------------------------------------------------------------------------
+
+export interface MultipleCommandsResult {
+  successCount: number;
+  /** Types d'événements non enregistrés. */
+  errors: string[];
+  /** Messages d'orientation des événements non enregistrés (ex. température sans valeur). */
+  notices: string[];
+  /** Alerte santé la plus grave, à afficher APRÈS (ou à la place de) le résumé. */
+  alert: TemperatureAlert | null;
+}
+
+/**
+ * Exécute les commandes une par une sans rien afficher : les alertes santé sont
+ * collectées et renvoyées pour que l'appelant les montre en dernier, dans la
+ * même modale que le résumé (jamais sous celui-ci). Une commande qui renvoie
+ * false (rien d'enregistré) n'est pas comptée comme un succès.
+ */
+export async function executeMultipleCommands(
+  commands: ParsedCommandResult[],
+  childId: string,
+  healthOptions?: HealthAlertOptions, // showTemperatureAlert est ignoré : les alertes sont renvoyées
+): Promise<MultipleCommandsResult> {
+  let successCount = 0;
+  const errors: string[] = [];
+  const notices: string[] = [];
+  const alerts: TemperatureAlert[] = [];
+  let lastMessage = "";
+  const quietFeedback: ModalFeedback = {
+    showInfo: (_title, message) => {
+      lastMessage = message;
+    },
+  };
+
+  for (const command of commands) {
+    lastMessage = "";
+    try {
+      const ok = await executeCommand(
+        command,
+        childId,
+        quietFeedback,
+        true,
+        { pipi: command.pipi || false, popo: command.popo || false },
+        undefined,
+        {
+          birthDate: healthOptions?.birthDate,
+          showTemperatureAlert: (alert) => alerts.push(alert),
+        },
+      );
+      if (ok) {
+        successCount++;
+      } else {
+        errors.push(command.type);
+        if (lastMessage) notices.push(lastMessage);
+      }
+    } catch (error) {
+      console.error(`Erreur ajout ${command.type}:`, error);
+      errors.push(command.type);
+    }
+  }
+
+  return { successCount, errors, notices, alert: pickMostSevereAlert(alerts) };
 }

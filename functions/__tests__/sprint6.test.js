@@ -95,6 +95,48 @@ describe("validateAndCreateEvent : idempotence", () => {
   });
 });
 
+describe("suppression d'un événement idempotent : pierre tombale (L5)", () => {
+  const data = { childId: "c1", type: "biberon", quantite: 120, idempotencyKey: "u1_tomb_1" };
+
+  it("un rejeu de la création après suppression ne ressuscite pas l'événement", async () => {
+    const docs = memoryStore(base());
+    const created = await fns.validateAndCreateEvent(call("u1", data));
+    expect(docs.has(`events/${created.id}`)).toBe(true);
+
+    await fns.deleteEventCascade(call("u1", { childId: "c1", eventId: created.id }));
+    expect(docs.has(`events/${created.id}`)).toBe(false);
+    expect(docs.has(`deleted_idem/${created.id}`)).toBe(true);
+
+    // Rejeu tardif de la même création (file hors ligne, réponse perdue…).
+    const replay = await fns.validateAndCreateEvent(call("u1", data));
+    expect(replay.id).toBe(created.id);
+    expect(docs.has(`events/${created.id}`)).toBe(false);
+  });
+
+  it("la pierre tombale ne contient aucune donnée de santé ni d'identité", async () => {
+    const docs = memoryStore(base());
+    const created = await fns.validateAndCreateEvent(call("u1", data));
+    await fns.deleteEventCascade(call("u1", { childId: "c1", eventId: created.id }));
+    const tomb = docs.get(`deleted_idem/${created.id}`);
+    expect(Object.keys(tomb)).toEqual(["deletedAt"]);
+  });
+
+  it("une autre clé d'idempotence reste créable après cette suppression", async () => {
+    const docs = memoryStore(base());
+    const created = await fns.validateAndCreateEvent(call("u1", data));
+    await fns.deleteEventCascade(call("u1", { childId: "c1", eventId: created.id }));
+    const other = await fns.validateAndCreateEvent(call("u1", { ...data, idempotencyKey: "u1_tomb_2" }));
+    expect(other.id).not.toBe(created.id);
+    expect(docs.has(`events/${other.id}`)).toBe(true);
+  });
+
+  it("la suppression d'un événement sans identifiant déterministe n'écrit aucune pierre tombale", async () => {
+    const docs = memoryStore({ ...base(), "events/plain1": { childId: "c1", userId: "u1", type: "biberon" } });
+    await fns.deleteEventCascade(call("u1", { childId: "c1", eventId: "plain1" }));
+    expect([...docs.keys()].filter((k) => k.startsWith("deleted_idem/"))).toHaveLength(0);
+  });
+});
+
 describe("requestAccountDeletion : e-mail de confirmation", () => {
   let errorSpy;
   beforeEach(() => {

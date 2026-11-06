@@ -23,6 +23,12 @@ export interface OptimisticEntry {
   createdAt: number;
   confirmedAt?: number;
   reconciledAt?: number;
+  /**
+   * L'appel serveur de cette écriture est encore en cours (y compris ses
+   * nouveaux essais). Une entrée en vol n'est jamais purgée comme « périmée » :
+   * sa réponse (succès OU échec) doit pouvoir être traitée.
+   */
+  inFlight?: boolean;
 }
 
 /**
@@ -256,6 +262,7 @@ export function failOptimistic(
   if (!entry) return null;
 
   entry.status = 'failed';
+  entry.inFlight = false;
   const result = {
     event: entry.operation === 'update' ? entry.previousEvent : entry.event,
     operation: entry.operation,
@@ -298,15 +305,66 @@ export function failOptimistic(
   entries.delete(entry.tempId);
 
   // Notify the user via the registered failure callback.
-  const label = getEventTypeLabel(result.eventType);
-  const what = entry.operation === 'create' ? "l'ajout" : 'la modification';
-  const message =
-    `Échec de ${what}${label ? ` : ${label}` : ''}.` +
-    (result.retryable ? '' : ' Veuillez recommencer.');
-  onFailureCallback?.(message, result);
+  notifyOptimisticFailure(result);
 
   notify();
   return result;
+}
+
+/**
+ * Tell the user a write failed, through the registered failure callback.
+ * Used by failOptimistic, and directly by callers whose entry is gone (purged,
+ * reconciled…) but whose failure must still be shown: the caller rebuilds the
+ * failure (type, data) instead of letting it pass in silence.
+ */
+export function notifyOptimisticFailure(failure: OptimisticFailure): void {
+  const label = getEventTypeLabel(failure.eventType);
+  const what = failure.operation === 'create' ? "l'ajout" : 'la modification';
+  const message =
+    `Échec de ${what}${label ? ` : ${label}` : ''}.` +
+    (failure.retryable ? '' : ' Veuillez recommencer.');
+  onFailureCallback?.(message, failure);
+}
+
+/**
+ * Mark whether the server call of an entry is still running. A running entry
+ * is exempt from the stale purge.
+ */
+export function setOptimisticInFlight(tempId: string, inFlight: boolean): void {
+  const entry = entries.get(tempId);
+  if (entry) entry.inFlight = inFlight;
+}
+
+/**
+ * Silently remove the optimistic entry of a queued write the offline queue has
+ * given up on, so the timeline stops showing it as saved (the user is told by
+ * the queue itself). Creates match by idempotency key, updates by event id;
+ * a delete has no entry.
+ */
+export function purgeQueuedOptimistic(match: {
+  action?: string;
+  idempotencyKey?: string;
+  eventId?: string;
+}): number {
+  let removed = 0;
+  for (const [key, e] of entries) {
+    const isCreateMatch =
+      match.action === 'create' &&
+      !!match.idempotencyKey &&
+      e.operation === 'create' &&
+      e.event?.idempotencyKey === match.idempotencyKey;
+    const isUpdateMatch =
+      match.action === 'update' &&
+      !!match.eventId &&
+      e.operation === 'update' &&
+      e.realId === match.eventId;
+    if (isCreateMatch || isUpdateMatch) {
+      entries.delete(key);
+      removed++;
+    }
+  }
+  if (removed > 0) notify();
+  return removed;
 }
 
 /**
@@ -548,7 +606,9 @@ function cleanupSilent(): void {
   for (const [key, entry] of entries) {
     const reconciled = entry.status === 'confirmed' && entry.reconciledAt;
     const pendingStale =
-      entry.status === 'pending' && now - entry.createdAt > STALE_THRESHOLD_MS;
+      entry.status === 'pending' &&
+      !entry.inFlight &&
+      now - entry.createdAt > STALE_THRESHOLD_MS;
     if (reconciled || pendingStale) {
       if (pendingStale) {
         addBreadcrumb(
