@@ -189,7 +189,16 @@ export default function PlusScreen() {
     if (!activeChild?.id || !activeChild?.name || exporting) return;
     setExporting(true);
     try {
-      await exportAllEventsCSV(activeChild.id, activeChild.name);
+      const { failedTypes } = await exportAllEventsCSV(
+        activeChild.id,
+        activeChild.name,
+      );
+      if (failedTypes.length > 0) {
+        Alert.alert(
+          "Export incomplet",
+          `Certains types d'événements n'ont pas pu être lus et sont absents du fichier : ${failedTypes.join(", ")}. Vérifiez votre connexion puis relancez l'export.`,
+        );
+      }
     } catch (e: any) {
       Alert.alert(
         "Erreur d'export",

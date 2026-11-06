@@ -41,7 +41,7 @@ import {
   cancelAccountDeletion,
   formatPendingDeletionDate,
   getPendingDeletionDateFromUser,
-  requestAccountDeletion,
+  getDeletionAuthMethod,
 } from "@/services/accountDeletionService";
 import {
   disableBiometric,
@@ -50,6 +50,8 @@ import {
   isBiometricAvailable,
   isBiometricEnabled,
 } from "@/services/biometricAuthService";
+import { withdrawHealthConsent } from "@/services/healthConsentService";
+import { useAccountDeletionFlow } from "@/hooks/useAccountDeletionFlow";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 
 interface SettingItem {
@@ -73,7 +75,9 @@ export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const accent = nc.todayAccent;
-  const { user, signOut, refreshUser } = useAuth();
+  const { user, firebaseUser, signOut, refreshUser } = useAuth();
+  const deletionAuthMethod = getDeletionAuthMethod(firebaseUser);
+  const isPasswordUser = deletionAuthMethod === "password";
   const { activeChild, children, hiddenChildrenIds } = useBaby();
   const hiddenPhotoIds = useHiddenPhotos();
   const { preference: themePreference } = useThemePreference();
@@ -89,9 +93,8 @@ export default function SettingsScreen() {
     message: "",
   });
   const [showDeleteExportModal, setShowDeleteExportModal] = useState(false);
-  const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [showWithdrawConsentModal, setShowWithdrawConsentModal] = useState(false);
+  const [isWithdrawingConsent, setIsWithdrawingConsent] = useState(false);
   const deleteParamHandledRef = useRef(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -246,13 +249,45 @@ export default function SettingsScreen() {
     return () => unsubscribe();
   }, [user]);
 
+  const { start: startDeletionFlow, modals: deletionModals } =
+    useAccountDeletionFlow({
+      backgroundCard: nc.backgroundCard,
+      textStrong: nc.textStrong,
+      textMuted: nc.textMuted,
+      borderLight: nc.borderLight,
+      error: nc.error,
+      white: nc.white,
+      accent,
+    });
+
   useEffect(() => {
     if (deleteParam === "1" && !deleteParamHandledRef.current) {
       deleteParamHandledRef.current = true;
-      setShowDeletePasswordModal(true);
+      startDeletionFlow();
       router.setParams({ delete: undefined });
     }
-  }, [deleteParam, router]);
+  }, [deleteParam, router, startDeletionFlow]);
+
+  const performConsentWithdrawal = useCallback(async () => {
+    if (isWithdrawingConsent) return;
+    setIsWithdrawingConsent(true);
+    try {
+      // Server records the withdrawal and resets the local consent cache.
+      await withdrawHealthConsent();
+      setShowWithdrawConsentModal(false);
+      router.replace("/boot");
+    } catch {
+      setShowWithdrawConsentModal(false);
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message:
+          "Impossible de retirer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
+      });
+    } finally {
+      setIsWithdrawingConsent(false);
+    }
+  }, [isWithdrawingConsent, router]);
 
   const handleBiometricToggle = useCallback(
     async (value: boolean) => {
@@ -299,16 +334,21 @@ export default function SettingsScreen() {
           router.push("/settings/profile");
         },
       },
-      {
-        id: "password",
-        icon: "lock-closed-outline",
-        label: "Mot de passe",
-        description: "Changer votre mot de passe",
-        onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/password");
-        },
-      },
+      // Password change only makes sense for e-mail/password accounts.
+      ...(isPasswordUser
+        ? ([
+            {
+              id: "password",
+              icon: "lock-closed-outline",
+              label: "Mot de passe",
+              description: "Changer votre mot de passe",
+              onPress: () => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/settings/password");
+              },
+            },
+          ] as SettingItem[])
+        : []),
       {
         id: "premium",
         icon: "diamond-outline",
@@ -345,6 +385,7 @@ export default function SettingsScreen() {
     ],
     [
       router,
+      isPasswordUser,
       biometricAvailable,
       biometricEnabled,
       biometricLabel,
@@ -487,6 +528,16 @@ export default function SettingsScreen() {
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           router.push("/settings/privacy");
+        },
+      },
+      {
+        id: "withdraw-consent",
+        icon: "hand-left-outline",
+        label: "Retirer mon consentement aux données de santé",
+        description: "Vous devrez accepter à nouveau pour utiliser l'application",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowWithdrawConsentModal(true);
         },
       },
       {
@@ -800,93 +851,24 @@ export default function SettingsScreen() {
         }}
         onCancel={() => {
           setShowDeleteExportModal(false);
-          setShowDeletePasswordModal(true);
+          startDeletionFlow();
         }}
       />
-      <PromptModal
-        visible={showDeletePasswordModal}
-        title="Confirmer la suppression"
-        message={
-          (isDeleting ? (
-            <View style={styles.deleteLoader}>
-              <IconPulseDots />
-              <Text style={[styles.deleteLoaderText, { color: nc.textStrong }]}>
-                Suppression en cours...
-              </Text>
-            </View>
-          ) : (
-            "Votre compte sera programmé pour suppression dans 30 jours. Vous pourrez annuler à tout moment depuis les paramètres."
-          )) as any
-        }
-        value={deletePassword}
-        placeholder="Mot de passe"
-        secureTextEntry
-        multiline={false}
-        autoCapitalize="none"
-        confirmText={isDeleting ? "Suppression..." : "Supprimer"}
-        confirmButtonColor={nc.error}
-        confirmDisabled={isDeleting}
+      {deletionModals}
+      <ConfirmModal
+        visible={showWithdrawConsentModal}
+        title="Retirer mon consentement"
+        message="Sans votre consentement, l'application ne peut plus traiter les données de santé de votre enfant et vous ne pourrez plus l'utiliser. Vos données ne sont pas supprimées : pour cela, supprimez votre compte. Vous pourrez donner à nouveau votre consentement à tout moment."
+        confirmText={isWithdrawingConsent ? "Retrait..." : "Retirer"}
         cancelText="Annuler"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
-        onChangeText={(value) => {
-          if (isDeleting) return;
-          setDeletePassword(value);
-        }}
-        onConfirm={async () => {
-          if (isDeleting) return;
-          if (!deletePassword.trim()) {
-            setModalConfig({
-              visible: true,
-              title: "Erreur",
-              message: "Veuillez saisir votre mot de passe.",
-            });
-            return;
-          }
-
-          let deletionScheduled = false;
-          try {
-            setIsDeleting(true);
-            await requestAccountDeletion(deletePassword);
-            deletionScheduled = true;
-
-            // Envoyer email de confirmation (fire & forget)
-            const { httpsCallable } = await import("firebase/functions");
-            const { functions } = await import("@/config/firebase");
-            const sendEmail = httpsCallable(
-              functions,
-              "sendDeletionRequestEmail",
-            );
-            sendEmail().catch(() => {});
-
-            await refreshUser();
-
-            setShowDeletePasswordModal(false);
-            setDeletePassword("");
-            await signOut();
-            router.replace("/(auth)/login");
-          } catch (error: any) {
-            const code = error?.code || "";
-            const message = deletionScheduled
-              ? "Votre compte est bien programmé pour suppression, mais la déconnexion automatique a échoué. Déconnectez-vous manuellement."
-              : code === "auth/wrong-password"
-                ? "Mot de passe incorrect."
-                : code === "auth/requires-recent-login"
-                  ? "Veuillez vous reconnecter puis réessayer."
-                  : "Impossible de programmer la suppression du compte.";
-            setModalConfig({
-              visible: true,
-              title: "Erreur",
-              message,
-            });
-          } finally {
-            setIsDeleting(false);
-          }
-        }}
+        confirmButtonColor={nc.error}
+        confirmTextColor={nc.white}
+        onConfirm={performConsentWithdrawal}
         onCancel={() => {
-          if (isDeleting) return;
-          setShowDeletePasswordModal(false);
-          setDeletePassword("");
+          if (isWithdrawingConsent) return;
+          setShowWithdrawConsentModal(false);
         }}
       />
     </SafeAreaView>
@@ -958,15 +940,6 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 14,
-  },
-  deleteLoader: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 4,
-  },
-  deleteLoaderText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   tag: {
     borderRadius: 12,

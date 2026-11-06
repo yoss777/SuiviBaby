@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
+import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
 import {
   collection,
   doc,
@@ -28,7 +28,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { PaywallPrompt } from "@/components/ui/PaywallPrompt";
 import { db } from "@/config/firebase";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,12 +35,13 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { usePremium } from "@/contexts/PremiumContext";
-import {
-  consumeExportQuota,
-  getExportUsageStatus,
-} from "@/services/premiumUsageService";
 import { Event, EventType } from "@/services/eventsService";
+import { getExportEventTypes } from "@/services/eventTypeSupport";
+import {
+  buildChildExportProfile,
+  collectEventPhotoPaths,
+  EXPORT_PHOTO_NOTE,
+} from "@/services/exportDataHelpers";
 import { obtenirPreferences } from "@/services/userPreferencesService";
 import type { ChildRole } from "@/types/permissions";
 import type { EventComment, EventLike } from "@/types/social";
@@ -56,6 +56,8 @@ interface ExportFormat {
 
 interface ExportChild {
   child: Child;
+  /** Full child document (allergies, notes, ...), technical fields removed. */
+  profile: Record<string, unknown>;
   events: Event[];
   likes: EventLike[];
   comments: EventComment[];
@@ -175,6 +177,12 @@ const EXTRA_EVENT_TYPES: ExportTypeItem[] = [
   },
 ];
 
+EXTRA_EVENT_TYPES.push({
+  id: "nettoyage_nez",
+  label: "Nettoyage du nez",
+  icon: { lib: "MaterialCommunityIcons", name: "water-outline" },
+});
+
 const INTERACTION_TYPES: ExportTypeItem[] = [
   { id: "likes", label: "Likes", icon: { lib: "Ionicons", name: "heart" } },
   {
@@ -184,16 +192,31 @@ const INTERACTION_TYPES: ExportTypeItem[] = [
   },
 ];
 
-const ALL_EVENT_TYPE_IDS = new Set<EventType>(
-  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map(
-    (item) => item.id as EventType,
-  ),
+// Types offered to every role; the others are hidden for contributors.
+const CONTRIBUTOR_TYPE_IDS = new Set<string>(
+  BASE_EVENT_TYPES.map((item) => item.id),
 );
 
-const getEventTypes = (hideExtra: boolean) => [
-  ...BASE_EVENT_TYPES,
-  ...(hideExtra ? [] : EXTRA_EVENT_TYPES),
-];
+// Single source of truth: the list of exported types is derived from
+// services/eventTypeSupport.ts; the arrays above only provide labels and icons.
+const TYPE_META = new Map<string, ExportTypeItem>(
+  [...BASE_EVENT_TYPES, ...EXTRA_EVENT_TYPES].map((item) => [item.id, item]),
+);
+const EXPORT_TYPE_ITEMS: ExportTypeItem[] = getExportEventTypes().map(
+  (type) =>
+    TYPE_META.get(type) ?? {
+      id: type,
+      label: type,
+      icon: { lib: "Ionicons", name: "ellipse-outline" },
+    },
+);
+
+const ALL_EVENT_TYPE_IDS = new Set<EventType>(getExportEventTypes());
+
+const getEventTypes = (hideExtra: boolean) =>
+  hideExtra
+    ? EXPORT_TYPE_ITEMS.filter((item) => CONTRIBUTOR_TYPE_IDS.has(item.id))
+    : EXPORT_TYPE_ITEMS;
 
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -268,58 +291,69 @@ export default function ExportScreen() {
           obtenirPreferences().catch(() => null),
           Promise.all(
             visibleChildren.map(async (child) => {
-              const [
-                eventsSnapshot,
-                likesSnapshot,
-                commentsSnapshot,
-                accessDoc,
-              ] = await Promise.all([
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "events"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "eventLikes"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDocs(
-                      query(
-                        collection(db, "eventComments"),
-                        where("childId", "==", child.id),
-                        where("userId", "==", user.uid),
-                        limit(10000),
-                      ),
-                    )
-                  : Promise.resolve({ docs: [] } as any),
-                user?.uid
-                  ? getDoc(doc(db, "children", child.id, "access", user.uid))
-                  : Promise.resolve(null),
-              ]);
+              // Role first: owners/admins export ALL events of the child,
+              // others only their own entries.
+              const accessDoc = user?.uid
+                ? await getDoc(
+                    doc(db, "children", child.id, "access", user.uid),
+                  ).catch(() => null)
+                : null;
+              const role =
+                accessDoc && accessDoc.exists()
+                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
+                  : null;
+              const seesAllEvents = role === "owner" || role === "admin";
+
+              const [eventsSnapshot, likesSnapshot, commentsSnapshot, childDoc] =
+                await Promise.all([
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "events"),
+                          where("childId", "==", child.id),
+                          ...(seesAllEvents
+                            ? []
+                            : [where("userId", "==", user.uid)]),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "eventLikes"),
+                          where("childId", "==", child.id),
+                          where("userId", "==", user.uid),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  user?.uid
+                    ? getDocs(
+                        query(
+                          collection(db, "eventComments"),
+                          where("childId", "==", child.id),
+                          where("userId", "==", user.uid),
+                          limit(10000),
+                        ),
+                      )
+                    : Promise.resolve({ docs: [] } as any),
+                  getDoc(doc(db, "children", child.id)).catch(() => null),
+                ]);
 
               const events = eventsSnapshot.docs.map(
                 (d: any) => ({ id: d.id, ...d.data() }) as Event,
               );
 
-              const role =
-                accessDoc && accessDoc.exists()
-                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
-                  : null;
+              const profile = buildChildExportProfile(
+                childDoc && childDoc.exists()
+                  ? (childDoc.data() as Record<string, unknown>)
+                  : null,
+              );
 
               return {
                 child,
+                profile,
                 events,
                 likes: likesSnapshot.docs.map(
                   (d: any) => ({ id: d.id, ...d.data() }) as EventLike,
@@ -738,10 +772,11 @@ export default function ExportScreen() {
     !hasSelectedTypes ||
     !hasSelectedData;
 
-  const { checkFeatureAccess } = usePremium();
-  const [showPaywall, setShowPaywall] = useState(false);
+  // Synchronous guard against double taps (isExporting state updates async).
+  const exportInFlightRef = useRef(false);
 
   const handleExport = useCallback(async (force = false) => {
+    if (exportInFlightRef.current) return;
     if (Platform.OS === "web") {
       setModalConfig({
         visible: true,
@@ -762,14 +797,6 @@ export default function ExportScreen() {
       return;
     }
 
-    if (!checkFeatureAccess("unlimited_export")) {
-      const exportQuota = await getExportUsageStatus();
-      if (!exportQuota.allowed || (exportQuota.remaining ?? 0) <= 0) {
-        setShowPaywall(true);
-        return;
-      }
-    }
-
     if (!force && !hasSelectedTypes) {
       setModalConfig({
         visible: true,
@@ -781,6 +808,7 @@ export default function ExportScreen() {
     }
 
     try {
+      exportInFlightRef.current = true;
       setIsExporting(true);
       const effectiveEventTypes = force
         ? eventTypes.map((item) => item.id as EventType)
@@ -799,6 +827,7 @@ export default function ExportScreen() {
           pseudo: userName ?? null,
         },
         format: "json",
+        notes: { photos: EXPORT_PHOTO_NOTE },
         filters: {
           eventTypes: effectiveEventTypes,
           interactionTypes: effectiveInteractionTypes,
@@ -824,7 +853,15 @@ export default function ExportScreen() {
               birthDate: item.child.birthDate ?? null,
               gender: item.child.gender ?? null,
               photoUri: item.child.photoUri ?? null,
-              events: filteredEvents.map(serializeValue),
+              // Full child document (allergies, notes, ...), technical fields removed.
+              profile: serializeValue(item.profile),
+              events: filteredEvents.map((event) => {
+                const photoPaths = collectEventPhotoPaths(event as any);
+                return {
+                  ...serializeValue(event),
+                  ...(photoPaths.length > 0 ? { photoStoragePaths: photoPaths } : {}),
+                };
+              }),
               likes: includeLikes ? item.likes.map(serializeValue) : [],
               comments: includeComments
                 ? item.comments.map(serializeValue)
@@ -837,28 +874,22 @@ export default function ExportScreen() {
       const fileName = `suivibaby_export_${new Date()
         .toISOString()
         .replace(/[:.]/g, "-")}.json`;
-      const baseDirectory = FileSystem.documentDirectory;
-      if (!baseDirectory) {
-        throw new Error("Répertoire de stockage indisponible");
-      }
-      const fileUri = `${baseDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(
-        fileUri,
-        JSON.stringify(exportData, null, 2),
-        {
-          encoding: FileSystem.EncodingType.UTF8,
-        },
-      );
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(fileUri);
-      }
-
-      if (!checkFeatureAccess("unlimited_export")) {
-        // B5.S1 — passe les childIds pour que la CF valide l'accès à
-        // chaque enfant avant de débiter le quota free.
-        await consumeExportQuota(selectedChildren.map((item) => item.child.id));
+      // Cache exports folder, purged after ~1h: health data must not stay
+      // in the app's persistent (and backed-up) storage.
+      const fileUri = await prepareExportFile(fileName);
+      try {
+        await FileSystem.writeAsStringAsync(
+          fileUri,
+          JSON.stringify(exportData, null, 2),
+          {
+            encoding: FileSystem.EncodingType.UTF8,
+          },
+        );
+        await shareTempFile(fileUri);
+      } catch (error) {
+        // A failed write leaves a partial file; a share error does not need it either.
+        await deleteTempFile(fileUri);
+        throw error;
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -893,10 +924,10 @@ export default function ExportScreen() {
         mode: "text",
       });
     } finally {
+      exportInFlightRef.current = false;
       setIsExporting(false);
     }
   }, [
-    checkFeatureAccess,
     children,
     email,
     eventTypes,
@@ -1145,14 +1176,6 @@ export default function ExportScreen() {
             headerBackTitle: "Retour",
           }}
         />
-        {showPaywall && (
-          <PaywallPrompt
-            trigger="export_limit"
-            variant="banner"
-            onDismiss={() => setShowPaywall(false)}
-          />
-        )}
-
         {isAutoDeleteFlow ? (
           <View style={styles.autoExportLoader}>
             <IconPulseDots color={nc.todayAccent} />

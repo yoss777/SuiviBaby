@@ -52,25 +52,49 @@ service cloud.firestore {
     // redeemShareCodeCF, Admin SDK). Clients can no longer write their own access
     // from an invitation or a share code (privilege escalation, 2026-11-02 audit).
 
+    // Rôles et droits d'écriture sur les events (décision Q6, sprint 4.8) :
+    //   owner / admin : créer et modifier les events, liker et commenter tout.
+    //   contributor   : lire tous les events ; liker et commenter UNIQUEMENT
+    //                   ceux qui portent des photos ; aucune écriture d'event.
+    //   viewer        : lecture seule.
+    // Le rôle seul décide : les anciens drapeaux canWriteEvents d'un document
+    // d'accès ne donnent plus l'écriture d'events (un contributeur ou un
+    // observateur ne peut pas se l'accorder par ce biais).
+    function accessRole(childId) {
+      return getAccessDoc(childId).data.role;
+    }
+
     // Vérifie si l'utilisateur peut écrire des events (owner ou admin)
     function canWriteEvents(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin'] ||
-         getAccessDoc(childId).data.get('canWriteEvents', false) == true);
+      return hasAccess(childId) && accessRole(childId) in ['owner', 'admin'];
     }
 
-    // Vérifie si l'utilisateur peut écrire des likes
-    function canWriteLikes(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
-         getAccessDoc(childId).data.get('canWriteLikes', false) == true);
+    // L'event existe, appartient à cet enfant et porte au moins une photo.
+    function isPhotoEventOf(childId, eventId) {
+      return eventId is string &&
+        exists(/databases/$(database)/documents/events/$(eventId)) &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.childId == childId &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.get('photos', []) is list &&
+        get(/databases/$(database)/documents/events/$(eventId)).data.get('photos', []).size() > 0;
     }
 
-    // Vérifie si l'utilisateur peut écrire des commentaires
-    function canWriteComments(childId) {
-      return hasAccess(childId) &&
-        (getAccessDoc(childId).data.role in ['owner', 'admin', 'contributor'] ||
-         getAccessDoc(childId).data.get('canWriteComments', false) == true);
+    // Likes : owner/admin sur tout event ; contributor (ou drapeau explicite)
+    // sur les events avec photos uniquement.
+    function canWriteLikes(childId, eventId) {
+      return hasAccess(childId) && (
+        accessRole(childId) in ['owner', 'admin'] ||
+        ((accessRole(childId) == 'contributor' ||
+          getAccessDoc(childId).data.get('canWriteLikes', false) == true) &&
+         isPhotoEventOf(childId, eventId)));
+    }
+
+    // Commentaires : mêmes règles que les likes.
+    function canWriteComments(childId, eventId) {
+      return hasAccess(childId) && (
+        accessRole(childId) in ['owner', 'admin'] ||
+        ((accessRole(childId) == 'contributor' ||
+          getAccessDoc(childId).data.get('canWriteComments', false) == true) &&
+         isPhotoEventOf(childId, eventId)));
     }
 
     // ============================================
@@ -105,7 +129,7 @@ service cloud.firestore {
       // propriété, suppression) : sinon un admin pourrait se déclarer owner.
       allow update: if isNotDeleted() && (
         isOwner(childId) || isAdmin(childId)
-      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'deletedAt']);
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt']);
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
       allow delete: if false;
@@ -122,26 +146,28 @@ service cloud.firestore {
         // Liste : tout user avec accès peut lister (pour voir les co-parents/contributeurs)
         allow list: if hasAccess(childId) || isChildOwner(childId);
 
-        // Création/Modification :
-        // 1. Owner peut tout gérer
-        // 2. Bootstrap owner (via ownerId dans document enfant, à la création)
-        // Les invités reçoivent leur accès via Cloud Functions uniquement.
-        // Le bootstrap ne vaut qu'en création ; l'accès du propriétaire principal
-        // (children.ownerId) ne peut être ni rétrogradé ni supprimé par un
-        // co-owner (transfert via transferAndLeave uniquement).
-        allow create, update: if (isOwner(childId) ||
-          (request.method == 'create' && uid == request.auth.uid &&
-            isChildOwner(childId) && request.resource.data.role == 'owner')
-          ) &&
-          (request.method == 'create' || uid != childDoc(childId).data.ownerId ||
+        // Création : uniquement le bootstrap du créateur de l'enfant
+        // (children.ownerId, role owner, son propre uid). Aucun accès pour un
+        // AUTRE utilisateur n'est créé côté client, même par un owner : les
+        // invités et co-parents reçoivent leur accès via Cloud Functions
+        // (acceptInvitationCF, redeemShareCodeCF, Admin SDK).
+        allow create: if uid == request.auth.uid &&
+          isChildOwner(childId) &&
+          request.resource.data.role == 'owner' &&
+          request.resource.data.grantedBy is string &&
+          request.resource.data.userId == uid;
+
+        // Modification : un owner peut changer les rôles, avec les gardes
+        // habituelles. L'accès du propriétaire principal (children.ownerId) ne
+        // peut être ni rétrogradé ni supprimé par un co-owner (transfert via
+        // transferAndLeave uniquement).
+        allow update: if isOwner(childId) &&
+          (uid != childDoc(childId).data.ownerId ||
             request.resource.data.role == 'owner') &&
-          // Vérifications de cohérence
           request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
-          (request.method == 'create'
-            ? (request.resource.data.grantedBy is string)
-            : request.resource.data.grantedBy == resource.data.grantedBy) &&
+          request.resource.data.grantedBy == resource.data.grantedBy &&
           request.resource.data.userId == uid &&
-          (request.method == 'create' || request.resource.data.userId == resource.data.userId);
+          request.resource.data.userId == resource.data.userId;
 
         // Suppression : uniquement le owner (sauf son propre accès)
         allow delete: if isOwner(childId) && uid != request.auth.uid &&
@@ -154,16 +180,17 @@ service cloud.firestore {
       // Lecture : tous ceux qui ont accès à l'enfant
       allow read: if hasAccess(resource.data.childId);
 
-      // Création : owner/admin + vérifier que userId est bien l'uid de l'utilisateur
+      // Création : owner/admin + userId == auth.uid. `reported` est posé par le
+      // serveur (modération) : un event ne naît pas déjà masqué.
       allow create: if canWriteEvents(request.resource.data.childId) &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        !('reported' in request.resource.data);
 
-      // Modification : owner/admin uniquement
+      // Modification : owner/admin uniquement. userId, childId, createdAt,
+      // idempotencyKey et reported (modération) ne changent jamais côté client.
       allow update: if canWriteEvents(resource.data.childId) &&
-        // Empêcher la modification du userId, childId et createdAt
-        request.resource.data.userId == resource.data.userId &&
-        request.resource.data.childId == resource.data.childId &&
-        request.resource.data.createdAt == resource.data.createdAt;
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['userId', 'childId', 'createdAt', 'idempotencyKey', 'reported']);
 
       // Suppression : désactivée côté client — utiliser deleteEventCascade CF
       // pour garantir la suppression atomique des likes/comments associés.
@@ -180,8 +207,8 @@ service cloud.firestore {
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
-      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
-      allow create: if canWriteLikes(request.resource.data.childId) &&
+      // Création : owner/admin, ou contributor sur un event avec photos ; userId == auth.uid
+      allow create: if canWriteLikes(request.resource.data.childId, request.resource.data.get('eventId', null)) &&
         request.resource.data.userId == request.auth.uid;
 
       // Suppression : son propre like OU owner/admin de l'enfant
@@ -201,14 +228,16 @@ service cloud.firestore {
         && resource.data.childId is string
         && hasAccess(resource.data.childId);
 
-      // Création : contributor et plus + vérifier que userId est bien l'uid de l'utilisateur
-      allow create: if canWriteComments(request.resource.data.childId) &&
+      // Création : owner/admin, ou contributor sur un event avec photos ; userId == auth.uid
+      allow create: if canWriteComments(request.resource.data.childId, request.resource.data.get('eventId', null)) &&
         request.resource.data.userId == request.auth.uid;
 
-      // Modification : uniquement son propre commentaire
-      allow update: if canWriteComments(resource.data.childId) &&
+      // Modification : uniquement le texte de son propre commentaire ;
+      // childId, eventId, userId et createdAt sont figés.
+      allow update: if canWriteComments(resource.data.childId, resource.data.get('eventId', null)) &&
         resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['content', 'updatedAt', 'mentions']);
 
       // Suppression : son propre commentaire OU owner/admin de l'enfant
       allow delete: if (hasAccess(resource.data.childId) &&
@@ -332,21 +361,27 @@ service cloud.firestore {
         request.query.limit <= 200 &&
         resource.data.userId == request.auth.uid;
 
-      // Création/Mise à jour : owner uniquement (les invités sont ajoutés par
-      // acceptInvitationCF / redeemShareCodeCF côté serveur)
-      // Note: isChildOwner regarde le doc enfant (ownerId), isOwner regarde
-      // l'access doc. Le bootstrap (création de l'enfant + premier access) doit
-      // utiliser isChildOwner sinon on a une race condition : au moment où on
-      // crée l'access doc, hasAccess() ne peut pas encore le voir.
-      // L'id du doc est imposé ({userId}_{childId}) et userId/childId sont
-      // immuables : un owner ne peut pas écraser l'index d'un autre enfant.
-      allow create, update: if isSignedIn() &&
+      // Création : uniquement pour soi-même, en tant que créateur de l'enfant
+      // (bootstrap : isChildOwner regarde le doc enfant, car l'access doc n'est
+      // pas encore visible par hasAccess) ou owner. L'entrée d'un AUTRE
+      // utilisateur est écrite par acceptInvitationCF / redeemShareCodeCF
+      // (Admin SDK) uniquement.
+      // Mise à jour : owner ; userId et childId sont immuables.
+      // L'id du doc est imposé ({userId}_{childId}).
+      allow create: if isSignedIn() &&
+        request.resource.data.userId is string &&
+        request.resource.data.childId is string &&
+        request.resource.data.userId == request.auth.uid &&
+        docId == request.resource.data.userId + '_' + request.resource.data.childId &&
+        (isOwner(request.resource.data.childId) ||
+          isChildOwner(request.resource.data.childId));
+
+      allow update: if isSignedIn() &&
         request.resource.data.userId is string &&
         request.resource.data.childId is string &&
         docId == request.resource.data.userId + '_' + request.resource.data.childId &&
-        (request.method == 'create' || (
-          request.resource.data.userId == resource.data.userId &&
-          request.resource.data.childId == resource.data.childId)) &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.childId == resource.data.childId &&
         (isOwner(request.resource.data.childId) ||
           (request.resource.data.userId == request.auth.uid &&
             isChildOwner(request.resource.data.childId)));
@@ -362,22 +397,81 @@ service cloud.firestore {
     // ============================================
 
     match /users/{userId} {
+      // M1 : un client ne peut poser ou modifier `pendingDeletion` qu'avec une
+      // date de suppression à au moins 29 jours (sinon un appareil volé ou un
+      // script déclencherait une purge immédiate). L'app actuelle passe par la
+      // CF requestAccountDeletion ; l'app 1.0.8 écrit encore elle-même
+      // { scheduledAt, deletionDate } en chaînes ISO UTC (toISOString), d'où
+      // les deux formes acceptées (chaîne ISO ou Timestamp). Retirer le champ
+      // (annulation) reste toujours permis.
+      function two(n) {
+        return n < 10 ? '0' + string(n) : string(n);
+      }
+      function isoAtLeast29Days(d) {
+        let t = request.time + duration.value(29, 'd');
+        return d is string &&
+          d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$') &&
+          d >= string(t.year()) + '-' + two(t.month()) + '-' + two(t.day()) + 'T' +
+            two(t.hours()) + ':' + two(t.minutes()) + ':' + two(t.seconds());
+      }
+      function deletionDateOk(d) {
+        return (d is timestamp && d >= request.time + duration.value(29, 'd')) ||
+          isoAtLeast29Days(d);
+      }
+      function pendingDeletionAllowed() {
+        return !('pendingDeletion' in request.resource.data) ||
+          (resource != null && 'pendingDeletion' in resource.data &&
+            request.resource.data.pendingDeletion == resource.data.pendingDeletion) ||
+          (request.resource.data.pendingDeletion is map &&
+            deletionDateOk(request.resource.data.pendingDeletion.get('deletionDate', null)));
+      }
       // Chaque utilisateur peut uniquement lire/écrire son propre document
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read, delete: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && request.auth.uid == userId &&
+        pendingDeletionAllowed();
     }
 
     match /users_public/{userId} {
       // Données publiques minimales (nom uniquement — email retiré pour privacy)
       // get: tout user connecté peut lire un profil par uid (pour afficher le nom)
-      // list: interdit — la recherche par email passe par la CF findUserByEmail
+      // list: interdit (la CF findUserByEmail a été retirée : aucune recherche par e-mail)
       allow get: if isSignedIn();
       allow list: if false;
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /user_preferences/{userId} {
-      // Chaque utilisateur peut uniquement lire/écrire ses propres préférences
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      // Chaque utilisateur peut uniquement lire/écrire ses propres préférences,
+      // sauf healthDataConsent : preuve de consentement écrite par le serveur
+      // (recordHealthConsent) ; le client ne peut ni la créer ni la modifier.
+      // Transition : l'app ≤ 1.0.8 écrit encore elle-même un consentement
+      // version "1.0" à l'inscription. On le tolère (sinon l'inscription
+      // échoue) ; l'app actuelle exige la version serveur "2.2" et redemande.
+      // Jamais par-dessus un consentement serveur.
+      function isLegacyConsentWrite() {
+        return request.resource.data.healthDataConsent.version == '1.0' &&
+          !(resource != null && 'healthDataConsent' in resource.data &&
+            resource.data.healthDataConsent.version != '1.0');
+      }
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        (!('healthDataConsent' in request.resource.data) || isLegacyConsentWrite());
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['healthDataConsent']) ||
+          ('healthDataConsent' in request.resource.data && isLegacyConsentWrite()));
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Preuves de consentement (RGPD art. 7.1) : serveur uniquement, conservées
+    // 5 ans après la suppression du compte (TTL expireAt posé par purgeUserData).
+    match /consent_records/{recordId} {
+      allow read, write: if false;
+    }
+
+    // Refresh token Sign in with Apple (révocation à la suppression du compte) :
+    // serveur uniquement.
+    match /apple_tokens/{userId} {
+      allow read, write: if false;
     }
 
     // ============================================

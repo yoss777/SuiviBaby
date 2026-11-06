@@ -6,6 +6,8 @@ import { useRef, useState } from "react";
 import { auth } from "@/config/firebase";
 import type { Event as AppEvent } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
+import VoiceCommandService from "@/services/voiceCommandService";
+import { canManageEvents } from "@/utils/eventPermissions";
 import { getUserChildAccess } from "@/utils/permissions";
 import { useAudioRecorder } from "./useAudioRecorder";
 import {
@@ -182,7 +184,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         try {
           const access = await getUserChildAccess(childId, currentUid);
           const role = access?.role;
-          if (role !== "owner" && role !== "admin") {
+          if (!canManageEvents(role)) {
             setInfoModal({
               visible: true,
               title: "Action non autorisée",
@@ -400,6 +402,8 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       // MODE TEST (after recording — legacy path, kept for safety)
       if (testMode) {
+        // Pas de transcription : l'audio n'est pas utilisé, on le supprime.
+        await VoiceCommandService.deleteRecording(audioUri);
         setTestPromptText("");
         setTestPromptVisible(true);
         return;

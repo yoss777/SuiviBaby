@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { PhotoImage } from "@/components/ui/PhotoImage";
@@ -1643,8 +1644,7 @@ export default function ChronoScreen() {
   const hasPrefetchedMore = useRef(false);
   const [infoModalMessage, setInfoModalMessage] = useState<string | null>(null);
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = canManageEvents(permissions.role);
   const { showToast, showUndoToast, showActionToast } = useToast();
   const [deleteConfirm, setDeleteConfirm] = useState<{
     visible: boolean;

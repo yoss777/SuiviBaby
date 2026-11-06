@@ -5,6 +5,7 @@
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { PromptModal } from "@/components/ui/PromptModal";
+import { VOICE_NOTICE_MESSAGE, VOICE_NOTICE_TITLE } from "@/services/voiceNoticeService";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -18,7 +19,7 @@ interface VoiceCommandModalsProps {
 }
 
 export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
-  const { voice, voiceLimitReached, setVoiceLimitReached } = input;
+  const { voice, voiceLimitReached, setVoiceLimitReached, voiceNoticeVisible, dismissVoiceNotice } = input;
   const {
     testPromptVisible,
     testPromptText,
@@ -222,6 +223,16 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
           setTranscriptionErrorModal(false);
           cancelTestPrompt();
         }}
+      />
+
+      <InfoModal
+        visible={voiceNoticeVisible}
+        title={VOICE_NOTICE_TITLE}
+        message={VOICE_NOTICE_MESSAGE}
+        dismissText="Compris"
+        backgroundColor={Colors[colorScheme].background}
+        textColor={Colors[colorScheme].text}
+        onClose={dismissVoiceNotice}
       />
 
       <InfoModal

@@ -144,17 +144,50 @@ describe("storage.rules", () => {
     );
   });
 
-  test("user with canWriteEvents can upload and delete a child milestone photo", async () => {
+  test("a viewer with a stale canWriteEvents flag cannot upload nor delete a child photo (HC9)", async () => {
+    await seedPhoto();
     const storage = authedStorage(CHARLIE_UID).ref(FILE_PATH);
 
-    await assertSucceeds(
+    await assertFails(
       asPromise(
         storage.putString("jpeg-data", "raw", {
           contentType: "image/jpeg",
         }),
       ),
     );
+    await assertFails(storage.delete());
+  });
+
+  test("an admin can upload and delete a child milestone photo", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "children", CHILD_ID, "access", DANA_UID), {
+        userId: DANA_UID,
+        role: "admin",
+        grantedBy: ALICE_UID,
+      });
+    });
+    const storage = authedStorage(DANA_UID).ref(FILE_PATH);
+
+    await assertSucceeds(
+      asPromise(storage.putString("jpeg-data", "raw", { contentType: "image/jpeg" })),
+    );
     await assertSucceeds(storage.delete());
+  });
+
+  test("a contributor cannot upload a child milestone photo", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "children", CHILD_ID, "access", DANA_UID), {
+        userId: DANA_UID,
+        role: "contributor",
+        grantedBy: ALICE_UID,
+        canWriteEvents: true,
+      });
+    });
+    await assertFails(
+      asPromise(
+        authedStorage(DANA_UID).ref(FILE_PATH).putString("jpeg-data", "raw", { contentType: "image/jpeg" }),
+      ),
+    );
   });
 
   test("non-image uploads are rejected", async () => {

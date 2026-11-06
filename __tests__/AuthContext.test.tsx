@@ -2,6 +2,7 @@ import React from "react";
 import { renderHook, act, waitFor } from "@testing-library/react-native";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { getDoc } from "firebase/firestore";
+import { cleanupStaleExports } from "@/services/tempShareService";
 
 // Mock config/firebase
 jest.mock("@/config/firebase", () => ({
@@ -29,6 +30,10 @@ jest.mock("@/services/pushTokenService", () => ({
 jest.mock("@/services/offlineQueueService", () => ({
   onSignOut: jest.fn(() => Promise.resolve()),
   startAutoSync: jest.fn(),
+}));
+
+jest.mock("@/services/tempShareService", () => ({
+  cleanupStaleExports: jest.fn(() => Promise.resolve(0)),
 }));
 
 jest.mock("@/services/todayEventsCache", () => ({
@@ -292,6 +297,20 @@ describe("AuthContext", () => {
       });
 
       expect(clearTodayEventsCache).toHaveBeenCalled();
+      expect(firebaseSignOut).toHaveBeenCalled();
+      expect(cleanupStaleExports).toHaveBeenCalledWith(0);
+    });
+
+    it("still signs out when the export cleanup fails", async () => {
+      (cleanupStaleExports as jest.Mock).mockRejectedValueOnce(new Error("fs"));
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      const authCallback = captureAuthCallback();
+      await act(async () => {
+        await authCallback(mockFirebaseUser());
+      });
+      await act(async () => {
+        await result.current.signOut();
+      });
       expect(firebaseSignOut).toHaveBeenCalled();
     });
   });

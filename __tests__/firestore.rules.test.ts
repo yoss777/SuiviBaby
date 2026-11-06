@@ -463,6 +463,58 @@ describe("children/access subcollection", () => {
     );
   });
 
+  test("M4: an owner cannot create an access doc for another user client-side", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "viewer",
+        grantedBy: ALICE_UID,
+      })
+    );
+  });
+
+  test("M4: a co-owner cannot create an access doc for another user either", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+        userId: CHARLIE_UID,
+        role: "owner",
+        grantedBy: ALICE_UID,
+      });
+    });
+    await assertFails(
+      setDoc(doc(authedFirestore(CHARLIE_UID), "children", CHILD_ID, "access", "dana"), {
+        userId: "dana",
+        role: "owner",
+        grantedBy: CHARLIE_UID,
+      })
+    );
+  });
+
+  test("M4: user_child_access cannot be created for another user, even by the owner", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      setDoc(doc(db, "user_child_access", `${CHARLIE_UID}_${CHILD_ID}`), {
+        userId: CHARLIE_UID,
+        childId: CHILD_ID,
+      })
+    );
+  });
+
+  test("M4: an owner can still update an existing user_child_access index entry", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        userId: BOB_UID,
+        childId: CHILD_ID,
+      });
+    });
+    await assertSucceeds(
+      updateDoc(doc(authedFirestore(ALICE_UID), "user_child_access", `${BOB_UID}_${CHILD_ID}`), {
+        role: "viewer",
+      })
+    );
+  });
+
   test("owner can change a member's role", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(
@@ -730,6 +782,13 @@ describe("eventLikes collection", () => {
         role: "contributor",
         grantedBy: ALICE_UID,
       });
+      await setDoc(doc(db, "events", "event1"), {
+        childId: CHILD_ID,
+        userId: ALICE_UID,
+        type: "jalon",
+        createdAt: now,
+        photos: [`children/${CHILD_ID}/jalons/p.jpg`],
+      });
       await setDoc(doc(db, "eventLikes", "like1"), {
         childId: CHILD_ID,
         eventId: "event1",
@@ -826,6 +885,13 @@ describe("eventComments collection", () => {
         userId: BOB_UID,
         role: "contributor",
         grantedBy: ALICE_UID,
+      });
+      await setDoc(doc(db, "events", "event1"), {
+        childId: CHILD_ID,
+        userId: ALICE_UID,
+        type: "jalon",
+        createdAt: now,
+        photos: [`children/${CHILD_ID}/jalons/p.jpg`],
       });
       await setDoc(doc(db, "eventComments", "comment1"), {
         childId: CHILD_ID,
@@ -926,6 +992,65 @@ describe("users collection", () => {
     await assertFails(
       updateDoc(doc(db, "users", ALICE_UID), { displayName: "Hacked" })
     );
+  });
+
+  describe("pendingDeletion (M1: at least 29 days ahead)", () => {
+    const daysFromNow = (d: number) => new Date(Date.now() + d * 86400000);
+    const legacy = (deletionDate: string) => ({
+      pendingDeletion: { scheduledAt: new Date().toISOString(), deletionDate },
+    });
+    const stamped = (deletionDate: Date) => ({
+      pendingDeletion: { scheduledAt: Timestamp.now(), deletionDate: Timestamp.fromDate(deletionDate) },
+    });
+    const userRef = () => doc(authedFirestore(ALICE_UID), "users", ALICE_UID);
+
+    test("app 1.0.8 write (ISO strings, 30 days) is accepted", async () => {
+      await assertSucceeds(updateDoc(userRef(), legacy(daysFromNow(30).toISOString())));
+    });
+
+    test("ISO string only 1 day ahead, in the past or malformed is refused", async () => {
+      await assertFails(updateDoc(userRef(), legacy(daysFromNow(1).toISOString())));
+      await assertFails(updateDoc(userRef(), legacy(daysFromNow(-1).toISOString())));
+      await assertFails(updateDoc(userRef(), legacy("zzz")));
+      await assertFails(updateDoc(userRef(), legacy("2999")));
+    });
+
+    test("Timestamp 30 days ahead is accepted, 1 day ahead refused", async () => {
+      await assertSucceeds(updateDoc(userRef(), stamped(daysFromNow(30))));
+      await assertFails(updateDoc(userRef(), stamped(daysFromNow(1))));
+    });
+
+    test("other field types are refused", async () => {
+      await assertFails(updateDoc(userRef(), { pendingDeletion: { deletionDate: daysFromNow(30).getTime() } }));
+      await assertFails(updateDoc(userRef(), { pendingDeletion: { scheduledAt: "x" } }));
+    });
+
+    test("setDoc creating the user doc with a short pendingDeletion is refused", async () => {
+      const db = authedFirestore(BOB_UID);
+      await assertFails(setDoc(doc(db, "users", BOB_UID), legacy(daysFromNow(0).toISOString())));
+      await assertSucceeds(setDoc(doc(db, "users", BOB_UID), legacy(daysFromNow(30).toISOString())));
+    });
+
+    test("removing pendingDeletion stays allowed", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "users", ALICE_UID), {
+          email: "alice@test.com",
+          ...legacy(daysFromNow(2).toISOString()),
+        });
+      });
+      await assertSucceeds(updateDoc(userRef(), { pendingDeletion: deleteField() }));
+    });
+
+    test("an unrelated update keeps working while a (short, server-set) pendingDeletion is untouched", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "users", ALICE_UID), {
+          email: "alice@test.com",
+          ...legacy(daysFromNow(2).toISOString()),
+        });
+      });
+      await assertSucceeds(updateDoc(userRef(), { displayName: "New" }));
+      await assertFails(updateDoc(userRef(), { "pendingDeletion.deletionDate": daysFromNow(1).toISOString() }));
+    });
   });
 
   test("unauthenticated cannot read user doc", async () => {
@@ -1326,6 +1451,143 @@ describe("user_preferences collection", () => {
       updateDoc(doc(db, "user_preferences", ALICE_UID), { theme: "light" })
     );
   });
+
+  test("user cannot add healthDataConsent to existing preferences", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      updateDoc(doc(db, "user_preferences", ALICE_UID), {
+        healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+      })
+    );
+  });
+
+  test("user cannot create preferences carrying healthDataConsent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      setDoc(doc(db, "user_preferences", BOB_UID), {
+        theme: "dark",
+        healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+      })
+    );
+  });
+
+  test("user can create preferences without healthDataConsent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(setDoc(doc(db, "user_preferences", BOB_UID), { theme: "dark" }));
+  });
+
+  describe("with a server-written consent", () => {
+    beforeEach(async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "user_preferences", ALICE_UID), {
+          theme: "dark",
+          healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "2.1" },
+        });
+      });
+    });
+
+    test("user can still read the consent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(getDoc(doc(db, "user_preferences", ALICE_UID)));
+    });
+
+    test("user can update other fields", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { theme: "light" })
+      );
+    });
+
+    test("user cannot modify healthDataConsent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { "healthDataConsent.version": "9.9" })
+      );
+    });
+
+    test("user cannot remove healthDataConsent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        updateDoc(doc(db, "user_preferences", ALICE_UID), { healthDataConsent: deleteField() })
+      );
+    });
+
+    test("user can delete own preferences", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(deleteDoc(doc(db, "user_preferences", ALICE_UID)));
+    });
+
+    test("the legacy app cannot overwrite it with a 1.0 consent", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertFails(
+        setDoc(
+          doc(db, "user_preferences", ALICE_UID),
+          { healthDataConsent: { granted: true, grantedAt: "2026-11-07T00:00:00Z", version: "1.0" } },
+          { merge: true }
+        )
+      );
+    });
+  });
+
+  // App ≤ 1.0.8 still writes its own "1.0" consent at sign-up (transition).
+  test("legacy app can create preferences with a 1.0 consent", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, "user_preferences", BOB_UID),
+        { healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "1.0" } },
+        { merge: true }
+      )
+    );
+  });
+
+  test("legacy app can add a 1.0 consent to existing preferences", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, "user_preferences", ALICE_UID),
+        { healthDataConsent: { granted: true, grantedAt: "2026-11-06T00:00:00Z", version: "1.0" } },
+        { merge: true }
+      )
+    );
+  });
+});
+
+// ===========================================================================
+// SERVER-ONLY PROOF COLLECTIONS (consent_records, apple_tokens)
+// ===========================================================================
+
+describe("consent_records and apple_tokens collections", () => {
+  beforeEach(async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "consent_records", "c1"), { uid: ALICE_UID, type: "health_data", version: "2.1" });
+      await setDoc(doc(db, "apple_tokens", ALICE_UID), { refreshToken: "r" });
+    });
+  });
+
+  test("owner cannot read own consent record", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "consent_records", "c1")));
+  });
+
+  test("user cannot list consent records", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDocs(query(collection(db, "consent_records"), where("uid", "==", ALICE_UID))));
+  });
+
+  test("user cannot create, update or delete consent records", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(setDoc(doc(db, "consent_records", "c2"), { uid: ALICE_UID, version: "2.1" }));
+    await assertFails(updateDoc(doc(db, "consent_records", "c1"), { version: "1" }));
+    await assertFails(deleteDoc(doc(db, "consent_records", "c1")));
+  });
+
+  test("owner cannot read, write or delete own apple token", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "apple_tokens", ALICE_UID)));
+    await assertFails(setDoc(doc(db, "apple_tokens", ALICE_UID), { refreshToken: "x" }));
+    await assertFails(deleteDoc(doc(db, "apple_tokens", ALICE_UID)));
+  });
 });
 
 // ===========================================================================
@@ -1599,5 +1861,162 @@ describe("device_tokens collection", () => {
   test("user can delete own device token", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(deleteDoc(doc(db, "device_tokens", "token1")));
+  });
+});
+
+// ===========================================================================
+// SPRINT 4.8 — ROLE MATRIX ON EVENTS / LIKES / COMMENTS
+// ===========================================================================
+
+describe("sprint 4.8 role matrix", () => {
+  const ADMIN_UID = "adminuser";
+  const CONTRIB_UID = "contrib";
+  const VIEWER_UID = "viewer";
+  const FLAGGED_UID = "flagged"; // contributor whose access doc carries legacy write flags
+  const photoPath = `children/${CHILD_ID}/jalons/p.jpg`;
+
+  beforeEach(async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID), { name: "Baby", birthDate: now, ownerId: ALICE_UID });
+      await setDoc(doc(db, "children", CHILD2_ID), { name: "Other", birthDate: now, ownerId: CHARLIE_UID });
+      const grant = (uid: string, role: string, extra: object = {}) =>
+        setDoc(doc(db, "children", CHILD_ID, "access", uid), { userId: uid, role, grantedBy: ALICE_UID, ...extra });
+      await grant(ALICE_UID, "owner");
+      await grant(ADMIN_UID, "admin");
+      await grant(CONTRIB_UID, "contributor", { canWriteEvents: false, canWriteLikes: true, canWriteComments: true });
+      await grant(VIEWER_UID, "viewer", { canWriteEvents: false, canWriteLikes: false, canWriteComments: false });
+      await grant(FLAGGED_UID, "contributor", { canWriteEvents: true, canWriteLikes: true, canWriteComments: true });
+      await setDoc(doc(db, "events", "photoEvent"), {
+        childId: CHILD_ID, userId: ALICE_UID, type: "jalon", createdAt: now, photos: [photoPath],
+      });
+      await setDoc(doc(db, "events", "emptyPhotoEvent"), {
+        childId: CHILD_ID, userId: ALICE_UID, type: "jalon", createdAt: now, photos: [],
+      });
+      await setDoc(doc(db, "events", "plainEvent"), {
+        childId: CHILD_ID, userId: ALICE_UID, type: "biberon", createdAt: now,
+      });
+      await setDoc(doc(db, "events", "otherChildPhotoEvent"), {
+        childId: CHILD2_ID, userId: CHARLIE_UID, type: "jalon", createdAt: now, photos: [`children/${CHILD2_ID}/x.jpg`],
+      });
+      await setDoc(doc(db, "eventComments", "bobComment"), {
+        childId: CHILD_ID, eventId: "photoEvent", userId: CONTRIB_UID, content: "Cute", createdAt: now,
+      });
+    });
+  });
+
+  const like = (uid: string, eventId: string, childId = CHILD_ID) => ({ childId, eventId, userId: uid });
+  const comment = (uid: string, eventId: string, childId = CHILD_ID) => ({
+    childId, eventId, userId: uid, content: "Hello", createdAt: now,
+  });
+  const newEvent = (uid: string) => ({ childId: CHILD_ID, userId: uid, type: "couche", createdAt: now });
+
+  describe("reading events", () => {
+    test.each([ALICE_UID, ADMIN_UID, CONTRIB_UID, VIEWER_UID])("%s reads photo and non-photo events", async (uid) => {
+      const db = authedFirestore(uid);
+      await assertSucceeds(getDoc(doc(db, "events", "photoEvent")));
+      await assertSucceeds(getDoc(doc(db, "events", "plainEvent")));
+    });
+    test("a contributor can list the child's events", async () => {
+      const db = authedFirestore(CONTRIB_UID);
+      await assertSucceeds(getDocs(query(collection(db, "events"), where("childId", "==", CHILD_ID), limit(50))));
+    });
+  });
+
+  describe("writing events", () => {
+    test.each([ALICE_UID, ADMIN_UID])("%s can create an event", async (uid) => {
+      await assertSucceeds(setDoc(doc(authedFirestore(uid), "events", "new1"), newEvent(uid)));
+    });
+    test.each([CONTRIB_UID, VIEWER_UID, FLAGGED_UID])("%s cannot create an event", async (uid) => {
+      await assertFails(setDoc(doc(authedFirestore(uid), "events", "new1"), newEvent(uid)));
+    });
+    test.each([CONTRIB_UID, VIEWER_UID, FLAGGED_UID])("%s cannot update an event", async (uid) => {
+      await assertFails(updateDoc(doc(authedFirestore(uid), "events", "plainEvent"), { note: "x" }));
+    });
+    test.each([ALICE_UID, ADMIN_UID, CONTRIB_UID, VIEWER_UID])("%s cannot delete an event from the client", async (uid) => {
+      await assertFails(deleteDoc(doc(authedFirestore(uid), "events", "plainEvent")));
+    });
+    test("cannot create an event already flagged as reported", async () => {
+      await assertFails(setDoc(doc(authedFirestore(ALICE_UID), "events", "new1"), { ...newEvent(ALICE_UID), reported: true }));
+    });
+    test.each([
+      ["reported", { reported: false }],
+      ["createdAt", { createdAt: Timestamp.fromMillis(1) }],
+      ["childId", { childId: CHILD2_ID }],
+      ["userId", { userId: BOB_UID }],
+      ["idempotencyKey", { idempotencyKey: "k" }],
+    ])("owner cannot change %s on update", async (_name, patch) => {
+      await assertFails(updateDoc(doc(authedFirestore(ALICE_UID), "events", "plainEvent"), patch as any));
+    });
+    test("owner can still edit ordinary fields", async () => {
+      await assertSucceeds(updateDoc(doc(authedFirestore(ALICE_UID), "events", "plainEvent"), { note: "ok" }));
+    });
+  });
+
+  describe("likes", () => {
+    test.each([ALICE_UID, ADMIN_UID])("%s can like any event of the child", async (uid) => {
+      await assertSucceeds(setDoc(doc(authedFirestore(uid), "eventLikes", "l1"), like(uid, "plainEvent")));
+      await assertSucceeds(setDoc(doc(authedFirestore(uid), "eventLikes", "l2"), like(uid, "photoEvent")));
+    });
+    test("a contributor can like a photo event", async () => {
+      await assertSucceeds(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(CONTRIB_UID, "photoEvent")));
+    });
+    test("a contributor cannot like a non-photo event", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(CONTRIB_UID, "plainEvent")));
+    });
+    test("a contributor cannot like an event whose photos array is empty", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(CONTRIB_UID, "emptyPhotoEvent")));
+    });
+    test("a contributor cannot like a missing event", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(CONTRIB_UID, "ghost")));
+    });
+    test("a contributor cannot point a like at another child's photo event", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(CONTRIB_UID, "otherChildPhotoEvent")));
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l2"), like(CONTRIB_UID, "otherChildPhotoEvent", CHILD2_ID)));
+    });
+    test("a contributor cannot like in someone else's name", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), like(ALICE_UID, "photoEvent")));
+    });
+    test("a viewer cannot like", async () => {
+      await assertFails(setDoc(doc(authedFirestore(VIEWER_UID), "eventLikes", "l1"), like(VIEWER_UID, "photoEvent")));
+    });
+    test("a like without eventId string is refused", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventLikes", "l1"), { childId: CHILD_ID, userId: CONTRIB_UID }));
+    });
+  });
+
+  describe("comments", () => {
+    test.each([ALICE_UID, ADMIN_UID])("%s can comment on any event", async (uid) => {
+      await assertSucceeds(setDoc(doc(authedFirestore(uid), "eventComments", "c1"), comment(uid, "plainEvent")));
+    });
+    test("a contributor can comment on a photo event", async () => {
+      await assertSucceeds(setDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "c1"), comment(CONTRIB_UID, "photoEvent")));
+    });
+    test("a contributor cannot comment on a non-photo event", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "c1"), comment(CONTRIB_UID, "plainEvent")));
+    });
+    test("a contributor cannot comment on another child's event", async () => {
+      await assertFails(setDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "c1"), comment(CONTRIB_UID, "otherChildPhotoEvent")));
+    });
+    test("a viewer cannot comment", async () => {
+      await assertFails(setDoc(doc(authedFirestore(VIEWER_UID), "eventComments", "c1"), comment(VIEWER_UID, "photoEvent")));
+    });
+    test("author can edit the content of own comment", async () => {
+      await assertSucceeds(updateDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "bobComment"), { content: "Edited", updatedAt: now }));
+    });
+    test.each([
+      ["eventId", { eventId: "plainEvent" }],
+      ["childId", { childId: CHILD2_ID }],
+      ["userId", { userId: ALICE_UID }],
+      ["createdAt", { createdAt: Timestamp.fromMillis(1) }],
+    ])("author cannot change %s of own comment", async (_n, patch) => {
+      await assertFails(updateDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "bobComment"), patch as any));
+    });
+    test("someone else cannot edit the comment", async () => {
+      await assertFails(updateDoc(doc(authedFirestore(ALICE_UID), "eventComments", "bobComment"), { content: "x" }));
+    });
+    test("author and owner can delete the comment, a viewer cannot", async () => {
+      await assertFails(deleteDoc(doc(authedFirestore(VIEWER_UID), "eventComments", "bobComment")));
+      await assertSucceeds(deleteDoc(doc(authedFirestore(CONTRIB_UID), "eventComments", "bobComment")));
+    });
   });
 });

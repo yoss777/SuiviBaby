@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tesfa.suivibaby",
+      "sha256_cert_fingerprints": [
+        "54:A7:51:FF:02:4A:FB:BE:F7:07:5C:26:AB:5E:DF:62:84:58:49:D3:EB:E7:51:7F:D5:D9:48:41:CD:F8:55:A4"
+      ]
+    }
+  }
+]

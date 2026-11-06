@@ -38,6 +38,18 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "package": "com.tesfa.suivibaby",
+      "allowBackup": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "samaye-53723.firebaseapp.com", "pathPrefix": "/reset-password" },
+            { "scheme": "https", "host": "samaye-53723.web.app", "pathPrefix": "/reset-password" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "versionCode": 11
     },
     "web": {

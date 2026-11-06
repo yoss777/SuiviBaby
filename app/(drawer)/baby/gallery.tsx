@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { SwipeGallery } from "@/components/moments";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -475,8 +476,7 @@ export default function GalleryScreen() {
   const headerOwnerId = useRef("gallery-header");
   const sheetOwnerId = "gallery";
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = canManageEvents(permissions.role);
 
   const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -1058,6 +1058,7 @@ export default function GalleryScreen() {
         onAddPhoto={canManageContent ? handleAddPhoto : undefined}
         onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
+        role={permissions.role}
         onDownload={handleDownload}
         onMarkSeen={markEventAsSeen}
         newEventIds={newEventIds}

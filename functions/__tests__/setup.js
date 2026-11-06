@@ -32,7 +32,7 @@ const runTransactionRouter = jest.fn((fn, opts) =>
     })
     : mockRunTransaction(fn, opts)
 );
-const mockFirestore = { doc: jest.fn(() => mockDocRef), collection: jest.fn(() => mockCollectionRef), batch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) })), runTransaction: runTransactionRouter };
+const mockFirestore = { doc: jest.fn(() => mockDocRef), collection: jest.fn(() => mockCollectionRef), batch: jest.fn(() => ({ set: jest.fn(), update: jest.fn(), delete: jest.fn(), commit: jest.fn(() => Promise.resolve()) })), getAll: jest.fn(async (...refs) => Promise.all(refs.map((r) => r.get()))), runTransaction: runTransactionRouter };
 jest.mock("firebase-admin", () => {
   const MockTimestamp = jest.fn((seconds, nanoseconds = 0) => ({
     seconds,
@@ -67,11 +67,12 @@ jest.mock("firebase-admin", () => {
     delete: jest.fn(() => "DEL"),
     arrayRemove: jest.fn((v) => v),
     arrayUnion: jest.fn((v) => v),
+    increment: jest.fn((n) => ({ __increment: n })),
   };
   a.firestore.Timestamp = MockTimestamp;
   return a;
 });
-jest.mock("firebase-functions/v2/https", () => ({ onCall: jest.fn((o, h) => typeof o === "function" ? o : h), onRequest: jest.fn((o, h) => h), HttpsError: class extends Error { constructor(c, m) { super(m); this.code = c; } } }));
+jest.mock("firebase-functions/v2/https", () => ({ onCall: jest.fn((o, h) => typeof o === "function" ? o : h), onRequest: jest.fn((o, h) => h), HttpsError: class extends Error { constructor(c, m, d) { super(m); this.code = c; this.details = d; } } }));
 jest.mock("firebase-functions/v2/scheduler", () => ({ onSchedule: jest.fn((o, h) => h) }));
 jest.mock("firebase-functions/v2/firestore", () => ({ onDocumentCreated: jest.fn((o, h) => h) }));
 jest.mock("expo-server-sdk", () => ({ Expo: jest.fn(() => ({ sendPushNotificationsAsync: jest.fn(() => Promise.resolve([])), chunkPushNotifications: jest.fn((m) => [m]), isExpoPushToken: jest.fn(() => true) })) }));

@@ -29,6 +29,7 @@ function memoryStore(initial) {
         const [head, ...rest] = k.split(".");
         next[head] = applyPatch(next[head], { [rest.join(".")]: v });
       } else if (v === "DEL") delete next[k];
+      else if (v && typeof v === "object" && "__increment" in v) next[k] = (Number(next[k]) || 0) + v.__increment;
       else next[k] = v;
     }
     return next;
@@ -37,8 +38,18 @@ function memoryStore(initial) {
     path: p,
     id: p.split("/").pop(),
     get: async () => (docs.has(p) ? { exists: true, id: p.split("/").pop(), data: () => docs.get(p) } : { exists: false, data: () => undefined }),
-    set: async (data, opts) => docs.set(p, opts?.merge ? applyPatch(docs.get(p), data) : data),
-    update: async (data) => docs.set(p, applyPatch(docs.get(p), data)),
+    set: async (data, opts) => {
+      if (opts?.mergeFields) {
+        // Only the listed fields are written, each replaced as a whole (no deep merge).
+        const picked = Object.fromEntries(opts.mergeFields.map((f) => [f, data[f]]));
+        docs.set(p, { ...(docs.get(p) || {}), ...picked });
+      } else docs.set(p, opts?.merge ? applyPatch(docs.get(p), data) : data);
+    },
+    update: async (data) => {
+      // Like Firestore: update() fails on a missing document.
+      if (!docs.has(p)) throw Object.assign(new Error(`NOT_FOUND: ${p}`), { code: 5 });
+      docs.set(p, applyPatch(docs.get(p), data));
+    },
     delete: async () => docs.delete(p),
     collection: (sub) => query(`${p}/${sub}`),
   });
@@ -68,6 +79,7 @@ function memoryStore(initial) {
     return q;
   };
   mockFirestore.doc.mockImplementation((p) => ref(p));
+  mockFirestore.getAll.mockImplementation(async (...refs) => Promise.all(refs.map((r) => r.get())));
   mockFirestore.collection.mockImplementation((name) => query(name));
   mockFirestore.batch.mockImplementation(() => {
     const ops = [];

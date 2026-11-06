@@ -1,6 +1,6 @@
 // services/premiumGatingService.ts
 // Source de vérité UI pour les limites gratuites statiques et les messages de paywall.
-// Les compteurs/quota runtime voice/export/sharing sont désormais gérés côté serveur
+// Les compteurs/quota runtime voice/export PDF/sharing sont désormais gérés côté serveur
 // via premiumUsageService + Cloud Functions.
 
 // ============================================
@@ -10,8 +10,6 @@
 export const FREE_LIMITS = {
   /** Nombre max de commandes vocales par jour */
   voiceCommandsPerDay: 3,
-  /** Nombre total d'exports PDF (pas par mois — 1 seul gratuit) */
-  totalPdfExports: 1,
   /** Nombre de jours d'historique accessible */
   historyDays: 90,
   /** Nombre max de co-parents invités */
@@ -39,7 +37,7 @@ export function getHistoryCutoffDate(isPremium: boolean): Date | null {
 
 export type PaywallTrigger =
   | "voice_limit"
-  | "export_limit"
+  | "pdf_export_limit"
   | "history_limit"
   | "sharing_limit"
   | "advanced_stats"
@@ -57,10 +55,10 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
     description: "Vous avez utilisé vos 3 commandes vocales du jour. Passez à Premium pour des commandes illimitées.",
     ctaText: "Débloquer la voix illimitée",
   },
-  export_limit: {
+  pdf_export_limit: {
     title: "Export PDF utilisé",
-    description: "Votre export gratuit a été utilisé. Passez à Premium pour des exports illimités.",
-    ctaText: "Exporter sans limites",
+    description: "Votre export PDF gratuit a été utilisé. Le rapport PDF est réservé à Premium et Famille. L'export JSON de vos données reste gratuit.",
+    ctaText: "Exporter en PDF",
   },
   history_limit: {
     title: "Historique limité à 90 jours",
@@ -83,3 +81,27 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
     ctaText: "Activer les insights IA",
   },
 };
+
+// ============================================
+// Décision d'accès à l'export PDF
+// ============================================
+
+export type PdfExportDecision =
+  | "allow" // accès Premium/Famille/grandfathered : export illimité
+  | "allow_trial" // export d'essai gratuit : quota à consommer après succès
+  | "paywall" // essai épuisé
+  | "error"; // quota illisible : ne rien générer
+
+/**
+ * Décide si le rapport PDF peut être généré.
+ * `quota` vaut null quand le statut serveur n'a pas pu être lu.
+ */
+export function decidePdfExportAccess(
+  hasAccess: boolean,
+  quota: { allowed?: boolean; remaining?: number | null } | null | undefined,
+): PdfExportDecision {
+  if (hasAccess) return "allow";
+  if (!quota || typeof quota !== "object") return "error";
+  if (quota.allowed === true && (quota.remaining ?? 0) > 0) return "allow_trial";
+  return "paywall";
+}

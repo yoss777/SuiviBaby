@@ -38,6 +38,14 @@ jest.mock("firebase/firestore", () => ({
 jest.mock("@/contexts/BabyContext", () => ({
   useBaby: () => ({ activeChild: { id: "child-1", name: "Léo" } }),
 }));
+jest.mock("@/contexts/PremiumContext", () => ({
+  usePremium: () => ({ checkFeatureAccess: () => true }),
+}));
+jest.mock("@/services/premiumUsageService", () => ({
+  getExportUsageStatus: jest.fn(),
+  consumeExportQuota: jest.fn(),
+}));
+jest.mock("@/components/ui/PaywallPrompt", () => ({ PaywallPrompt: () => null }));
 jest.mock("@/hooks/use-color-scheme", () => ({ useColorScheme: () => "light" }));
 jest.mock("@/hooks/useForegroundServerRefresh", () => ({ useForegroundServerRefresh: jest.fn() }));
 jest.mock("expo-router", () => ({

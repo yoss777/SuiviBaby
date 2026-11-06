@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -823,8 +824,7 @@ export default function CroissanceScreen() {
     `croissance-${Math.random().toString(36).slice(2)}`,
   );
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = canManageEvents(permissions.role);
 
   const PAGE_SIZE = 3;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);

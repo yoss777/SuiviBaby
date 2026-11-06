@@ -246,6 +246,18 @@ describe("childSharingService", () => {
       await expect(redeemShareCode("EXPIRD")).rejects.toThrow("Ce code a expiré");
     });
 
+    it("should expose email-not-verified as a stable code without reporting", async () => {
+      mockCallable.mockRejectedValueOnce(
+        Object.assign(callableError("functions/failed-precondition", "Vérifiez votre adresse e-mail pour continuer."), { details: { reason: "email-not-verified" } }),
+      );
+
+      await expect(redeemShareCode("ANY123")).rejects.toMatchObject({
+        code: "email-not-verified",
+        message: "Vérifiez votre adresse e-mail pour continuer.",
+      });
+      expect(captureServiceError).not.toHaveBeenCalled();
+    });
+
     it("should report and rethrow unexpected errors", async () => {
       mockCallable.mockRejectedValueOnce(callableError("functions/internal"));
 
@@ -294,7 +306,7 @@ describe("childSharingService", () => {
       );
     });
 
-    it.each(["self-invite", "no-user", "already-pending", "already-linked", "sharing-limit"])(
+    it.each(["self-invite", "already-pending", "already-linked", "sharing-limit"])(
       "should expose the %s reason as error.code without reporting",
       async (reason) => {
         (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(
@@ -307,6 +319,25 @@ describe("childSharingService", () => {
         expect(captureServiceError).not.toHaveBeenCalled();
       },
     );
+
+    it("should expose email-not-verified without reporting", async () => {
+      (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(
+        Object.assign(callableError("functions/failed-precondition", "Vérifiez votre adresse e-mail pour continuer."), { details: { reason: "email-not-verified" } }),
+      );
+
+      await expect(
+        createEmailInvitation("child-1", "Bébé", "friend@example.com"),
+      ).rejects.toMatchObject({ code: "email-not-verified" });
+      expect(captureServiceError).not.toHaveBeenCalled();
+    });
+
+    it("should resolve with the id on the neutral success shape (unknown address)", async () => {
+      (createShareInvitationCF as unknown as jest.Mock).mockResolvedValueOnce({ data: { id: "neutral-1" } });
+
+      await expect(
+        createEmailInvitation("child-1", "Bébé", "nobody@example.com"),
+      ).resolves.toBe("neutral-1");
+    });
 
     it("should attach the invited email to an already-linked error", async () => {
       (createShareInvitationCF as unknown as jest.Mock).mockRejectedValueOnce(
@@ -368,6 +399,15 @@ describe("childSharingService", () => {
       mockCallable.mockRejectedValueOnce(callableError(code));
 
       await expect(acceptInvitation("invite-1")).rejects.toThrow(message);
+      expect(captureServiceError).not.toHaveBeenCalled();
+    });
+
+    it("should expose email-not-verified (not 'already processed') without reporting", async () => {
+      mockCallable.mockRejectedValueOnce(
+        Object.assign(callableError("functions/failed-precondition", "Vérifiez votre adresse e-mail pour continuer."), { details: { reason: "email-not-verified" } }),
+      );
+
+      await expect(acceptInvitation("invite-1")).rejects.toMatchObject({ code: "email-not-verified" });
       expect(captureServiceError).not.toHaveBeenCalled();
     });
 

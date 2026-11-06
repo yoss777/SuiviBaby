@@ -1,3 +1,4 @@
+import { canManageEvents } from "@/utils/eventPermissions";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import {
   ConfettiBurst,
@@ -58,8 +59,7 @@ export default function MomentsScreen() {
   const nc = getNeutralColors(colorScheme);
   const headerOwnerId = useRef("moments-header");
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const canManageContent =
-    permissions.role === "owner" || permissions.role === "admin";
+  const canManageContent = canManageEvents(permissions.role);
 
   const hiddenPhotoIds = useHiddenPhotos();
 
@@ -364,6 +364,7 @@ export default function MomentsScreen() {
         onAddPhoto={canManageContent ? handleAddPhoto : undefined}
         onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
+        role={permissions.role}
         onDownload={handleDownload}
         onMarkSeen={markEventAsSeen}
         newEventIds={newEventIds}

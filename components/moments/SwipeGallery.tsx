@@ -36,6 +36,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { canInteractWithEvent } from "@/utils/eventPermissions";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -83,6 +84,8 @@ type SwipeGalleryProps = {
   currentUserName?: string;
   authorNames?: Record<string, string>;
   currentUserId?: string;
+  /** Role of the viewer: like/comment are hidden when it may not interact. Omitted = no restriction. */
+  role?: string | null;
 };
 
 // Format date short for title fallback
@@ -157,6 +160,7 @@ export const SwipeGallery = ({
   onAddPhoto,
   onEdit,
   onLike,
+  role,
   onDownload,
   onMarkSeen,
   newEventIds = new Set(),
@@ -403,9 +407,18 @@ export const SwipeGallery = ({
     }, 2600);
   }, []);
 
+  // Like/comment only where the role may (contributors: photo events only).
+  const canInteractWith = useCallback(
+    (photo: PhotoItem) =>
+      role === undefined || canInteractWithEvent(role, { photos: [photo.uri] }),
+    [role],
+  );
+
   // Handle like with optimistic update + rollback on error
   const handleLike = useCallback(
     async (photoId: string) => {
+      const target = photos.find((p) => p.id === photoId);
+      if (target && !canInteractWith(target)) return;
       const serverInfo = likesInfo[photoId] || {
         count: 0,
         likedByMe: false,
@@ -447,12 +460,14 @@ export const SwipeGallery = ({
         showLocalToast("Impossible d'enregistrer le like");
       }
     },
-    [onLike, likesInfo, optimisticLikes, showLocalToast],
+    [onLike, likesInfo, optimisticLikes, showLocalToast, photos, canInteractWith],
   );
 
   // Handle double tap to like
   const handleDoubleTap = useCallback(
     (photoId: string) => {
+      const target = photos.find((p) => p.id === photoId);
+      if (target && !canInteractWith(target)) return;
       if (heartTimeoutRef.current) clearTimeout(heartTimeoutRef.current);
       setDoubleTapHeartId(photoId);
       heartScale.value = withSequence(
@@ -468,7 +483,7 @@ export const SwipeGallery = ({
 
       handleLike(photoId);
     },
-    [handleLike, heartScale],
+    [handleLike, heartScale, photos, canInteractWith],
   );
 
   // Animated style for double tap heart
@@ -492,10 +507,10 @@ export const SwipeGallery = ({
   // Open comments for current photo via swipe up
   const openCurrentPhotoComments = useCallback(() => {
     const item = galleryItems[currentIndex];
-    if (item?.type === "photo") {
+    if (item?.type === "photo" && canInteractWith(item.photo)) {
       handleComment(item.photo.id, item.photo.titre);
     }
-  }, [currentIndex, galleryItems, handleComment]);
+  }, [currentIndex, galleryItems, handleComment, canInteractWith]);
 
   // Vertical pan gesture for swipe up (comments) and swipe down (close)
   const verticalPanGesture = Gesture.Pan()
@@ -766,6 +781,7 @@ export const SwipeGallery = ({
               {/* Social bar below the image */}
               <View style={styles.cardSocialBar}>
                 <View style={styles.socialBarRow}>
+                  {canInteractWith(item.photo) ? (
                   <View style={styles.socialBarActions}>
                     <Pressable
                       style={({ pressed }) => [
@@ -798,6 +814,9 @@ export const SwipeGallery = ({
                       {commentCount > 0 && <View style={styles.commentDot} />}
                     </Pressable>
                   </View>
+                  ) : (
+                    <View style={styles.socialBarActions} />
+                  )}
                   <View style={styles.photoInfoContainer}>
                     <Text style={styles.photoDate}>
                       {item.photo.userId && item.photo.userId !== currentUserId && authorNames[item.photo.userId]
@@ -836,6 +855,7 @@ export const SwipeGallery = ({
       handleImageTap,
       handleLike,
       handleComment,
+      canInteractWith,
       handleAddPhoto,
       doubleTapHeartId,
       heartAnimatedStyle,

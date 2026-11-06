@@ -70,8 +70,9 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
   const cancelRecording = async () => {
     try {
       if (isRecording) {
-        await VoiceCommandService.stopRecording();
         setIsRecording(false);
+        // Arrête le micro ET supprime le fichier audio temporaire.
+        await VoiceCommandService.cancelRecording();
         console.log("🚫 Enregistrement annulé");
       }
     } catch (error) {

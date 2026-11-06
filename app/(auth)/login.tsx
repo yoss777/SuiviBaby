@@ -18,7 +18,7 @@ import {
 } from "@/services/socialAuthService";
 import { createPatientUser } from "@/services/userService";
 import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
-import { sauvegarderConsentementSante } from "@/services/userPreferencesService";
+import { recordHealthConsent } from "@/services/healthConsentService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -355,9 +355,15 @@ export default function LoginScreen() {
         );
 
         // Sauvegarder le consentement données de santé (RGPD art. 9)
-        await sauvegarderConsentementSante(userCredential.user.uid);
+        // Preuve écrite côté serveur. En cas d'échec, l'écran de consentement
+        // du démarrage (boot) le redemandera : l'inscription n'est pas bloquée.
+        try {
+          await recordHealthConsent(userCredential.user.uid);
+          trackOnboardingEvent("health_consent_granted");
+        } catch (consentError) {
+          console.warn("[LOGIN] recordHealthConsent échoué:", consentError);
+        }
         trackOnboardingEvent("signup_completed");
-        trackOnboardingEvent("health_consent_granted");
 
         // Envoyer l'email de vérification
         sendEmailVerification(userCredential.user).catch(() => {});

@@ -50,7 +50,7 @@
         <header>
           <span class="eyebrow">Données personnelles</span>
           <h1>Politique de confidentialité</h1>
-          <p class="doc__meta">Version 2.1 — en vigueur au <time datetime="2026-11-02">2 novembre 2026</time></p>
+          <p class="doc__meta">Version 2.2 — en vigueur au <time datetime="2026-11-06">6 novembre 2026</time></p>
         </header>
 
         <aside class="doc__summary" aria-labelledby="essentiel">
@@ -100,8 +100,8 @@
               <thead><tr><th scope="col">Finalité</th><th scope="col">Base légale (RGPD)</th></tr></thead>
               <tbody>
                 <tr><td>Créer et gérer votre compte, synchroniser vos données entre appareils</td><td>Exécution du contrat (art. 6.1.b)</td></tr>
-                <tr><td>Enregistrer et afficher le suivi de santé de l'enfant, statistiques, courbes de croissance, conseils adaptés à l'âge</td><td>Votre <strong>consentement explicite</strong> (art. 9.2.a), recueilli par une case distincte à l'inscription</td></tr>
-                <tr><td>Commande vocale</td><td>Consentement explicite (art. 9.2.a) — fonction facultative, déclenchée par vous à chaque utilisation</td></tr>
+                <tr><td>Enregistrer et afficher le suivi de santé de l'enfant, statistiques, courbes de croissance</td><td>Votre <strong>consentement explicite</strong> (art. 9.2.a), recueilli à l'inscription ou à la première connexion</td></tr>
+                <tr><td>Commande vocale</td><td>Couverte par le consentement explicite aux données de santé (art. 9.2.a) — fonction facultative ; une information sur les prestataires concernés (AssemblyAI, Anthropic) vous est présentée une seule fois, avant la première utilisation</td></tr>
                 <tr><td>Partager le suivi avec les personnes que vous invitez</td><td>Exécution du contrat et consentement (art. 6.1.b et 9.2.a)</td></tr>
                 <tr><td>Rappels et notifications push</td><td>Consentement (autorisation du système de votre téléphone, révocable)</td></tr>
                 <tr><td>Récapitulatif hebdomadaire par e-mail</td><td>Consentement — envoyé uniquement si vous l'activez dans les réglages</td></tr>
@@ -129,7 +129,7 @@
             <li>le texte transcrit et l'heure locale sont envoyés à <strong>Anthropic</strong> (modèle Claude) pour identifier les événements à créer ;</li>
             <li>les événements proposés vous sont présentés : rien n'est enregistré sans votre validation.</li>
           </ol>
-          <p><strong>L'audio n'est jamais stocké par SuiviBaby.</strong> La transcription est supprimée chez AssemblyAI immédiatement après le traitement. Le texte est conservé au plus 5 minutes dans un cache technique pour éviter les doubles traitements. Le prénom de l'enfant et votre identifiant de compte ne sont pas transmis à Anthropic. Ces prestataires agissent comme sous-traitants et n'utilisent pas vos données pour entraîner leurs modèles <span class="todo">[À VÉRIFIER dans les contrats AssemblyAI et Anthropic]</span>.</p>
+          <p><strong>L'audio n'est pas conservé par SuiviBaby.</strong> Il est enregistré temporairement sur votre téléphone, puis supprimé dès la fin de la transcription (ou si vous annulez, ou en cas d'erreur) ; notre serveur ne le stocke pas. La transcription est supprimée chez AssemblyAI juste après le traitement ; si cette suppression échoue, elle est mise en file d'attente et retentée automatiquement (jusqu'à 5 essais), puis signalée à notre équipe pour suppression manuelle. Le texte transcrit est conservé dans un cache technique, utilisable 5 minutes pour éviter les doubles traitements, puis supprimé automatiquement (la purge peut prendre jusqu'à 24 heures). Le texte envoyé à Anthropic est celui que vous avez dicté, tel quel : <strong>si vous prononcez le prénom de votre enfant, ce prénom s'y trouve</strong>. SuiviBaby n'ajoute ni le profil de l'enfant ni votre identifiant de compte à ce qui est envoyé à Anthropic. Ces prestataires agissent comme sous-traitants et n'utilisent pas vos données pour entraîner leurs modèles <span class="todo">[À VÉRIFIER dans les contrats AssemblyAI et Anthropic]</span>.</p>
         </section>
 
         <section id="destinataires" aria-labelledby="h-destinataires">
@@ -140,13 +140,13 @@
               <caption class="sr-only">Sous-traitants</caption>
               <thead><tr><th scope="col">Prestataire</th><th scope="col">Rôle</th><th scope="col">Données concernées</th><th scope="col">Localisation</th></tr></thead>
               <tbody>
-                <tr><td>Google Ireland / Google LLC (Firebase)</td><td>Hébergement de la base de données et des photos, authentification, fonctions serveur, protection de l'application</td><td>Toutes les données de l'application</td><td>Base de données : UE (multi-région eur3 : Belgique, Pays-Bas, Finlande). Fonctions serveur : UE (Belgique). Photos : UE (Belgique, europe-west1)</td></tr>
+                <tr><td>Google Ireland / Google LLC (Firebase)</td><td>Hébergement de la base de données et des photos, authentification, fonctions serveur, protection de l'application</td><td>Toutes les données de l'application</td><td>Base de données : UE (multi-région eur3 : Belgique, Pays-Bas, Finlande). Fonctions serveur : UE (Belgique). Photos : UE (Belgique, europe-west1) ; des photos plus anciennes peuvent subsister dans un espace de stockage hérité aux États-Unis, en cours de migration vers l'UE</td></tr>
                 <tr><td>AssemblyAI, Inc.</td><td>Transcription de la commande vocale</td><td>Enregistrement audio</td><td>États-Unis</td></tr>
-                <tr><td>Anthropic, PBC</td><td>Interprétation du texte dicté</td><td>Texte transcrit, heure locale ; pour les conseils, âge en mois, sexe et types d'événements récents, sans prénom ni identifiant</td><td>États-Unis</td></tr>
+                <tr><td>Anthropic, PBC</td><td>Interprétation du texte dicté</td><td>Texte transcrit tel que dicté (peut contenir un prénom), heure locale</td><td>États-Unis</td></tr>
                 <tr><td>RevenueCat, Inc.</td><td>Gestion des abonnements</td><td>Identifiant de compte pseudonyme, statut d'achat</td><td>États-Unis</td></tr>
                 <tr><td>Resend (Plus Five Five, Inc.)</td><td>Envoi des e-mails</td><td>Adresse e-mail, contenu de l'e-mail (invitation, récapitulatif…)</td><td>États-Unis</td></tr>
-                <tr><td>Expo (650 Industries, Inc.)</td><td>Acheminement des notifications push</td><td>Jeton de l'appareil, texte de la notification</td><td>États-Unis</td></tr>
-                <tr><td>Functional Software, Inc. (Sentry)</td><td>Diagnostic des erreurs et des performances</td><td>Données techniques de l'appareil et de l'erreur, sans identifiant de compte</td><td>États-Unis <span class="todo">[ou UE selon l'hébergement Sentry choisi]</span></td></tr>
+                <tr><td>Expo (650 Industries, Inc.)</td><td>Acheminement des notifications push</td><td>Jeton de l'appareil, texte de la notification (prénom de l'enfant et horaires)</td><td>États-Unis</td></tr>
+                <tr><td>Functional Software, Inc. (Sentry)</td><td>Diagnostic des erreurs et des performances</td><td>Données techniques de l'appareil et de l'erreur, sans identifiant de compte</td><td>Union européenne (Allemagne)</td></tr>
               </tbody>
             </table>
           </div>
@@ -155,7 +155,7 @@
 
         <section id="transferts" aria-labelledby="h-transferts">
           <h2 id="h-transferts">7. Transferts hors de l'Union européenne</h2>
-          <p>Les données de l'application, photos comprises, sont hébergées dans l'Union européenne. Certains prestataires sont toutefois situés aux États-Unis. Ces transferts sont encadrés par la décision d'adéquation <strong>EU-US Data Privacy Framework</strong> lorsque le prestataire y est certifié, et à défaut par les <strong>clauses contractuelles types</strong> de la Commission européenne, complétées de mesures de sécurité (chiffrement, minimisation des données envoyées). Vous pouvez obtenir une copie des garanties applicables en écrivant à <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
+          <p>Les données de l'application, photos comprises, sont hébergées dans l'Union européenne (à l'exception de quelques photos anciennes encore en cours de migration depuis un espace de stockage aux États-Unis). Certains prestataires sont toutefois situés aux États-Unis. Ces transferts sont encadrés par la décision d'adéquation <strong>EU-US Data Privacy Framework</strong> lorsque le prestataire y est certifié, et à défaut par les <strong>clauses contractuelles types</strong> de la Commission européenne, complétées de mesures de sécurité (chiffrement, minimisation des données envoyées). Vous pouvez obtenir une copie des garanties applicables en écrivant à <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
         </section>
 
         <section id="conservation" aria-labelledby="h-conservation">
@@ -168,11 +168,11 @@
                 <tr><td>Compte et suivi de l'enfant</td><td>Tant que votre compte est actif</td></tr>
                 <tr><td>Après une demande de suppression du compte</td><td>Délai de 30 jours pendant lequel vous pouvez annuler, puis effacement définitif de la base de production</td></tr>
                 <tr><td>Profil d'enfant supprimé</td><td>30 jours, puis effacement définitif, photos comprises</td></tr>
-                <tr><td>Enregistrement audio</td><td>Non conservé</td></tr>
-                <tr><td>Transcription vocale</td><td>Supprimée chez AssemblyAI aussitôt après traitement ; 5 minutes dans notre cache technique</td></tr>
+                <tr><td>Enregistrement audio</td><td>Supprimé de votre téléphone après la transcription ; non conservé sur nos serveurs</td></tr>
+                <tr><td>Transcription vocale</td><td>Supprimée chez AssemblyAI aussitôt après traitement ; cache technique utilisable 5 minutes, purge automatique sous 24 heures au plus</td></tr>
                 <tr><td>Codes d'invitation</td><td>7 jours</td></tr>
                 <tr><td>Journaux techniques et de sécurité</td><td>90 jours maximum</td></tr>
-                <tr><td>Preuve de consentement</td><td>Durée du compte, puis 5 ans à titre de preuve</td></tr>
+                <tr><td>Preuve de consentement</td><td>5 ans après la suppression du compte, à titre de preuve en cas de litige (art. 6.1.f RGPD ; prescription de l'art. 2224 du Code civil), horodatage enregistré côté serveur</td></tr>
                 <tr><td>Données de facturation</td><td>10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement</td></tr>
                 <tr><td>Sauvegardes</td><td><span class="todo">[À COMPLÉTER : durée réelle des sauvegardes, ex. 30 jours glissants]</span></td></tr>
               </tbody>
@@ -193,7 +193,7 @@
             <li><strong>Accès</strong> et <strong>rectification</strong> : directement dans l'application, ou sur demande ;</li>
             <li><strong>Effacement</strong> : Paramètres → Supprimer le compte, ou via la page <a href="/delete-account">suppression de compte</a> ;</li>
             <li><strong>Portabilité</strong> : Paramètres → Export (format JSON, lisible par machine) ;</li>
-            <li><strong>Retrait du consentement</strong> à tout moment, sans affecter la licéité des traitements passés ;</li>
+            <li><strong>Retrait du consentement</strong> à tout moment (Paramètres → Retirer mon consentement aux données de santé), sans affecter la licéité des traitements passés ;</li>
             <li><strong>Opposition</strong> aux traitements fondés sur notre intérêt légitime, et <strong>limitation</strong> du traitement ;</li>
             <li><strong>Directives post-mortem</strong> sur le sort de vos données après votre décès (article 85 de la loi Informatique et Libertés).</li>
           </ul>

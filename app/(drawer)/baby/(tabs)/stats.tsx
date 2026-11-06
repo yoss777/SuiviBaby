@@ -6,7 +6,9 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import { getChartColors, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
+import { PaywallPrompt } from "@/components/ui/PaywallPrompt";
 import { useBaby } from "@/contexts/BabyContext";
+import { usePremium } from "@/contexts/PremiumContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import {
@@ -14,6 +16,12 @@ import {
   useMergedOptimisticEvents,
 } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
+import { decidePdfExportAccess } from "@/services/premiumGatingService";
+import {
+  consumeExportQuota,
+  getExportUsageStatus,
+  type UsageQuotaStatus,
+} from "@/services/premiumUsageService";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
   addWeeks,
@@ -38,7 +46,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Sharing from "expo-sharing";
+import { adoptTempFile, deleteTempFile, shareTempFile } from "@/services/tempShareService";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
@@ -206,6 +214,8 @@ export default function StatsScreen() {
   const [refreshFailed, setRefreshFailed] = useState(false);
   const historyFailedForRef = useRef<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showPdfPaywall, setShowPdfPaywall] = useState(false);
+  const { checkFeatureAccess } = usePremium();
   const [pompagesDayMs, setPompagesDayMs] = useState<number | null>(null);
 
   // Récupérer les paramètres de l'URL
@@ -726,7 +736,7 @@ export default function StatsScreen() {
   );
 
   // PDF Export — 3-month weekly trend report
-  const exportReport = useCallback(async () => {
+  const exportReport = useCallback(async (): Promise<boolean> => {
     const name = activeChild?.name || "Bébé";
     const now = new Date();
     const dateStr = now.toLocaleDateString("fr-FR", {
@@ -779,7 +789,7 @@ export default function StatsScreen() {
             { cancelable: true, onDismiss: () => resolve(false) },
           ),
         );
-        if (!proceed) return;
+        if (!proceed) return false;
         partialSince = loadedFrom;
       }
     }
@@ -899,17 +909,27 @@ export default function StatsScreen() {
     } catch (e) {
       captureServiceError(e, { service: "stats", operation: "exportPDF.print" });
       Alert.alert("Export impossible", "Le PDF n'a pas pu être généré. Réessayez.");
-      return;
+      return false;
     }
     try {
-      await Sharing.shareAsync(uri, {
+      // Moved to the exports folder, purged after ~1h (not right after the
+      // share: the receiving app may read it later). It holds health data.
+      uri = await adoptTempFile(uri, `suivibaby_stats_${Date.now()}.pdf`);
+      const shared = await shareTempFile(uri, {
         mimeType: "application/pdf",
         UTI: "com.adobe.pdf",
       });
+      if (!shared) {
+        await deleteTempFile(uri);
+        Alert.alert("Partage indisponible", "Le partage n'est pas disponible sur cet appareil.");
+        return false;
+      }
     } catch (e) {
       // Usually the user closing the share sheet; reported in case it is not.
       captureServiceError(e, { service: "stats", operation: "exportPDF.share" });
+      return false;
     }
+    return true;
   }, [activeChild?.id, activeChild?.name, tetees, pompages, sommeils]);
 
   const handleExportPDF = useCallback(async () => {
@@ -917,14 +937,43 @@ export default function StatsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsExporting(true);
     try {
-      await exportReport();
+      // Premium/Famille/grandfathered: illimité. Free: 1 essai (quota serveur).
+      const hasAccess = checkFeatureAccess("pdf_export");
+      let quota: UsageQuotaStatus | null = null;
+      if (!hasAccess) {
+        try {
+          quota = await getExportUsageStatus();
+        } catch (e) {
+          captureServiceError(e, { service: "stats", operation: "exportPDF.quotaStatus" });
+        }
+      }
+      const decision = decidePdfExportAccess(hasAccess, quota);
+      if (decision === "error") {
+        Alert.alert(
+          "Vérification impossible",
+          "Impossible de vérifier votre accès à l'export PDF. Vérifiez votre connexion et réessayez.",
+        );
+        return;
+      }
+      if (decision === "paywall") {
+        setShowPdfPaywall(true);
+        return;
+      }
+      const ok = await exportReport();
+      if (ok && decision === "allow_trial" && activeChild?.id) {
+        try {
+          await consumeExportQuota([activeChild.id]);
+        } catch (e) {
+          captureServiceError(e, { service: "stats", operation: "exportPDF.consumeQuota" });
+        }
+      }
     } catch (e) {
       captureServiceError(e, { service: "stats", operation: "exportPDF" });
       Alert.alert("Export impossible", "Le rapport n'a pas pu être préparé. Réessayez.");
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, exportReport]);
+  }, [isExporting, exportReport, checkFeatureAccess, activeChild?.id]);
 
   // Refresh tint color: use chart accent per tab
   const refreshTintColor =
@@ -961,6 +1010,13 @@ export default function StatsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: nc.background }]}>
+      {showPdfPaywall && (
+        <PaywallPrompt
+          trigger="pdf_export_limit"
+          variant="banner"
+          onDismiss={() => setShowPdfPaywall(false)}
+        />
+      )}
       {/* BOUTONS DE SÉLECTION (icônes) */}
       <View
         style={styles.tabContainer}

@@ -11,11 +11,12 @@ const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("../lib
 const UID = "parent1";
 const OTHER = "parent2";
 const past = new Date(Date.now() - 86400000).toISOString();
+const scheduled = new Date(Date.now() - 31 * 86400000).toISOString();
 
 function seed() {
   const data = {
     // The account to delete, due for deletion.
-    [`users/${UID}`]: { email: "p1@t.com", pendingDeletion: { deletionDate: past } },
+    [`users/${UID}`]: { email: "p1@t.com", pendingDeletion: { scheduledAt: scheduled, deletionDate: past } },
     // c1: only this parent → deleted with everything.
     "children/c1": { name: "Léo", ownerId: UID },
     [`children/c1/access/${UID}`]: { role: "owner", userId: UID },
@@ -69,7 +70,7 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     const docs = memoryStore(seed());
     await fns.processScheduledDeletions();
 
-    const leftovers = [...docs.entries()].filter(([, d]) => Object.values(d).includes(UID));
+    const leftovers = [...docs.entries()].filter(([p, d]) => !p.startsWith("consent_records/") && Object.values(d).includes(UID));
     expect(leftovers.map(([p]) => p)).toEqual([]);
     for (const collection of USER_DOCS_BY_ID) expect(docs.has(`${collection}/${UID}`)).toBe(false);
     expect(docs.has(`users/${UID}`)).toBe(false);
@@ -193,6 +194,7 @@ const NOT_PURGED_BY_UID = {
   user_child_access: "index entries removed per child in purgeUserData",
   events: "deleted with the child, or anonymised (DELETED_USER_ID) in shared children",
   shareInvitations: "removed by inviter / invited e-mail in purgeUserData",
+  consent_records: "kept 5 years after deletion as proof of consent (GDPR art. 7.1): purgeUserData only sets expireAt, a TTL deletes them",
   adminAuditLog: "kept on purpose: investigation trail of admin actions",
   revenuecat_webhook_events: "event ids only, no personal data; TTL 30 days",
   app_config: "shared configuration",

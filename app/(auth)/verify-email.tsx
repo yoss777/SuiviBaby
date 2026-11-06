@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { auth } from "@/config/firebase";
+import { refreshEmailVerification } from "@/utils/emailVerification";
 
 const COOLDOWN_SECONDS = 60;
 
@@ -68,8 +69,36 @@ export default function VerifyEmailScreen() {
     }
   }, []);
 
+  const [checking, setChecking] = useState(false);
+
+  // Reload the user and force a fresh ID token so the server sees the
+  // up-to-date email_verified claim (sharing callables check it).
+  const handleCheckVerified = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user || checking) return;
+    setError("");
+    setChecking(true);
+    try {
+      const verified = await refreshEmailVerification(user);
+      if (verified) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (router.canGoBack()) router.back();
+        else router.replace("/boot");
+      } else {
+        setError("Votre adresse n'est pas encore vérifiée. Ouvrez le lien reçu par e-mail puis réessayez.");
+      }
+    } catch {
+      setError("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setChecking(false);
+    }
+  }, [checking, router]);
+
   const handleContinue = useCallback(() => {
-    // Let the user continue — AuthContext will handle the rest
+    // Let the user continue — AuthContext will handle the rest. Best-effort
+    // token refresh in case the address was verified in the meantime.
+    const user = auth.currentUser;
+    if (user) void refreshEmailVerification(user).catch(() => {});
     router.replace("/boot");
   }, [router]);
 
@@ -127,6 +156,25 @@ export default function VerifyEmailScreen() {
               {error}
             </Text>
           )}
+
+          {/* Already verified: refresh the session */}
+          <TouchableOpacity
+            style={[
+              styles.mainButton,
+              { backgroundColor: nc.todayAccent, shadowColor: nc.todayAccent },
+              checking && styles.mainButtonDisabled,
+            ]}
+            onPress={handleCheckVerified}
+            disabled={checking}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="J'ai vérifié mon e-mail"
+            accessibilityState={{ disabled: checking }}
+          >
+            <Text style={styles.mainButtonText}>
+              {checking ? "Vérification..." : "J'ai vérifié mon e-mail"}
+            </Text>
+          </TouchableOpacity>
 
           {/* Resend button */}
           <TouchableOpacity

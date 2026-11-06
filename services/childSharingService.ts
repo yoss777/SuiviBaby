@@ -19,6 +19,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
 import { captureServiceError } from "@/utils/errorReporting";
+import { createEmailNotVerifiedError, isEmailNotVerifiedError } from "@/utils/emailVerification";
 import { createShareInvitationCF } from "@/services/premiumUsageService";
 
 export interface ShareCode {
@@ -138,6 +139,7 @@ export async function redeemShareCode(
     return result.data;
   } catch (error: any) {
     // Mapper les codes d'erreur Firebase Functions en messages user-friendly.
+    if (isEmailNotVerifiedError(error)) throw createEmailNotVerifiedError();
     if (error?.code === "functions/not-found") {
       throw new Error("Code invalide ou expiré");
     }
@@ -200,7 +202,7 @@ export async function createEmailInvitation(
     let code = rawCode;
 
     if (reason === "self-invite") code = "self-invite";
-    if (reason === "no-user") code = "no-user";
+    if (isEmailNotVerifiedError(error)) code = "email-not-verified";
     if (reason === "already-pending") code = "already-pending";
     if (reason === "already-linked") code = "already-linked";
     if (reason === "sharing-limit") code = "sharing-limit";
@@ -211,7 +213,7 @@ export async function createEmailInvitation(
 
     const expectedCodes = new Set([
       "self-invite",
-      "no-user",
+      "email-not-verified",
       "already-linked",
       "already-pending",
       "sharing-limit",
@@ -463,6 +465,7 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
     );
     await accept({ invitationId });
   } catch (error: any) {
+    if (isEmailNotVerifiedError(error)) throw createEmailNotVerifiedError();
     if (error?.code === "functions/not-found") {
       throw new Error("Invitation introuvable");
     }

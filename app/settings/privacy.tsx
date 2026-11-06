@@ -33,12 +33,12 @@ const sections = [
     {
       title: "2. Données traitées",
       content:
-        "Compte : adresse e-mail, pseudonyme, méthode de connexion. Profil de l'enfant : prénom, date de naissance, sexe, allergies éventuelles. Santé et suivi de l'enfant (données sensibles) : repas, sommeil, couches, température, médicaments, symptômes, vaccins, mesures de croissance, notes. Photos ajoutées aux jalons et souvenirs. Commande vocale (facultative) : enregistrement audio et texte transcrit. Partage : invitations, codes, droits d'accès, commentaires et réactions. Préférences et preuve horodatée de vos consentements. Appareil : jeton de notification et données techniques de diagnostic. Abonnement : offre et statut (jamais vos coordonnées bancaires). Signalements de contenu.",
+        "Compte : adresse e-mail, pseudonyme, méthode de connexion. Profil de l'enfant : prénom, date de naissance, sexe, allergies éventuelles. Santé et suivi de l'enfant (données sensibles) : repas, sommeil, couches, température, médicaments, symptômes, vaccins, mesures de croissance, notes. Photos ajoutées aux jalons et souvenirs. Commande vocale (facultative) : enregistrement audio et texte transcrit. Partage : invitations, codes, droits d'accès, commentaires et réactions. Préférences et preuve horodatée de vos consentements (acceptation ou retrait), enregistrée côté serveur. Appareil : jeton de notification et données techniques de diagnostic. Abonnement : offre et statut (jamais vos coordonnées bancaires). Signalements de contenu.",
     },
     {
       title: "3. Finalités et bases légales",
       content:
-        "Gestion du compte et synchronisation : exécution du contrat (art. 6.1.b RGPD). Suivi de santé de l'enfant, statistiques, courbes et conseils : votre consentement explicite (art. 9.2.a), recueilli par une case distincte à l'inscription. Commande vocale : consentement explicite, à chaque utilisation. Partage avec les personnes invitées : contrat et consentement. Notifications et récapitulatif hebdomadaire : consentement, uniquement si vous les activez. Abonnement : contrat et obligations comptables. Sécurité, prévention des abus et diagnostic des erreurs : intérêt légitime (art. 6.1.f). Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons pas.",
+        "Gestion du compte et synchronisation : exécution du contrat (art. 6.1.b RGPD). Suivi de santé de l'enfant, statistiques et courbes : votre consentement explicite (art. 9.2.a), recueilli à l'inscription ou à la première connexion, que vous pouvez retirer à tout moment dans les Réglages. Commande vocale : fonction facultative couverte par ce même consentement ; une information sur les prestataires concernés vous est présentée une fois, avant la première utilisation. Conservation de la preuve de votre consentement après la suppression du compte : intérêt légitime à disposer d'une preuve en cas de litige (art. 6.1.f ; prescription de 5 ans, art. 2224 du Code civil). Partage avec les personnes invitées : contrat et consentement. Notifications et récapitulatif hebdomadaire : consentement, uniquement si vous les activez. Abonnement : contrat et obligations comptables. Sécurité, prévention des abus et diagnostic des erreurs : intérêt légitime (art. 6.1.f). Nous n'utilisons pas vos données à des fins publicitaires et ne les vendons pas.",
     },
     {
       title: "4. Données des enfants",
@@ -48,22 +48,22 @@ const sections = [
     {
       title: "5. Commande vocale et intelligence artificielle",
       content:
-        "L'enregistrement est envoyé de façon chiffrée à notre serveur, puis à AssemblyAI pour être transcrit. Le texte transcrit et l'heure locale sont envoyés à Anthropic (modèle Claude) pour identifier les événements à créer. Rien n'est enregistré sans votre validation. L'audio n'est jamais stocké par SuiviBaby, la transcription est supprimée chez AssemblyAI juste après le traitement, et le texte est conservé au plus 5 minutes dans un cache technique. Ni le prénom de l'enfant ni votre identifiant de compte ne sont transmis à Anthropic.",
+        "L'enregistrement est envoyé de façon chiffrée à notre serveur, puis à AssemblyAI pour être transcrit. Le texte transcrit et l'heure locale sont envoyés à Anthropic (modèle Claude) pour identifier les événements à créer. Rien n'est enregistré sans votre validation. L'audio n'est pas conservé par SuiviBaby : il est enregistré temporairement sur votre téléphone, puis supprimé dès la fin de la transcription (ou si vous annulez, ou en cas d'erreur). Notre serveur ne le stocke pas. La transcription est supprimée chez AssemblyAI juste après le traitement ; si cette suppression échoue, elle est mise en file d'attente et retentée automatiquement (jusqu'à 5 essais), puis signalée à notre équipe pour suppression manuelle. Le texte transcrit est conservé dans un cache technique, utilisable 5 minutes pour éviter les doubles traitements, puis supprimé automatiquement (la purge peut prendre jusqu'à 24 heures). Le texte envoyé à Anthropic est celui que vous avez dicté, tel quel : si vous prononcez le prénom de votre enfant, ce prénom s'y trouve. SuiviBaby n'ajoute ni le profil de l'enfant ni votre identifiant de compte à ce qui est envoyé à Anthropic.",
     },
     {
       title: "6. Destinataires et sous-traitants",
       content:
-        "Vos données sont accessibles à vous, aux personnes que vous invitez selon les droits que vous leur donnez, à un nombre restreint de personnes habilitées de TESFA lorsque c'est nécessaire (support à votre demande, signalement, sécurité), et à nos sous-traitants : Google Firebase (hébergement, authentification, fonctions serveur), AssemblyAI (transcription vocale), Anthropic (interprétation du texte dicté et conseils, sans prénom ni identifiant), RevenueCat (abonnements), Resend (e-mails), Expo (notifications push) et Sentry (diagnostic des erreurs). Apple et Google interviennent comme responsables distincts pour la connexion avec leur compte et le paiement dans leurs stores.",
+        "Vos données sont accessibles à vous, aux personnes que vous invitez selon les droits que vous leur donnez, à un nombre restreint de personnes habilitées de TESFA lorsque c'est nécessaire (support à votre demande, signalement, sécurité), et à nos sous-traitants : Google Cloud / Firebase (hébergement, authentification assurée par Google, fonctions serveur), AssemblyAI (transcription vocale), Anthropic (interprétation du texte dicté pour la commande vocale, qui peut contenir un prénom si vous le prononcez), RevenueCat (abonnements), Resend (e-mails), Expo (notifications push, dont le texte contient le prénom de l'enfant et des horaires) et Sentry (diagnostic des erreurs). Apple et Google interviennent comme responsables distincts pour la connexion avec leur compte et le paiement dans leurs stores.",
     },
     {
       title: "7. Hébergement et transferts hors UE",
       content:
-        "La base de données est hébergée par Google Firebase dans l'Union européenne (région eur3) et les fonctions serveur en Belgique. Les photos sont stockées par Google Firebase dans l'Union européenne (Belgique, europe-west1). Certains prestataires sont toutefois situés aux États-Unis : ces transferts sont encadrés par le EU-US Data Privacy Framework lorsque le prestataire y est certifié, et à défaut par les clauses contractuelles types de la Commission européenne.",
+        "La base de données est hébergée par Google Firebase dans l'Union européenne (région eur3) et les fonctions serveur en Belgique. Les photos sont stockées par Google Firebase dans l'Union européenne (Belgique, europe-west1) ; des photos plus anciennes peuvent subsister dans un espace de stockage hérité aux États-Unis, en cours de migration vers l'Union européenne. Certains prestataires sont toutefois situés aux États-Unis : ces transferts sont encadrés par le EU-US Data Privacy Framework lorsque le prestataire y est certifié, et à défaut par les clauses contractuelles types de la Commission européenne.",
     },
     {
       title: "8. Durées de conservation",
       content:
-        "Compte et suivi de l'enfant : tant que votre compte est actif. Après une demande de suppression du compte : 30 jours pendant lesquels vous pouvez annuler, puis effacement définitif. Profil d'enfant supprimé : 30 jours, puis effacement définitif. Audio : non conservé. Codes d'invitation : 7 jours. Journaux techniques : 90 jours maximum. Preuve de consentement : durée du compte, puis 5 ans. Données de facturation : 10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement.",
+        "Compte et suivi de l'enfant : tant que votre compte est actif. Après une demande de suppression du compte : 30 jours pendant lesquels vous pouvez annuler, puis effacement définitif. Profil d'enfant supprimé : 30 jours, puis effacement définitif. Audio : supprimé de votre téléphone après la transcription, non conservé sur nos serveurs. Texte transcrit : cache technique de 5 minutes, purge automatique sous 24 heures au plus. Codes d'invitation : 7 jours. Journaux techniques : 90 jours maximum. Preuve de consentement horodatée : 5 ans après la suppression du compte, pour pouvoir se défendre en cas de litige. Données de facturation : 10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement.",
     },
     {
       title: "9. Sécurité",
@@ -73,7 +73,7 @@ const sections = [
     {
       title: "10. Vos droits",
       content:
-        "Vous disposez des droits d'accès, de rectification, d'effacement (Paramètres → Supprimer le compte), de portabilité (Paramètres → Export), de retrait du consentement, d'opposition, de limitation et du droit de définir des directives sur le sort de vos données après votre décès. Écrivez à privacy@suivibaby.com depuis l'adresse liée à votre compte : nous répondons sous un mois. Vous pouvez aussi introduire une réclamation auprès de la CNIL (www.cnil.fr).",
+        "Vous disposez des droits d'accès, de rectification, d'effacement (Paramètres → Supprimer le compte), de portabilité (Paramètres → Export), de retrait du consentement (Paramètres → Retirer mon consentement aux données de santé), d'opposition, de limitation et du droit de définir des directives sur le sort de vos données après votre décès. Écrivez à privacy@suivibaby.com depuis l'adresse liée à votre compte : nous répondons sous un mois. Vous pouvez aussi introduire une réclamation auprès de la CNIL (www.cnil.fr).",
     },
     {
       title: "11. Modifications",
@@ -137,7 +137,7 @@ const sections = [
                 { color: nc.textMuted },
               ]}
             >
-              Dernière mise à jour : 2 novembre 2026
+              Version 2.2 — dernière mise à jour : 6 novembre 2026
             </Text>
           </View>
 
