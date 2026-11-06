@@ -232,6 +232,7 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
         events: events as Parameters<typeof getTopInsights>[0]["events"],
         babyName,
         ageMonths,
+        birthDate: babyBirthDate,
       },
       3,
     );

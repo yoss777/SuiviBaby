@@ -6,6 +6,13 @@ import {
   TIP_CATEGORY_COLORS,
 } from "@/types/content";
 import type { EventType } from "@/services/eventsService";
+import type { BirthDateInput } from "@/utils/ageUtils";
+import {
+  formatWarningSigns,
+  getTemperatureAlert,
+  type TemperatureAlert,
+  type TemperatureAlertLevel,
+} from "@/utils/temperatureAlert";
 
 // ============================================
 // TYPES
@@ -41,6 +48,8 @@ interface InsightParams {
   events: EventData[];
   babyName: string;
   ageMonths: number;
+  /** Date de naissance : permet d'adapter les alertes de température à l'âge. */
+  birthDate?: BirthDateInput;
   now?: Date;
 }
 
@@ -319,23 +328,38 @@ function sommeilInsights(
       }
     }
 
-    const locLabels: Record<string, string> = {
-      lit: "dans son lit",
-      cododo: "en cododo",
-      poussette: "en poussette",
-      voiture: "en voiture",
-      autre: "ailleurs",
-    };
-
-    if (bestLoc && bestScore >= 2.5) {
+    // Santé : on ne met en avant que le lit de bébé. Aucun autre lieu
+    // (cododo, poussette, voiture...) n'est jamais présenté comme « le
+    // meilleur endroit ». Recommandations : lit à barreaux ou berceau, sur le
+    // dos, espace de couchage vide (HAS, Santé publique France : prévention de
+    // la mort inattendue du nourrisson).
+    if (bestLoc === "lit" && bestScore >= 2.5) {
       insights.push({
         id: nextId(),
         type: "info",
         icon: "location-dot",
         title: "Meilleur endroit",
-        message: `${name} dort le mieux ${locLabels[bestLoc] ?? bestLoc}. Le score qualité y est le plus élevé.`,
+        message: `${name} dort le mieux dans son lit. Couchez toujours bébé sur le dos, dans son propre lit à barreaux ou berceau, avec un espace de couchage vide (ni oreiller, ni tour de lit, ni peluche).`,
         accentColor: color,
         priority: 3,
+        category: "sommeil",
+      });
+    }
+
+    // Siestes fréquentes hors lit (voiture, poussette, écharpe) : rappel de
+    // couchage sûr. Seuil produit : au moins 3 siestes sur 7 jours.
+    const offBedNaps = recent7d.filter(
+      (s) => s.location === "voiture" || s.location === "poussette",
+    ).length;
+    if (offBedNaps >= OFF_BED_NAP_REMINDER_COUNT) {
+      insights.push({
+        id: nextId(),
+        type: "warning",
+        icon: "bed",
+        title: "Couchage sûr",
+        message: `${name} a fait ${offBedNaps} siestes en voiture ou en poussette cette semaine. Un siège auto, une poussette ou une écharpe ne remplacent pas le lit : dès que possible, recouchez bébé sur le dos dans son lit à barreaux ou berceau, espace de couchage vide. Ne le laissez pas dormir sans surveillance dans un siège auto à l'arrêt.`,
+        accentColor: color,
+        priority: 2,
         category: "sommeil",
       });
     }
@@ -346,32 +370,58 @@ function sommeilInsights(
 
 // --- SANTE ---
 
+const OFF_BED_NAP_REMINDER_COUNT = 3;
+
+const ALERT_SEVERITY: Record<TemperatureAlertLevel, number> = {
+  fievre: 1,
+  rapide: 2,
+  hypothermie: 3,
+  urgent: 4,
+};
+
 function santeInsights(
   events: EventData[],
   name: string,
   _ageMonths: number,
   now: Date,
+  birthDate?: BirthDateInput,
 ): Insight[] {
   const insights: Insight[] = [];
   const color = TIP_CATEGORY_COLORS.sante;
 
   const recent7d = filterByDays(events, 7, now);
 
-  // Recent fever
-  const temperatures = filterByType(recent7d, "temperature").filter(
-    (e) => e.valeur && e.valeur >= 38,
-  );
-  if (temperatures.length > 0) {
-    const maxTemp = Math.max(...temperatures.map((e) => e.valeur!));
+  // Température des 7 derniers jours : l'alerte dépend de l'âge de l'enfant
+  // AU MOMENT de la mesure (utils/temperatureAlert.ts). On garde la plus grave.
+  let worst: { alert: TemperatureAlert; valeur: number } | null = null;
+  for (const e of filterByType(recent7d, "temperature")) {
+    if (typeof e.valeur !== "number") continue;
+    const alert = getTemperatureAlert({
+      valeur: e.valeur,
+      birthDate,
+      measuredAt: e.date,
+    });
+    if (!alert) continue;
+    const better =
+      !worst ||
+      ALERT_SEVERITY[alert.level] > ALERT_SEVERITY[worst.alert.level] ||
+      (ALERT_SEVERITY[alert.level] === ALERT_SEVERITY[worst.alert.level] &&
+        Math.abs(e.valeur - 37) > Math.abs(worst.valeur - 37));
+    if (better) worst = { alert, valeur: e.valeur };
+  }
+  if (worst) {
+    const { alert } = worst;
     insights.push({
       id: nextId(),
       type: "warning",
-      icon: "temperature-high",
-      title: "Fièvre détectée",
-      message: `${name} a eu de la fièvre cette semaine (max ${maxTemp}°C). Surveillez l'évolution et consultez si la fièvre persiste.`,
+      icon: alert.level === "hypothermie" ? "temperature-low" : "temperature-high",
+      title:
+        alert.level === "hypothermie" ? "Température basse détectée" : "Fièvre détectée",
+      message: `${name} : ${alert.message} ${formatWarningSigns(alert.signs)}`,
       accentColor: color,
-      priority: 1,
+      priority: alert.dismissible ? 1 : 0,
       category: "sante",
+      ...(alert.dismissible ? {} : { dismissible: false }),
     });
   }
 
@@ -385,7 +435,7 @@ function santeInsights(
         type: "info",
         icon: "syringe",
         title: "Post-vaccination",
-        message: `${name} a été vacciné(e) il y a ${daysSince} jour${daysSince > 1 ? "s" : ""}. Une légère fièvre ou irritabilité est normale dans les 48h.`,
+        message: `${name} a été vacciné(e) il y a ${daysSince} jour${daysSince > 1 ? "s" : ""}. Si de la fièvre ou des signes inhabituels apparaissent, consultez un médecin ou appelez le 15 en cas de doute.`,
         accentColor: color,
         priority: 2,
         category: "sante",
@@ -504,7 +554,7 @@ function developpementInsights(
  * Returns sorted by priority (1=highest).
  */
 export function generateInsights(params: InsightParams): Insight[] {
-  const { events, babyName, ageMonths, now = new Date() } = params;
+  const { events, babyName, ageMonths, birthDate, now = new Date() } = params;
 
   // Reset counter for consistent IDs
   insightCounter = 0;
@@ -518,7 +568,7 @@ export function generateInsights(params: InsightParams): Insight[] {
   const allInsights: Insight[] = [
     ...alimentationInsights(normalizedEvents, babyName, ageMonths, now),
     ...sommeilInsights(normalizedEvents, babyName, ageMonths, now),
-    ...santeInsights(normalizedEvents, babyName, ageMonths, now),
+    ...santeInsights(normalizedEvents, babyName, ageMonths, now, birthDate),
     ...developpementInsights(normalizedEvents, babyName, ageMonths, now),
   ];
 

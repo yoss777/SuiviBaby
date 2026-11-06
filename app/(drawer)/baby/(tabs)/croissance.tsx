@@ -3,12 +3,8 @@ import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import {
-  OMS_MAX_DAY,
-  OMS_PERCENTILES,
-  OMSMetric,
-  OMSSex,
-} from "@/constants/omsPercentiles";
+import { OMSMetric, OMSSex } from "@/constants/omsPercentiles";
+import { OMS_RANGE_NOTE, getOmsSeries, hasMeasurementsBeyondOms } from "@/utils/omsCurve";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -1346,12 +1342,13 @@ export default function CroissanceScreen() {
     );
   }, [chartWidth, labels.length]);
 
-  const { chartPoints, yAxisLabels, maxValue, oms } = useMemo(() => {
+  const { chartPoints, yAxisLabels, maxValue, oms, omsBeyondRange } = useMemo(() => {
     if (!hasData || plotWidth <= 0) {
       return {
         chartPoints: [] as ChartPoint[],
         yAxisLabels: [] as { value: number; y: number }[],
         maxValue: 0,
+        omsBeyondRange: false,
         oms: null as null | {
           lines: Record<
             "p3" | "p15" | "p50" | "p85" | "p97",
@@ -1368,23 +1365,14 @@ export default function CroissanceScreen() {
       birthDate && omsSex
         ? metricEntries.map((entry) => getAgeInDays(birthDate, entry.date))
         : null;
-    const omsAvailable =
-      ageDays &&
-      ageDays.length === values.length &&
-      ageDays.every((day) => day >= 0 && day <= OMS_MAX_DAY);
-    const omsSource =
-      omsAvailable && omsSex
-        ? OMS_PERCENTILES[omsSex as OMSSex][metric as OMSMetric]
+    // Les tables OMS embarquées couvrent 0-731 jours : les mesures au-delà
+    // n'ont pas de référence, mais ne font plus disparaître celles qui en ont.
+    const omsSeries =
+      ageDays && ageDays.length === values.length && omsSex
+        ? getOmsSeries(omsSex as OMSSex, metric as OMSMetric, ageDays)
         : null;
-    const omsValues = omsSource
-      ? {
-          p3: ageDays!.map((day) => omsSource.p3[day]),
-          p15: ageDays!.map((day) => omsSource.p15[day]),
-          p50: ageDays!.map((day) => omsSource.p50[day]),
-          p85: ageDays!.map((day) => omsSource.p85[day]),
-          p97: ageDays!.map((day) => omsSource.p97[day]),
-        }
-      : null;
+    const omsValues = omsSeries ? omsSeries.values : null;
+    const omsIndices = omsSeries ? omsSeries.indices : [];
 
     const rangeValues = [
       ...values,
@@ -1427,24 +1415,24 @@ export default function CroissanceScreen() {
 
     const omsLines = omsValues
       ? {
-          p3: omsValues.p3.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p3: omsValues.p3.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p15: omsValues.p15.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p15: omsValues.p15.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p50: omsValues.p50.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p50: omsValues.p50.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p85: omsValues.p85.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p85: omsValues.p85.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
-          p97: omsValues.p97.map((value, index) => ({
-            x: CHART_PADDING.left + spacing * index,
+          p97: omsValues.p97.map((value, i) => ({
+            x: CHART_PADDING.left + spacing * omsIndices[i],
             y: toY(value),
           })),
         }
@@ -1468,6 +1456,7 @@ export default function CroissanceScreen() {
       chartPoints: points,
       yAxisLabels: yLabels,
       maxValue: babyMax,
+      omsBeyondRange: !!ageDays && !!omsSex && hasMeasurementsBeyondOms(ageDays),
       oms: omsLines ? { lines: omsLines, bands: omsBands } : null,
     };
   }, [
@@ -1984,6 +1973,15 @@ export default function CroissanceScreen() {
                           </Animated.View>
                         ) : null}
                       </View>
+                    )}
+
+                    {hasData && omsBeyondRange && (
+                      <Text
+                        style={[styles.omsLegendText, { color: palette.muted, marginTop: 8 }]}
+                        accessibilityRole="text"
+                      >
+                        {OMS_RANGE_NOTE}
+                      </Text>
                     )}
 
                     {hasData && oms && (

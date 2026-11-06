@@ -337,27 +337,186 @@ User stories :
 - En tant que parent, je veux des conseils de sommeil conformes aux
   recommandations françaises.
 
-- [ ] **5.1** Alerte à la saisie d'une température, selon l'âge :
+- [x] **5.1** Alerte à la saisie d'une température, selon l'âge :
   < 3 mois et ≥ 38 °C → modale non masquable « consultez en urgence /
   appelez le 15 » ; 3 à 6 mois → consultation rapide ; < 36 °C → alerte
   hypothermie ; signes de gravité affichés. (`SoinsForm.tsx:609-626`,
   `services/insightEngine.ts:349-376`)
-- [ ] **5.2** Conseil « fièvre » des insights : âge pris en compte, non
+- [x] **5.2** Conseil « fièvre » des insights : âge pris en compte, non
   masquable pour les moins de 3 mois.
-- [ ] **5.3** Retirer « C'est normal » du conseil fièvre et appétit.
+- [x] **5.3** Retirer « C'est normal » du conseil fièvre et appétit.
   (`services/correlationService.ts:348`)
-- [ ] **5.4** « Meilleur endroit » limité au lit ; rappel de couchage sûr si
+- [x] **5.4** « Meilleur endroit » limité au lit ; rappel de couchage sûr si
   siestes fréquentes en voiture ou poussette. (`insightEngine.ts:298-341`)
-- [ ] **5.5** Fiche cododo réécrite (même chambre, pas le même lit avant
+- [x] **5.5** Fiche cododo réécrite (même chambre, pas le même lit avant
   4-6 mois) ; fiche fièvre complétée (« appelez le 15 ») ; coquille « Évry » ;
   vérifier que la collection `tips` en production correspond au seed.
-- [ ] **5.6** Bornes de température identiques dans le formulaire et le
+- [x] **5.6** Bornes de température identiques dans le formulaire et le
   serveur (34-43) ; courbes OMS qui ne disparaissent plus au-delà de
   731 jours.
 - [ ] **5.7** Relecture pédiatre (Q3) et décision MDR (Q4) notées ici avant la
   version.
 
 Contrôle : tests unitaires des seuils par âge ; textes validés.
+
+### Notes de réalisation S5
+
+Fait sur la branche `sprint-5/sante` (rien de commité, rien de déployé, rien
+écrit en production). Reste à faire avant la version : relecture pédiatre (Q3)
+et, pour la fiche `tips`, lancer `node scripts/compareTipsWithSeed.mjs` puis
+re-semer (`seedViaFirestore.mjs`) sur accord du propriétaire.
+
+**Décision dispositif médical (Q4), prise par le propriétaire.** Les messages
+de santé sont de l'ORIENTATION uniquement (« consultez », « appelez le 15 »).
+Ils ne contiennent ni diagnostic, ni interprétation, ni formule rassurante du
+type « c'est normal ». Les seuils suivent les repères publics français (HAS,
+Santé publique France, ameli.fr) ; aucun seuil n'est ajouté au-delà du plan.
+
+**Seuils (`utils/temperatureAlert.ts`, source commentée à côté de chaque seuil)**
+- fièvre : ≥ 38 °C ; température basse : < 36 °C (tout âge) ;
+- moins de 3 mois = date de la mesure avant le jour du 3e anniversaire mensuel
+  de la naissance (mois calendaires ; fin de mois ramenée au dernier jour : né le
+  31 janvier, 3 mois = 30 avril) : ≥ 38 °C, modale non masquable ;
+- 3 à 6 mois = du 3e au 6e anniversaire mensuel exclu : ≥ 38 °C, consultation rapide ;
+- 6 mois et plus : message de fièvre générique ; date de naissance inconnue :
+  message générique qui couvre le cas « moins de 3 mois » (jamais « normal »).
+
+**Textes de santé modifiés (à relire par un pédiatre, Q3)**
+
+Alerte de température (saisie, `SoinsForm`) et insight « Fièvre détectée » /
+« Température basse détectée » (`{prénom} : ` précède le message dans l'insight ;
+chaque message est suivi de « Signes à surveiller : difficultés à respirer,
+somnolence inhabituelle ou bébé mou, refus de s'alimenter, vomissements
+répétés, éruption qui ne s'efface pas à la pression, pleurs inhabituels,
+convulsions. ») :
+- moins de 3 mois, titre « Température élevée », non masquable, boutons
+  « J'ai compris » et « Appeler le 15 » (`tel:15`) : « Température de {T} °C
+  chez un bébé de moins de 3 mois. Consultez en urgence un médecin ou appelez
+  le 15. »
+- 3 à 6 mois : « Température de {T} °C chez un bébé de 3 à 6 mois : consultez
+  rapidement un médecin. En cas de doute ou si un des signes ci-dessous
+  apparaît, appelez le 15. »
+- 6 mois et plus : « Température de {T} °C. Consultez un médecin si la fièvre
+  persiste ou si un des signes ci-dessous apparaît. En cas de doute, appelez le
+  15. »
+- âge inconnu : « Température de {T} °C. L'âge de l'enfant n'est pas renseigné :
+  s'il a moins de 3 mois, consultez en urgence un médecin ou appelez le 15.
+  Sinon, consultez un médecin si la fièvre persiste ou si un des signes
+  ci-dessous apparaît. »
+- hypothermie (titre « Température basse ») : « Température de {T} °C,
+  inférieure à 36 °C. Appelez un médecin ou le 15. »
+
+Autres insights (`services/insightEngine.ts`, `services/correlationService.ts`) :
+- Fièvre et appétit. Avant : « Quand {prénom} a de la fièvre, son appétit
+  diminue naturellement. C'est normal — privilégiez l'hydratation. » Après :
+  « Quand {prénom} a de la fièvre, son appétit a diminué. Proposez
+  régulièrement à boire et consultez un médecin si la fièvre persiste ou si
+  {prénom} refuse de s'alimenter. »
+- Post-vaccination. Avant : « ... Une légère fièvre ou irritabilité est normale
+  dans les 48h. » Après : « {prénom} a été vacciné(e) il y a N jour(s). Si de la
+  fièvre ou des signes inhabituels apparaissent, consultez un médecin ou appelez
+  le 15 en cas de doute. »
+- Meilleur endroit (uniquement si le lit est le meilleur endroit ; jamais
+  cododo, poussette ou voiture) : « {prénom} dort le mieux dans son lit.
+  Couchez toujours bébé sur le dos, dans son propre lit à barreaux ou berceau,
+  avec un espace de couchage vide (ni oreiller, ni tour de lit, ni peluche). »
+- Couchage sûr (nouveau, au moins 3 siestes en voiture ou poussette sur 7
+  jours ; seuil produit, pas un seuil médical) : « {prénom} a fait N siestes en
+  voiture ou en poussette cette semaine. Un siège auto, une poussette ou une
+  écharpe ne remplacent pas le lit : dès que possible, recouchez bébé sur le dos
+  dans son lit à barreaux ou berceau, espace de couchage vide. Ne le laissez pas
+  dormir sans surveillance dans un siège auto à l'arrêt. »
+
+Fiches `data/tips_seed.json` (textes complets dans le fichier) :
+- `sommeil_cododo_securite` : réécrite. Titre « Dormir dans la chambre des
+  parents, dans son propre lit » ; résumé « Pour réduire le risque de mort
+  inattendue du nourrisson, bébé dort dans la chambre des parents, mais dans son
+  propre lit. » ; « Bébé dort dans la chambre des parents, dans son propre lit
+  (lit à barreaux ou berceau), au minimum jusqu'à ses 6 mois » ; « Pas de
+  partage du lit avec les parents, ni avec un frère ou une sœur » ; source
+  « Santé publique France ». L'ancien contenu (cododo dans le lit, « le berceau
+  cododo : le meilleur compromis ») est supprimé.
+- `sante_fievre_guide` : réécrite. Titre « La fièvre chez bébé : quand
+  consulter ? » ; « Moins de 3 mois : dès 38°C, consultez en urgence un médecin
+  ou appelez le 15 » ; « De 3 à 6 mois : dès 38°C, consultez rapidement un
+  médecin » ; « Après 6 mois : consultez un médecin si la fièvre persiste ou si
+  l'un des signes ci-dessous apparaît » ; « En cas de doute, à tout âge :
+  appelez le 15 » ; les 7 signes. Retirés : seuils 39/40 °C et durées 24/48 h
+  (absents du plan), « La température varie normalement entre 36.5 et 37.5 »,
+  « la fièvre n'est pas une maladie », paracétamol / ibuprofène et dosages (remplacés par
+  « Ne donnez aucun médicament sans avis d'un médecin ou d'un pharmacien »),
+  « ajouter 0°C » (incohérent).
+- `sante_poussees_dentaires` : retiré « Ce qui est normal : fièvre légère
+  (< 38.5°C) » et « Ce qui n'est pas dû aux dents (> 38.5°C) ». Ajouté :
+  « Ne mettez pas une fièvre sur le compte des dents : suivez les consignes de la
+  fiche « La fièvre chez bébé » ». Paracétamol remplacé par « Demandez conseil
+  à votre médecin ou à votre pharmacien avant tout médicament ».
+- `sante_post_vaccination` : titre « Après la vaccination : que surveiller ? »
+  (avant : « ... réactions normales ») ; section « Réactions normales »
+  remplacée par « Dans les 48 heures » ; seuils 38.5 / 39.5 °C et paracétamol
+  retirés ; « Consultez un médecin ou appelez le 15 » avec les signes de gravité.
+- `sante_croissance` : retiré « mais c'est normal si c'est sa courbe »,
+  « = parfait », « = à surveiller » ; remplacés par « Seul un professionnel de
+  santé peut interpréter la courbe de votre enfant » et « Parlez de la courbe
+  de bébé à votre médecin à chaque consultation ». Les seuils « Quand
+  consulter » (2 couloirs, stagnation 2-3 semaines) et les poids moyens sont
+  inchangés : à valider.
+- `alim_eau_hydratation` : « Évry » : marques retirées (voir compléments).
+
+**Reste « rassurant » mais hors santé stricte, non modifié (à trancher)** :
+`bienetre_baby_blues` (« Baby blues (normal) »), `sommeil_regression_4mois` /
+`_8mois`, `dev_tummy_time`, `dev_motricite_libre`, `bienetre_couple`.
+
+**Bornes et courbes (5.6)**
+- Température 34-43 °C : formulaire aligné sur `utils/eventBounds.ts` (le
+  contrôle à l'envoi acceptait jusqu'à 45) ; serveur déjà à 34-43 en création et
+  modification (`validateEventData`), durci contre NaN/Infinity, tests aux bornes.
+- Courbes OMS : les tables embarquées couvrent 0-731 jours (24 mois), pas plus.
+  Une seule mesure au-delà masquait toute la courbe ; maintenant seules les
+  mesures hors plage perdent leur référence (`utils/omsCurve.ts`). Au-delà de
+  24 mois il n'y a toujours pas de référence : décision propriétaire (embarquer
+  les tables OMS 2-5 ans ou afficher un message).
+
+**Compléments S5 (suite de la revue)**
+1. Âges en mois calendaires (`addMonths` avec fin de mois, équivalent date-fns),
+   plus en 90 / 180 jours : l'urgence ne s'arrête jamais avant 3 mois pleins.
+   Tests à la veille et au jour des 3 et 6 mois, dont naissances un 31 janvier,
+   un 30 novembre, tranche inconnue.
+2. Saisie vocale : `executeCommand` / `executeModify` (`hooks/useVoiceEventCreator.ts`)
+   affichent la même alerte via `temperatureAlertDialog` (branchée dans
+   `hooks/useVoiceCommand.ts`), à l'âge de la mesure, à la place du message de
+   succès. Seuls SoinsForm et la voix créent des températures.
+3. `sommeil_cododo_securite` : `ageMaxMonths` passe à 12.
+4. `alim_eau_hydratation` : plus aucune marque ; « Si eau en bouteille : choisir
+   une eau adaptée à la préparation des biberons (mention sur l'étiquette) ».
+   La ligne « résidu sec < 500 mg/L » (sans source) est retirée avec les marques.
+5. `alim_blw_introduction` : phrase « haut-le-cœur normal » retirée, sans
+   description de la différence haut-le-cœur / étouffement. Section Sécurité :
+   « Toujours surveiller bébé pendant le repas, sans le quitter des yeux »,
+   « Installez-le assis bien droit, jamais allongé ni en train de marcher ou de
+   jouer », « Apprenez les gestes de premiers secours en cas d'étouffement du
+   nourrisson : une formation aux premiers secours (Croix-Rouge, protection
+   civile, pompiers...) vous y prépare », « En cas d'étouffement ou de
+   difficulté à respirer : appelez le 15 ».
+6. Courbes OMS : au-delà de 731 jours, la note « Courbes OMS disponibles jusqu'à
+   24 mois » s'affiche sous le graphique.
+
+**Questions ouvertes pour le pédiatre (Q3)**
+- Conseils médicaments retirés (paracétamol, ibuprofène, dosages) des fiches
+  fièvre, dents et post-vaccination : faut-il les réintroduire, avec quelle source ?
+- Formulation DME / étouffement ci-dessus : suffisante, ou faut-il décrire la
+  différence haut-le-cœur / étouffement ?
+- `sante_croissance` : seuils de la section « Quand consulter » (2 couloirs,
+  stagnation 2-3 semaines, périmètre crânien) et poids moyens / rythmes de
+  croissance : à valider ou retirer.
+- Fiches qui parlent encore de « normal » ou rassurent : `bienetre_baby_blues`
+  (« Baby blues (normal) »), `sommeil_regression_4mois`, `sommeil_regression_8mois`,
+  `dev_tummy_time`, `dev_motricite_libre`, `bienetre_couple`.
+- Textes d'alerte température : formulations et signes de gravité ci-dessus.
+
+**Relecture pédiatre (Q3) et décision MDR (Q4)**
+- [x] Décision MDR (Q4) : orientation uniquement, voir ci-dessus.
+- [ ] Relecture pédiatre (Q3) de tous les textes ci-dessus : à faire avant la version.
 
 ## S6 — Fiabilité : plus d'action perdue en silence · app + serveur · ⏳
 

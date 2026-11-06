@@ -16,6 +16,32 @@ import {
   Event,
   EventType,
 } from "@/services/eventsService";
+import type { BirthDateInput } from "@/utils/ageUtils";
+import { getTemperatureAlert, type TemperatureAlert } from "@/utils/temperatureAlert";
+
+// ---------------------------------------------------------------------------
+// Alerte santé (température) : même décision que SoinsForm
+// ---------------------------------------------------------------------------
+
+export interface HealthAlertOptions {
+  /** Date de naissance de l'enfant (âge à la date de la mesure). */
+  birthDate?: BirthDateInput;
+  /** Affiche l'alerte (modale non masquable pour les moins de 3 mois). */
+  showTemperatureAlert?: (alert: TemperatureAlert) => void;
+}
+
+/** Retourne true si une alerte a été affichée. */
+function alertForTemperature(
+  valeur: unknown,
+  measuredAt: Date,
+  options?: HealthAlertOptions,
+): boolean {
+  if (!options?.showTemperatureAlert || typeof valeur !== "number") return false;
+  const alert = getTemperatureAlert({ valeur, birthDate: options.birthDate, measuredAt });
+  if (!alert) return false;
+  options.showTemperatureAlert(alert);
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Modal feedback callback type
@@ -199,6 +225,7 @@ export async function executeModify(
   modifications: Partial<ParsedCommandResult>,
   previousEvent: Event | null,
   feedback: ModalFeedback,
+  healthOptions?: HealthAlertOptions,
 ): Promise<boolean> {
   try {
     if (!previousEvent) {
@@ -257,10 +284,19 @@ export async function executeModify(
         previousEvent,
         expectedUpdatedAt,
       );
-      feedback.showInfo(
-        "Succès",
-        `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
-      );
+      const alerted =
+        type === "temperature" &&
+        alertForTemperature(
+          dataToUpdate.valeur,
+          eventDateToDate(previousEvent),
+          healthOptions,
+        );
+      if (!alerted) {
+        feedback.showInfo(
+          "Succès",
+          `${type.charAt(0).toUpperCase() + type.slice(1)} modifié avec succès`,
+        );
+      }
       return true;
     } else {
       feedback.showInfo(
@@ -290,6 +326,7 @@ export async function executeCommand(
   avecCouche?: boolean,
   excretionSelection?: { pipi: boolean; popo: boolean },
   targetEvent?: Event | null,
+  healthOptions?: HealthAlertOptions,
 ): Promise<boolean> {
   try {
     const action = command.action || "add";
@@ -319,6 +356,7 @@ export async function executeCommand(
         modifications,
         targetEvent,
         feedback,
+        healthOptions,
       );
     }
 
@@ -506,7 +544,16 @@ export async function executeCommand(
           ...data,
           type: "temperature" as const,
         });
-        feedback.showInfo("Succès", "Température ajoutée avec succès");
+        // L'alerte santé remplace le message de succès (une seule modale).
+        if (
+          !alertForTemperature(
+            (data as { valeur?: unknown }).valeur,
+            eventDateToDate({ date: (data as { date?: Date }).date ?? new Date() } as Event),
+            healthOptions,
+          )
+        ) {
+          feedback.showInfo("Succès", "Température ajoutée avec succès");
+        }
         return true;
 
       case "medicament":

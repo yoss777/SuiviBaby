@@ -2536,7 +2536,7 @@ function validateEventData(type, data) {
 
     case "temperature":
       if (data.valeur !== undefined) {
-        if (typeof data.valeur !== "number" || data.valeur < 34 || data.valeur > 43) {
+        if (typeof data.valeur !== "number" || !Number.isFinite(data.valeur) || data.valeur < 34 || data.valeur > 43) {
           throw new HttpsError(
             "invalid-argument",
             "Température doit être entre 34°C et 43°C."

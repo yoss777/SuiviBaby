@@ -4,6 +4,9 @@
 
 import { useRef, useState } from "react";
 import { auth } from "@/config/firebase";
+import { useBaby } from "@/contexts/BabyContext";
+import { useModal } from "@/contexts/ModalContext";
+import { showTemperatureAlertDialog } from "@/utils/temperatureAlertDialog";
 import type { Event as AppEvent } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
 import VoiceCommandService from "@/services/voiceCommandService";
@@ -28,6 +31,15 @@ type ConfirmHandlerResult = void | boolean | Promise<void | boolean>;
 export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   // --- Audio recorder ---
   const recorder = useAudioRecorder();
+
+  // --- Alerte température (même décision que SoinsForm) ---
+  const { activeChild } = useBaby();
+  const { showAlert } = useModal();
+  const healthOptions = {
+    birthDate: activeChild?.birthDate,
+    showTemperatureAlert: (alert: Parameters<typeof showTemperatureAlertDialog>[1]) =>
+      showTemperatureAlertDialog(showAlert, alert),
+  };
 
   // --- Processing / transcription state ---
   const [isProcessing, setIsProcessing] = useState(false);
@@ -103,6 +115,8 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
               feedback,
               true,
               { pipi: cmd.pipi || false, popo: cmd.popo || false },
+              undefined,
+              healthOptions,
             );
             successCount++;
           } catch (error) {
@@ -317,6 +331,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
             diaperChoiceRef.current,
             excretionSelectionRef.current,
             eventToTarget,
+            healthOptions,
           );
           setIsProcessing(false);
           return success;

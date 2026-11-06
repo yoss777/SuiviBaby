@@ -4,6 +4,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
+import { getTemperatureAlert } from "@/utils/temperatureAlert";
+import { showTemperatureAlertDialog } from "@/utils/temperatureAlertDialog";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -195,6 +198,9 @@ const SYMPTOMES_OPTIONS = [
   "dents",
   "autre",
 ];
+
+// Bornes identiques à la validation serveur (functions/index.js, validateEventData : 34-43 °C).
+const TEMP_BOUNDS = NUMERIC_BOUNDS.temperature.valeur;
 
 // ============================================
 // COMPONENT
@@ -594,6 +600,16 @@ export function SoinsForm({
   // ============================================
   // SUBMIT / DELETE
   // ============================================
+  // 5.1 : alerte d'orientation selon l'âge de l'enfant à la date de la mesure.
+  const alertForTemperature = (valeur: number) => {
+    const alert = getTemperatureAlert({
+      valeur,
+      birthDate: activeChild?.birthDate,
+      measuredAt: dateHeure,
+    });
+    if (alert) showTemperatureAlertDialog(showAlert, alert);
+  };
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
@@ -607,7 +623,7 @@ export function SoinsForm({
       if (isEditing) {
         if (selectedType === "temperature") {
           const valeur = Number(temperatureValue);
-          if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+          if (Number.isNaN(valeur) || valeur < TEMP_BOUNDS.min || valeur > TEMP_BOUNDS.max) {
             showAlert("Erreur", "Indiquez une température valide.");
             setIsSubmitting(false);
             return;
@@ -629,6 +645,7 @@ export function SoinsForm({
             editData!,
           );
           showSuccess("temperature", "Température modifiée");
+          if (valeur !== editData!.valeur) alertForTemperature(valeur);
         } else {
           const list = [...symptomes];
           if (symptomeAutre.trim()) list.push(symptomeAutre.trim());
@@ -658,7 +675,7 @@ export function SoinsForm({
         }
         if (includeTemperature) {
           const valeur = Number(temperatureValue);
-          if (Number.isNaN(valeur) || valeur < 34 || valeur > 45) {
+          if (Number.isNaN(valeur) || valeur < TEMP_BOUNDS.min || valeur > TEMP_BOUNDS.max) {
             showAlert("Erreur", "Indiquez une température valide.");
             setIsSubmitting(false);
             return;
@@ -678,6 +695,7 @@ export function SoinsForm({
             }),
           );
           showSuccess("temperature", "Température enregistrée");
+          alertForTemperature(valeur);
         }
         if (includeSymptome) {
           const list = [...symptomes];
@@ -1271,12 +1289,12 @@ export function SoinsForm({
                 onPressIn={() =>
                   handlePressIn(() =>
                     setTemperatureValue((value) =>
-                      Math.max(34, Math.round((value - 0.1) * 10) / 10),
+                      Math.max(TEMP_BOUNDS.min, Math.round((value - 0.1) * 10) / 10),
                     ),
                   )
                 }
                 onPressOut={handlePressOut}
-                disabled={isSubmitting || temperatureValue <= 34}
+                disabled={isSubmitting || temperatureValue <= TEMP_BOUNDS.min}
                 accessibilityLabel="Diminuer la température"
               >
                 <Text
@@ -1303,14 +1321,14 @@ export function SoinsForm({
                 onPressIn={() =>
                   handlePressIn(() =>
                     setTemperatureValue((value) =>
-                      // Borné à 43°C (parité CF validateEventData). Au-delà,
+                      // Borné à TEMP_BOUNDS.max (43 °C, parité CF validateEventData). Au-delà,
                       // valeur non médicale + rejet serveur tardif.
-                      Math.min(43, Math.round((value + 0.1) * 10) / 10),
+                      Math.min(TEMP_BOUNDS.max, Math.round((value + 0.1) * 10) / 10),
                     ),
                   )
                 }
                 onPressOut={handlePressOut}
-                disabled={isSubmitting || temperatureValue >= 43}
+                disabled={isSubmitting || temperatureValue >= TEMP_BOUNDS.max}
                 accessibilityLabel="Augmenter la température"
               >
                 <Text

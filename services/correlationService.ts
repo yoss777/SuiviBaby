@@ -346,7 +346,7 @@ function feverAppetiteCorrelation(
       type: "info",
       icon: "temperature-half",
       title: "Fièvre et appétit",
-      message: `Quand ${name} a de la fièvre, son appétit diminue naturellement. C'est normal — privilégiez l'hydratation.`,
+      message: `Quand ${name} a de la fièvre, son appétit a diminué. Proposez régulièrement à boire et consultez un médecin si la fièvre persiste ou si ${name} refuse de s'alimenter.`,
       accentColor: TIP_CATEGORY_COLORS.sante,
       priority: 2,
       category: "sante",
