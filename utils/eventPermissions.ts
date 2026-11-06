@@ -20,3 +20,18 @@ export function canManageEvents(role: MaybeRole): boolean {
 export function canInteractWithPhotos(role: MaybeRole): boolean {
   return role === "owner" || role === "admin" || role === "contributor";
 }
+
+/**
+ * Like / comment on a given event. Owners and admins always can; a contributor
+ * only on events that carry at least one photo (Firestore rules); viewers never.
+ */
+export function canInteractWithEvent(
+  role: MaybeRole,
+  event: { photos?: unknown } | null | undefined,
+): boolean {
+  if (role === "owner" || role === "admin") return true;
+  if (role === "contributor") {
+    return Array.isArray(event?.photos) && event.photos.length > 0;
+  }
+  return false;
+}

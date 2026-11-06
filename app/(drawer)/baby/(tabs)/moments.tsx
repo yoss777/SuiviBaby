@@ -364,6 +364,7 @@ export default function MomentsScreen() {
         onAddPhoto={canManageContent ? handleAddPhoto : undefined}
         onEdit={canManageContent ? handleEditPhoto : undefined}
         onLike={handleLike}
+        role={permissions.role}
         onDownload={handleDownload}
         onMarkSeen={markEventAsSeen}
         newEventIds={newEventIds}

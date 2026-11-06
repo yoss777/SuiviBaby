@@ -1,7 +1,7 @@
 jest.mock("@/config/firebase", () => ({ db: {} }));
 
 import { DEFAULT_ROLE_PERMISSIONS, type ChildAccessDocument, type ChildRole } from "@/types/permissions";
-import { canInteractWithPhotos, canManageEvents } from "@/utils/eventPermissions";
+import { canInteractWithEvent, canInteractWithPhotos, canManageEvents } from "@/utils/eventPermissions";
 import { calculatePermissions } from "@/utils/permissions";
 
 const accessFor = (role: ChildRole, overrides: Partial<ChildAccessDocument> = {}) =>
@@ -39,6 +39,28 @@ describe("canInteractWithPhotos (like / comment)", () => {
     ["superuser", false],
   ])("%p -> %p", (role, expected) => {
     expect(canInteractWithPhotos(role as any)).toBe(expected);
+  });
+});
+
+describe("canInteractWithEvent (like / comment per event)", () => {
+  const withPhotos = { photos: ["children/c1/a.jpg"] };
+  it.each([
+    ["owner", withPhotos, true],
+    ["owner", {}, true],
+    ["admin", { photos: [] }, true],
+    ["contributor", withPhotos, true],
+    ["contributor", {}, false],
+    ["contributor", { photos: [] }, false],
+    ["contributor", { photos: null }, false],
+    ["contributor", { photos: "x" }, false],
+    ["contributor", null, false],
+    ["contributor", undefined, false],
+    ["viewer", withPhotos, false],
+    [null, withPhotos, false],
+    [undefined, withPhotos, false],
+    ["superuser", withPhotos, false],
+  ])("%p on %j -> %p", (role, event, expected) => {
+    expect(canInteractWithEvent(role as any, event as any)).toBe(expected);
   });
 });
 

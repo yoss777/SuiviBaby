@@ -8,13 +8,40 @@ import {
 import { doc, getDoc, deleteField, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/config/firebase";
-import { onAccountDelete as purgeOfflineQueue } from "@/services/offlineQueueService";
+import {
+  getQueueSize,
+  onAccountDelete as purgeOfflineQueue,
+  processQueue,
+} from "@/services/offlineQueueService";
 import {
   getAppleCredential,
   getGoogleCredential,
 } from "@/services/socialAuthService";
 
 const GRACE_PERIOD_DAYS = 30;
+const QUEUE_SYNC_TIMEOUT_MS = 5000;
+
+/** True when the offline queue is empty (after a sync attempt bounded by a timeout). */
+async function flushOfflineQueue(): Promise<boolean> {
+  const attempt = async () => {
+    if ((await getQueueSize()) === 0) return true;
+    await processQueue();
+    return (await getQueueSize()) === 0;
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      attempt(),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), QUEUE_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export type PendingDeletionInfo = NonNullable<User["pendingDeletion"]>;
 
@@ -229,12 +256,16 @@ export async function requestAccountDeletion(
     pendingDeletion,
   });
 
-  // Local copy of this account's unsent events: nothing must be replayed or
-  // left on the device once deletion is requested. Best effort, never blocks.
+  // Local copy of this account's unsent events. Deletion can still be cancelled
+  // during the grace period, so first try to sync them (short timeout); purge
+  // only when the queue is empty afterwards. Otherwise keep it: it is per user
+  // and stays on the device. Best effort, never blocks.
   try {
-    await purgeOfflineQueue(user.uid);
+    if (await flushOfflineQueue()) {
+      await purgeOfflineQueue(user.uid);
+    }
   } catch (error) {
-    console.warn("[DELETION] purge de la file hors-ligne échouée:", error);
+    console.warn("[DELETION] file hors-ligne non traitée:", error);
   }
 
   // Apple token revocation is best effort: never block the deletion.

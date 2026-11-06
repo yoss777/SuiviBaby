@@ -28,6 +28,7 @@ import { InvitationListener } from "@/components/ui/InvitationListener";
 import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
+import { cleanupStaleExports } from "@/services/tempShareService";
 import { startAutoSync } from "@/services/offlineQueueService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
@@ -60,6 +61,9 @@ setupNotificationHandler();
 
 // Démarrer la synchronisation automatique de la queue offline
 startAutoSync();
+
+// Purge les anciens fichiers d'export (données de santé) restés dans le cache.
+void cleanupStaleExports();
 
 // Initialiser App Check le plus tôt possible pour les appels Functions.
 void ensureFirebaseAppCheck();

@@ -46,7 +46,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
-import { shareAndDelete } from "@/services/tempShareService";
+import { adoptTempFile, deleteTempFile, shareTempFile } from "@/services/tempShareService";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Animated,
@@ -912,12 +912,15 @@ export default function StatsScreen() {
       return false;
     }
     try {
-      // Deleted once shared (or failed): the PDF holds the child's health data.
-      const shared = await shareAndDelete(uri, {
+      // Moved to the exports folder, purged after ~1h (not right after the
+      // share: the receiving app may read it later). It holds health data.
+      uri = await adoptTempFile(uri, `suivibaby_stats_${Date.now()}.pdf`);
+      const shared = await shareTempFile(uri, {
         mimeType: "application/pdf",
         UTI: "com.adobe.pdf",
       });
       if (!shared) {
+        await deleteTempFile(uri);
         Alert.alert("Partage indisponible", "Le partage n'est pas disponible sur cet appareil.");
         return false;
       }

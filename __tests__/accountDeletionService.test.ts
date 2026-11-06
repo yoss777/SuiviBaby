@@ -6,7 +6,7 @@ import {
   mapDeletionError,
   requestAccountDeletion,
 } from "@/services/accountDeletionService";
-import { onAccountDelete } from "@/services/offlineQueueService";
+import { getQueueSize, onAccountDelete, processQueue } from "@/services/offlineQueueService";
 import {
   getAppleCredential,
   getGoogleCredential,
@@ -41,6 +41,8 @@ jest.mock("@/services/socialAuthService", () => ({
 
 jest.mock("@/services/offlineQueueService", () => ({
   onAccountDelete: jest.fn(),
+  getQueueSize: jest.fn(),
+  processQueue: jest.fn(),
 }));
 
 jest.mock("react-native", () => ({ Platform: { OS: "ios" } }));
@@ -97,21 +99,65 @@ describe("accountDeletionService", () => {
       expect(getGoogleCredential).not.toHaveBeenCalled();
     });
 
-    it("purges the local offline queue of this account once deletion is scheduled", async () => {
+    it("purges directly when the offline queue is already empty", async () => {
       setUser(["password"]);
+      (getQueueSize as jest.Mock).mockResolvedValue(0);
       await requestAccountDeletion({ password: "secret" });
+      expect(processQueue).not.toHaveBeenCalled();
       expect(onAccountDelete).toHaveBeenCalledWith("u1");
     });
 
-    it("does not purge the queue when scheduling fails", async () => {
+    it("syncs the queue first and purges once it is empty", async () => {
+      setUser(["password"]);
+      (getQueueSize as jest.Mock).mockResolvedValueOnce(2).mockResolvedValueOnce(0);
+      (processQueue as jest.Mock).mockResolvedValue(2);
+      await requestAccountDeletion({ password: "secret" });
+      expect(processQueue).toHaveBeenCalledTimes(1);
+      expect(onAccountDelete).toHaveBeenCalledWith("u1");
+    });
+
+    it("keeps the queue when entries remain after the sync attempt", async () => {
+      setUser(["password"]);
+      (getQueueSize as jest.Mock).mockResolvedValue(2);
+      (processQueue as jest.Mock).mockResolvedValue(0);
+      await expect(requestAccountDeletion({ password: "secret" })).resolves.toBeDefined();
+      expect(onAccountDelete).not.toHaveBeenCalled();
+    });
+
+    it("keeps the queue when the sync fails", async () => {
+      setUser(["password"]);
+      (getQueueSize as jest.Mock).mockResolvedValue(1);
+      (processQueue as jest.Mock).mockRejectedValue(new Error("offline"));
+      await expect(requestAccountDeletion({ password: "secret" })).resolves.toBeDefined();
+      expect(onAccountDelete).not.toHaveBeenCalled();
+    });
+
+    it("keeps the queue and does not hang when the sync times out", async () => {
+      jest.useFakeTimers();
+      try {
+        setUser(["password"]);
+        (getQueueSize as jest.Mock).mockResolvedValue(1);
+        (processQueue as jest.Mock).mockReturnValue(new Promise(() => {}));
+        const promise = requestAccountDeletion({ password: "secret" });
+        await jest.advanceTimersByTimeAsync(6000);
+        await expect(promise).resolves.toBeDefined();
+        expect(onAccountDelete).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("does not touch the queue when scheduling fails", async () => {
       setUser(["password"]);
       (updateDoc as jest.Mock).mockRejectedValue(new Error("offline"));
       await expect(requestAccountDeletion({ password: "secret" })).rejects.toThrow("offline");
       expect(onAccountDelete).not.toHaveBeenCalled();
+      expect(processQueue).not.toHaveBeenCalled();
     });
 
     it("a failing queue purge does not block the deletion", async () => {
       setUser(["password"]);
+      (getQueueSize as jest.Mock).mockResolvedValue(0);
       (onAccountDelete as jest.Mock).mockRejectedValue(new Error("sqlite"));
       await expect(requestAccountDeletion({ password: "secret" })).resolves.toBeDefined();
     });

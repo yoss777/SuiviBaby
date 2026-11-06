@@ -3,7 +3,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { deleteTempFile, getCacheFileUri, shareAndDelete } from "@/services/tempShareService";
+import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
 import {
   collection,
   doc,
@@ -825,9 +825,9 @@ export default function ExportScreen() {
       const fileName = `suivibaby_export_${new Date()
         .toISOString()
         .replace(/[:.]/g, "-")}.json`;
-      // Cache directory + deleted after sharing: health data must not stay
+      // Cache exports folder, purged after ~1h: health data must not stay
       // in the app's persistent (and backed-up) storage.
-      const fileUri = getCacheFileUri(fileName);
+      const fileUri = await prepareExportFile(fileName);
       try {
         await FileSystem.writeAsStringAsync(
           fileUri,
@@ -836,10 +836,11 @@ export default function ExportScreen() {
             encoding: FileSystem.EncodingType.UTF8,
           },
         );
-        await shareAndDelete(fileUri);
-      } finally {
-        // Also covers a failed write (partial file).
+        await shareTempFile(fileUri);
+      } catch (error) {
+        // A failed write leaves a partial file; a share error does not need it either.
         await deleteTempFile(fileUri);
+        throw error;
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

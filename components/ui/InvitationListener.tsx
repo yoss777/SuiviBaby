@@ -18,6 +18,8 @@ import {
   type ShareInvitation,
 } from "@/services/childSharingService";
 import { buildTodayEventsData, setTodayEventsCache } from "@/services/todayEventsCache";
+import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
+import { useModal } from "@/contexts/ModalContext";
 import { InvitationModal } from "@/components/ui/InvitationModal";
 
 export function InvitationListener() {
@@ -32,6 +34,7 @@ export function InvitationListener() {
     setActiveChild,
   } = useBaby();
   const router = useRouter();
+  const { showAlert } = useModal();
   const pathname = usePathname();
   const [incomingInvitation, setIncomingInvitation] = useState<ShareInvitation | null>(null);
   const [incomingVisible, setIncomingVisible] = useState(false);
@@ -135,6 +138,13 @@ export function InvitationListener() {
             await acceptInvitation(incomingInvitation.id);
             if (incomingInvitation.childId) {
               setPendingChildId(incomingInvitation.childId);
+            }
+          } catch (error) {
+            setIsPreparingChild(false);
+            if (isEmailNotVerifiedError(error)) {
+              showEmailNotVerifiedAlert(showAlert, router);
+            } else {
+              showAlert("Erreur", "Impossible d'accepter l'invitation. Réessayez.");
             }
           } finally {
             isHandlingInviteRef.current = false;

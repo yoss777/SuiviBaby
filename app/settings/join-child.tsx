@@ -5,6 +5,7 @@ import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby, type Child } from "@/contexts/BabyContext";
+import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
 import { useModal } from "@/contexts/ModalContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -219,13 +220,17 @@ export default function JoinChildScreen() {
     } catch (error) {
       if (!isMountedRef.current) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (isEmailNotVerifiedError(error)) {
+        showEmailNotVerifiedAlert(showAlert, router);
+        return;
+      }
       const msg = sanitizeError(error, "Code invalide. Réessayez.");
       showToast(msg);
       showAlert("Erreur", msg);
     } finally {
       if (isMountedRef.current) setIsLoadingCode(false);
     }
-  }, [isLoadingCode, shareCode, showAlert, showToast, queueNavigateToChild]);
+  }, [isLoadingCode, shareCode, router, showAlert, showToast, queueNavigateToChild]);
 
   const handleAcceptInvitation = useCallback(
     async (invitationId: string, childName: string) => {
@@ -247,6 +252,10 @@ export default function JoinChildScreen() {
       } catch (error) {
         if (!isMountedRef.current) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (isEmailNotVerifiedError(error)) {
+          showEmailNotVerifiedAlert(showAlert, router);
+          return;
+        }
         const msg = sanitizeError(error, "Impossible d'accepter l'invitation. Réessayez.");
         showToast(msg);
         showAlert("Erreur", msg);
@@ -254,7 +263,7 @@ export default function JoinChildScreen() {
         if (isMountedRef.current) setProcessingInvitation(null);
       }
     },
-    [processingInvitation, pendingInvitations, queueNavigateToChild, showAlert, showToast],
+    [processingInvitation, pendingInvitations, queueNavigateToChild, router, showAlert, showToast],
   );
 
   const handleRejectInvitation = useCallback(

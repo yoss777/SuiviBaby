@@ -14,6 +14,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { HeaderBackButton } from "@react-navigation/elements";
 import * as Haptics from "expo-haptics";
+import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { doc, getDoc } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -282,11 +283,15 @@ export default function ShareChildScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (isEmailNotVerifiedError(error)) {
+        showEmailNotVerifiedAlert(showAlert, router);
+        return;
+      }
       showAlert("Erreur", error.message || "Impossible de créer le code");
     } finally {
       setIsLoadingCode(false);
     }
-  }, [childId, childName, showAlert]);
+  }, [childId, childName, router, showAlert]);
 
   const handleCopyCode = useCallback(() => {
     if (shareCode) {
@@ -356,15 +361,18 @@ export default function ShareChildScreen() {
       });
       await createEmailInvitation(childId, childName, trimmedEmail);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Neutral on purpose: the server never reveals whether the address has an account.
       showAlert(
-        "Invitation envoyée",
-        `Une invitation a été envoyée à ${trimmedEmail}. L'autre parent recevra une notification dans l'app.`,
+        "Invitation",
+        "Si cette adresse correspond à un compte SuiviBaby, l'invitation a été envoyée.",
         [{ text: "" }],
       );
       setInviteEmail("");
     } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      if (error?.code === "already-linked") {
+      if (error?.code === "email-not-verified") {
+        showEmailNotVerifiedAlert(showAlert, router);
+      } else if (error?.code === "already-linked") {
         const email = error?.email ?? trimmedEmail;
         showAlert(
           "Déjà lié",
