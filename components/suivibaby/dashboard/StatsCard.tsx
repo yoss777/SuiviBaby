@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { startLoop } from "@/utils/motion";
 
 // ============================================
 // TYPES
@@ -146,7 +147,7 @@ export const StatsCardSkeleton = memo(function StatsCardSkeleton() {
         }),
       ])
     );
-    animation.start();
+    startLoop(animation);
     return () => animation.stop();
   }, [opacity]);
 

@@ -44,7 +44,11 @@ describe("ChartA11ySummary", () => {
     render(<ChartA11ySummary title="Graphique des repas" entries={entries} />);
 
     const chart = screen.getByRole("adjustable");
-    expect(chart.props.accessibilityValue).toEqual({ text: entries[0] });
+    expect(chart.props.accessibilityValue).toEqual({
+      text: `${entries[0]}, jour 1 sur 2`,
+    });
+    // Libellé stable, sans mode d'emploi du geste (fourni par le lecteur d'écran)
+    expect(chart.props.accessibilityLabel).toBe("Graphique des repas");
     expect(chart.props.accessibilityActions.map((a: { name: string }) => a.name)).toEqual([
       "increment",
       "decrement",
@@ -66,12 +70,42 @@ describe("ChartA11ySummary", () => {
       screen.getByRole("adjustable").props.accessibilityValue.text;
 
     trigger("increment");
-    expect(currentText()).toBe(entries[1]);
+    expect(currentText()).toBe(`${entries[1]}, jour 2 sur 2`);
 
     trigger("increment");
-    expect(currentText()).toBe(entries[1]);
+    expect(currentText()).toBe(`${entries[1]}, jour 2 sur 2`);
 
     trigger("decrement");
-    expect(currentText()).toBe(entries[0]);
+    expect(currentText()).toBe(`${entries[0]}, jour 1 sur 2`);
+  });
+
+  it("revient au premier jour quand la période change (même nombre de jours)", () => {
+    const { rerender } = render(
+      <ChartA11ySummary title="Graphique des repas" entries={entries} periodKey={1} />,
+    );
+    act(() => {
+      screen
+        .getByRole("adjustable")
+        .props.onAccessibilityAction({ nativeEvent: { actionName: "increment" } });
+    });
+    expect(screen.getByRole("adjustable").props.accessibilityValue.text).toContain(
+      "jour 2 sur 2",
+    );
+
+    const nextWeek = ["Lundi 10 novembre : 1 repas", "Mardi 11 novembre : 3 repas"];
+    rerender(
+      <ChartA11ySummary title="Graphique des repas" entries={nextWeek} periodKey={2} />,
+    );
+    expect(screen.getByRole("adjustable").props.accessibilityValue.text).toBe(
+      `${nextWeek[0]}, jour 1 sur 2`,
+    );
+  });
+
+  it("sans données : pas de « Jour 1 sur 0 » ni d'élément ajustable", () => {
+    render(<ChartA11ySummary title="Graphique des repas" entries={[]} />);
+
+    expect(screen.queryByRole("adjustable")).toBeNull();
+    const node = screen.getByLabelText("Graphique des repas. Aucune donnée pour cette période.");
+    expect(node.props.accessibilityLabel).not.toMatch(/sur 0/);
   });
 });

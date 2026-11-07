@@ -79,6 +79,7 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supprimerEvenement as supprimerCroissance } from "@/services/eventsService";
 import { useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -748,7 +749,7 @@ const CroissanceSkeleton = React.memo(function CroissanceSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1240,7 +1241,7 @@ export default function CroissanceScreen() {
   const hasMore = visibleCount < filteredEntries.length;
 
   const handleShowMore = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setVisibleCount((prev) => prev + PAGE_SIZE);
   }, []);
 

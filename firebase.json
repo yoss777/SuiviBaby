@@ -61,9 +61,16 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
       },
       {
-        "source": "/@(reset-password|delete-account|404)*",
+        "source": "/@(reset-password|delete-account|404|invite)*",
+        "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }]
+      },
+      {
+        "source": "/invite/**",
         "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }]
       }
+    ],
+    "rewrites": [
+      { "source": "/invite/**", "destination": "/invite.html" }
     ]
   },
   "emulators": {

@@ -5,9 +5,20 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type Gender = "male" | "female";
 
-const GENDER_COLORS = {
+/**
+ * Couleurs d'aplat de l'option cochée et couleur du texte/icône posé dessus.
+ * Paires vérifiées dans __tests__/paletteContrast.test.ts (≥ 4.5:1) :
+ * - rose #FF69B4 + texte sombre #1f2937 (5.5:1) — le blanc n'atteint que 2.65:1 ;
+ * - bleu #2563eb (blue-600) + texte blanc (5.2:1) — l'ancien #4A90E2 plafonnait à 3.3:1.
+ */
+export const GENDER_COLORS = {
   female: "#FF69B4",
-  male: "#4A90E2",
+  male: "#2563eb",
+} as const;
+
+export const GENDER_SELECTED_TEXT = {
+  female: "#1f2937",
+  male: "#ffffff",
 } as const;
 
 const OPTIONS: { value: Gender; label: string; icon: string }[] = [
@@ -64,13 +75,13 @@ export const GenderRadioGroup = memo(function GenderRadioGroup({
             <FontAwesome
               name={option.icon}
               size={24}
-              color={checked ? nc.white : accent}
+              color={checked ? GENDER_SELECTED_TEXT[option.value] : accent}
             />
             <Text
               style={[
                 styles.text,
                 { color: nc.textStrong },
-                checked && { color: nc.white },
+                checked && { color: GENDER_SELECTED_TEXT[option.value] },
               ]}
             >
               {option.label}

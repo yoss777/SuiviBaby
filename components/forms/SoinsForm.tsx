@@ -1904,7 +1904,7 @@ export function SoinsForm({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>
+            <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
           </TouchableOpacity>

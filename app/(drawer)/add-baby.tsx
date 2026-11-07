@@ -297,7 +297,7 @@ export default function AddBabyScreen() {
             {/* Nom de l'enfant */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Nom complet <Text style={styles.required}>*</Text>
+                Nom complet <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
               <View style={dynamicStyles.inputContainer}>
                 <FontAwesome name="user" size={16} color={nc.textLight} />
@@ -318,7 +318,7 @@ export default function AddBabyScreen() {
             {/* Date de naissance */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Date de naissance <Text style={styles.required}>*</Text>
+                Date de naissance <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
               <DateTimePickerRow
                 label="Né(e) le"
@@ -337,7 +337,7 @@ export default function AddBabyScreen() {
             {/* Sexe de l'enfant */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Sexe <Text style={styles.required}>*</Text>
+                Sexe <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
               <GenderRadioGroup
                 value={gender}
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   required: {
-    color: "#ef4444",
+    // couleur appliquée en ligne : nc.errorText (≥ 4.5:1 dans les deux thèmes)
   },
   genderContainer: {
     flexDirection: "row",

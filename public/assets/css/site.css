@@ -62,7 +62,7 @@
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h, 68px) + 16px); }
 [id] { scroll-margin-top: calc(var(--header-h) + 16px); }
 body {
   font-family: var(--font);
@@ -78,7 +78,8 @@ a { color: var(--brand-ink); text-underline-offset: 3px; }
 a:hover { text-decoration-thickness: 2px; }
 h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; letter-spacing: -.01em; }
 button { font: inherit; color: inherit; }
-:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
+/* Pas de border-radius forcé : le contour suit l'arrondi propre à chaque élément. */
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -243,6 +244,8 @@ button { font: inherit; color: inherit; }
 .float-card .dot { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; }
 .float-card--a { top: 2%; left: -6%; animation: bob 6s ease-in-out infinite; }
 .float-card--b { bottom: 22%; right: -6%; animation: bob 7s ease-in-out -2s infinite; }
+/* Le bouton « Mettre la démo en pause » fige aussi les cartes flottantes (WCAG 2.2.2). */
+.is-paused .float-card { animation-play-state: paused; }
 @keyframes bob { 50% { transform: translateY(-10px); } }
 @media (max-width: 520px) { .float-card { display: none; } }
 
@@ -298,7 +301,10 @@ button { font: inherit; color: inherit; }
   transition: opacity .3s, transform .3s, filter .3s;
 }
 .type i { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-style: normal; font-size: 18px; flex: none; }
-.type.is-dim { opacity: .28; transform: scale(.97); filter: grayscale(.8); }
+/* Types non retenus : texte en --text-3 (≥ 4.5:1) au lieu d'une opacité qui ferait chuter le contraste ;
+   seule la pastille décorative (aria-hidden) est estompée. */
+.type.is-dim { color: var(--text-3); border-style: dashed; transform: scale(.97); }
+.type.is-dim i { opacity: .35; filter: grayscale(1); }
 
 /* ---------- Feature rows ---------- */
 .feature { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 6vw, 88px); align-items: center; }
@@ -459,6 +465,8 @@ button { font: inherit; color: inherit; }
 /* ---------- Reveal on scroll (activé par JS uniquement) ---------- */
 .js .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .8, .2, 1); }
 .js .reveal.is-visible { opacity: 1; transform: none; }
+/* Un élément atteint au clavier avant son apparition reste visible (WCAG 2.4.11). */
+.js .reveal:focus-within { opacity: 1; transform: none; }
 .js .reveal[data-delay="1"] { transition-delay: .08s; }
 .js .reveal[data-delay="2"] { transition-delay: .16s; }
 .js .reveal[data-delay="3"] { transition-delay: .24s; }
@@ -467,7 +475,7 @@ button { font: inherit; color: inherit; }
 .doc { padding: clamp(40px, 6vw, 72px) 0 0; }
 .doc__layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 56px; align-items: start; }
 .doc__toc { position: sticky; top: calc(var(--header-h) + 24px); font-size: 14px; max-height: calc(100vh - var(--header-h) - 48px); overflow: auto; }
-.doc__toc h2 { font-family: var(--font); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 12px; }
+.doc__toc-title { font-family: var(--font); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: 12px; }
 .doc__toc ol { padding-left: 28px; display: grid; gap: 8px; color: var(--text-3); }
 .doc__toc a { color: var(--text-2); text-decoration: none; }
 .doc__toc a:hover, .doc__toc a[aria-current] { color: var(--brand-ink); text-decoration: underline; }
@@ -521,6 +529,12 @@ button { font: inherit; color: inherit; }
 }
 :root[data-theme="dark"] .billing em { color: var(--teal); }
 
+/* ---------- Contraste forcé (Windows) : les fonds disparaissent, on marque l'état pressé par une bordure ---------- */
+@media (forced-colors: active) {
+  .tab[aria-pressed="true"], .billing button[aria-pressed="true"] { border: 3px solid Highlight; }
+  .billing button { border: 1px solid transparent; }
+}
+
 /* Deux écrans côte à côte (accueil + timeline) */
 .phone-duo { position: relative; transform: translateX(-24%); }
 .feature__visual .phone-duo .phone--back {
@@ -550,3 +564,7 @@ button { font: inherit; color: inherit; }
 .card--center { text-align: center; }
 .card--center .card__icon { margin-inline: auto; }
 .card .card__note { margin-top: 16px; font-size: 14px; }
+
+/* ---------- Page d'invitation (parrainage) ---------- */
+.invite-code__value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: .06em; color: var(--text); margin: 4px 0 8px; }
+.invite-stores { margin-top: 24px; }

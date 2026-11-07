@@ -142,7 +142,7 @@ export default function ProfileScreen() {
             </View>
 
             {!!errorMessage && (
-              <Text style={[styles.errorText, { color: nc.error }]}>
+              <Text style={[styles.errorText, { color: nc.errorText }]}>
                 {errorMessage}
               </Text>
             )}

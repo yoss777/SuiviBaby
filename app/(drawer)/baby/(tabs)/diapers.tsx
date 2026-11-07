@@ -59,6 +59,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -133,7 +134,7 @@ const DiapersSkeleton = React.memo(function DiapersSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1078,7 +1079,7 @@ export default function DiapersScreen() {
 
   const toggleExpand = useCallback((dateKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const newExpandedDays = new Set(prev);
       if (newExpandedDays.has(dateKey)) {

@@ -180,7 +180,7 @@ export default function ForgotPasswordScreen() {
               {/* Error message */}
               {!!error && (
                 <Text
-                  style={[styles.errorText, { color: nc.error }]}
+                  style={[styles.errorText, { color: nc.errorText }]}
                   accessibilityRole="alert"
                   accessibilityLabel={error}
                 >

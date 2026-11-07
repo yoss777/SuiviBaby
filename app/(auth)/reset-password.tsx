@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { auth } from "@/config/firebase";
 import { isValidOobCode } from "@/utils/passwordResetLink";
+import { startLoop } from "@/utils/motion";
 
 const PASSWORD_RULES = [
   {
@@ -153,7 +154,7 @@ export default function ResetPasswordScreen() {
         useNativeDriver: true,
       }),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [verifying, shimmerAnim]);
 
@@ -391,7 +392,7 @@ export default function ResetPasswordScreen() {
           {/* Error message */}
           {!!error && (
             <Text
-              style={[styles.errorText, { color: nc.error }]}
+              style={[styles.errorText, { color: nc.errorText }]}
               accessibilityRole="alert"
               accessibilityLabel={error}
             >

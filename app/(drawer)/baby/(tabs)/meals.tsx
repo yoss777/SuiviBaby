@@ -64,6 +64,7 @@ import {
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -134,7 +135,7 @@ const MealsSkeleton = React.memo(function MealsSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1095,7 +1096,7 @@ export default function MealsScreen() {
 
   const toggleExpand = useCallback((dateKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {

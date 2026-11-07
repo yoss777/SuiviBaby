@@ -229,7 +229,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
                   onPress={handleConfirmIOS}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
-                  accessibilityLabel="Valider"
+                  accessibilityLabel="OK" // = libellé visible (WCAG 2.5.3)
                 >
                   <Text
                     style={[

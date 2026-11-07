@@ -15,6 +15,7 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -152,7 +153,7 @@ export const StatsGroup = memo(function StatsGroup({
 
   const toggleExpanded = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
   }, []);
 
@@ -194,7 +195,7 @@ export const StatsGroup = memo(function StatsGroup({
           useNativeDriver: true,
         }),
       );
-      shimmer.start();
+      startLoop(shimmer);
       return () => shimmer.stop();
     }
   }, [isLoading, shimmerAnim]);
@@ -270,7 +271,7 @@ export const StatsGroup = memo(function StatsGroup({
               style={[
                 styles.summary,
                 { color: nc.textStrong },
-                isWarning && { color: nc.error },
+                isWarning && { color: nc.errorText },
               ]}
             >
               {summary}
@@ -287,7 +288,7 @@ export const StatsGroup = memo(function StatsGroup({
                   style={[
                     styles.timeSince,
                     { color: nc.textLight },
-                    isWarning && { color: nc.error },
+                    isWarning && { color: nc.errorText },
                   ]}
                 >
                   {timeSinceLabel

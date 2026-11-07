@@ -59,6 +59,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -207,7 +208,7 @@ const MilestoneSkeleton = React.memo(function MilestoneSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1142,7 +1143,7 @@ export default function MilestonesScreen() {
 
   const toggleExpand = useCallback((dateKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {

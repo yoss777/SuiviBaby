@@ -1219,6 +1219,8 @@ function RepasChart({
             <ChartA11ySummary
               title="Graphique des repas de la semaine"
               entries={a11yEntries}
+
+              periodKey={`${weekStartMs}-${typeFilter}-${viewMode}`}
             />
 
             {showTapHint && totalWeekCount > 0 && (

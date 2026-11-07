@@ -498,7 +498,7 @@ export default function DeletionRequestsScreen() {
                         >
                           <Ionicons name="close" size={18} color={nc.error} />
                           <Text
-                            style={[styles.voteButtonText, { color: nc.error }]}
+                            style={[styles.voteButtonText, { color: nc.errorText }]}
                           >
                             Refuser
                           </Text>

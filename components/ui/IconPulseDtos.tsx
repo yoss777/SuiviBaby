@@ -1,6 +1,7 @@
 import { FontAwesome6 } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 type IconPulseDotsProps = {
   icons?: React.ComponentProps<typeof FontAwesome6>["name"][];
@@ -44,7 +45,7 @@ export function IconPulseDots({
       { resetBeforeIteration: true }
     );
 
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [t, cycleDurationMs]);
 

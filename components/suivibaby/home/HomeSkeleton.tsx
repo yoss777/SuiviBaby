@@ -10,6 +10,7 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useEffect, useRef } from "react";
 import { Animated, View } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 interface HomeSkeletonProps {
   colorScheme: "light" | "dark";
@@ -27,7 +28,7 @@ export function HomeSkeleton({ colorScheme }: HomeSkeletonProps) {
         useNativeDriver: true,
       }),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [shimmerAnim]);
 

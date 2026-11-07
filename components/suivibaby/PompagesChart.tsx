@@ -1026,6 +1026,8 @@ function PompagesChart({
               <ChartA11ySummary
                 title="Graphique des pompages de la semaine"
                 entries={weeklyA11yEntries}
+
+                periodKey={weekStartMs}
               />
 
               {selectedBarIndex !== null && (

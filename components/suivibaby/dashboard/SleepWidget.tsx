@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -134,7 +135,7 @@ export const SleepWidget = memo(function SleepWidget({
           }),
         ]),
       );
-      pulse.start();
+      startLoop(pulse);
       return () => pulse.stop();
     } else {
       ownPulseAnim.setValue(1);

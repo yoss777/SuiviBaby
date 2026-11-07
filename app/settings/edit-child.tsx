@@ -445,7 +445,7 @@ export default function EditChildScreen() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <FontAwesome name="trash-alt" size={14} color={nc.error} />
-                          <Text style={[styles.dangerButtonText, { color: nc.error }]}>{isDeleting ? "..." : "Supprimer"}</Text>
+                          <Text style={[styles.dangerButtonText, { color: nc.errorText }]}>{isDeleting ? "..." : "Supprimer"}</Text>
                         </TouchableOpacity>
                       </View>
                     )}

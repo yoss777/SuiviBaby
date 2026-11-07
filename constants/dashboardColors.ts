@@ -101,7 +101,11 @@ export const neutralColors = {
   error: "#ef4444", // red-500
 
   // Accents
-  todayAccent: "#6366f1", // indigo-500
+  // indigo-600 : ≥ 4.5:1 en texte sur les fonds clairs ET en aplat sous texte blanc
+  // (indigo-500 #6366f1 plafonnait à 4.47:1).
+  todayAccent: "#4f46e5",
+  // Texte/icône posé sur un aplat todayAccent (blanc : 6.3:1).
+  onTodayAccent: "#ffffff",
 
   // UI
   white: "#ffffff",
@@ -144,7 +148,9 @@ export const neutralColorsDark = {
   warning: "#f59e0b",
   error: "#ef4444",
 
-  todayAccent: "#818cf8", // indigo-400 (brighter for dark bg)
+  todayAccent: "#818cf8", // indigo-400 (brighter for dark bg) : ≥ 4.5:1 en texte sur les fonds sombres
+  // Texte/icône posé sur un aplat todayAccent : le blanc n'atteint que 2.98:1 sur indigo-400.
+  onTodayAccent: "#111827",
 
   white: "#ffffff",
   shadow: "#000000",
@@ -269,7 +275,7 @@ function buildChartColors(scheme: "light" | "dark") {
       tetees: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         blue: "#60a5fa",
         blueDeep: "#93bbfc",
@@ -295,7 +301,7 @@ function buildChartColors(scheme: "light" | "dark") {
       pompages: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         green: "#4ade80",
         greenDeep: "#86efac",
@@ -319,7 +325,7 @@ function buildChartColors(scheme: "light" | "dark") {
       sommeil: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         purple: "#a78bfa",
         purpleDeep: "#c4b5fd",
@@ -353,7 +359,7 @@ function buildChartColors(scheme: "light" | "dark") {
     tetees: {
       surface: "#ffffff",
       ink: "#1e2a36",
-      muted: "#6a7784",
+      muted: "#5b6672", // ≥ 4.5:1 aussi sur metricBg
       border: "#e5ecf2",
       blue: "#2f80ed",
       blueDeep: "#1b4f9c",
@@ -378,7 +384,7 @@ function buildChartColors(scheme: "light" | "dark") {
     pompages: {
       surface: "#ffffff",
       ink: "#1f2a2e",
-      muted: "#6b7a7f",
+      muted: "#5a686c", // ≥ 4.5:1 aussi sur metricBg
       border: "#e6ecef",
       green: "#2e7d32",
       greenDeep: "#1b5e20",
@@ -402,7 +408,7 @@ function buildChartColors(scheme: "light" | "dark") {
     sommeil: {
       surface: "#ffffff",
       ink: "#1e2a36",
-      muted: "#6a7784",
+      muted: "#5b6672", // ≥ 4.5:1 aussi sur metricBg
       border: "#e5ecf2",
       purple: "#7c3aed",
       purpleDeep: "#5b21b6",

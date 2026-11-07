@@ -47,7 +47,9 @@ import {
   View,
 } from "react-native";
 import { announceError } from "@/utils/a11yAnnounce";
+import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consentMessage";
 import { auth } from "../../config/firebase";
+import { configureLayoutAnimation } from "@/utils/motion";
 
 const LAST_EMAIL_KEY = "@suivibaby_last_email";
 const LEGACY_EMAIL_KEY = "@samaye_last_email";
@@ -326,14 +328,16 @@ export default function LoginScreen() {
     if (!isLogin && (!hasConsented || !hasHealthConsent)) {
       setShowConsentError(true);
       // Message textuel persistant (le rouge seul disparaît après 2 s et ne
-      // dit rien aux lecteurs d'écran) ; effacé dès que les cases sont cochées.
-      const message =
-        !hasConsented && !hasHealthConsent
-          ? "Cochez l'acceptation des conditions et le consentement aux données de santé pour créer votre compte."
-          : !hasConsented
-            ? "Cochez l'acceptation des conditions et de la politique de confidentialité pour créer votre compte."
-            : "Cochez le consentement au traitement des données de santé pour créer votre compte.";
-      setConsentErrorMessage(message);
+      // dit rien aux lecteurs d'écran) ; recalculé à chaque case cochée.
+      const message = getConsentErrorMessage(hasConsented, hasHealthConsent) ?? "";
+      if (Platform.OS === "android" && consentErrorMessage === message) {
+        // Même texte qu'avant : la zone live Android ne relit pas un contenu
+        // inchangé. On vide puis on remet le texte au tick suivant.
+        setConsentErrorMessage("");
+        setTimeout(() => setConsentErrorMessage(message), 50);
+      } else {
+        setConsentErrorMessage(message);
+      }
       announceError(message);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setShowConsentError(false), 2000);
@@ -481,7 +485,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isLogin, hasConsented, hasHealthConsent, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
+  }, [isLogin, hasConsented, hasHealthConsent, consentErrorMessage, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
 
 
   const handleEmailChange = useCallback((text: string) => {
@@ -498,7 +502,7 @@ export default function LoginScreen() {
 
   const handleToggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext({
+    configureLayoutAnimation({
       duration: 350,
       create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
       update: { type: LayoutAnimation.Types.easeInEaseOut },
@@ -524,14 +528,18 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasConsented(!hasConsented);
     setShowConsentError(false);
-    if (!hasConsented && hasHealthConsent) setConsentErrorMessage(null);
+    setConsentErrorMessage((prev) =>
+      nextConsentErrorMessage(prev, !hasConsented, hasHealthConsent),
+    );
   }, [hasConsented, hasHealthConsent]);
 
   const handleToggleHealthConsent = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasHealthConsent(!hasHealthConsent);
     setShowConsentError(false);
-    if (!hasHealthConsent && hasConsented) setConsentErrorMessage(null);
+    setConsentErrorMessage((prev) =>
+      nextConsentErrorMessage(prev, hasConsented, !hasHealthConsent),
+    );
   }, [hasConsented, hasHealthConsent]);
 
   return (
@@ -601,7 +609,7 @@ export default function LoginScreen() {
               )}
             </View>
             {emailTouched && email.trim().length > 0 && !emailValid && (
-              <Text style={[styles.inlineHint, { color: nc.error }]}>
+              <Text style={[styles.inlineHint, { color: nc.errorText }]}>
                 Format d&apos;email invalide
               </Text>
             )}
@@ -855,7 +863,7 @@ export default function LoginScreen() {
                 style={[
                   styles.legalText,
                   { color: nc.textLight },
-                  showConsentError && { color: nc.error, fontWeight: "bold" },
+                  showConsentError && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 J&apos;accepte{" "}
@@ -870,7 +878,7 @@ export default function LoginScreen() {
                     styles.legalLink,
                     { color: nc.todayAccent },
                     showConsentError && {
-                      color: nc.error,
+                      color: nc.errorText,
                       fontWeight: "bold",
                     },
                   ]}
@@ -882,7 +890,7 @@ export default function LoginScreen() {
                 style={[
                   styles.legalText,
                   { color: nc.textLight },
-                  showConsentError && { color: nc.error, fontWeight: "bold" },
+                  showConsentError && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 {" "}
@@ -899,7 +907,7 @@ export default function LoginScreen() {
                     styles.legalLink,
                     { color: nc.todayAccent },
                     showConsentError && {
-                      color: nc.error,
+                      color: nc.errorText,
                       fontWeight: "bold",
                     },
                   ]}
@@ -941,7 +949,7 @@ export default function LoginScreen() {
                 style={[
                   styles.legalText,
                   { color: nc.textLight, flex: 1 },
-                  showConsentError && !hasHealthConsent && { color: nc.error, fontWeight: "bold" },
+                  showConsentError && !hasHealthConsent && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 J&apos;autorise le traitement des{" "}
@@ -961,7 +969,8 @@ export default function LoginScreen() {
           )}
 
           {/* Erreur de consentement : texte persistant, annoncé */}
-          {!isLogin && consentErrorMessage && (
+          {/* Reste monté quand le texte est vidé ("") pour forcer la relecture Android */}
+          {!isLogin && consentErrorMessage !== null && (
             <Text
               testID="consent-error"
               accessibilityRole="alert"

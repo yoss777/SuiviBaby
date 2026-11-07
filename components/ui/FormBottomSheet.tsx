@@ -6,6 +6,8 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetHandle,
+  BottomSheetHandleProps,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import React, { forwardRef, useCallback, useMemo, useRef, useState } from "react";
@@ -97,9 +99,28 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
           appearsOnIndex={0}
           opacity={0.5}
           pressBehavior="close"
+          // Libellés français (défauts anglais de @gorhom/bottom-sheet)
+          accessibilityLabel="Fermer le formulaire"
+          accessibilityHint="Touchez deux fois pour fermer sans enregistrer"
         />
       ),
       [],
+    );
+
+    const renderHandle = useCallback(
+      (props: BottomSheetHandleProps) => (
+        <BottomSheetHandle
+          {...props}
+          indicatorStyle={{ backgroundColor: nc.textMuted }}
+          accessibilityLabel="Poignée du formulaire"
+          accessibilityHint={
+            enablePanDownToClose
+              ? "Faites glisser vers le haut pour agrandir, vers le bas pour fermer"
+              : "Faites glisser pour agrandir ou réduire le formulaire"
+          }
+        />
+      ),
+      [nc.textMuted, enablePanDownToClose],
     );
 
     return (
@@ -114,7 +135,12 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         backdropComponent={renderBackdrop}
         onClose={onClose}
         backgroundStyle={{ backgroundColor: nc.backgroundCard }}
-        handleIndicatorStyle={{ backgroundColor: nc.textMuted }}
+        handleComponent={renderHandle}
+        // Le conteneur « accessible » par défaut (libellé « Bottom Sheet »)
+        // regroupe tout le contenu en un seul élément pour VoiceOver : on le
+        // désactive pour que chaque champ et bouton reste atteignable.
+        accessible={false}
+        accessibilityLabel={title}
       >
         <FormScrollContext.Provider value={formScrollContext}>
           <BottomSheetScrollView
@@ -172,6 +198,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                     ]}
                     onPress={onCancel}
                     disabled={isSubmitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isSubmitting }}
                   >
                     <Text style={[styles.cancelText, { color: nc.textNormal }]}>Annuler</Text>
                   </TouchableOpacity>
@@ -184,6 +212,17 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                     ]}
                     onPress={onSubmit}
                     disabled={isSubmitting}
+                    accessibilityRole="button"
+                    // Pendant l'envoi, le libellé visible disparaît au profit du
+                    // spinner : on annonce l'état plutôt qu'un bouton sans nom.
+                    accessibilityLabel={
+                      isSubmitting
+                        ? "Enregistrement en cours"
+                        : isEditing
+                          ? "Enregistrer"
+                          : "Ajouter"
+                    }
+                    accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
                   >
                     {isSubmitting ? (
                       <ActivityIndicator size="small" color={nc.white} />
@@ -203,9 +242,12 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                     ]}
                     onPress={onDelete}
                     disabled={isSubmitting}
+                    accessibilityRole="button"
+                    accessibilityLabel="Supprimer"
+                    accessibilityState={{ disabled: isSubmitting }}
                   >
                     <FontAwesome name="trash" size={14} color={nc.error} />
-                    <Text style={[styles.deleteOutlineText, { color: nc.error }]}>Supprimer</Text>
+                    <Text style={[styles.deleteOutlineText, { color: nc.errorText }]}>Supprimer</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -270,6 +312,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
+    minHeight: 44, // cible tactile ≥ 44 pt
+    minWidth: 44,
     gap: 8,
   },
   deleteOutlineText: {

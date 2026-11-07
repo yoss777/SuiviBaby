@@ -3,7 +3,17 @@
   "use strict";
 
   let root = document.documentElement;
-  let reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let reduceMotion = motionQuery.matches;
+  // Suit le réglage système en direct : chaque bloc animé s'abonne via onReduceMotion().
+  let motionHandlers = [];
+  let onReduceMotion = function (fn) { motionHandlers.push(fn); };
+  let handleMotionChange = function (e) {
+    reduceMotion = e.matches;
+    motionHandlers.forEach(function (fn) { fn(reduceMotion); });
+  };
+  if (motionQuery.addEventListener) motionQuery.addEventListener("change", handleMotionChange);
+  else if (motionQuery.addListener) motionQuery.addListener(handleMotionChange);
   let $ = function (sel, ctx) { return (ctx || document).querySelector(sel); };
   let $$ = function (sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); };
 
@@ -35,8 +45,8 @@
   let nav = $("#site-nav");
   if (menuBtn && nav) {
     let setOpen = function (open) {
+      // Libellé fixe (« Menu ») : seul aria-expanded porte l'état ouvert / fermé.
       menuBtn.setAttribute("aria-expanded", String(open));
-      menuBtn.setAttribute("aria-label", open ? "Fermer le menu" : "Ouvrir le menu");
       nav.classList.toggle("is-open", open);
     };
     menuBtn.addEventListener("click", function () {
@@ -60,7 +70,16 @@
     });
     $$("[data-store-cta]").forEach(function (cta) {
       let target = $('.store[data-platform="' + platform + '"]');
-      if (target) { cta.href = target.href; cta.target = "_blank"; cta.rel = "noopener"; }
+      if (target) {
+        cta.href = target.href; cta.target = "_blank"; cta.rel = "noopener";
+        // Comme les badges des stores : prévenir l'ouverture d'une nouvelle fenêtre.
+        if (!$(".sr-only", cta)) {
+          let hint = document.createElement("span");
+          hint.className = "sr-only";
+          hint.textContent = " (nouvelle fenêtre)";
+          cta.appendChild(hint);
+        }
+      }
     });
   }
 
@@ -76,6 +95,9 @@
   } else {
     revealEls.forEach(function (el) { el.classList.add("is-visible"); });
   }
+  onReduceMotion(function (reduced) {
+    if (reduced) revealEls.forEach(function (el) { el.classList.add("is-visible"); });
+  });
 
   /* ---------- Lien de navigation actif (scrollspy) ---------- */
   function scrollSpy(links) {
@@ -111,9 +133,16 @@
       types.forEach(function (el) {
         let on = cat === "all" || el.getAttribute("data-cat") === cat;
         el.classList.toggle("is-dim", !on);
-        if (on) count++;
+        // Les types estompés sortent de l'arbre d'accessibilité : le lecteur d'écran
+        // parcourt exactement la liste annoncée ci-dessous.
+        if (on) { el.removeAttribute("aria-hidden"); count++; }
+        else el.setAttribute("aria-hidden", "true");
       });
-      if (typesStatus) typesStatus.textContent = count + " types mis en évidence : " + tab.textContent.trim();
+      if (typesStatus) {
+        typesStatus.textContent = cat === "all"
+          ? "Les " + count + " types sont affichés."
+          : count + " types affichés sur " + types.length + " : " + tab.textContent.trim() + ".";
+      }
     });
   });
 
@@ -266,12 +295,18 @@
 
     reset();
     let pauseBtn = $("#demo-toggle");
-    if (reduceMotion) {
-      // Pas d'animation : on affiche un état final statique et lisible.
+    let heroVisual = demo.closest(".hero__visual");
+    // Pas d'animation : on affiche un état final statique et lisible.
+    let showStatic = function () {
+      stop();
+      reset();
       script.slice(0, 4).forEach(addEvent);
       $$(".is-new", list).forEach(function (el) { el.classList.remove("is-new"); });
       setStatus("Température · 37,8 °C · 11:15 — confirmé ✓", "done");
       if (pauseBtn) pauseBtn.hidden = true;
+    };
+    if (reduceMotion) {
+      showStatic();
     } else {
       // La démo tourne seulement si elle est visible, l'onglet actif et non mise en pause.
       let visible = true;
@@ -291,9 +326,15 @@
           userPaused = !userPaused;
           // Le libellé change selon l'action : pas d'aria-pressed en plus (double sens).
           pauseBtn.textContent = userPaused ? "Reprendre la démo" : "Mettre la démo en pause";
+          // Fige aussi les cartes flottantes (animation CSS « bob »).
+          if (heroVisual) heroVisual.classList.toggle("is-paused", userPaused);
           sync();
         });
       }
+      // Réduction des animations activée en cours de visite : la démo s'arrête définitivement.
+      onReduceMotion(function (reduced) {
+        if (reduced) { userPaused = true; showStatic(); }
+      });
     }
   }
 

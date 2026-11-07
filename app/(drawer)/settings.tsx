@@ -635,7 +635,13 @@ export default function SettingsScreen() {
               <Text
                 style={[
                   styles.settingLabel,
-                  { color: item.color || nc.textStrong },
+                  // Libellé : error (3.8:1) réservé aux icônes → errorText pour le texte
+                  {
+                    color:
+                      item.color === nc.error
+                        ? nc.errorText
+                        : item.color || nc.textStrong,
+                  },
                   isDisabled && { opacity: 0.35 },
                 ]}
               >
@@ -764,7 +770,7 @@ export default function SettingsScreen() {
           >
             <Ionicons name="warning-outline" size={20} color={nc.error} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={[styles.deletionBannerText, { color: nc.error }]}>
+              <Text style={[styles.deletionBannerText, { color: nc.errorText }]}>
                 Suppression programmée le{" "}
                 {formattedPendingDeletionDate}
               </Text>
@@ -806,7 +812,7 @@ export default function SettingsScreen() {
               }}
             >
               <Text
-                style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}
+                style={{ color: nc.errorText, fontWeight: "600", fontSize: 13 }}
               >
                 {isCancellingDeletion ? "..." : "Annuler"}
               </Text>

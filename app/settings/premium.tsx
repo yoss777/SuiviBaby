@@ -42,6 +42,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { configureLayoutAnimation } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -323,6 +324,7 @@ export default function PremiumScreen() {
             { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight },
           ]}
           onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width)}
+          accessibilityRole="tablist"
         >
           {tabWidth > 0 && (
             <Animated.View
@@ -345,7 +347,7 @@ export default function PremiumScreen() {
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   tabIndicatorX.value = index;
-                  LayoutAnimation.configureNext(
+                  configureLayoutAnimation(
                     LayoutAnimation.Presets.easeInEaseOut,
                   );
                   setSelectedPlan(key);
@@ -358,14 +360,14 @@ export default function PremiumScreen() {
                   <Text
                     style={[
                       styles.cycleButtonText,
-                      { color: selectedPlan === key ? nc.white : nc.textLight },
+                      { color: selectedPlan === key ? nc.onTodayAccent : nc.textLight },
                     ]}
                   >
                     {labels[key]}
                   </Text>
                   {(key === currentTier ||
                     (key === "premium" && currentTier === "family")) && (
-                    <View style={[styles.activeTabDot, { backgroundColor: selectedPlan === key ? nc.white : nc.success }]} />
+                    <View style={[styles.activeTabDot, { backgroundColor: selectedPlan === key ? nc.onTodayAccent : nc.success }]} />
                   )}
                 </View>
               </TouchableOpacity>
@@ -429,7 +431,7 @@ export default function PremiumScreen() {
                     accessibilityHint="Ouvre les paramètres d'abonnement du store pour annuler ou modifier"
                   >
                     <Text
-                      style={[styles.subscribeButtonText, { color: nc.white }]}
+                      style={[styles.subscribeButtonText, { color: nc.onTodayAccent }]}
                     >
                       Gérer mon abonnement
                     </Text>
@@ -465,7 +467,15 @@ export default function PremiumScreen() {
                       { backgroundColor: cardBorderColor },
                     ]}
                   >
-                    <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                    <Text
+                      style={[
+                        styles.planBadgeText,
+                        // Texte sombre sur le vert « actuel » (blanc : 2.3:1)
+                        { color: isCurrentPlan ? "#052e16" : nc.onTodayAccent },
+                      ]}
+                    >
+                      {plan.badge}
+                    </Text>
                   </View>
                 )}
 
@@ -494,13 +504,18 @@ export default function PremiumScreen() {
                 </View>
 
                 {/* Options de facturation */}
-                <View style={styles.billingOptions}>
+                <View
+                  style={styles.billingOptions}
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="Formule de facturation"
+                >
                   {[
                     {
                       key: "monthly" as BillingCycle,
                       label: "Mensuel",
                       price: plan.monthlyPrice,
                       sub: null,
+                      spokenPrice: `${plan.monthlyPrice} par mois`,
                     },
                     {
                       key: "annual" as BillingCycle,
@@ -508,12 +523,14 @@ export default function PremiumScreen() {
                       price: plan.annualPrice,
                       sub: `soit ${plan.annualMonthly}/mois`,
                       badge: "-37%",
+                      spokenPrice: `${plan.annualPrice} par an, soit ${plan.annualMonthly} par mois, moins 37 %`,
                     },
                     {
                       key: "lifetime" as BillingCycle,
                       label: "À vie",
                       price: lifetimePrice,
                       sub: "paiement unique",
+                      spokenPrice: `${lifetimePrice}, paiement unique`,
                     },
                   ].map((opt) => {
                     const isCurrentBilling =
@@ -539,9 +556,10 @@ export default function PremiumScreen() {
                         disabled={isCurrentBilling}
                         activeOpacity={isCurrentBilling ? 1 : 0.7}
                         accessibilityRole="radio"
-                        accessibilityLabel={`${opt.label} ${opt.price}${isCurrentBilling ? ", abonnement actuel" : ""}`}
+                        // Libellé = tout le contenu visible (prix, équivalent mensuel, remise)
+                        accessibilityLabel={`${opt.label}, ${opt.spokenPrice}${isCurrentBilling ? ", abonnement actuel" : ""}`}
                         accessibilityState={{
-                          selected: isSelected,
+                          checked: isSelected,
                           disabled: isCurrentBilling,
                         }}
                       >
@@ -688,7 +706,7 @@ export default function PremiumScreen() {
                       <Text
                         style={[
                           styles.subscribeButtonText,
-                          { color: nc.white },
+                          { color: nc.onTodayAccent },
                         ]}
                       >
                         {buttonLabel}
@@ -910,7 +928,8 @@ const styles = StyleSheet.create({
   tabLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   activeTabDot: { width: 6, height: 6, borderRadius: 3 },
   savingsBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  savingsBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  // Texte sombre sur #22c55e : ≥ 4.5:1 (le blanc n'atteint que 2.3:1)
+  savingsBadgeText: { color: "#052e16", fontSize: 12, fontWeight: "700" },
   planCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1007,7 +1026,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   manageButtonText: { fontSize: 14, fontWeight: "500" },
-  linksRow: { alignItems: "center", gap: 16, paddingVertical: 16 },
+  linksRow: { alignItems: "center", gap: 4, paddingVertical: 12 },
   devSection: { marginTop: 20, alignItems: "center" },
   devLabel: { fontSize: 12, marginBottom: 6 },
   devButtons: { flexDirection: "row", gap: 8 },
@@ -1018,7 +1037,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   devButtonText: { fontSize: 12, fontWeight: "600" },
-  restoreButton: { alignItems: "center", paddingVertical: 4 },
+  // Cible tactile ≥ 44 pt (lien texte de 14 pt)
+  restoreButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   restoreText: { fontSize: 14, fontWeight: "500" },
   faqDivider: { borderTopWidth: 1, marginVertical: 16 },
   faqSection: { marginTop: 4 },

@@ -68,6 +68,7 @@ import {
 import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
 import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
+import { startLoop } from "@/utils/motion";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -725,7 +726,7 @@ export default function HomeDashboard() {
           }),
         ]),
       );
-      pulse.start();
+      startLoop(pulse);
       return () => pulse.stop();
     } else {
       sharedPulseAnim.setValue(1);

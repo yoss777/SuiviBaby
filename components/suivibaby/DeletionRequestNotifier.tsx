@@ -248,7 +248,7 @@ export function DeletionRequestNotifier() {
                 onPress={() => handleVote("refused")}
                 disabled={isVoting}
               >
-                <Text style={[styles.actionText, { color: nc.error }]}>
+                <Text style={[styles.actionText, { color: nc.errorText }]}>
                   Refuser
                 </Text>
               </TouchableOpacity>

@@ -418,7 +418,7 @@ export default function PasswordScreen() {
               </View>
             </View>
             {!!errorMessage && (
-              <Text style={[styles.errorText, { color: nc.error }]}>
+              <Text style={[styles.errorText, { color: nc.errorText }]}>
                 {errorMessage}
               </Text>
             )}

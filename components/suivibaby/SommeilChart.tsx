@@ -769,6 +769,8 @@ function SommeilChart({
                 <ChartA11ySummary
                   title="Graphique du sommeil de la semaine"
                   entries={a11yEntries}
+
+                  periodKey={weekStartMs}
                 />
 
                 {showTapHint && totalWeekCount > 0 && (

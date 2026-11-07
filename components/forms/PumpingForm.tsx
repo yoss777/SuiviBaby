@@ -472,7 +472,7 @@ export function PumpingForm({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>

@@ -8,6 +8,11 @@ import {
   categoryTextColorsDark,
 } from "../constants/dashboardColors";
 import { Colors } from "../constants/theme";
+import { getChartColors } from "../constants/dashboardColors";
+import {
+  GENDER_COLORS,
+  GENDER_SELECTED_TEXT,
+} from "../components/forms/GenderRadioGroup";
 
 function channel(v: number): number {
   const s = v / 255;
@@ -123,4 +128,53 @@ describe("contraste de la palette", () => {
       expect(contrast(c.tint, c.background)).toBeGreaterThanOrEqual(LARGE_MIN);
     },
   );
+
+  it.each(["female", "male"] as const)(
+    "sexe coché (%s) : texte >= 4.5:1 sur l'aplat",
+    (g) => {
+      expect(contrast(GENDER_SELECTED_TEXT[g], GENDER_COLORS[g])).toBeGreaterThanOrEqual(
+        TEXT_MIN,
+      );
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "texte secondaire des graphiques (%s) >= 4.5:1 sur surface, metricBg et navButtonBg",
+    (scheme) => {
+      const charts = getChartColors(scheme);
+      for (const c of Object.values(charts) as {
+        muted: string;
+        surface: string;
+        metricBg: string;
+        navButtonBg: string;
+      }[]) {
+        for (const bg of [c.surface, c.metricBg, c.navButtonBg]) {
+          expect(contrast(c.muted, bg)).toBeGreaterThanOrEqual(TEXT_MIN);
+        }
+      }
+    },
+  );
+
+  describe.each([
+    ["clair", neutralColors],
+    ["sombre", neutralColorsDark],
+  ] as const)("todayAccent (%s)", (_name, nc) => {
+    it("en texte >= 4.5:1 sur les fonds de base", () => {
+      for (const bg of [nc.background, nc.backgroundCard]) {
+        expect(contrast(nc.todayAccent, bg)).toBeGreaterThanOrEqual(TEXT_MIN);
+      }
+    });
+
+    it("onTodayAccent >= 4.5:1 sur un aplat todayAccent", () => {
+      expect(contrast(nc.onTodayAccent, nc.todayAccent)).toBeGreaterThanOrEqual(
+        TEXT_MIN,
+      );
+    });
+  });
+
+  it("todayAccent clair accepte du texte blanc (boutons pleins)", () => {
+    expect(contrast(neutralColors.white, neutralColors.todayAccent)).toBeGreaterThanOrEqual(
+      TEXT_MIN,
+    );
+  });
 });

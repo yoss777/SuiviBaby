@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
-import { GenderRadioGroup } from "@/components/forms/GenderRadioGroup";
+import { StyleSheet } from "react-native";
+
+import {
+  GENDER_COLORS,
+  GENDER_SELECTED_TEXT,
+  GenderRadioGroup,
+} from "@/components/forms/GenderRadioGroup";
 
 jest.mock("@expo/vector-icons/FontAwesome6", () => "FontAwesome6");
 
@@ -31,4 +37,22 @@ describe("GenderRadioGroup", () => {
     fireEvent.press(screen.getByRole("radio", { name: "Fille" }));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["female", "Fille"],
+    ["male", "Garçon"],
+  ] as const)(
+    "option %s cochée : aplat et texte issus des paires vérifiées",
+    (value, label) => {
+      render(<GenderRadioGroup value={value} onChange={jest.fn()} colorScheme="light" />);
+
+      const radio = screen.getByRole("radio", { name: label });
+      expect(StyleSheet.flatten(radio.props.style).backgroundColor).toBe(
+        GENDER_COLORS[value],
+      );
+      expect(StyleSheet.flatten(screen.getByText(label).props.style).color).toBe(
+        GENDER_SELECTED_TEXT[value],
+      );
+    },
+  );
 });

@@ -327,7 +327,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>

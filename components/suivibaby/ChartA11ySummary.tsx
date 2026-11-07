@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  AccessibilityInfo,
   type AccessibilityActionEvent,
-  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -12,6 +10,12 @@ type Props = {
   title: string;
   /** Une phrase par jour : « Mardi 4 novembre : 6 repas, 720 ml ». */
   entries: string[];
+  /**
+   * Identifiant de la période affichée (ex. début de semaine en ms, filtre) :
+   * quand il change, on repart du premier jour même si le nombre de jours est
+   * identique (changer de semaine garde 7 entrées).
+   */
+  periodKey?: string | number;
 };
 
 const ACTIONS = [
@@ -26,29 +30,29 @@ const ACTIONS = [
  * À placer en dernier enfant d'un conteneur `position: relative` ; il ne
  * capte aucun toucher (le geste tactile du graphique reste intact).
  */
-export function ChartA11ySummary({ title, entries }: Props) {
+export function ChartA11ySummary({ title, entries, periodKey }: Props) {
   const [index, setIndex] = useState(0);
 
   // La semaine ou le filtre change : on repart du premier jour.
   useEffect(() => {
     setIndex(0);
-  }, [title, entries.length]);
+  }, [title, entries.length, periodKey]);
 
+  const hasEntries = entries.length > 0;
   const safeIndex = Math.min(index, Math.max(entries.length - 1, 0));
-  const current = entries[safeIndex] ?? "Aucune donnée";
 
   const move = useCallback(
     (delta: number) => {
       if (entries.length === 0) return;
       const next = Math.min(Math.max(safeIndex + delta, 0), entries.length - 1);
       if (next === safeIndex) return;
+      // Pas d'annonce explicite : iOS relit la valeur d'un élément ajustable et,
+      // sur Android, React Native met à jour la description du nœud focalisé
+      // (valeur texte), que TalkBack relit déjà. Une annonce en plus doublait
+      // la lecture.
       setIndex(next);
-      // iOS relit la valeur d'un élément ajustable ; Android a besoin d'une annonce.
-      if (Platform.OS === "android") {
-        AccessibilityInfo.announceForAccessibility(entries[next]);
-      }
     },
-    [entries, safeIndex],
+    [entries.length, safeIndex],
   );
 
   const onAction = useCallback(
@@ -59,14 +63,32 @@ export function ChartA11ySummary({ title, entries }: Props) {
     [move],
   );
 
+  // Aucune donnée : simple texte, ni « Jour 1 sur 0 » ni actions inopérantes.
+  if (!hasEntries) {
+    return (
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel={`${title}. Aucune donnée pour cette période.`}
+      />
+    );
+  }
+
+  // Le libellé reste stable (titre seul) ; la position et la phrase du jour
+  // passent dans la valeur, seule partie relue quand on change de jour. Le
+  // mode d'emploi du geste est fourni par le lecteur d'écran (rôle ajustable).
   return (
     <View
       style={StyleSheet.absoluteFill}
       pointerEvents="none"
       accessible
       accessibilityRole="adjustable"
-      accessibilityLabel={`${title}. Jour ${safeIndex + 1} sur ${entries.length}. Balayez vers le haut ou le bas pour changer de jour.`}
-      accessibilityValue={{ text: current }}
+      accessibilityLabel={title}
+      accessibilityValue={{
+        text: `${entries[safeIndex]}, jour ${safeIndex + 1} sur ${entries.length}`,
+      }}
       accessibilityActions={ACTIONS as unknown as { name: string; label: string }[]}
       onAccessibilityAction={onAction}
     />

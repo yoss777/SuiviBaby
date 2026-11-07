@@ -62,6 +62,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -1461,7 +1462,7 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1972,7 +1973,7 @@ export default function ChronoScreen() {
   const handleRangeChange = useCallback(
     (value: RangeOption) => {
       // P2: Animate section transitions
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
       if (value > maxRange) {
         setMaxRange(value);
         setIsRefreshing(true);
@@ -2007,13 +2008,13 @@ export default function ChronoScreen() {
 
   const handleToggleAll = useCallback(() => {
     // P2: Animate section transitions
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes(allSelected ? [] : [...ALL_FILTERS]);
   }, [allSelected]);
 
   const handleFilterToggle = useCallback((type: FilterType) => {
     // P2: Animate section transitions
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes((prev) =>
       prev.includes(type)
         ? prev.filter((value) => value !== type)
@@ -2066,13 +2067,13 @@ export default function ChronoScreen() {
   );
 
   const handleDateSelect = useCallback((dateString: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedDate(dateString);
     setShowCalendar(false);
   }, []);
 
   const handleClearDate = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedDate(null);
     setShowCalendar(false);
   }, []);

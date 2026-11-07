@@ -1106,7 +1106,7 @@ export default function StatsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Semaines précédentes indisponibles, réessayer"
               >
-                <Text style={[styles.statusNote, { color: nc.error }]}>
+                <Text style={[styles.statusNote, { color: nc.errorText }]}>
                   Semaines précédentes indisponibles · Réessayer
                 </Text>
               </TouchableOpacity>

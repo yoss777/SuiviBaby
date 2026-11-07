@@ -23,6 +23,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export const VOICE_BAR_HEIGHT = 56;
 /** How far the finger may drift outside the pill before releasing cancels. */
@@ -130,7 +131,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
         Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
       ]),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [isRecording, animations.decorative, pulse]);
 
@@ -181,7 +182,11 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
       }}
       disabled={isBusy || dimmed}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, commande vocale`}
+      // Pendant l'enregistrement, la durée est portée par accessibilityValue :
+      // on ne la répète pas dans le libellé.
+      accessibilityLabel={
+        isRecording ? "Je vous écoute, commande vocale" : `${title}, commande vocale`
+      }
       accessibilityHint="Touchez deux fois pour démarrer l'enregistrement, puis à nouveau pour l'envoyer."
       accessibilityState={{ busy: isBusy, disabled: isBusy || dimmed }}
       accessibilityValue={isRecording ? { text: formatRecordingDuration(elapsedSeconds) } : undefined}

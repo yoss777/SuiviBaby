@@ -53,6 +53,7 @@ import { supprimerEvenement as supprimerCroissance } from "@/services/eventsServ
 import * as Haptics from "expo-haptics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -140,7 +141,7 @@ const GrowthSkeleton = React.memo(function GrowthSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1031,7 +1032,7 @@ export default function GrowthScreen() {
 
   const toggleExpand = useCallback((date: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {

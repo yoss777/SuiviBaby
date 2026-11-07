@@ -129,8 +129,9 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
                   style={[
                     styles.menuItemText,
                     {
+                      // errorText (≥ 4.5:1) pour le texte ; error reste pour l'icône
                       color: item.destructive
-                        ? nc.error
+                        ? nc.errorText
                         : nc.textStrong,
                     },
                   ]}

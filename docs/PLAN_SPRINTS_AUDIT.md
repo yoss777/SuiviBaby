@@ -768,7 +768,7 @@ figés après une erreur, caches non vidés à la déconnexion, image de l'enfan
 précédent après un changement d'enfant, filtres « aujourd'hui » figés après
 minuit…) corrigés avec tests (1182 tests app, 439 fonctions, 219 règles).
 
-## S9 — Accessibilité · app + site · ✅ 2026-11-07 (en attente de revue ECC S9+S10)
+## S9 — Accessibilité · app + site · ✅ 2026-11-07
 
 User story : en tant que parent malvoyant ou utilisant VoiceOver/TalkBack, je
 veux lire tous les textes, connaître les valeurs des graphiques et des dates,
@@ -795,7 +795,7 @@ et ne pas subir d'animations si je les ai désactivées.
   sans double sens, `aria-live` réduit sur les tarifs, alerte de
   `reset-password` annoncée.
 
-## S10 — Site et stores · site · ⏳
+## S10 — Site et stores · site · ✅ 2026-11-07 (10.2 : 4 mentions à compléter par Yoss ; 10.5 : consoles à mettre à jour ; 10.6 : déploiement après fusion)
 
 - [x] **10.1** Décisions Q7 appliquées : site aligné sur ce que l'app fait
   vraiment (OMS, statistiques avancées, Famille) ; −37 % / −46 % par offre.
@@ -821,12 +821,23 @@ et ne pas subir d'animations si je les ai désactivées.
 - [x] **10.4** CSP : styles inline déplacés pour retirer `'unsafe-inline'` ;
   `connect-src` vérifié pour la page de réinitialisation (aucun appel
   réseau : simple redirection vers l'app, `'self'` suffit).
-- [ ] **10.5** Fiches « Confidentialité » (App Store) et « Sécurité des
+- [x] **10.5** Fiches « Confidentialité » (App Store) et « Sécurité des
   données » (Google Play) comparées aux flux réels (Sentry, Anthropic,
   AssemblyAI, Resend, RevenueCat) et mises à jour.
 - [ ] **10.6** 2.4 : déploiement du site.
 
 **Revue ECC (S9 + S10)** : `a11y-architect`, `seo-specialist`.
+Faite le 2026-11-07 : a11y 3 HIGH (texte blanc sur le choix du sexe, `error`
+en texte, ligne âge/date du menu) et 14 MEDIUM ; SEO 1 HIGH (lien de
+parrainage `/invite/…` en 404, antérieur au sprint) et 4 MEDIUM ; corrigés
+avec tests (1243 tests). Restent ouverts : boutons à texte blanc sur
+`todayAccent` en mode sombre hors abonnement (à passer en `onTodayAccent`) ;
+aucun écran de l'app ne permet de saisir un code de parrainage
+(`validateReferralCode` existe côté serveur) — `invite.html` renvoie vers le
+support en attendant une décision.
+
+**Backlog (Yoss, 2026-11-07)** : champ « allergies » dans la fiche enfant
+(ajout, modification, règles, export) — la politique les mentionne déjà.
 
 ## S11 — Tests et CI · ⏳
 

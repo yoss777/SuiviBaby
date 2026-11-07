@@ -280,7 +280,7 @@ export default function HealthConsentScreen() {
           accessibilityHint="Programme la suppression de votre compte et de vos données"
           style={[styles.deleteButton, busy && styles.buttonDisabled]}
         >
-          <Text style={[styles.deleteText, { color: nc.error }]}>
+          <Text style={[styles.deleteText, { color: nc.errorText }]}>
             Supprimer mon compte
           </Text>
         </TouchableOpacity>

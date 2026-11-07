@@ -67,6 +67,7 @@ import {
 } from "@/components/forms/RoutinesForm";
 import { isValidDate, toDate } from "@/utils/date";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -127,7 +128,7 @@ const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1265,7 +1266,7 @@ export default function RoutinesScreen() {
 
   const toggleExpand = useCallback((date: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
