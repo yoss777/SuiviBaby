@@ -366,6 +366,7 @@ export default function EditChildScreen() {
                             style={[styles.inlineInput, { backgroundColor: nc.backgroundPressed, color: nc.textStrong, borderColor: nc.borderLight }]}
                             value={editName}
                             onChangeText={setEditName}
+                            accessibilityLabel={`Nom de ${child.name}`}
                             placeholder="Nom ou petit nom"
                             placeholderTextColor={nc.textMuted}
                             autoCapitalize="words"
@@ -379,6 +380,7 @@ export default function EditChildScreen() {
                             onPress={handleSave}
                             disabled={isSaveDisabled}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
                             accessibilityLabel="Valider le nom"
                           >
                             <Ionicons name="checkmark" size={20} color={nc.white} />
@@ -406,8 +408,10 @@ export default function EditChildScreen() {
                         <TouchableOpacity
                           onPress={() => isEditing ? cancelEditing() : startEditing(child)}
                           disabled={isSaving || isDeleting}
+                          style={styles.iconTarget}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          accessibilityLabel={isEditing ? "Annuler la modification" : "Modifier le nom"}
+                          accessibilityRole="button"
+                          accessibilityLabel={isEditing ? `Annuler la modification du nom de ${child.name}` : `Modifier le nom de ${child.name}`}
                         >
                           <Ionicons
                             name={isEditing ? "arrow-back" : "create-outline"}
@@ -593,9 +597,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inlineValidateButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Cible tactile réelle ≥ 44 pt pour les boutons-icônes
+  iconTarget: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
   },

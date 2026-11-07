@@ -289,7 +289,7 @@
       if (pauseBtn) {
         pauseBtn.addEventListener("click", function () {
           userPaused = !userPaused;
-          pauseBtn.setAttribute("aria-pressed", String(userPaused));
+          // Le libellé change selon l'action : pas d'aria-pressed en plus (double sens).
           pauseBtn.textContent = userPaused ? "Reprendre la démo" : "Mettre la démo en pause";
           sync();
         });

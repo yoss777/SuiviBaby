@@ -132,7 +132,24 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
               ) : (
                 <FontAwesome name={icon} size={24} color={accentColor} />
               )}
-              <Text style={[styles.title, { color: nc.textStrong }]}>{title}</Text>
+              <Text
+                accessibilityRole="header"
+                style={[styles.title, { color: nc.textStrong }]}
+              >
+                {title}
+              </Text>
+              {/* Bouton « Fermer » : alternative au glissement / au fond
+                  pour les lecteurs d'écran et la commande vocale. */}
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={onCancel}
+                disabled={isSubmitting}
+                accessibilityRole="button"
+                accessibilityLabel="Fermer"
+                accessibilityState={{ disabled: isSubmitting }}
+              >
+                <FontAwesome name="xmark" size={18} color={nc.textStrong} />
+              </TouchableOpacity>
             </View>
 
             {/* Contenu du formulaire */}
@@ -222,6 +239,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "bold",
+  },
+  closeButton: {
+    position: "absolute",
+    right: -8,
+    top: -6,
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     paddingBottom: 10,

@@ -158,6 +158,10 @@ const ActionButton = ({
     <Animated.View
       style={[styles.actionButtonWrapper, animatedStyle]}
       pointerEvents={isOpen ? "auto" : "none"}
+      // Fermé : les actions sortent de l'arbre d'accessibilité (sinon
+      // VoiceOver/TalkBack les lisent alors qu'elles sont invisibles).
+      accessibilityElementsHidden={!isOpen}
+      importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
     >
       <Pressable
         onPress={onPress}
@@ -409,10 +413,14 @@ export const GlobalFAB = ({
       <Animated.View
         style={[styles.backdrop, backdropStyle]}
         pointerEvents={isOpen ? "auto" : "none"}
+        accessibilityElementsHidden={!isOpen}
+        importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
       >
         <Pressable
           style={styles.backdropPress}
           onPress={() => setIsOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer le menu"
         />
       </Animated.View>
 

@@ -12,6 +12,12 @@ import {
   toMillis,
 } from "@/utils/statsAggregations";
 import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
+import {
+  buildDayEntries,
+  formatMinutesSpoken,
+  getWeekDayLabels,
+} from "@/utils/chartA11y";
+import { ChartA11ySummary } from "./ChartA11ySummary";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
@@ -392,6 +398,20 @@ function SommeilChart({
     });
   }, [weeklyData, prevWeekData, barWidth, barSpacing, chartAreaHeight, maxMinutes]);
 
+  // Résumé textuel par jour pour les lecteurs d'écran (canevas Skia muet).
+  const a11yEntries = useMemo(
+    () =>
+      buildDayEntries(
+        getWeekDayLabels(weekStartMs),
+        bars.map((b) =>
+          b.total > 0
+            ? `${formatMinutesSpoken(b.total)} de sommeil, dont ${formatMinutesSpoken(b.nuit)} de nuit et ${formatMinutesSpoken(b.sieste)} de sieste`
+            : "aucun sommeil enregistré",
+        ),
+      ),
+    [bars, weekStartMs],
+  );
+
   const yAxisLabels = useMemo(() => {
     const steps = 4;
     const maxVal = maxMinutes || 60;
@@ -610,7 +630,11 @@ function SommeilChart({
 
               {/* CHART */}
               <View style={styles.chartContainer}>
-                <View style={styles.yAxisContainer}>
+                <View
+                  style={styles.yAxisContainer}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
                   {yAxisLabels.map((label, index) => (
                     <View key={index} style={[styles.yAxisLabel, { top: label.y - 8 }]}>
                       <Text style={[styles.yAxisText, { color: C.muted }]}>{label.label}</Text>
@@ -621,7 +645,8 @@ function SommeilChart({
                 <GestureDetector gesture={tapGesture}>
                   <Canvas
                     style={[styles.canvas, { width: SCREEN_WIDTH }]}
-                    accessibilityLabel="Graphique du sommeil de la semaine. Appuyez sur une barre pour voir les détails."
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
                   >
                     <RoundedRect
                       x={CHART_PADDING.left}
@@ -740,6 +765,11 @@ function SommeilChart({
                     })}
                   </Canvas>
                 </GestureDetector>
+
+                <ChartA11ySummary
+                  title="Graphique du sommeil de la semaine"
+                  entries={a11yEntries}
+                />
 
                 {showTapHint && totalWeekCount > 0 && (
                   <View style={[styles.tapHint, { backgroundColor: C.tooltipBg, borderColor: C.tooltipBorder }]}>

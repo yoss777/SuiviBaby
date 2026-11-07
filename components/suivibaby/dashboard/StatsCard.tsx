@@ -207,8 +207,9 @@ const styles = StyleSheet.create({
     color: "#6c757d",
   },
   statsTimeSince: {
-    fontSize: 11,
-    color: "#28a745",
+    fontSize: 12,
+    color: "#1e7e34", // vert foncé : contraste texte >= 4.5:1
+
     fontWeight: "500",
   },
   // Skeleton styles

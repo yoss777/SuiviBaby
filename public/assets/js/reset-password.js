@@ -17,8 +17,13 @@
 
   if (!validCode || !validMode) {
     loading.hidden = true;
-    error.textContent = "Lien invalide ou expiré. Refaites une demande de réinitialisation depuis l'application.";
+    // Conteneur d'alerte d'abord affiché (vide), texte injecté ensuite : les
+    // lecteurs d'écran n'annoncent pas toujours un contenu déjà présent à
+    // l'apparition d'un élément masqué.
     error.hidden = false;
+    setTimeout(function () {
+      error.textContent = "Lien invalide ou expiré. Refaites une demande de réinitialisation depuis l'application.";
+    }, 100);
     return;
   }
 

@@ -161,7 +161,7 @@
             </div>
           </figure>
           <p style="text-align:center;margin-top:14px">
-            <button class="btn btn--ghost btn--sm" id="demo-toggle" type="button" aria-pressed="false">Mettre la démo en pause</button>
+            <button class="btn btn--ghost btn--sm" id="demo-toggle" type="button">Mettre la démo en pause</button>
           </p>
         </div>
       </div>
@@ -207,8 +207,9 @@
     </section>
 
     <!-- ================= PILIERS ================= -->
-    <section class="section" aria-label="Fonctionnalités principales">
+    <section class="section" aria-labelledby="features-title">
       <div class="wrap">
+        <h2 class="sr-only" id="features-title">Fonctionnalités principales</h2>
 
         <!-- Quotidien -->
         <article class="feature">
@@ -396,7 +397,7 @@
             <button type="button" data-period="annual" aria-pressed="true">Annuel <em>jusqu'à −46 %</em></button>
           </div>
         </div>
-        <div class="plans" aria-live="polite">
+        <div class="plans">
           <article class="plan reveal">
             <h3>Gratuit</h3>
             <p class="plan__price">0 €</p>
@@ -413,7 +414,7 @@
           <article class="plan plan--hl reveal" data-delay="1">
             <span class="badge">Le plus choisi</span>
             <h3>Premium</h3>
-            <p class="plan__price"><span data-price-monthly="3,99 €" data-price-annual="29,99 €">29,99 €</span> <small data-unit>/an</small></p>
+            <p class="plan__price" aria-live="polite" aria-atomic="true"><span data-price-monthly="3,99 €" data-price-annual="29,99 €">29,99 €</span> <small data-unit>/an</small></p>
             <p class="plan__sub" data-sub-monthly="Sans engagement" data-sub-annual="soit 2,49 € par mois">soit 2,49 € par mois</p>
             <ul class="checks">
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Tout le plan Gratuit</li>
@@ -425,7 +426,7 @@
           </article>
           <article class="plan reveal" data-delay="2">
             <h3>Famille</h3>
-            <p class="plan__price"><span data-price-monthly="6,99 €" data-price-annual="44,99 €">44,99 €</span> <small data-unit>/an</small></p>
+            <p class="plan__price" aria-live="polite" aria-atomic="true"><span data-price-monthly="6,99 €" data-price-annual="44,99 €">44,99 €</span> <small data-unit>/an</small></p>
             <p class="plan__sub" data-sub-monthly="Sans engagement" data-sub-annual="soit 3,74 € par mois">soit 3,74 € par mois</p>
             <ul class="checks">
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Tout le plan Premium</li>

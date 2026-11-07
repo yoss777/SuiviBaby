@@ -46,6 +46,7 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { announceError } from "@/utils/a11yAnnounce";
 import { auth } from "../../config/firebase";
 
 const LAST_EMAIL_KEY = "@suivibaby_last_email";
@@ -97,6 +98,9 @@ export default function LoginScreen() {
   const [hasConsented, setHasConsented] = useState(false);
   const [hasHealthConsent, setHasHealthConsent] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
+  const [consentErrorMessage, setConsentErrorMessage] = useState<string | null>(
+    null,
+  );
   const navigationLocked = useRef(false);
   // Consentement santé vérifié pour ce uid (null = pas encore lu). Sans ce
   // contrôle, une connexion Google/Apple ou e-mail allait droit à l'accueil
@@ -143,6 +147,7 @@ export default function LoginScreen() {
     setUserName("");
     setHasConsented(false);
     setHasHealthConsent(false);
+    setConsentErrorMessage(null);
     resetPasswordFields();
   }, [resetPasswordFields]);
 
@@ -320,6 +325,16 @@ export default function LoginScreen() {
 
     if (!isLogin && (!hasConsented || !hasHealthConsent)) {
       setShowConsentError(true);
+      // Message textuel persistant (le rouge seul disparaît après 2 s et ne
+      // dit rien aux lecteurs d'écran) ; effacé dès que les cases sont cochées.
+      const message =
+        !hasConsented && !hasHealthConsent
+          ? "Cochez l'acceptation des conditions et le consentement aux données de santé pour créer votre compte."
+          : !hasConsented
+            ? "Cochez l'acceptation des conditions et de la politique de confidentialité pour créer votre compte."
+            : "Cochez le consentement au traitement des données de santé pour créer votre compte.";
+      setConsentErrorMessage(message);
+      announceError(message);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setShowConsentError(false), 2000);
       return;
@@ -509,13 +524,15 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasConsented(!hasConsented);
     setShowConsentError(false);
-  }, [hasConsented]);
+    if (!hasConsented && hasHealthConsent) setConsentErrorMessage(null);
+  }, [hasConsented, hasHealthConsent]);
 
   const handleToggleHealthConsent = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasHealthConsent(!hasHealthConsent);
     setShowConsentError(false);
-  }, [hasHealthConsent]);
+    if (!hasHealthConsent && hasConsented) setConsentErrorMessage(null);
+  }, [hasConsented, hasHealthConsent]);
 
   return (
     <KeyboardAvoidingView
@@ -943,6 +960,18 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Erreur de consentement : texte persistant, annoncé */}
+          {!isLogin && consentErrorMessage && (
+            <Text
+              testID="consent-error"
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              style={[styles.consentErrorText, { color: nc.errorText }]}
+            >
+              {consentErrorMessage}
+            </Text>
+          )}
+
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
             <Text style={[styles.switchText, { color: nc.textMuted }]}>
@@ -1113,8 +1142,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   consentCheckbox: {
-    marginRight: 8,
+    marginRight: 4,
     padding: 4,
+    // Cible tactile réelle ≥ 44 pt
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  consentErrorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 8,
+    paddingHorizontal: 12,
   },
   forgotPasswordContainer: {
     alignSelf: "flex-end",

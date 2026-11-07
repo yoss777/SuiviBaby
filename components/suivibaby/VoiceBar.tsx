@@ -83,6 +83,9 @@ interface VoiceBarProps {
   dimmed?: boolean;
 }
 
+// La pilule a une hauteur fixe : on plafonne l'agrandissement du texte (Dynamic Type)
+const VOICE_BAR_MAX_FONT_SCALE = 1.3;
+
 export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps) {
   const { status, elapsedSeconds, isHandsFree, onPressIn, onPressOut, onPress } = input;
   const colorScheme = useColorScheme() ?? "light";
@@ -215,6 +218,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
         <Text
           style={[styles.title, { fontSize: fontSize.normal }, isRecording && styles.tabular]}
           numberOfLines={1}
+          maxFontSizeMultiplier={VOICE_BAR_MAX_FONT_SCALE}
         >
           {title}
         </Text>
@@ -224,9 +228,11 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
               styles.subtitle,
               { fontSize: fontSize.small },
               isNightMode && styles.subtitleNight,
-              willCancel && { color: nc.errorText },
+              // Fond de barre toujours sombre : rouge clair du thème sombre (contraste)
+              willCancel && { color: getNeutralColors("dark").errorText },
             ]}
             numberOfLines={1}
+            maxFontSizeMultiplier={VOICE_BAR_MAX_FONT_SCALE}
           >
             {subtitle}
           </Text>

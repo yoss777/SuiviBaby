@@ -215,6 +215,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       {/* Section: Suivi Enfant */}
       <View style={styles.section}>
         <Text
+          accessibilityRole="header"
           style={[
             styles.sectionHeader,
             { color: Colors[colorScheme].tabIconDefault },
@@ -420,6 +421,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowHideModal(false)}
+          accessible={false}
         >
           <Pressable
             style={[
@@ -629,6 +631,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+    // Cible tactile réelle ≥ 44 pt
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalOverlay: {
     flex: 1,

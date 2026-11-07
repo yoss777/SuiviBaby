@@ -364,7 +364,7 @@ export const StatsGroup = memo(function StatsGroup({
                     {item.label}
                   </Text>
                   {itemTimeSince && (
-                    <Text style={[styles.itemTimeSince, { color: nc.textMuted }]}>
+                    <Text style={[styles.itemTimeSince, { color: nc.textLight }]}>
                       {itemTimeSince}
                     </Text>
                   )}
@@ -374,7 +374,7 @@ export const StatsGroup = memo(function StatsGroup({
                     {item.value}
                   </Text>
                   {item.unit && (
-                    <Text style={[styles.itemUnit, { color: nc.textMuted }]}>
+                    <Text style={[styles.itemUnit, { color: nc.textLight }]}>
                       {item.unit}
                     </Text>
                   )}

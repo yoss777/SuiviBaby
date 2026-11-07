@@ -8,7 +8,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
-import { Keyboard, View } from "react-native";
+import { Keyboard, Text, View } from "react-native";
+
+/** Plafond d'agrandissement des libellés d'onglets (Dynamic Type) */
+const TAB_LABEL_MAX_FONT_SCALE = 1.3;
 
 /** Tabs where parents consult the tracking and may want to add an event. */
 const VOICE_DOCK_ROUTES = new Set(["home", "chrono", "croissance", "moments"]);
@@ -56,7 +59,7 @@ const hiddenTabOptions = {
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
-  const { hasNewMoments } = useMomentsNotification();
+  const { hasNewMoments, newMomentsCount } = useMomentsNotification();
   const canManageContent = useCanManageContent();
   const [currentRoute, setCurrentRoute] = useState("");
   const keyboardVisible = useKeyboardVisible();
@@ -78,6 +81,16 @@ export default function BabyTabLayout() {
           tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
           headerShown: false,
           tabBarStyle: {},
+          // Dynamic Type : la barre a une hauteur contrainte, on plafonne le texte
+          tabBarLabel: ({ color, children }) => (
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={TAB_LABEL_MAX_FONT_SCALE}
+              style={{ color, fontSize: 12, textAlign: "center" }}
+            >
+              {children}
+            </Text>
+          ),
         }}
       >
         <Tabs.Screen
@@ -104,6 +117,11 @@ export default function BabyTabLayout() {
           name="moments"
           options={{
             title: "Moments",
+            // Le point de notification est visuel : on annonce le nombre dans le libellé
+            tabBarAccessibilityLabel:
+              newMomentsCount > 0
+                ? `Moments, ${newMomentsCount} ${newMomentsCount > 1 ? "nouveautés" : "nouveauté"}`
+                : "Moments",
             tabBarIcon: ({ focused, color }) => (
               <TabBarBadge visible={hasNewMoments} type="dot" color="#E8A85A">
                 <FontAwesome

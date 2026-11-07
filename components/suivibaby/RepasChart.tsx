@@ -10,6 +10,12 @@ import {
   type SolideType,
 } from "@/utils/statsAggregations";
 import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
+import {
+  buildDayEntries,
+  getWeekDayLabels,
+  pluralize,
+} from "@/utils/chartA11y";
+import { ChartA11ySummary } from "./ChartA11ySummary";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
@@ -578,6 +584,28 @@ function RepasChart({
     transform: [{ translateX: tooltipX.value }, { translateY: tooltipY.value }],
   }));
 
+  // Résumé textuel par jour pour les lecteurs d'écran (le canevas Skia est muet).
+  const a11yEntries = useMemo(() => {
+    const noun =
+      typeFilter === "tous"
+        ? "repas"
+        : typeFilter === "biberons"
+          ? "biberon"
+          : typeFilter === "solides"
+            ? "solide"
+            : "tétée";
+    const nounPlural = noun === "repas" ? "repas" : undefined;
+    const details = JOURS.map((j) => {
+      const day = weeklyData[j];
+      const parts = [pluralize(day.count, noun, nounPlural)];
+      if (day.quantity > 0 && typeFilter !== "seins" && typeFilter !== "solides") {
+        parts.push(`${day.quantity} ml`);
+      }
+      return parts.join(", ");
+    });
+    return buildDayEntries(getWeekDayLabels(weekStartMs), details);
+  }, [weeklyData, typeFilter, weekStartMs]);
+
   return (
     <View
       style={[styles.container, { backgroundColor: nc.background }]}
@@ -968,7 +996,11 @@ function RepasChart({
           )}
 
           <View style={styles.chartContainer}>
-            <View style={styles.yAxisContainer}>
+            <View
+              style={styles.yAxisContainer}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
               {yAxisLabels.map((label, index) => (
                 <View
                   key={index}
@@ -984,7 +1016,8 @@ function RepasChart({
             <GestureDetector gesture={tapGesture}>
               <Canvas
                 style={[styles.canvas, { width: SCREEN_WIDTH }]}
-                accessibilityLabel="Graphique des tétées de la semaine. Appuyez sur une barre pour voir les détails."
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
               >
                 <RoundedRect
                   x={CHART_PADDING.left}
@@ -1183,6 +1216,11 @@ function RepasChart({
               </Canvas>
             </GestureDetector>
 
+            <ChartA11ySummary
+              title="Graphique des repas de la semaine"
+              entries={a11yEntries}
+            />
+
             {showTapHint && totalWeekCount > 0 && (
               <View style={[styles.tapHint, { backgroundColor: C.tooltipBg, borderColor: C.tooltipBorder }]}>
                 <FontAwesome name="hand-pointer" size={12} color={C.muted} />
@@ -1246,7 +1284,11 @@ function RepasChart({
               </Animated.View>
             )}
 
-            <View style={styles.xAxisContainer}>
+            <View
+              style={styles.xAxisContainer}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
               {JOURS.map((jour, index) => (
                 <Text
                   key={`xlabel-${index}`}

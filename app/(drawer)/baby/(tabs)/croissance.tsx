@@ -896,7 +896,7 @@ export default function CroissanceScreen() {
       surface: nc.backgroundCard,
       surfaceAlt: nc.background,
       ink: nc.textStrong,
-      muted: nc.textMuted,
+      muted: nc.textLight, // texte secondaire lisible (textMuted = décoratif)
       border: nc.borderLight,
       tint: nc.todayAccent,
       orange: "#f97316",
