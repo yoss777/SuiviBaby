@@ -330,9 +330,6 @@ export default function DiapersScreen() {
   const sheetOwnerId = "diapers";
 
   // Data states
-  const [groupedExcretions, setGroupedExcretions] = useState<ExcretionGroup[]>(
-    []
-  );
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [mictionsLoaded, setMictionsLoaded] = useState(false);
   const [sellesLoaded, setSellesLoaded] = useState(false);
@@ -378,6 +375,37 @@ export default function DiapersScreen() {
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
+
+  // Filtering (memoized)
+  const filteredExcretions = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    return excretions.filter((excretion) => {
+      if (softDeletedIds.has(excretion.id)) return false;
+      const excretionDate = toDate(excretion.date);
+      excretionDate.setHours(0, 0, 0, 0);
+      const excretionTime = excretionDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return excretionTime === calDate.getTime();
+      }
+
+      if (selectedFilter === "today") return excretionTime === todayTime;
+      if (selectedFilter === "past") return excretionTime < todayTime;
+      return true;
+    });
+  }, [excretions, selectedFilter, selectedDate, softDeletedIds]);
+
+  // Regroupement par jour (dérivé : calculé au rendu, pas en effet)
+  const groupedExcretions = useMemo<ExcretionGroup[]>(
+    () => groupExcretionsByDay(filteredExcretions),
+    [filteredExcretions],
+  );
 
   // URL params
   const { tab, openModal, editId, returnTo } = useLocalSearchParams();
@@ -615,6 +643,17 @@ export default function DiapersScreen() {
     });
   }, []);
 
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
   // ============================================
   // SHEET OPEN EFFECT
   // ============================================
@@ -657,7 +696,6 @@ export default function DiapersScreen() {
     returnTargetParam,
     maybeReturnTo,
     ensureTodayInRange,
-    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
     applyTodayFilter,
     showToast,
   ]);
@@ -809,7 +847,6 @@ export default function DiapersScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedExcretions([]);
     setMictionsLoaded(false);
     setSellesLoaded(false);
     setEmptyDelayDone(false);
@@ -970,17 +1007,6 @@ export default function DiapersScreen() {
   // FILTERS + GROUPING
   // ============================================
 
-  const applyTodayFilter = useCallback(() => {
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setSelectedFilter("today");
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set([todayKey]));
-  }, []);
-
   const clearSelectedDate = useCallback(() => {
     applyTodayFilter();
   }, [applyTodayFilter]);
@@ -1007,37 +1033,6 @@ export default function DiapersScreen() {
       }
     }, [applyTodayFilter, selectedDate])
   );
-
-  // Filtering (memoized)
-  const filteredExcretions = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    return excretions.filter((excretion) => {
-      if (softDeletedIds.has(excretion.id)) return false;
-      const excretionDate = toDate(excretion.date);
-      excretionDate.setHours(0, 0, 0, 0);
-      const excretionTime = excretionDate.getTime();
-
-      if (selectedDate) {
-        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
-        const calDate = new Date(calYear, calMonth - 1, calDay);
-        calDate.setHours(0, 0, 0, 0);
-        return excretionTime === calDate.getTime();
-      }
-
-      if (selectedFilter === "today") return excretionTime === todayTime;
-      if (selectedFilter === "past") return excretionTime < todayTime;
-      return true;
-    });
-  }, [excretions, selectedFilter, selectedDate, softDeletedIds]);
-
-  // Grouping by day
-  useEffect(() => {
-    const grouped = groupExcretionsByDay(filteredExcretions);
-    setGroupedExcretions(grouped);
-  }, [filteredExcretions]);
 
   // ============================================
   // HELPERS - CALENDAR

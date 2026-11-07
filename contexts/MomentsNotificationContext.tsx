@@ -198,7 +198,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
     let unsubscribes: (() => void)[] = [];
 
     const timer = setTimeout(() => {
-      console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
+      if (__DEV__) console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
 
       // Écouter les jalons
       const jalonsQuery = query(
@@ -219,11 +219,11 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
           if (hasPhotos && data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(d.id)) {
             count++;
             newJalonIds.add(d.id);
-            console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
+            if (__DEV__) console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
           }
         });
 
-        console.log(`[MomentsNotification] jalons: ${count} new out of ${snapshot.size} total`);
+        if (__DEV__) console.log(`[MomentsNotification] jalons: ${count} new out of ${snapshot.size} total`);
         countsRef.current.jalons = count;
         eventIdsRef.current.jalons = newJalonIds;
         updateTotalCount();

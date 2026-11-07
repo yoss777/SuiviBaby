@@ -147,7 +147,15 @@ export function AuthProvider({
   const isMountedRef = useRef(true);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const { showAlert } = useModal();
+  const { showAlert: showAlertFromContext } = useModal();
+  // Lu par ref : un changement du contexte modal ne doit pas recréer loadUserData
+  // (donc ne pas réabonner l'écouteur d'auth).
+  const showAlertRef = useRef(showAlertFromContext);
+  showAlertRef.current = showAlertFromContext;
+  const showAlert = useCallback<typeof showAlertFromContext>(
+    (...args) => showAlertRef.current(...args),
+    [],
+  );
 
   // Fonction pour charger les données utilisateur
   const loadUserData = useCallback(

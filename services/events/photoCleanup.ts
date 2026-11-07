@@ -26,7 +26,7 @@ export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
       return;
     }
     const encodedPath = encodeURIComponent(filePath);
-    console.log("[DELETE_PHOTO] Suppression de:", filePath);
+    if (__DEV__) console.log("[DELETE_PHOTO] Suppression de:", filePath);
 
     const user = auth.currentUser;
     if (!user) {
@@ -44,7 +44,7 @@ export async function deletePhotoFromStorage(photoRef: string): Promise<void> {
       });
 
       if (response.ok || response.status === 404) {
-        console.log("[DELETE_PHOTO] Photo supprimée de", bucket);
+        if (__DEV__) console.log("[DELETE_PHOTO] Photo supprimée de", bucket);
       } else {
         console.error(
           "[DELETE_PHOTO] Erreur:",

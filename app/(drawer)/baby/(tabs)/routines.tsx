@@ -17,6 +17,7 @@ import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
@@ -284,7 +285,6 @@ export default function RoutinesScreen() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
-  const [groupedEvents, setGroupedEvents] = useState<RoutineGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ sommeil: false, bain: false, nez: false });
   const [loadError, setLoadError] = useState(false);
@@ -313,7 +313,6 @@ export default function RoutinesScreen() {
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
-  const [now, setNow] = useState(new Date());
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
       [...(merged as RoutineEvent[])].sort(
@@ -416,6 +415,61 @@ export default function RoutinesScreen() {
   const handleAddPress = useCallback(() => {
     openAddModal("sommeil", "nap");
   }, [openAddModal]);
+
+  const groupedEvents = useMemo<RoutineGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+
+      if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number);
+        const selected = new Date(year, month - 1, day);
+        selected.setHours(0, 0, 0, 0);
+        return time === selected.getTime();
+      }
+
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+
+    const groups: Record<string, RoutineEvent[]> = {};
+    filtered.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const grouped = Object.entries(groups)
+      .map(([date, items]) => {
+        const sorted = items.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        const counts = {
+          sommeil: 0,
+          bain: 0,
+        } as Record<RoutineType, number>;
+        sorted.forEach((item) => {
+          counts[item.type as RoutineType] += 1;
+        });
+        return {
+          date,
+          events: sorted,
+          counts,
+          lastEvent: sorted[0],
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    return grouped;
+  }, [events, selectedFilter, selectedDate, softDeletedIds]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: handleAddPress },
@@ -656,7 +710,6 @@ export default function RoutinesScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedEvents([]);
     setLoaded({ sommeil: false, bain: false, nez: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
@@ -764,15 +817,8 @@ export default function RoutinesScreen() {
     ) as (SommeilEvent & { id: string }) | undefined;
   }, [events]);
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    if (sommeilEnCours) {
-      timer = setInterval(() => setNow(new Date()), 60000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [sommeilEnCours]);
+  // Temps écoulé du sommeil en cours : minuteur partagé, actif seulement si besoin
+  const { currentTime: now } = useMinuteTick(!!sommeilEnCours);
 
   const elapsedMinutes = useMemo(() => {
     if (!sommeilEnCours?.heureDebut) return 0;
@@ -806,61 +852,6 @@ export default function RoutinesScreen() {
       }
     }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
-
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    const filtered = events.filter((item) => {
-      if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-
-      if (selectedDate) {
-        const [year, month, day] = selectedDate.split("-").map(Number);
-        const selected = new Date(year, month - 1, day);
-        selected.setHours(0, 0, 0, 0);
-        return time === selected.getTime();
-      }
-
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      return true;
-    });
-
-    const groups: Record<string, RoutineEvent[]> = {};
-    filtered.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    const grouped = Object.entries(groups)
-      .map(([date, items]) => {
-        const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const counts = {
-          sommeil: 0,
-          bain: 0,
-        } as Record<RoutineType, number>;
-        sorted.forEach((item) => {
-          counts[item.type as RoutineType] += 1;
-        });
-        return {
-          date,
-          events: sorted,
-          counts,
-          lastEvent: sorted[0],
-        };
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-
-    setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {

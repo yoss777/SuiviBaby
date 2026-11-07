@@ -31,7 +31,7 @@ export async function ajouterVaccin(childId: string, data: Record<string, unknow
       userId,
       createdAt: new Date(),
     });
-    console.log("Prise de Vaccins ajoutée avec l'ID :", ref.id);
+    if (__DEV__) console.log("Prise de Vaccins ajoutée avec l'ID :", ref.id);
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
@@ -48,7 +48,7 @@ export async function obtenirVaccin(childId: string, id: string) {
     if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune prise de vaccins trouvée avec cet ID ou accès refusé");
+      if (__DEV__) console.log("Aucune prise de vaccins trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -137,7 +137,7 @@ export async function modifierVaccin(
       ...nouveausDonnees,
       updatedAt: new Date(),
     });
-    console.log("Prise de vaccins modifiée avec succès");
+    if (__DEV__) console.log("Prise de vaccins modifiée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
@@ -156,7 +156,7 @@ export async function supprimerVaccin(childId: string, id: string) {
     }
 
     await deleteDoc(docRef);
-    console.log("Prise de vaccins supprimée avec succès");
+    if (__DEV__) console.log("Prise de vaccins supprimée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);

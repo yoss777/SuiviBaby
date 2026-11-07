@@ -1,5 +1,5 @@
 // contexts/SuccessAnimationContext.tsx
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { SuccessAnimation } from '@/components/ui/SuccessAnimation';
 import { SUCCESS_ANIMATIONS, SuccessAnimationType } from '@/constants/successAnimations';
 
@@ -28,12 +28,15 @@ export function SuccessAnimationProvider({ children }: { children: React.ReactNo
     }, 100);
   }, []);
 
+  // Valeur stable : l'état de l'animation reste local au provider.
+  const value = useMemo(() => ({ showSuccess }), [showSuccess]);
+
   const config = animation.type
     ? SUCCESS_ANIMATIONS[animation.type] || SUCCESS_ANIMATIONS.default
     : SUCCESS_ANIMATIONS.default;
 
   return (
-    <SuccessAnimationContext.Provider value={{ showSuccess }}>
+    <SuccessAnimationContext.Provider value={value}>
       {children}
 
       <SuccessAnimation
@@ -54,3 +57,6 @@ export function useSuccessAnimation() {
   }
   return context;
 }
+
+// Alias explicite : la valeur ne contient que des actions stables.
+export const useSuccessAnimationActions = useSuccessAnimation;

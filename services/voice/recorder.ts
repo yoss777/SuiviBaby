@@ -160,7 +160,7 @@ export async function startRecording(): Promise<void> {
     }
 
     recording = recorder;
-    console.log("Enregistrement démarré");
+    if (__DEV__) console.log("Enregistrement démarré");
   } catch (error) {
     // Ne pas spammer Sentry pour les refus de permission — c'est un cas
     // utilisateur normal, pas un bug.
@@ -216,7 +216,7 @@ export async function stopRecording(): Promise<string | null> {
       recorder.release();
     }
 
-    console.log("Enregistrement arrêté:", uri);
+    if (__DEV__) console.log("Enregistrement arrêté:", uri);
     return uri;
   } catch (error) {
     console.error("Erreur arrêt enregistrement:", error);

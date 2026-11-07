@@ -1,6 +1,6 @@
 // hooks/useAudioRecorder.ts
 // Audio recording concerns: permissions, start/stop recording, cancel.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import VoiceCommandService from "@/services/voiceCommandService";
 import { VoicePermissionDeniedError } from "@/services/voice/recorder";
 
@@ -28,6 +28,24 @@ export interface AudioRecorderActions {
 
 export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
   const [isRecording, setIsRecording] = useState(false);
+  // Miroir synchrone de isRecording pour le nettoyage au démontage.
+  const isRecordingRef = useRef(false);
+  isRecordingRef.current = isRecording;
+
+  // Démontage : on ne laisse jamais le micro ouvert ni un fichier audio
+  // temporaire sur le disque (promesse du texte de confidentialité).
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (isRecordingRef.current) {
+        void VoiceCommandService.cancelRecording().catch((error) => {
+          console.warn("Nettoyage de l'enregistrement au démontage impossible:", error);
+        });
+      }
+    };
+  }, []);
 
   const startRecording = async (): Promise<"started" | "no-permission" | "permission-denied-permanent" | "error"> => {
     try {
@@ -36,9 +54,18 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
         return "no-permission";
       }
 
+      // Écran quitté pendant la demande de permission : ne pas démarrer le micro.
+      if (unmountedRef.current) return "error";
+
       setIsRecording(true);
+      isRecordingRef.current = true;
       await VoiceCommandService.startRecording();
-      console.log("🎤 Enregistrement démarré - Parlez maintenant");
+      if (unmountedRef.current) {
+        // Démonté pendant le démarrage : le nettoyage a pu passer avant.
+        await VoiceCommandService.cancelRecording();
+        return "error";
+      }
+      if (__DEV__) console.log("🎤 Enregistrement démarré - Parlez maintenant");
       return "started";
     } catch (error) {
       setIsRecording(false);
@@ -58,7 +85,7 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
       if (!isRecording) return null;
       setIsRecording(false);
       const audioUri = await VoiceCommandService.stopRecording();
-      console.log("🎤 Enregistrement arrêté, traitement en cours...");
+      if (__DEV__) console.log("🎤 Enregistrement arrêté, traitement en cours...");
       return audioUri;
     } catch (error) {
       console.error("Erreur arrêt enregistrement:", error);
@@ -73,7 +100,7 @@ export function useAudioRecorder(): AudioRecorderState & AudioRecorderActions {
         setIsRecording(false);
         // Arrête le micro ET supprime le fichier audio temporaire.
         await VoiceCommandService.cancelRecording();
-        console.log("🚫 Enregistrement annulé");
+        if (__DEV__) console.log("🚫 Enregistrement annulé");
       }
     } catch (error) {
       console.error("Erreur annulation:", error);

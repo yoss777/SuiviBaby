@@ -274,7 +274,6 @@ export default function MealsScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // États des données
-  const [groupedMeals, setGroupedMeals] = useState<MealGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [teteesLoaded, setTeteesLoaded] = useState(false);
   const [biberonsLoaded, setBiberonsLoaded] = useState(false);
@@ -337,6 +336,43 @@ export default function MealsScreen() {
   // ============================================
 
   // Gérer le bouton calendrier
+  // Filtrage et regroupement par jour (dérivé : calculé au rendu, pas en effet)
+  const groupedMeals = useMemo<MealGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
+    const filtered = meals.filter((meal) => {
+      if (softDeletedIds.has(meal.id)) return false;
+      const mealDate = toDate(meal.date);
+      mealDate.setHours(0, 0, 0, 0);
+      const mealTime = mealDate.getTime();
+
+      // Si une date est sélectionnée dans le calendrier (peu importe si le calendrier est ouvert ou fermé)
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return mealTime === calDate.getTime();
+      }
+
+      // Sinon, appliquer le filtre sélectionné
+      switch (selectedFilter) {
+        case "today":
+          return mealTime === todayTime;
+        case "past":
+          return mealTime < todayTime;
+        case null:
+        default:
+          return true; // Afficher tous les repas par défaut
+      }
+    });
+
+    return groupMealsByDay(filtered);
+  }, [meals, selectedFilter, selectedDate, softDeletedIds]);
+
+
   const handleCalendarPress = useCallback(() => {
     setShowCalendar((prev) => {
       const newValue = !prev;
@@ -533,6 +569,64 @@ export default function MealsScreen() {
     [],
   );
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = useCallback(() => {
+    const target = normalizeParam(returnTo);
+    if (!target) return;
+    if (target === "home" || target === "chrono" || target === "journal") {
+      returnToRef.current = target;
+      return;
+    }
+    returnToRef.current = null;
+  }, [returnTo]);
+
+  useEffect(() => {
+    stashReturnTo();
+  }, [stashReturnTo]);
+
+  const maybeReturnTo = useCallback((targetOverride?: string | null) => {
+    const target = targetOverride ?? returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/baby/chrono");
+    } else if (target === "journal") {
+      router.replace("/baby/chrono");
+    }
+  }, []);
+
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1,
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
+      }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const task = InteractionManager.runAfterInteractions(() => {
@@ -566,10 +660,11 @@ export default function MealsScreen() {
     openSheet,
     navigation,
     buildEditData,
-    // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
     ensureTodayInRange,
-    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
     applyTodayFilter,
+    stashReturnTo,
+    maybeReturnTo,
+    returnTargetParam,
   ]);
 
   useEffect(() => {
@@ -721,7 +816,6 @@ export default function MealsScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedMeals([]);
     setTeteesLoaded(false);
     setBiberonsLoaded(false);
     setSolidesLoaded(false);
@@ -879,43 +973,6 @@ export default function MealsScreen() {
     };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
-  // Filtrage et regroupement par jour
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    // Filtrer les repas en fonction du filtre sélectionné ou de la date du calendrier
-    const filtered = meals.filter((meal) => {
-      if (softDeletedIds.has(meal.id)) return false;
-      const mealDate = toDate(meal.date);
-      mealDate.setHours(0, 0, 0, 0);
-      const mealTime = mealDate.getTime();
-
-      // Si une date est sélectionnée dans le calendrier (peu importe si le calendrier est ouvert ou fermé)
-      if (selectedDate) {
-        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
-        const calDate = new Date(calYear, calMonth - 1, calDay);
-        calDate.setHours(0, 0, 0, 0);
-        return mealTime === calDate.getTime();
-      }
-
-      // Sinon, appliquer le filtre sélectionné
-      switch (selectedFilter) {
-        case "today":
-          return mealTime === todayTime;
-        case "past":
-          return mealTime < todayTime;
-        case null:
-        default:
-          return true; // Afficher tous les repas par défaut
-      }
-    });
-
-    const grouped = groupMealsByDay(filtered);
-    setGroupedMeals(grouped);
-  }, [meals, selectedFilter, selectedDate, softDeletedIds]);
-
   // ============================================
   // HELPERS - CALENDAR
   // ============================================
@@ -957,17 +1014,6 @@ export default function MealsScreen() {
     setSelectedFilter(null);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
-  }, []);
-
-  const applyTodayFilter = useCallback(() => {
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1,
-    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setSelectedFilter("today");
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set([todayKey]));
   }, []);
 
   const clearSelectedDate = useCallback(() => {
@@ -1073,53 +1119,6 @@ export default function MealsScreen() {
     setPendingEditData(meal);
     setPendingOpen(true);
   }, [showToast]);
-
-  const normalizeParam = (value: string | string[] | undefined) =>
-    Array.isArray(value) ? value[0] : value;
-
-  const stashReturnTo = useCallback(() => {
-    const target = normalizeParam(returnTo);
-    if (!target) return;
-    if (target === "home" || target === "chrono" || target === "journal") {
-      returnToRef.current = target;
-      return;
-    }
-    returnToRef.current = null;
-  }, [returnTo]);
-
-  useEffect(() => {
-    stashReturnTo();
-  }, [stashReturnTo]);
-
-  const maybeReturnTo = useCallback((targetOverride?: string | null) => {
-    const target = targetOverride ?? returnToRef.current;
-    returnToRef.current = null;
-    if (target === "home") {
-      router.replace("/baby/home");
-    } else if (target === "chrono") {
-      router.replace("/baby/chrono");
-    } else if (target === "journal") {
-      router.replace("/baby/chrono");
-    }
-  }, []);
-
-  const ensureTodayInRange = useCallback(() => {
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-
-    setRangeEndDate((prev) => {
-      if (!prev) {
-        setDaysWindow(14);
-        return endOfToday;
-      }
-      if (prev >= endOfToday) return prev;
-      const diffDays = Math.ceil(
-        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
-      );
-      setDaysWindow((window) => window + diffDays);
-      return endOfToday;
-    });
-  }, []);
 
   // ============================================
   // HANDLERS - DELETE

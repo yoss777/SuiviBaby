@@ -19,7 +19,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 
 // Bornes CF (parité serveur). Same value sur les deux côtés.
 const PUMP_MAX = NUMERIC_BOUNDS.pompage.quantiteGauche.max;
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -123,13 +123,6 @@ export function PumpingForm({
     setDateHeure(nextDate);
     setDateHeureDirty(true);
   }, []);
-
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(editData.date);
-    setDateHeureDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   // Toggle functions
   const toggleLeftBreast = () => {

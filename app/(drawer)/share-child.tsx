@@ -353,7 +353,7 @@ export default function ShareChildScreen() {
     isSendingInviteRef.current = true;
     setIsLoadingInvite(true);
     try {
-      console.log("[Invitation] handleSendInvitation", {
+      if (__DEV__) console.log("[Invitation] handleSendInvitation", {
         childId,
         childName,
         inviterId: user?.uid ?? null,

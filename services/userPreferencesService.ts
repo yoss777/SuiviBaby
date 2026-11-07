@@ -250,7 +250,7 @@ export async function masquerEnfant(childId: string) {
       });
     }
 
-    console.log("Enfant masqué avec succès");
+    if (__DEV__) console.log("Enfant masqué avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors du masquage de l'enfant:", e);
@@ -272,7 +272,7 @@ export async function afficherEnfant(childId: string) {
       hiddenChildrenIds: arrayRemove(childId),
     });
 
-    console.log("Enfant affiché avec succès");
+    if (__DEV__) console.log("Enfant affiché avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de l'affichage de l'enfant:", e);

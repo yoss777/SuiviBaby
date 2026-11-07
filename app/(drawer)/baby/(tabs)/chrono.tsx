@@ -26,6 +26,7 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useOngoingClock } from "@/hooks/useOngoingClock";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
 import { olderSliceBounds, windowStart } from "@/utils/chronoWindow";
 import { ecouterEvenements, obtenirEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
@@ -46,7 +47,6 @@ import React, {
 } from "react";
 import {
   Animated,
-  AppState,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -210,10 +210,6 @@ const LIST_PADDING_TOP = 8;
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function dayKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 function formatTime(date: Date) {
@@ -1672,7 +1668,8 @@ export default function ChronoScreen() {
   const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
-  const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
+  // Clé du jour (S8.6) : un seul minuteur, calé sur minuit, partagé avec useMinuteTick.
+  const currentDay = useCalendarDay();
   const hasLoadedPrefs = useRef(false);
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
@@ -1725,25 +1722,6 @@ export default function ChronoScreen() {
     }),
     [nc],
   );
-
-  const updateCurrentDay = useCallback(() => {
-    const now = new Date();
-    const next = dayKey(now);
-    setCurrentDay((prev) => (prev === next ? prev : next));
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(updateCurrentDay, 60 * 1000);
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        updateCurrentDay();
-      }
-    });
-    return () => {
-      clearInterval(interval);
-      subscription.remove();
-    };
-  }, [updateCurrentDay]);
 
   // All event types for the timeline
   const ALL_EVENT_TYPES: EventType[] = MODERN_UI_EVENT_TYPES;

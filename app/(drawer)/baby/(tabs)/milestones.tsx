@@ -307,7 +307,6 @@ export default function MilestonesScreen() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
-  const [groupedEvents, setGroupedEvents] = useState<MilestoneGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ jalons: false });
   const [loadError, setLoadError] = useState(false);
@@ -466,6 +465,64 @@ export default function MilestonesScreen() {
   const handleAddPress = useCallback(() => {
     openAddModal("dent");
   }, [openAddModal]);
+
+  const filteredEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    return events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+      if (selectedDate) return formatDateKey(date) === selectedDate;
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+  }, [events, selectedFilter, selectedDate, softDeletedIds]);
+
+
+  const groupedEvents = useMemo<MilestoneGroup[]>(() => {
+    const groups: Record<string, MilestoneGroup> = {};
+    filteredEvents.forEach((event) => {
+      const key = formatDateKey(toDate(event.date));
+      if (!groups[key]) {
+        groups[key] = {
+          date: key,
+          events: [],
+          counts: {
+            dent: 0,
+            pas: 0,
+            sourire: 0,
+            mot: 0,
+            humeur: 0,
+            photo: 0,
+            autre: 0,
+          },
+          lastEvent: event,
+        };
+      }
+      groups[key].events.push(event);
+      groups[key].counts[event.typeJalon] += 1;
+      if (toDate(event.date) > toDate(groups[key].lastEvent.date)) {
+        groups[key].lastEvent = event;
+      }
+    });
+
+    const sorted = Object.values(groups).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    sorted.forEach((group) => {
+      group.events.sort(
+        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime()
+      );
+    });
+
+    return sorted;
+  }, [filteredEvents]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: handleAddPress },
@@ -665,7 +722,6 @@ export default function MilestonesScreen() {
   useEffect(() => {
     if (!activeChild?.id) return;
 
-    setGroupedEvents([]);
     setLoaded({ jalons: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
@@ -745,63 +801,6 @@ export default function MilestonesScreen() {
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
   };
-
-  const filteredEvents = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    return events.filter((item) => {
-      if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-      if (selectedDate) return formatDateKey(date) === selectedDate;
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      return true;
-    });
-  }, [events, selectedFilter, selectedDate, softDeletedIds]);
-
-  useEffect(() => {
-    const groups: Record<string, MilestoneGroup> = {};
-    filteredEvents.forEach((event) => {
-      const key = formatDateKey(toDate(event.date));
-      if (!groups[key]) {
-        groups[key] = {
-          date: key,
-          events: [],
-          counts: {
-            dent: 0,
-            pas: 0,
-            sourire: 0,
-            mot: 0,
-            humeur: 0,
-            photo: 0,
-            autre: 0,
-          },
-          lastEvent: event,
-        };
-      }
-      groups[key].events.push(event);
-      groups[key].counts[event.typeJalon] += 1;
-      if (toDate(event.date) > toDate(groups[key].lastEvent.date)) {
-        groups[key].lastEvent = event;
-      }
-    });
-
-    const sorted = Object.values(groups).sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-
-    sorted.forEach((group) => {
-      group.events.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime()
-      );
-    });
-
-    setGroupedEvents(sorted);
-  }, [filteredEvents]);
 
   // ============================================
   // LOAD MORE

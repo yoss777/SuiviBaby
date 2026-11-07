@@ -6,7 +6,7 @@ import {
   type QuickAddSheetParams,
 } from "@/constants/dashboardConfig";
 import { Colors } from "@/constants/theme";
-import { type FormSheetProps, useSheet } from "@/contexts/SheetContext";
+import { type FormSheetProps, useSheetActions } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -217,7 +217,7 @@ export const GlobalFAB = ({
   bottom,
   disabled = false,
 }: GlobalFABProps = {}) => {
-  const { openSheet } = useSheet();
+  const { openSheet } = useSheetActions();
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
   const nc = getNeutralColors(colorScheme);

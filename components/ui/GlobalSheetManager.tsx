@@ -1,7 +1,9 @@
 // components/ui/GlobalSheetManager.tsx
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
-import { useSheet, isFormSheetProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
+import { SafeBoundary } from '@/components/SafeBoundary';
+import { useSheetState, useSheetActions, isFormSheetProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
 import { FormBottomSheet } from './FormBottomSheet';
 import { SoinsForm } from '@/components/forms/SoinsForm';
 import { MealsForm } from '@/components/forms/MealsForm';
@@ -17,6 +19,90 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchTipById, bookmarkTip, removeBookmark, submitTipFeedback, getUserContentState } from '@/services/smartContentService';
 import type { Tip, UserContent } from '@/types/content';
+import type { AnySheetProps } from '@/contexts/SheetContext';
+
+// Clé de montage d'une feuille : type de formulaire + sous-type + événement édité
+// (+ enfant). Un autre formulaire ou un autre événement remonte le formulaire
+// (aucun état résiduel) ; le même événement rouvert pendant que la feuille est
+// ouverte ne le remonte pas.
+export function getSheetKey(props: AnySheetProps | null): string {
+  if (!props) return 'closed';
+  if (!isFormSheetProps(props)) return `view:${props.ownerId}`;
+  let subtype = '';
+  let editId: string | undefined;
+  if (isSoinsFormProps(props)) {
+    subtype = props.soinsType;
+    editId = props.editData?.id;
+  } else if (isMealsFormProps(props)) {
+    subtype = props.mealType;
+    editId = props.editData?.id;
+  } else if (isPumpingFormProps(props)) {
+    editId = props.editData?.id;
+  } else if (isActivitiesFormProps(props)) {
+    subtype = props.activiteType;
+    editId = props.editData?.id;
+  } else if (isMilestonesFormProps(props)) {
+    subtype = props.jalonType;
+    editId = props.editData?.id;
+  } else if (isDiapersFormProps(props)) {
+    subtype = props.diapersType;
+    editId = props.editData?.id;
+  } else if (isRoutinesFormProps(props)) {
+    subtype = props.routineType;
+    editId = props.editData?.id;
+  } else if (isCroissanceFormProps(props)) {
+    editId = props.editData?.id;
+  } else if (isContentSheetProps(props)) {
+    subtype = props.tipId;
+  }
+  return `${props.ownerId}:${props.formType}:${subtype}:${editId ?? 'new'}`;
+}
+
+// Repli affiché à la place d'un formulaire qui a planté : la feuille reste
+// fermable, le reste de l'app n'est pas touché.
+function FormCrashFallback({ onClose }: { onClose: () => void }) {
+  return (
+    <View style={fallbackStyles.container} accessibilityRole="alert">
+      <Text style={fallbackStyles.title}>Ce formulaire n&apos;a pas pu s&apos;afficher</Text>
+      <Text style={fallbackStyles.message}>
+        L&apos;équipe a été notifiée. Vous pouvez fermer cette fenêtre et réessayer.
+      </Text>
+      <Pressable
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Fermer"
+        style={fallbackStyles.button}
+      >
+        <Text style={fallbackStyles.buttonText}>Fermer</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const fallbackStyles = StyleSheet.create({
+  container: { padding: 24, alignItems: 'center', gap: 12 },
+  title: { fontSize: 16, fontWeight: '700', color: '#991b1b', textAlign: 'center' },
+  message: { fontSize: 14, color: '#7f1d1d', textAlign: 'center' },
+  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: '#4A90E2' },
+  buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+});
+
+// Boundary d'un formulaire : un crash de rendu n'emporte que la feuille.
+function FormBoundary({
+  name,
+  onClose,
+  children,
+}: {
+  name: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <SafeBoundary name={`sheet.${name}`} fallback={<FormCrashFallback onClose={onClose} />}>
+      {children}
+    </SafeBoundary>
+  );
+}
 
 const SOINS_TYPE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   temperature: { label: "Température", color: eventColors.temperature.dark, icon: "temperature-half" },
@@ -77,33 +163,37 @@ function ContentSheetContent({ tipId, onClose }: { tipId: string; onClose: () =>
   );
 }
 
-export const GlobalSheetManager = () => {
+const GlobalSheetManagerInner = () => {
   const colorScheme = useColorScheme() ?? 'light';
-  const { isOpen, viewProps, closeSheet } = useSheet();
+  const { isOpen, viewProps } = useSheetState();
+  const { closeSheet } = useSheetActions();
   const sheetRef = useRef<BottomSheet>(null);
-  const [formKey, setFormKey] = useState(0);
+  const formKey = getSheetKey(viewProps);
+  const viewPropsRef = useRef(viewProps);
+  viewPropsRef.current = viewProps;
   const [isInPicker, setIsInPicker] = useState(false);
   const [activeRoutineSheet, setActiveRoutineSheet] = useState<"nap" | "night" | "bain" | "nez">("nap");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      // Reset states when opening
-      setFormKey((k) => k + 1);
+      // Reset states when opening (ou quand un autre formulaire/événement
+      // remplace la feuille ouverte : la clé change, le formulaire est remonté)
       setIsInPicker(false);
       setIsSubmitting(false);
       // Initialize routine sheet type from viewProps
-      if (viewProps && isFormSheetProps(viewProps) && isRoutinesFormProps(viewProps)) {
-        const rt = viewProps.routineType;
+      const current = viewPropsRef.current;
+      if (current && isFormSheetProps(current) && isRoutinesFormProps(current)) {
+        const rt = current.routineType;
         setActiveRoutineSheet(
-          rt === "bain" ? "bain" : rt === "nettoyage_nez" ? "nez" : (viewProps.sleepMode === "night" ? "night" : "nap")
+          rt === "bain" ? "bain" : rt === "nettoyage_nez" ? "nez" : (current.sleepMode === "night" ? "night" : "nap")
         );
       }
       sheetRef.current?.snapToIndex(1);
     } else {
       sheetRef.current?.close();
     }
-  }, [isOpen]);
+  }, [isOpen, formKey]);
 
   const handleFormStepChange = useCallback((inPicker: boolean) => {
     setIsInPicker(inPicker);
@@ -142,17 +232,19 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <SoinsForm
-            key={formKey}
-            initialType={soinsType}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="SoinsForm" onClose={closeSheet}>
+            <SoinsForm
+              key={formKey}
+              initialType={soinsType}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -176,17 +268,19 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <MealsForm
-            key={formKey}
-            initialType={mealType}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="MealsForm" onClose={closeSheet}>
+            <MealsForm
+              key={formKey}
+              initialType={mealType}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -210,16 +304,18 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <PumpingForm
-            key={formKey}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="PumpingForm" onClose={closeSheet}>
+            <PumpingForm
+              key={formKey}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -243,18 +339,20 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <ActivitiesForm
-            key={formKey}
-            initialType={activiteType}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-            promenadeEnCours={viewProps.promenadeEnCours}
-          />
+          <FormBoundary key={formKey} name="ActivitiesForm" onClose={closeSheet}>
+            <ActivitiesForm
+              key={formKey}
+              initialType={activiteType}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+              promenadeEnCours={viewProps.promenadeEnCours}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -283,17 +381,19 @@ export const GlobalSheetManager = () => {
           onCancel={handleCancel}
           onClose={handleCancel}
         >
-          <MilestonesForm
-            key={formKey}
-            initialType={jalonType}
-            onSuccess={handleSuccess}
-            onCancel={handleCancel}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="MilestonesForm" onClose={closeSheet}>
+            <MilestonesForm
+              key={formKey}
+              initialType={jalonType}
+              onSuccess={handleSuccess}
+              onCancel={handleCancel}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -322,17 +422,19 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <DiapersForm
-            key={formKey}
-            initialType={diapersType}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="DiapersForm" onClose={closeSheet}>
+            <DiapersForm
+              key={formKey}
+              initialType={diapersType}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -384,20 +486,22 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <RoutinesForm
-            key={formKey}
-            initialType={routineType}
-            initialSleepMode={sleepMode}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-            sommeilEnCours={sommeilEnCours}
-            onSheetTypeChange={setActiveRoutineSheet}
-          />
+          <FormBoundary key={formKey} name="RoutinesForm" onClose={closeSheet}>
+            <RoutinesForm
+              key={formKey}
+              initialType={routineType}
+              initialSleepMode={sleepMode}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+              sommeilEnCours={sommeilEnCours}
+              onSheetTypeChange={setActiveRoutineSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -421,16 +525,18 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <CroissanceForm
-            key={formKey}
-            onSuccess={handleSuccess}
-            onCancel={closeSheet}
-            isSubmitting={isSubmitting}
-            setIsSubmitting={setIsSubmitting}
-            onFormStepChange={handleFormStepChange}
-            editData={editData}
-            onDelete={closeSheet}
-          />
+          <FormBoundary key={formKey} name="CroissanceForm" onClose={closeSheet}>
+            <CroissanceForm
+              key={formKey}
+              onSuccess={handleSuccess}
+              onCancel={closeSheet}
+              isSubmitting={isSubmitting}
+              setIsSubmitting={setIsSubmitting}
+              onFormStepChange={handleFormStepChange}
+              editData={editData}
+              onDelete={closeSheet}
+            />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -452,7 +558,9 @@ export const GlobalSheetManager = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <ContentSheetContent tipId={viewProps.tipId} onClose={closeSheet} />
+          <FormBoundary key={formKey} name="ContentSheet" onClose={closeSheet}>
+            <ContentSheetContent tipId={viewProps.tipId} onClose={closeSheet} />
+          </FormBoundary>
         </FormBottomSheet>
       );
     }
@@ -467,5 +575,17 @@ export const GlobalSheetManager = () => {
       onCancel={closeSheet}
       onClose={closeSheet}
     />
+  );
+};
+
+// Le gestionnaire entier est isolé : un crash de la feuille ne doit pas faire
+// tomber l'app. La clé change à la fermeture, ce qui réarme la boundary après
+// un crash (la fermeture de la feuille reste possible via le bouton retour).
+export const GlobalSheetManager = () => {
+  const { viewProps } = useSheetState();
+  return (
+    <SafeBoundary key={viewProps ? 'open' : 'closed'} name="GlobalSheetManager" fallback={null}>
+      <GlobalSheetManagerInner />
+    </SafeBoundary>
   );
 };

@@ -122,7 +122,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   useEffect(() => {
     if (!childrenLoaded) return;
     if (children.length === 0 && pathname.includes("/baby")) {
-      console.log(
+      if (__DEV__) console.log(
         "[CustomDrawer] Tous les enfants masqués, redirection vers explore",
       );
       router.replace("/explore");

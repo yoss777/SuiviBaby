@@ -244,7 +244,6 @@ export default function PumpingScreen() {
   const [pendingEditData, setPendingEditData] = useState<PumpingEditData | null>(null);
 
   // États des données
-  const [groupedPompages, setGroupedPompages] = useState<PompageGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [pompagesLoaded, setPompagesLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -314,6 +313,39 @@ export default function PumpingScreen() {
   }, []);
 
   // Menu items pour le header
+  // Filtrage et regroupement par jour (dérivé : calculé au rendu, pas en effet)
+  const groupedPompages = useMemo<PompageGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = pompages.filter((pompage) => {
+      if (softDeletedIds.has(pompage.id)) return false;
+      const pompageDate = toDate(pompage.date);
+      pompageDate.setHours(0, 0, 0, 0);
+      const pompageTime = pompageDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return pompageTime === calDate.getTime();
+      }
+
+      switch (selectedFilter) {
+        case "today":
+          return pompageTime === todayTime;
+        case "past":
+          return pompageTime < todayTime;
+        case null:
+        default:
+          return true;
+      }
+    });
+
+    return groupPompagesByDay(filtered);
+  }, [pompages, selectedFilter, selectedDate, softDeletedIds]);
+
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: openAddModal },
     ...(groupedPompages.length > 0 || selectionMode ? [{
@@ -451,6 +483,64 @@ export default function PumpingScreen() {
     quantiteDroite: pompage.quantiteDroite,
   }), []);
 
+  const normalizeParam = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+
+  const stashReturnTo = useCallback(() => {
+    const target = normalizeParam(returnTo);
+    if (!target) return;
+    if (target === "home" || target === "chrono" || target === "journal") {
+      returnToRef.current = target;
+      return;
+    }
+    returnToRef.current = null;
+  }, [returnTo]);
+
+  useEffect(() => {
+    stashReturnTo();
+  }, [stashReturnTo]);
+
+  const maybeReturnTo = useCallback((targetOverride?: string | null) => {
+    const target = targetOverride ?? returnToRef.current;
+    returnToRef.current = null;
+    if (target === "home") {
+      router.replace("/baby/home");
+    } else if (target === "chrono") {
+      router.replace("/baby/chrono");
+    } else if (target === "journal") {
+      router.replace("/baby/chrono");
+    }
+  }, []);
+
+  const applyTodayFilter = useCallback(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(
+      today.getMonth() + 1,
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    setSelectedFilter("today");
+    setSelectedDate(null);
+    setShowCalendar(false);
+    setExpandedDays(new Set([todayKey]));
+  }, []);
+
+  const ensureTodayInRange = useCallback(() => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    setRangeEndDate((prev) => {
+      if (!prev) {
+        setDaysWindow(14);
+        return endOfToday;
+      }
+      if (prev >= endOfToday) return prev;
+      const diffDays = Math.ceil(
+        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      setDaysWindow((window) => window + diffDays);
+      return endOfToday;
+    });
+  }, []);
+
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
@@ -482,9 +572,11 @@ export default function PumpingScreen() {
     pendingEditData,
     returnTargetParam,
     openSheet,
-    // @ts-expect-error — ensureTodayInRange is a useCallback declared later in the component
+    navigation,
+    showToast,
+    stashReturnTo,
+    maybeReturnTo,
     ensureTodayInRange,
-    // @ts-expect-error — applyTodayFilter is a useCallback declared later in the component
     applyTodayFilter,
   ]);
 
@@ -592,7 +684,6 @@ export default function PumpingScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedPompages([]);
     setPompagesLoaded(false);
     setEmptyDelayDone(false);
     setDaysWindow(14);
@@ -775,40 +866,6 @@ export default function PumpingScreen() {
     };
   }, [activeChild?.id, daysWindow, rangeEndDate]);
 
-  // Filtrage et regroupement par jour
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    const filtered = pompages.filter((pompage) => {
-      if (softDeletedIds.has(pompage.id)) return false;
-      const pompageDate = toDate(pompage.date);
-      pompageDate.setHours(0, 0, 0, 0);
-      const pompageTime = pompageDate.getTime();
-
-      if (selectedDate) {
-        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
-        const calDate = new Date(calYear, calMonth - 1, calDay);
-        calDate.setHours(0, 0, 0, 0);
-        return pompageTime === calDate.getTime();
-      }
-
-      switch (selectedFilter) {
-        case "today":
-          return pompageTime === todayTime;
-        case "past":
-          return pompageTime < todayTime;
-        case null:
-        default:
-          return true;
-      }
-    });
-
-    const grouped = groupPompagesByDay(filtered);
-    setGroupedPompages(grouped);
-  }, [pompages, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
-
   // ============================================
   // HELPERS - CALENDAR
   // ============================================
@@ -846,17 +903,6 @@ export default function PumpingScreen() {
     setSelectedFilter(null);
     setShowCalendar(false);
     setExpandedDays(new Set([day.dateString]));
-  }, []);
-
-  const applyTodayFilter = useCallback(() => {
-    const today = new Date();
-    const todayKey = `${today.getFullYear()}-${String(
-      today.getMonth() + 1,
-    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    setSelectedFilter("today");
-    setSelectedDate(null);
-    setShowCalendar(false);
-    setExpandedDays(new Set([todayKey]));
   }, []);
 
   const clearSelectedDate = useCallback(() => {
@@ -1062,53 +1108,6 @@ export default function PumpingScreen() {
 
   const cancelDelete = useCallback(() => {
     setDeleteConfirm({ visible: false, pompage: null });
-  }, []);
-
-  const normalizeParam = (value: string | string[] | undefined) =>
-    Array.isArray(value) ? value[0] : value;
-
-  const stashReturnTo = useCallback(() => {
-    const target = normalizeParam(returnTo);
-    if (!target) return;
-    if (target === "home" || target === "chrono" || target === "journal") {
-      returnToRef.current = target;
-      return;
-    }
-    returnToRef.current = null;
-  }, [returnTo]);
-
-  useEffect(() => {
-    stashReturnTo();
-  }, [stashReturnTo]);
-
-  const maybeReturnTo = (targetOverride?: string | null) => {
-    const target = targetOverride ?? returnToRef.current;
-    returnToRef.current = null;
-    if (target === "home") {
-      router.replace("/baby/home");
-    } else if (target === "chrono") {
-      router.replace("/baby/chrono");
-    } else if (target === "journal") {
-      router.replace("/baby/chrono");
-    }
-  };
-
-  const ensureTodayInRange = useCallback(() => {
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-
-    setRangeEndDate((prev) => {
-      if (!prev) {
-        setDaysWindow(14);
-        return endOfToday;
-      }
-      if (prev >= endOfToday) return prev;
-      const diffDays = Math.ceil(
-        (endOfToday.getTime() - prev.getTime()) / (24 * 60 * 60 * 1000),
-      );
-      setDaysWindow((window) => window + diffDays);
-      return endOfToday;
-    });
   }, []);
 
   // ============================================

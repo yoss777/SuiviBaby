@@ -737,24 +737,29 @@ Décision 7.9 : pas de `minInstances` sur `validateAndCreateEvent` (~7,5 €/moi
 
 À faire hors code : déployer `storage.rules` à la main après fusion (chemin `thumbs/`) ; miniatures des photos existantes non générées (repli sur l'original) ; vérifications sur appareil listées dans la PR.
 
-## S8 — Robustesse React · app · ⏳
+## S8 — Robustesse React · app · ✅ (code, en attente de revue ECC)
 
-- [ ] **8.1** `ModalContext`, `ToastContext`, `SheetContext`,
+- [x] **8.1** `ModalContext`, `ToastContext`, `SheetContext`,
   `SuccessAnimationContext` : fonctions en `useCallback`, valeurs en
   `useMemo`, contexte « actions » séparé de l'état ; `AuthContext` lit
   `showAlert` par ref (plus de réabonnement, plus de boucle possible).
-- [ ] **8.2** `ErrorBoundary` : « Relancer » recharge vraiment l'app ;
+- [x] **8.2** `ErrorBoundary` : « Relancer » recharge vraiment l'app ;
   `SafeBoundary` autour du gestionnaire de feuilles et de chaque formulaire.
-- [ ] **8.3** `GlobalSheetManager` : clé dérivée du formulaire et de
+- [x] **8.3** `GlobalSheetManager` : clé dérivée du formulaire et de
   l'événement (plus de double montage ni d'état d'un autre événement) ;
   retirer les 10 `useEffect` de réinitialisation avec `eslint-disable`.
-- [ ] **8.4** Écrans de liste : état dérivé en `useMemo` au lieu de
+- [x] **8.4** Écrans de liste : état dérivé en `useMemo` au lieu de
   `useEffect` + `useState` ; dépendances déclarées avant usage (retrait des
   `@ts-expect-error`) — en attendant l'écran générique (S13).
-- [ ] **8.5** Voix : nettoyage au démontage, commande en attente annulée au
+- [x] **8.5** Voix : nettoyage au démontage, commande en attente annulée au
   changement d'enfant ; `useVoiceEventCreator` renommé en service.
-- [ ] **8.6** Divers : `useUserInfo` annulable, `useMinuteTick` dans le
+- [x] **8.6** Divers : `useUserInfo` annulable, `useMinuteTick` dans le
   journal, `BabyContext` dépend de `user?.uid`, `console.log` hors `__DEV__`.
+
+Notes S8 (2026-11-07) : `expo-updates` absent, donc « Relancer » remonte tout
+l'arbre React (clé) en production, `DevSettings.reload` en dev ; 8 effets de
+réinitialisation retirés (pas 10) ; `useVoiceEventCreator` devenu
+`services/voiceEventCreator.ts` ; 60 `console.log` passés sous `__DEV__`.
 
 **Revue ECC (S7 + S8)** : `performance-optimizer`, `react-reviewer`.
 

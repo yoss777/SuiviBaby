@@ -640,7 +640,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     return () => {
       cancelled = true;
     };
-  }, [children, loading, user]);
+  }, [children, loading, user?.uid]);
 
   const setActiveChild = useCallback((child: Child) => {
     setActiveChildState(child);
