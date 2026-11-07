@@ -9,7 +9,7 @@ const { assertVerifiedEmail, isValidDocId } = require("../shared/validation");
 const { CONTRIBUTOR_PERMISSIONS, assertJoinStillValid } = require("./join");
 
 const createShareInvitation = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "createShareInvitation"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -135,7 +135,7 @@ function randomNeutralId() {
  *  - Si l'access existe déjà, on marque juste l'invitation accepted (idempotent).
  */
 const acceptInvitationCF = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "acceptInvitationCF"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

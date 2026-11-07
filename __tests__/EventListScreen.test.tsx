@@ -68,7 +68,7 @@ jest.mock("@react-navigation/native", () => {
 });
 jest.mock("@react-navigation/elements", () => ({ HeaderBackButton: () => null }));
 let mockHeaderRight: React.ReactNode = null;
-jest.mock("@/app/(drawer)/_layout", () => ({
+jest.mock("@/contexts/HeaderContext", () => ({
   useHeaderLeft: () => ({ setHeaderLeft: jest.fn() }),
   useHeaderRight: () => ({
     setHeaderRight: (node: React.ReactNode) => {
@@ -285,5 +285,72 @@ describe("EventListScreen (fumée pompages / couches)", () => {
     settle();
     expect(screen.getByText("Aucune couche enregistrée")).toBeTruthy();
     expect(screen.getByLabelText("Ajouter une couche")).toBeTruthy();
+  });
+});
+
+// Écritures réservées au propriétaire/admin (règles Firestore + fonctions) :
+// un Proche lit tout mais ne modifie, ne sélectionne ni ne supprime rien.
+describe.each([
+  ["repas", mealsConfig, ["tetee", "biberon", "solide"], "Modifier ce repas", "Supprimer ce repas"],
+  ["pompages", pumpingConfig, ["pompage"], "Modifier ce pompage", "Supprimer ce pompage"],
+  ["couches", diapersConfig, ["miction", "selle"], "Modifier cette excrétion", "Supprimer cette excrétion"],
+] as const)("EventListScreen permissions (%s)", (_name, config, types, editLabel, deleteLabel) => {
+  const seed = () => {
+    types.forEach((type, index) => {
+      deliver(
+        type,
+        index === 0
+          ? [{ id: "e1", type, date: at(9), quantiteGauche: 10, quantiteDroite: 5, couleur: "jaune" }]
+          : [],
+      );
+    });
+    settle();
+  };
+
+  it.each(["viewer", "contributor"])("%s : lecture seule (ni balayage, ni édition, ni sélection)", (role) => {
+    mockRole = role;
+    const screen = render(<EventListScreen config={config as any} />);
+    seed();
+    expect(screen.getByTestId("swipe-disabled")).toBeTruthy();
+    expect(screen.queryByLabelText(deleteLabel)).toBeNull();
+    // Ligne visible mais non modifiable : pas d'action « Modifier ».
+    expect(screen.queryByLabelText(editLabel)).toBeNull();
+    expect(headerMenuItems().map((i) => i.label)).toEqual(["Ajouter"]);
+    expect(screen.queryByLabelText("Supprimer 0 élément")).toBeNull();
+    expect(mockOpenSheet).not.toHaveBeenCalled();
+  });
+
+  it("propriétaire : édition, sélection et suppression disponibles", () => {
+    mockRole = "owner";
+    const screen = render(<EventListScreen config={config as any} />);
+    seed();
+    expect(screen.getByTestId("swipe-enabled")).toBeTruthy();
+    expect(screen.getByLabelText(deleteLabel)).toBeTruthy();
+    expect(headerMenuItems().map((i) => i.label)).toContain("Sélectionner");
+    fireEvent(screen.getByTestId("event-list-body"), "layout", { nativeEvent: { layout: {} } });
+    fireEvent.press(screen.getByLabelText(editLabel));
+    act(() => {
+      jest.advanceTimersByTime(100); // InteractionManager
+    });
+    expect(mockOpenSheet).toHaveBeenCalled();
+  });
+
+  it("admin : mêmes droits que le propriétaire", () => {
+    mockRole = "admin";
+    const screen = render(<EventListScreen config={config as any} />);
+    seed();
+    expect(screen.getByTestId("swipe-enabled")).toBeTruthy();
+    expect(headerMenuItems().map((i) => i.label)).toContain("Sélectionner");
+  });
+
+  it("le rôle perdu en mode sélection ferme la sélection", () => {
+    mockRole = "owner";
+    const screen = render(<EventListScreen config={config as any} />);
+    seed();
+    act(() => headerMenuItems().find((i) => i.label === "Sélectionner")!.onPress());
+    expect(screen.getByLabelText("Supprimer 0 élément")).toBeTruthy();
+    mockRole = "viewer";
+    screen.rerender(<EventListScreen config={config as any} />);
+    expect(screen.queryByLabelText("Supprimer 0 élément")).toBeNull();
   });
 });

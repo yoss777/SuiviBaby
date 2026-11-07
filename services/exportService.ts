@@ -3,13 +3,7 @@ import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tem
 import { EventType, obtenirEvenements } from "./eventsService";
 import { getHiddenEventIds } from "./hiddenPhotosService";
 import { getExportEventTypes } from "./eventTypeSupport";
-
-function toDate(value: any): Date {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-}
+import { toDate } from "@/utils/date";
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("fr-FR", {

@@ -30,7 +30,7 @@ const TARGETS = [
   { collection: "webhook_logs", dateFields: ["processedAt"] },
   // Only the abandoned ones: the others are still being retried.
   { collection: "pending_assemblyai_deletes", dateFields: ["abandonedAt"], requireField: "abandonedAt" },
-  // Tombstones of deleted idempotent events: 30 days (IDEM_TOMBSTONE_RETENTION_MS in functions/index.js).
+  // Tombstones of deleted idempotent events: 30 days (IDEM_TOMBSTONE_RETENTION_MS in functions/src/events/idempotency.js).
   { collection: "deleted_idem", dateFields: ["deletedAt"], retentionMs: IDEM_RETENTION_MS },
 ];
 

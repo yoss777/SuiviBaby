@@ -1,6 +1,23 @@
 // Configuration d'un écran de liste d'événements (repas, pompages, couches).
 // Les configs sont des constantes de module : chaque écran ne fournit que ce
 // qui lui est propre (lignes, résumé du jour, textes, réglages historiques).
+//
+// Réglages historiques (différences héritées des anciens écrans, conservées pour
+// ne pas changer le comportement). À trancher avec le produit AVANT de migrer
+// d'autres écrans ; ne pas ajouter de nouveau drapeau sans cette décision :
+// - loadMore.jumpOnManual : « Voir plus » saute au prochain événement (pompages,
+//   couches) ou ajoute 14 jours (repas) ;
+// - loadMore.jumpWindow : après un saut, "extend" (fenêtre élargie, fin fixe)
+//   ou "reset" (retour à 14 jours terminés sur l'événement, repas) ;
+// - jumpToLatestOnMount : fenêtre ancrée au dernier événement (pompages seuls)
+//   ou à aujourd'hui (repas, couches) ;
+// - filters.resetToTodayOnFocus : retour au filtre « aujourd'hui » (couches seules) ;
+// - navigation.backUsesStashedReturn : cible de retour mémorisée (couches seules) ;
+// - permissions : les trois écrans sont en "manage" (écritures propriétaire/admin) ;
+// - texts.batchDeleteHaptic et texts.modalTone : retour haptique et style de la
+//   confirmation de suppression groupée (repas seuls : haptique + style carte) ;
+// - layout.paddedFilterRow, calendarButtonInset, growList et skeleton : mise en
+//   page propre à chaque écran d'origine.
 import type React from "react";
 
 import type { getNeutralColors } from "@/constants/dashboardColors";
@@ -71,7 +88,10 @@ export interface EventListConfig<T extends BaseEvent, S extends object = object>
     /** Le retour utilise aussi la cible mémorisée (returnToRef), pas seulement le paramètre. */
     backUsesStashedReturn: boolean;
   };
-  /** "all" : tout le monde peut supprimer ; "manage" : propriétaire/admin seulement (balayage). */
+  /**
+   * "manage" : modifier, sélectionner et supprimer réservés au propriétaire/admin
+   * (règles Firestore) ; "all" : sans restriction côté app (plus utilisé).
+   */
   permissions: "all" | "manage";
 
   accent: string;

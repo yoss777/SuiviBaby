@@ -1,6 +1,6 @@
 const admin = require("firebase-admin");
 const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("../../lib/userPurge");
-const { revokeAppleToken } = require("./apple");
+const { revokeAppleToken } = require("../shared/apple");
 const { deleteChildDataBatched, transferOwnership } = require("./childData");
 const { CONSENT_RETENTION_YEARS } = require("./consent");
 const { BATCH_LIMIT, deleteDocsByFieldBatched, updateDocsByFieldBatched } = require("../shared/batch");

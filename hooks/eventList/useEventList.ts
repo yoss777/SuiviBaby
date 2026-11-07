@@ -1,5 +1,5 @@
 // Assemble les hooks d'un écran de liste d'événements à partir de sa config.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { BaseEvent, EventListConfig } from "@/components/eventList/types";
 import { Colors } from "@/constants/theme";
@@ -31,7 +31,7 @@ export function useEventList<T extends BaseEvent, S extends object>(
   const childId = activeChild?.id;
   const colorScheme = useColorScheme() ?? "light";
   const { showToast } = useToast();
-  const batch = useBatchSelect();
+  const rawBatch = useBatchSelect();
   const { swipeableRef, triggerHint } = useSwipeHint();
 
   // Rôle lu seulement pour les écrans qui en dépendent (pas d'écouteur sinon).
@@ -40,6 +40,21 @@ export function useEventList<T extends BaseEvent, S extends object>(
     firebaseUser?.uid,
   );
   const canManage = config.permissions === "all" || canManageEvents(permissions.role);
+
+  // Sélection groupée réservée à qui peut supprimer : un Proche (lecture seule)
+  // ne peut ni entrer en mode sélection, ni y rester si son rôle change.
+  const { exitSelectionMode } = rawBatch;
+  useEffect(() => {
+    if (!canManage) exitSelectionMode();
+  }, [canManage, exitSelectionMode]);
+  const batch = useMemo(
+    () => ({
+      ...rawBatch,
+      selectionMode: canManage && rawBatch.selectionMode,
+      toggleSelectionMode: canManage ? rawBatch.toggleSelectionMode : () => {},
+    }),
+    [rawBatch, canManage],
+  );
 
   const window = useEventWindow({
     childId,
@@ -69,6 +84,17 @@ export function useEventList<T extends BaseEvent, S extends object>(
     showToast,
     onBatchStart: batch.exitSelectionMode,
   });
+  const { requestDelete: rawRequestDelete, requestBatchDelete: rawRequestBatchDelete } = softDelete;
+  // Garde côté client en plus du balayage : les règles Firestore refuseraient
+  // de toute façon l'écriture d'un Proche.
+  const guardedSoftDelete = useMemo(
+    () => ({
+      ...softDelete,
+      requestDelete: canManage ? rawRequestDelete : () => {},
+      requestBatchDelete: canManage ? rawRequestBatchDelete : () => {},
+    }),
+    [softDelete, canManage, rawRequestDelete, rawRequestBatchDelete],
+  );
 
   const groups = useDayGroups<T, S>({
     items: data.items,
@@ -104,6 +130,7 @@ export function useEventList<T extends BaseEvent, S extends object>(
     calendarButtonInset: config.layout.calendarButtonInset,
     onAdd,
     hasGroups: groups.length > 0,
+    canSelect: canManage,
     selectionMode: batch.selectionMode,
     toggleSelectionMode: batch.toggleSelectionMode,
     isSheetOpen: sheetFlow.isOpen,
@@ -150,7 +177,7 @@ export function useEventList<T extends BaseEvent, S extends object>(
     window,
     data,
     filters,
-    softDelete,
+    softDelete: guardedSoftDelete,
     groups,
     sheetFlow,
     loadMoreHidden,

@@ -22,7 +22,7 @@ import {
   View,
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import { isValidDate } from "@/utils/date";
+import { getDateTime, isValidDate } from "@/utils/date";
 
 // ============================================
 // TYPES
@@ -67,22 +67,13 @@ export interface RecentEventsListProps {
   getDayLabel: (date: Date) => string;
 }
 
-function getEventTimestamp(value: any): number {
-  if (!value) return 0;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toDate === "function") return value.toDate().getTime();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  const parsed = Date.parse(String(value));
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
 function getFallbackEventKey(event: RecentEvent): string {
   return [
     event.type,
     event.typeActivite ?? "",
     event.typeJalon ?? "",
     event.titre ?? "",
-    getEventTimestamp(event.heureDebut ?? event.date),
+    getDateTime(event.heureDebut ?? event.date),
   ].join(":");
 }
 

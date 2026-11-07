@@ -7,7 +7,7 @@ const { checkChildAccess } = require("../shared/access");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
 
 const getUsageQuotaStatus = onCall(
-  withAppCheck({ region: "europe-west1", concurrency: 50 }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }, "getUsageQuotaStatus"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -44,7 +44,7 @@ const getUsageQuotaStatus = onCall(
 );
 
 const consumeUsageQuota = onCall(
-  withAppCheck({ region: "europe-west1", concurrency: 50 }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }, "consumeUsageQuota"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

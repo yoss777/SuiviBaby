@@ -27,7 +27,7 @@ async function sendEmailOrThrow(resend, payload) {
  * Obligatoire pour conformité RGPD (Apple/Google Store requirement).
  */
 const deleteUserAccount = onCall(
-  withAppCheck({ region: "europe-west1", timeoutSeconds: 300, memory: "512MiB", secrets: APPLE_SECRETS }),
+  withAppCheck({ region: "europe-west1", timeoutSeconds: 300, memory: "512MiB", secrets: APPLE_SECRETS }, "deleteUserAccount"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -183,7 +183,7 @@ async function deliverDeletionRequestEmail(db, uid, deletionDateIso) {
  * keeps its date.
  */
 const requestAccountDeletion = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }, "requestAccountDeletion"),
   async (request) => {
     monitorAppCheck(request, "requestAccountDeletion");
     if (!request.auth) {
@@ -245,7 +245,7 @@ const requestAccountDeletion = onCall(
  * period. Input: {}. Output: { success: true }.
  */
 const cancelAccountDeletion = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "cancelAccountDeletion"),
   async (request) => {
     monitorAppCheck(request, "cancelAccountDeletion");
     if (!request.auth) {
@@ -270,7 +270,7 @@ const cancelAccountDeletion = onCall(
  * Appelé côté client après que l'utilisateur a programmé la suppression.
  */
 const sendDeletionRequestEmail = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }, "sendDeletionRequestEmail"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

@@ -14,6 +14,22 @@ const path = require("path");
 
 const FIXTURE = path.join(__dirname, "exportsSnapshot.expected.json");
 
+// Options passées à onCall par fonction exportée. Le manifest de l'endpoint
+// n'expose pas enforceAppCheck / consumeAppCheckToken / cors : on enveloppe
+// onCall (vrai SDK en dessous) pour les enregistrer.
+const mockCallableOptions = new WeakMap();
+jest.mock("firebase-functions/v2/https", () => {
+  const actual = jest.requireActual("firebase-functions/v2/https");
+  return {
+    ...actual,
+    onCall: (opts, handler) => {
+      const fn = actual.onCall(opts, handler);
+      mockCallableOptions.set(fn, opts || {});
+      return fn;
+    },
+  };
+});
+
 /** Endpoint manifest of each export, without unset (null) options. */
 function snapshotExports() {
   const fns = require("../index");
@@ -24,6 +40,7 @@ function snapshotExports() {
       out[name] = { nonTrigger: typeof fn };
       continue;
     }
+    const opts = mockCallableOptions.get(fn);
     out[name] = JSON.parse(
       JSON.stringify(fn.__endpoint, (key, value) => {
         if (value === null) return undefined;
@@ -35,16 +52,42 @@ function snapshotExports() {
         return value;
       }),
     );
+    if (opts) {
+      out[name].callableOptions = {
+        enforceAppCheck: opts.enforceAppCheck === true,
+        consumeAppCheckToken: opts.consumeAppCheckToken === true,
+        cors: opts.cors === undefined ? "default" : opts.cors,
+      };
+    }
   }
   return out;
+}
+
+/** Charge l'entry point dans un registre isolé, avec l'environnement donné. */
+function snapshotWithEnv(env) {
+  const keys = ["APPCHECK_ENFORCE", "APPCHECK_ENFORCE_FUNCTIONS"];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  keys.forEach((k) => Reflect.deleteProperty(process.env, k));
+  Object.assign(process.env, env);
+  try {
+    let out;
+    jest.isolateModules(() => {
+      out = snapshotExports();
+    });
+    return out;
+  } finally {
+    keys.forEach((k) => {
+      if (saved[k] === undefined) Reflect.deleteProperty(process.env, k);
+      else process.env[k] = saved[k];
+    });
+  }
 }
 
 describe("exports snapshot (deployed function names, triggers, options)", () => {
   let actual;
   beforeAll(() => {
-    jest.isolateModules(() => {
-      actual = snapshotExports();
-    });
+    // Environnement par défaut : surveillance App Check seule.
+    actual = snapshotWithEnv({});
   });
 
   it("matches the committed list exactly", () => {
@@ -62,5 +105,25 @@ describe("exports snapshot (deployed function names, triggers, options)", () => 
       .filter(([, e]) => !e.region.includes("europe-west1"))
       .map(([n]) => n);
     expect(regions).toEqual(["mirrorLegacyPhotoDelete", "mirrorLegacyPhotoUpload"]);
+  });
+
+  it("par défaut, aucun callable n'impose App Check (surveillance seule)", () => {
+    const callables = Object.entries(actual).filter(([, e]) => e.callableOptions);
+    expect(callables.length).toBeGreaterThan(0);
+    expect(callables.filter(([, e]) => e.callableOptions.enforceAppCheck)).toEqual([]);
+  });
+
+  it("APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio : seule cette fonction impose App Check", () => {
+    const partial = snapshotWithEnv({ APPCHECK_ENFORCE_FUNCTIONS: "transcribeAudio" });
+    const enforced = Object.entries(partial)
+      .filter(([, e]) => e.callableOptions && e.callableOptions.enforceAppCheck)
+      .map(([n]) => n);
+    expect(enforced).toEqual(["transcribeAudio"]);
+  });
+
+  it("APPCHECK_ENFORCE=true : tous les callables imposent App Check", () => {
+    const all = snapshotWithEnv({ APPCHECK_ENFORCE: "true" });
+    const callables = Object.entries(all).filter(([, e]) => e.callableOptions);
+    expect(callables.filter(([, e]) => !e.callableOptions.enforceAppCheck)).toEqual([]);
   });
 });

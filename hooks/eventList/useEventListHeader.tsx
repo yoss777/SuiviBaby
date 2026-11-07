@@ -10,7 +10,7 @@ import { BackHandler, Pressable, StyleSheet, View } from "react-native";
 
 import { HeaderMenu, type HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { Colors } from "@/constants/theme";
-import { useHeaderLeft, useHeaderRight } from "@/app/(drawer)/_layout";
+import { useHeaderLeft, useHeaderRight } from "@/contexts/HeaderContext";
 
 import { navigateToReturnTarget } from "./useEventSheetFlow";
 
@@ -23,6 +23,8 @@ type Options = {
   onAdd: () => void;
   /** « Sélectionner » n'apparaît que s'il y a des groupes (ou en mode sélection). */
   hasGroups: boolean;
+  /** « Sélectionner » (suppression groupée) : propriétaire/admin seulement. */
+  canSelect: boolean;
   selectionMode: boolean;
   toggleSelectionMode: () => void;
   isSheetOpen: boolean;
@@ -40,6 +42,7 @@ export function useEventListHeader({
   calendarButtonInset,
   onAdd,
   hasGroups,
+  canSelect,
   selectionMode,
   toggleSelectionMode,
   isSheetOpen,
@@ -55,7 +58,7 @@ export function useEventListHeader({
   const menuItems: HeaderMenuItem[] = useMemo(
     () => [
       { label: "Ajouter", icon: "add-circle-outline", onPress: onAdd },
-      ...(hasGroups || selectionMode
+      ...(canSelect && (hasGroups || selectionMode)
         ? [
             {
               label: selectionMode ? "Annuler sélection" : "Sélectionner",
@@ -67,7 +70,7 @@ export function useEventListHeader({
           ]
         : []),
     ],
-    [onAdd, selectionMode, toggleSelectionMode, hasGroups],
+    [onAdd, selectionMode, toggleSelectionMode, hasGroups, canSelect],
   );
 
   // Définir les boutons du header (calendrier + menu)

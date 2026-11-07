@@ -194,7 +194,7 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   loadMore: { jumpOnManual: true, jumpWindow: "extend" },
   filters: { resetToTodayOnFocus: true },
   navigation: { backUsesStashedReturn: true },
-  permissions: "all",
+  permissions: "manage",
 
   accent,
   expandColors: (nc, colorScheme) => ({ text: Colors[colorScheme].tint, chevron: nc.textMuted }),

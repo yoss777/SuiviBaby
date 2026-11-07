@@ -30,7 +30,7 @@ import { useCalendarDay } from "@/hooks/useMinuteTick";
 import { olderSliceBounds, windowStart } from "@/utils/chronoWindow";
 import { ecouterEvenements, obtenirEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
-import { isValidDate, toDate } from "@/utils/date";
+import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -249,7 +249,7 @@ function buildSections(events: Event[]): TimelineSection[] {
       key,
       title: formatDayLabel(value.date),
       data: value.items.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     }));
 }
@@ -1639,7 +1639,7 @@ export default function ChronoScreen() {
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
       [...(merged as Event[])].sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );

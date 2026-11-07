@@ -2,9 +2,7 @@ import { useNetInfo } from "@react-native-community/netinfo";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Drawer } from "expo-router/drawer";
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
 } from "react";
@@ -24,29 +22,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { useBaby } from "@/contexts/BabyContext";
+import {
+  HeaderLeftContext,
+  HeaderRightContext,
+  useHeaderLeft,
+  useHeaderRight,
+} from "@/contexts/HeaderContext";
 import { DeletionRequestNotifier } from "@/components/suivibaby/DeletionRequestNotifier";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { FAILED_WRITES_READ_ERROR, useFailedWrites } from "@/hooks/useFailedWrites";
 import { onExhaustedChange, onQueueChange } from "@/services/offlineQueueService";
 
-// Contexte pour gérer le headerRight dynamiquement
-const HeaderRightContext = createContext<{
-  setHeaderRight: (
-    component: React.ReactElement | null,
-    ownerId?: string,
-  ) => void;
-}>({ setHeaderRight: () => {} });
-
-// Contexte pour gérer le headerLeft dynamiquement
-const HeaderLeftContext = createContext<{
-  setHeaderLeft: (
-    component: React.ReactElement | null,
-    ownerId?: string,
-  ) => void;
-}>({ setHeaderLeft: () => {} });
-
-export const useHeaderRight = () => useContext(HeaderRightContext);
-export const useHeaderLeft = () => useContext(HeaderLeftContext);
+// Contextes du header : définis dans contexts/HeaderContext.tsx, ré-exportés ici
+// pour les écrans qui importent encore depuis le layout.
+export { useHeaderLeft, useHeaderRight };
 
 function BabyHeaderTitle() {
   const { activeChild, children, setActiveChild } = useBaby();

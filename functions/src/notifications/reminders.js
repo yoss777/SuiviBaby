@@ -1,7 +1,7 @@
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const reminderLib = require("../../lib/reminders");
-const { hasValidHealthConsent } = require("../deletion/consent");
+const { hasValidHealthConsent } = require("../shared/consent");
 const { JOB_USER_CONCURRENCY, usersWithPendingDeletion } = require("./eligibility");
 const { logExpireAt } = require("../shared/logging");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");

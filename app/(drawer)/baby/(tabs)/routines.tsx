@@ -65,7 +65,7 @@ import {
   RoutinesEditData,
   SleepMode,
 } from "@/components/forms/RoutinesForm";
-import { isValidDate, toDate } from "@/utils/date";
+import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
@@ -317,7 +317,7 @@ export default function RoutinesScreen() {
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
       [...(merged as RoutineEvent[])].sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );
@@ -453,7 +453,7 @@ export default function RoutinesScreen() {
     const grouped = Object.entries(groups)
       .map(([date, items]) => {
         const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+          (a, b) => getDateTime(b.date) - getDateTime(a.date),
         );
         const counts = {
           sommeil: 0,

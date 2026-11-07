@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { modifierEvenementOptimistic } from "@/services/eventsService";
-import { toDate } from "@/utils/date";
+import { isValidDate, toDate } from "@/utils/date";
 
 type TimedEvent = {
   id?: string;
@@ -29,19 +29,19 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       if (!childId || !event?.id) return;
       const start = toDate(event.heureDebut);
       const heureFin = new Date();
-      const elapsedMs = heureFin.getTime() - start.getTime();
+      // Début absent ou invalide : on arrête quand même le chrono, sans durée
+      // (jamais de NaN écrit dans Firestore).
+      const hasStart = isValidDate(start);
+      const elapsedMs = hasStart ? heureFin.getTime() - start.getTime() : 0;
       const elapsedMinutes = Math.round(elapsedMs / 60000);
       const isUnderOneMinute = elapsedMs < 60_000;
-      const duree = Math.max(
-        1,
-        elapsedMinutes,
-      );
+      const duree = hasStart ? Math.max(1, elapsedMinutes) : undefined;
       const snapshot = event;
 
       modifierEvenementOptimistic(
         childId,
         event.id,
-        { heureFin, duree },
+        duree === undefined ? { heureFin } : { heureFin, duree },
         snapshot,
       );
 
@@ -55,7 +55,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
           childId,
           event.id!,
           { heureFin: null, duree: null } as any,
-          { ...snapshot, heureFin, duree },
+          duree === undefined ? { ...snapshot, heureFin } : { ...snapshot, heureFin, duree },
         );
       }, undefined, 5000);
     },

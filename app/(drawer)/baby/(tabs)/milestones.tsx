@@ -60,7 +60,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
-import { toDate } from "@/utils/date";
+import { getDateTime, toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -515,7 +515,7 @@ export default function MilestonesScreen() {
 
     sorted.forEach((group) => {
       group.events.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime()
+        (a, b) => getDateTime(b.date) - getDateTime(a.date)
       );
     });
 

@@ -156,7 +156,7 @@ export const pumpingConfig: EventListConfig<Pompage, PompageSummary> = {
   loadMore: { jumpOnManual: true, jumpWindow: "extend" },
   filters: { resetToTodayOnFocus: false },
   navigation: { backUsesStashedReturn: false },
-  permissions: "all",
+  permissions: "manage",
 
   accent,
   expandColors: () => ({ text: accent, chevron: accent }),

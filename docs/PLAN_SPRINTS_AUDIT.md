@@ -1034,7 +1034,41 @@ Notes S13 (2026-11-07) :
   `docs/archive/`. Erreurs repérées dans `FIREBASE_MONITORING.md` et
   `STORE_SUBMISSION.md` à corriger.
 
-**Revue ECC (S13)** : `architect`, `code-reviewer`.
+**Revue ECC (S13)** : `architect`, `code-reviewer`. Corrigé (2026-11-07) :
+- App Check : bascule partielle possible. `withAppCheck(options, nom)` lit
+  `APPCHECK_ENFORCE_FUNCTIONS` (noms d'export séparés par des virgules) en plus
+  de `APPCHECK_ENFORCE=true` (toutes) ; sans variable, surveillance seule. ADR
+  0002 mis à jour (la variable doit rester dans `functions/.env.<projet>`, la CI
+  redéploie tout). Le test d'exports figé enregistre désormais
+  `enforceAppCheck`, `consumeAppCheckToken` et `cors` de chaque callable.
+- Écran générique : « Voir plus » en mode `extend` gardait la fin de fenêtre
+  sur l'événement trouvé (les jours récents sortaient de l'écouteur, comme dans
+  les anciens écrans) ; la fin reste désormais fixe et seule la longueur
+  grandit. Échec de `getNextEventDateBefore` : le chargement est libéré.
+  Pompages et couches passent en `permissions: "manage"` ; édition, sélection
+  groupée et suppression sont réservées au propriétaire/admin (un Proche lit
+  tout). Drapeaux historiques de `components/eventList/types.ts` listés, à
+  trancher avec le produit avant de migrer d'autres écrans.
+- Dates : tris par `getDateTime` (plus de NaN avec `toDate(null)`), groupes et
+  filtres du jour ignorent les dates invalides, arrêt de chrono sans début,
+  doublons `toDate`/`toMillis` retirés (dont celui d'`exportService`, bogue
+  `seconds: 0`).
+- Données : `babyService` supprimé ; écritures d'accès (`grantChildAccess`,
+  `revokeChildAccess`, `updateChildAccess`, `createOwnerAccess`) déplacées dans
+  `services/accessRepository.ts` (lectures typées du document d'accès
+  ajoutées) ; `user_preferences` regroupé dans `userPreferencesService`. Règle
+  ESLint étendue (sous-chemins, SDK natif, `require`/`import()` dynamiques),
+  testée.
+- Divers : contextes d'en-tête dans `contexts/HeaderContext.tsx` ; `functions/`
+  : `revokeAppleToken` et `hasValidHealthConsent` dans `src/shared/` ;
+  commentaires périmés et RUNBOOK §2.4 / §6 corrigés ; test de connexion rendu
+  déterministe (premier rendu à froid hors du délai de 5 s).
+Reste : migrer les écrans restants vers l'écran générique (soins, routines,
+activités…) après décision produit sur les drapeaux historiques ; le mode
+`reset` des repas sort aussi les jours récents de la fenêtre (comportement
+historique conservé) ; le bouton « Ajouter » reste visible pour un Proche (les
+règles refusent l'écriture) ; `React.memo` de la ligne non fait (la ligne est un
+rendu local, pas un composant) ; décision `deviceInfo.appCheck` (ADR 0002).
 
 ## Correspondance audit → sprints
 

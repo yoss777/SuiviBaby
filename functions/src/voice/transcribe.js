@@ -22,7 +22,7 @@ const transcribeAudio = onCall(
     // don't pay a 3-8s cold start on Node 22. ~5€/month at current volume.
     concurrency: 30,
     minInstances: 1,
-  }),
+  }, "transcribeAudio"),
   async (request) => {
     // 1. Auth check
     if (!request.auth) {

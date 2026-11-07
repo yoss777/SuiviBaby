@@ -125,9 +125,75 @@ describe("useEventWindow", () => {
     const endOfRange = new Date(2026, 10, 7, 23, 59, 59, 999);
     const expected = Math.floor((endOfRange.getTime() - new Date(2026, 9, 1).getTime()) / DAY) + 1;
     expect(result.current.daysWindow).toBe(expected);
-    expect(result.current.rangeEndDate).toEqual(next);
+    // Fin de fenêtre inchangée : les jours récents restent écoutés.
+    expect(result.current.rangeEndDate).toBeNull();
     expect(result.current.isLoadingMore).toBe(true);
     expect(result.current.autoLoadMore).toBe(true);
+    const { startOfRange, endOfRange: newEnd } = computeRange(
+      result.current.rangeEndDate,
+      result.current.daysWindow,
+    );
+    expect(newEnd).toEqual(endOfRange);
+    expect(startOfRange.getTime()).toBeLessThanOrEqual(next.getTime());
+  });
+
+  it("« Voir plus » en extend : la fenêtre [J-13, J] devient [prochain, J], pas [prochain-N, prochain]", async () => {
+    // Régression : l'ancien écran déplaçait la fin sur l'événement (J-30) et la
+    // fenêtre [J-60, J-30] sortait les 30 derniers jours de l'écouteur.
+    const J = new Date(2026, 10, 7, 23, 59, 59, 999);
+    const next = new Date(2026, 9, 8, 10, 0); // J-30
+    mockGetNext.mockResolvedValue(next);
+    const { result } = renderHook(() => useHarness({ jumpOnManual: true, jumpWindow: "extend" }));
+    await flush();
+    await act(async () => {
+      await result.current.loadMoreStep(false);
+    });
+    const { startOfRange, endOfRange } = computeRange(
+      result.current.rangeEndDate,
+      result.current.daysWindow,
+    );
+    expect(endOfRange).toEqual(J);
+    expect(startOfRange.getTime()).toBeLessThanOrEqual(new Date(2026, 9, 8).getTime());
+    // Dernier jour récent et jour de l'événement sont tous deux dans l'écouteur.
+    expect(startOfRange.getTime()).toBeGreaterThan(new Date(2026, 9, 7).getTime() - 1);
+  });
+
+  it("« Voir plus » en extend avec une fin de fenêtre déjà décalée : la fin reste", async () => {
+    const last = new Date(2026, 9, 20, 10, 0);
+    mockGetNext.mockResolvedValueOnce(last);
+    const { result } = renderHook(() =>
+      useHarness({ jumpOnManual: true, jumpWindow: "extend", jumpToLatestOnMount: true }),
+    );
+    await flush();
+    expect(result.current.rangeEndDate).toEqual(last);
+
+    const older = new Date(2026, 8, 1, 10, 0);
+    mockGetNext.mockResolvedValueOnce(older);
+    await act(async () => {
+      await result.current.loadMoreStep(false);
+    });
+    expect(result.current.rangeEndDate).toEqual(last);
+    const { startOfRange } = computeRange(result.current.rangeEndDate, result.current.daysWindow);
+    expect(startOfRange.getTime()).toBeLessThanOrEqual(older.getTime());
+  });
+
+  it("« Voir plus » : si la recherche du prochain événement échoue, le chargement est libéré", async () => {
+    mockGetNext.mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useHarness({ jumpOnManual: true, jumpWindow: "extend" }));
+    await flush();
+    await act(async () => {
+      await result.current.loadMoreStep(false);
+    });
+    expect(result.current.isLoadingMore).toBe(false);
+    expect(result.current.pendingLoadMoreRef.current).toBe(0);
+    expect(result.current.autoLoadMore).toBe(false);
+    expect(result.current.daysWindow).toBe(14);
+    // L'utilisateur peut réessayer.
+    mockGetNext.mockResolvedValue(new Date(2026, 9, 1));
+    await act(async () => {
+      await result.current.loadMoreStep(false);
+    });
+    expect(result.current.daysWindow).toBeGreaterThan(14);
   });
 
   it("« Voir plus » manuel sans jumpOnManual (repas) : +14 jours, pas de requête", async () => {

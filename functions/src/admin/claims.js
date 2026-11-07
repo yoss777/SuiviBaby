@@ -36,7 +36,7 @@ async function anyAdminExists() {
 }
 
 const setAdminClaim = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["INITIAL_ADMIN_EMAIL"] }),
+  withAppCheck({ region: "europe-west1", secrets: ["INITIAL_ADMIN_EMAIL"] }, "setAdminClaim"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

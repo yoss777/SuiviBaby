@@ -491,7 +491,7 @@ export default function HomeDashboard() {
 
     const filtered = merged
       .filter((event) => !softDeletedIds.has(event.id))
-      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
     return filtered;
   }, [
     data.biberons,
@@ -616,7 +616,7 @@ export default function HomeDashboard() {
   const todayMoodEvent = useMemo(() => {
     const moods = todayJalons
       .filter((item) => item.typeJalon === "humeur")
-      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
     return moods[0] ?? null;
   }, [todayJalons]);
 

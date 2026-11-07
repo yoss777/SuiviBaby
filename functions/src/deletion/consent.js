@@ -20,7 +20,7 @@ const CONSENT_RETENTION_YEARS = 5;
  * reads to gate access (clients cannot write that field, see firestore.rules).
  */
 const recordHealthConsent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "recordHealthConsent"),
   async (request) => {
     monitorAppCheck(request, "recordHealthConsent");
     if (!request.auth) {
@@ -76,7 +76,7 @@ const recordHealthConsent = onCall(
  * version }. Scheduled jobs (reminders, recaps) stop processing the user.
  */
 const withdrawHealthConsent = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "withdrawHealthConsent"),
   async (request) => {
     monitorAppCheck(request, "withdrawHealthConsent");
     if (!request.auth) {
@@ -107,21 +107,8 @@ const withdrawHealthConsent = onCall(
   }
 );
 
-// ============================================
-// REMINDER PUSH NOTIFICATIONS (Scheduled)
-// ============================================
-
-/**
- * Health data consent gate for scheduled processing: any version counts as
- * long as `granted` is true (consents given by app 1.0.x stay valid).
- */
-function hasValidHealthConsent(prefs) {
-  return prefs?.healthDataConsent?.granted === true;
-}
-
 module.exports = {
   CONSENT_RETENTION_YEARS,
-  hasValidHealthConsent,
   recordHealthConsent,
   withdrawHealthConsent,
 };

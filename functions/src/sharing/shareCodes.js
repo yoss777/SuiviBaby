@@ -60,7 +60,7 @@ const cleanupExpiredShareCodes = onSchedule("every 24 hours", async () => {
  * Retourne le childId/childName pour navigation client immédiate.
  */
 const redeemShareCodeCF = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "redeemShareCodeCF"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

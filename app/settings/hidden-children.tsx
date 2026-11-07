@@ -25,9 +25,9 @@ import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   afficherEnfant,
+  listenToUserPreferencesDoc,
 } from "@/services/userPreferencesService";
 import { getChildDoc } from "@/services/childRepository";
-import { listenToUserPreferencesDoc } from "@/services/userRepository";
 import { getAccessibleChildIds } from "@/utils/permissions";
 
 const { width } = Dimensions.get("window");

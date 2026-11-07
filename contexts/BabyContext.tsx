@@ -1,7 +1,11 @@
-import { obtenirPreferences, type ReminderPreferences } from '@/services/userPreferencesService';
+import {
+  listenToUserPreferencesDoc,
+  mergeUserPreferences,
+  obtenirPreferences,
+  type ReminderPreferences,
+} from '@/services/userPreferencesService';
 import { listenToUserAccessIndex } from '@/services/accessRepository';
 import { listenToChildDoc } from '@/services/childRepository';
-import { listenToUserPreferencesDoc, mergeUserPreferences } from '@/services/userRepository';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';

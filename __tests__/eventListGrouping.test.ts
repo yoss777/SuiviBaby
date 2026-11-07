@@ -72,6 +72,49 @@ describe("filterByDay", () => {
   });
 });
 
+describe("dates invalides ou absentes", () => {
+  const bad = [
+    { id: "n", date: null },
+    { id: "u", date: undefined },
+    { id: "x", date: "pas une date" },
+    { id: "o", date: {} },
+  ];
+  const good = { id: "g", date: at(7, 9) };
+
+  it("filterByDay ignore les éléments sans date valide, quel que soit le filtre", () => {
+    const all = [...bad, good];
+    const opts = { selectedDate: null, softDeletedIds: new Set<string>() };
+    expect(filterByDay(all, { ...opts, filter: null }).map((i) => i.id)).toEqual(["g"]);
+    expect(filterByDay(all, { ...opts, filter: "today" }).map((i) => i.id)).toEqual(["g"]);
+    expect(filterByDay(all, { ...opts, filter: "past" })).toEqual([]);
+    expect(filterByDay(all, { ...opts, selectedDate: "2026-11-07", filter: null }).map((i) => i.id)).toEqual(["g"]);
+  });
+
+  it("groupByDay n'invente pas de groupe NaN-NaN-NaN / Invalid Date", () => {
+    const groups = groupByDay([...bad, good, { id: "h", date: at(6, 8) }]);
+    expect(groups.map((g) => g.date)).toEqual(["2026-11-07", "2026-11-06"]);
+    expect(groups.flatMap((g) => g.items.map((i) => i.id))).toEqual(["g", "h"]);
+    expect(JSON.stringify(groups)).not.toMatch(/NaN|Invalid/);
+  });
+
+  it("groupByDay : liste d'éléments tous invalides = aucun groupe", () => {
+    expect(groupByDay(bad)).toEqual([]);
+  });
+
+  it("le tri par getDateTime reste total (null = 0, jamais NaN)", () => {
+    const sorted = [{ date: null }, { date: at(7, 9) }, { date: at(6, 9) }, { date: undefined }].sort(
+      (a, b) => getDateTime(b.date) - getDateTime(a.date),
+    );
+    expect(sorted.map((i) => getDateTime(i.date))).toEqual([
+      at(7, 9).getTime(),
+      at(6, 9).getTime(),
+      0,
+      0,
+    ]);
+    expect(getDateTime(null)).toBe(0);
+  });
+});
+
 describe("groupByDay", () => {
   it("groupes et éléments du plus récent au plus ancien, tête = plus récent", () => {
     const items = [

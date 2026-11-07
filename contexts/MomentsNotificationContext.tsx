@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SocialInteractionsProvider, useSocialInteractions } from '@/contexts/SocialInteractionsContext';
 import { listenToRecentJalons } from '@/services/eventsRepository';
 import { isFirestoreTimestamp } from '@/services/firestoreTimestamps';
-import { getUserPreferencesDoc, mergeUserPreferences } from '@/services/userRepository';
+import { getUserPreferencesDoc, mergeUserPreferences } from '@/services/userPreferencesService';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type NotificationType = 'photo' | 'like' | 'comment';

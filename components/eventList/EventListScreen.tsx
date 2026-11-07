@@ -132,8 +132,9 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
           enabled={deletable}
         >
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={config.a11y.row}
+            accessibilityRole={canManage ? "button" : undefined}
+            accessibilityLabel={canManage ? config.a11y.row : undefined}
+            disabled={!canManage}
             style={({ pressed }) => [
               eventListStyles.sessionCard,
               {
@@ -148,13 +149,16 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                 borderLeftColor: isSelected ? tint : "transparent",
               },
             ]}
+            // Lecture seule (Proche) : ni édition ni sélection.
             onPress={
-              selectionMode
-                ? () => toggleId(item.id)
-                : () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    openEdit(item);
-                  }
+              !canManage
+                ? undefined
+                : selectionMode
+                  ? () => toggleId(item.id)
+                  : () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      openEdit(item);
+                    }
             }
           >
             {selectionMode && (
@@ -168,7 +172,7 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
             )}
             {config.renderRow({ item, isLatest, nc, colorScheme })}
             {/* Edit icon */}
-            <Ionicons name="create-outline" size={18} color={nc.textMuted} />
+            {canManage && <Ionicons name="create-outline" size={18} color={nc.textMuted} />}
           </Pressable>
         </ReanimatedSwipeable>
       );

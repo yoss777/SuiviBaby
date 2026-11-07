@@ -89,7 +89,7 @@ END {
     exit 1
   } else {
     print "STATUS: READY — all functions below the 0.5% UNVERIFIED threshold."
-    print "        Safe to deploy with APPCHECK_ENFORCE=true on critical CFs."
+    print "        Safe to deploy with APPCHECK_ENFORCE_FUNCTIONS=<critical CFs> (partial) or APPCHECK_ENFORCE=true (all)."
   }
 }
 '

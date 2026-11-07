@@ -5,6 +5,8 @@
 const { mockBucket } = require("./setup");
 const { memoryStore } = require("./memoryFirestore");
 const fns = require("../index");
+const { photoRefToPath } = require("../src/shared/photos");
+const { handleReportCreated } = require("../src/moderation/reports");
 
 const adminMod = require("firebase-admin");
 const { Resend } = require("resend");
@@ -53,26 +55,26 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 describe("4.4 photoRefToPath", () => {
   it("accepts a plain child path and a legacy download URL", () => {
-    expect(fns.photoRefToPath("children/c1/jalons/a.jpg")).toBe("children/c1/jalons/a.jpg");
+    expect(photoRefToPath("children/c1/jalons/a.jpg")).toBe("children/c1/jalons/a.jpg");
     const url = "https://firebasestorage.googleapis.com/v0/b/x/o/children%2Fc1%2Fjalons%2Fa.jpg?alt=media&token=t";
-    expect(fns.photoRefToPath(url)).toBe("children/c1/jalons/a.jpg");
+    expect(photoRefToPath(url)).toBe("children/c1/jalons/a.jpg");
   });
 
   it("rejects traversal, foreign prefixes, malformed encoding and non-strings", () => {
-    expect(fns.photoRefToPath("children/c1/../c2/a.jpg")).toBeNull();
-    expect(fns.photoRefToPath("users/u1/avatar.jpg")).toBeNull();
-    expect(fns.photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/users%2Fu1%2Fa.jpg?alt=media")).toBeNull();
-    expect(fns.photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/children%2Fc1%2F..%2Fc2%2Fa.jpg")).toBeNull();
-    expect(fns.photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/%E0%A4%A")).toBeNull();
-    expect(fns.photoRefToPath(null)).toBeNull();
-    expect(fns.photoRefToPath(42)).toBeNull();
-    expect(fns.photoRefToPath("")).toBeNull();
+    expect(photoRefToPath("children/c1/../c2/a.jpg")).toBeNull();
+    expect(photoRefToPath("users/u1/avatar.jpg")).toBeNull();
+    expect(photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/users%2Fu1%2Fa.jpg?alt=media")).toBeNull();
+    expect(photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/children%2Fc1%2F..%2Fc2%2Fa.jpg")).toBeNull();
+    expect(photoRefToPath("https://firebasestorage.googleapis.com/v0/b/x/o/%E0%A4%A")).toBeNull();
+    expect(photoRefToPath(null)).toBeNull();
+    expect(photoRefToPath(42)).toBeNull();
+    expect(photoRefToPath("")).toBeNull();
   });
 
   it("restricts to one child folder when a childId is given", () => {
-    expect(fns.photoRefToPath("children/c1/a.jpg", "c1")).toBe("children/c1/a.jpg");
-    expect(fns.photoRefToPath("children/c2/a.jpg", "c1")).toBeNull();
-    expect(fns.photoRefToPath("children/c10/a.jpg", "c1")).toBeNull();
+    expect(photoRefToPath("children/c1/a.jpg", "c1")).toBe("children/c1/a.jpg");
+    expect(photoRefToPath("children/c2/a.jpg", "c1")).toBeNull();
+    expect(photoRefToPath("children/c10/a.jpg", "c1")).toBeNull();
   });
 });
 
@@ -142,7 +144,7 @@ describe("4.4 e-mails escape user content", () => {
   afterEach(() => delete process.env.RESEND_API_KEY);
 
   it("escapes every interpolated field of the operator e-mail", async () => {
-    await fns.handleReportCreated(
+    await handleReportCreated(
       { data: () => ({
         reporterUserId: "u1", childId: "c<1>", eventId: "e<1>", photoPath: `children/${evil}`,
         message: evil, reason: "other<script>",

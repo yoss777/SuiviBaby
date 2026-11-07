@@ -249,7 +249,7 @@ const REPORT_REASONS = new Set([
 ]);
 
 const submitContentReportCF = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "submitContentReportCF"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -351,7 +351,7 @@ const submitContentReportCF = onCall(
 // ============================================
 
 const resolveReport = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }),
+  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }, "resolveReport"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

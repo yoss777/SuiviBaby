@@ -12,13 +12,12 @@
 
 import { initializeApp } from 'firebase/app';
 import { connectFirestoreEmulator, getFirestore, doc, getDoc } from 'firebase/firestore';
+import { getUserChildAccess, calculatePermissions } from '../utils/permissions';
 import {
-  getUserChildAccess,
-  calculatePermissions,
   grantChildAccess,
   revokeChildAccess,
   updateChildAccess,
-} from '../utils/permissions';
+} from '../services/accessRepository';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBJUP-b3NPExx-4RfWFLvrbAM5pEfHvAOg",

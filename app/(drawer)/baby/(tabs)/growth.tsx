@@ -54,7 +54,7 @@ import * as Haptics from "expo-haptics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
-import { toDate } from "@/utils/date";
+import { getDateTime, toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -257,7 +257,7 @@ export default function GrowthScreen() {
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
       [...(merged as GrowthEventWithId[])].sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );
@@ -340,7 +340,7 @@ export default function GrowthScreen() {
       ? [precedingEvent, ...events]
       : [...events];
     const sorted = allEvents.sort(
-      (a, b) => toDate(a.date).getTime() - toDate(b.date).getTime(),
+      (a, b) => getDateTime(a.date) - getDateTime(b.date),
     );
 
     for (let i = 1; i < sorted.length; i++) {
@@ -474,7 +474,7 @@ export default function GrowthScreen() {
     const grouped = Object.entries(groups)
       .map(([date, items]) => {
         const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+          (a, b) => getDateTime(b.date) - getDateTime(a.date),
         );
         const counts = { poids: 0, taille: 0, tete: 0 };
         sorted.forEach((e) => {

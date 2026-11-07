@@ -15,7 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { revokeChildAccess } from "@/utils/permissions";
+import { revokeChildAccess } from "@/services/accessRepository";
 import { captureServiceError } from "@/utils/errorReporting";
 import { createShareInvitationCF } from "@/services/premiumUsageService";
 
@@ -41,8 +41,7 @@ function callableError(code: string, message = code) {
   return Object.assign(new Error(message), { code });
 }
 
-jest.mock("@/utils/permissions", () => ({
-  grantChildAccess: jest.fn(),
+jest.mock("@/services/accessRepository", () => ({
   revokeChildAccess: jest.fn(),
 }));
 

@@ -29,7 +29,7 @@ function normalizeReferralCode(value) {
  * repris s'il n'appartient à personne d'autre.
  */
 const ensureReferralCode = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "ensureReferralCode"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -75,7 +75,7 @@ const ensureReferralCode = onCall(
  * créé dans la même transaction que les récompenses.
  */
 const validateReferralCode = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "validateReferralCode"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

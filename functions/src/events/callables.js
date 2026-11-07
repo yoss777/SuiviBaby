@@ -13,7 +13,7 @@ const { isValidDocId } = require("../shared/validation");
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
 const validateAndCreateEvent = onCall(
-  withAppCheck({ region: "europe-west1", concurrency: 50 }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }, "validateAndCreateEvent"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -115,7 +115,7 @@ const validateAndCreateEvent = onCall(
  * validateAndUpdateEvent — Modification d'événement avec validation serveur
  */
 const validateAndUpdateEvent = onCall(
-  withAppCheck({ region: "europe-west1", concurrency: 50 }),
+  withAppCheck({ region: "europe-west1", concurrency: 50 }, "validateAndUpdateEvent"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -230,7 +230,7 @@ const validateAndUpdateEvent = onCall(
  * deleteEventCascade — Suppression atomique événement + likes + commentaires
  */
 const deleteEventCascade = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "deleteEventCascade"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

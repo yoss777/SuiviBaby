@@ -5,7 +5,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "cancelAccountDeletion": {
     "platform": "gcfv2",
@@ -13,7 +18,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "cancelChildDeletion": {
     "platform": "gcfv2",
@@ -21,7 +31,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "checkAndSendReminders": {
     "availableMemoryMb": 256,
@@ -65,7 +80,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "createDeletionRequest": {
     "platform": "gcfv2",
@@ -73,7 +93,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "createShareCode": {
     "platform": "gcfv2",
@@ -81,7 +106,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "createShareInvitation": {
     "platform": "gcfv2",
@@ -89,7 +119,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "deleteEventCascade": {
     "platform": "gcfv2",
@@ -97,7 +132,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "deletePhotoThumbnail": {
     "platform": "gcfv2",
@@ -132,7 +172,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "ensureReferralCode": {
     "platform": "gcfv2",
@@ -140,7 +185,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "generatePhotoThumbnail": {
     "platform": "gcfv2",
@@ -164,7 +214,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "getUsageQuotaStatus": {
     "concurrency": 50,
@@ -173,7 +228,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "handleReportCreated": {
     "nonTrigger": "function"
@@ -243,7 +303,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "photoRefToPath": {
     "nonTrigger": "function"
@@ -306,7 +371,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "redeemShareCodeCF": {
     "platform": "gcfv2",
@@ -314,7 +384,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "registerAppleRevocation": {
     "platform": "gcfv2",
@@ -333,7 +408,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "requestAccountDeletion": {
     "platform": "gcfv2",
@@ -346,7 +426,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "resolveReport": {
     "platform": "gcfv2",
@@ -359,7 +444,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "retryAssemblyAIDeletes": {
     "timeoutSeconds": 540,
@@ -402,7 +492,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "sendWeeklyRecap": {
     "availableMemoryMb": 256,
@@ -437,7 +532,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "setMemberRole": {
     "platform": "gcfv2",
@@ -445,7 +545,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "submitContentReportCF": {
     "platform": "gcfv2",
@@ -453,7 +558,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "transcribeAudio": {
     "availableMemoryMb": 512,
@@ -470,7 +580,12 @@
       }
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "transferAndLeave": {
     "platform": "gcfv2",
@@ -478,7 +593,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "unsubscribeRecap": {
     "platform": "gcfv2",
@@ -500,7 +620,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "validateAndUpdateEvent": {
     "concurrency": 50,
@@ -509,7 +634,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "validateReferralCode": {
     "platform": "gcfv2",
@@ -517,7 +647,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "voteDeletionRequest": {
     "platform": "gcfv2",
@@ -525,7 +660,12 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   },
   "withdrawHealthConsent": {
     "platform": "gcfv2",
@@ -533,6 +673,11 @@
       "europe-west1"
     ],
     "labels": {},
-    "callableTrigger": {}
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
   }
 }

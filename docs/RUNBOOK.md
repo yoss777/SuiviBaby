@@ -107,8 +107,11 @@ Mettre à jour `app_config/latest_version` (bannière de mise à jour, `minVersi
 
 - workflow `release.yml` (job « Update app_config », environnement `store-release`,
   validation requise) ; ou
-- en local, avec la clé d'écriture : `MIN_VERSION=<version> npm run update-app-config`
-  (script `scripts/updateAppConfig.mjs`).
+- en local : `MIN_VERSION=<version> npm run update-app-config` (script
+  `scripts/updateAppConfig.mjs`). En local, le script utilise le **token de la CLI
+  Firebase** (`firebase login` préalable, compte autorisé à écrire dans Firestore) ;
+  en CI, il utilise le service account JSON (`GCP_SA_KEY`). Aucune clé d'écriture à
+  fournir à la main.
 
 `minVersion` **force** la mise à jour : ne la relever qu'après publication effective
 (la version minimale est aujourd'hui 1.0.6, fixée le 2026-11-02 par décision de Yoss ;
@@ -242,7 +245,11 @@ remplacé dès que la fédération d'identité est en place (S11.7).
 2. **Contenir** (ordre de préférence) :
    - **Fonction fautive** : `git revert` du commit sur `main`, puis CI (1.1). En
      urgence, redéployer la fonction précédente avec `firebase deploy --only functions:<nom>
-     --project samaye-53723` depuis un commit connu. Il n'y a pas d'interrupteur de
+     --project samaye-53723` depuis un commit connu. **Attention** : un déploiement
+     manuel depuis un ancien commit est écrasé au prochain push sur `main`, car la CI
+     redéploie toutes les fonctions depuis `main`. Le `git revert` sur `main` (ou le
+     blocage des merges, le temps du correctif) reste donc obligatoire ; le déploiement
+     manuel ne sert qu'à gagner quelques minutes. Il n'y a pas d'interrupteur de
      fonction documenté : prévoir un drapeau si ce cas revient.
    - **Règles Firestore ou Storage fautives** : `git revert` de la règle, puis
      `firebase deploy --only firestore:rules --project samaye-53723` (sans `--force`)

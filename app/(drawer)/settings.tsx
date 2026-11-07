@@ -7,7 +7,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAccessDoc } from "@/services/accessRepository";
 import { listenToOwnerDeletionRequests } from "@/services/deletionRequestRepository";
-import { listenToUserPreferencesDoc } from "@/services/userRepository";
+import { listenToUserPreferencesDoc } from "@/services/userPreferencesService";
 import {
   useCallback,
   useEffect,

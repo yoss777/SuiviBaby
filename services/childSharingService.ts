@@ -16,7 +16,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { grantChildAccess, revokeChildAccess } from "@/utils/permissions";
+import { revokeChildAccess } from "@/services/accessRepository";
 import { captureServiceError } from "@/utils/errorReporting";
 import { createEmailNotVerifiedError, isEmailNotVerifiedError } from "@/utils/emailVerification";
 import { createShareInvitationCF } from "@/services/premiumUsageService";

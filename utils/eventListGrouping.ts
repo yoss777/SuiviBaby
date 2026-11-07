@@ -1,6 +1,6 @@
 // Filtrage par jour et regroupement des listes d'événements (repas,
 // pompages, couches). Fonctions pures : testées sans React.
-import { getDateTime, toDate } from "@/utils/date";
+import { getDateTime, isValidDate, toDate } from "@/utils/date";
 
 export { getDateTime };
 
@@ -13,7 +13,7 @@ export function dayKey(date: Date): string {
   ).padStart(2, "0")}`;
 }
 
-/** Début du jour local (ms), NaN pour une date invalide. Ne mute pas `date`. */
+/** Début du jour local (ms). Ne mute pas `date`. */
 function startOfDayTime(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
@@ -44,7 +44,10 @@ export function filterByDay<T extends { id: string; date: unknown }>(
 
   return items.filter((item) => {
     if (softDeletedIds.has(item.id)) return false;
-    const itemTime = startOfDayTime(toDate(item.date));
+    // Date absente ou invalide : l'événement ne peut figurer dans aucun jour.
+    const itemDate = toDate(item.date);
+    if (!isValidDate(itemDate)) return false;
+    const itemTime = startOfDayTime(itemDate);
 
     if (selectedTime !== null) return itemTime === selectedTime;
 
@@ -80,7 +83,10 @@ export function groupByDay<T extends { date: unknown }, S extends object = objec
   const groups = new Map<string, T[]>();
 
   items.forEach((item) => {
-    const key = dayKey(toDate(item.date));
+    const date = toDate(item.date);
+    // Pas de groupe « NaN-NaN-NaN » pour une date absente ou invalide.
+    if (!isValidDate(date)) return;
+    const key = dayKey(date);
     const bucket = groups.get(key);
     if (bucket) bucket.push(item);
     else groups.set(key, [item]);

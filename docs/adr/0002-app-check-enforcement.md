@@ -19,9 +19,11 @@
   `EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED=true`.
 
 **Côté fonctions** (`functions/src/shared/appCheck.js`) :
-- `withAppCheck(options)` ajoute `enforceAppCheck: true` seulement si la variable
-  `APPCHECK_ENFORCE=true` est présente au déploiement (fonctions v2, lecture de
-  `process.env`) ;
+- `withAppCheck(options, nom)` (nom = nom d'export déployé, ex. `transcribeAudio`)
+  ajoute `enforceAppCheck: true` si, au déploiement (fonctions v2, lecture de
+  `process.env`), `APPCHECK_ENFORCE=true` (toutes les fonctions) ou si `nom` figure
+  dans `APPCHECK_ENFORCE_FUNCTIONS` (liste séparée par des virgules, ex.
+  `transcribeAudio,parseVoiceCommand`). Sans variable : surveillance seule ;
 - `monitorAppCheck(request, nom)` journalise `[AppCheck] <fonction>: VERIFIED` ou
   `UNVERIFIED` pour chaque appel ; la ligne `UNVERIFIED` indique aussi
   `enforcement=true|false`. C'est la seule
@@ -105,12 +107,17 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    que les critères C1 à C4 soient réunis. Date de revue prévue : 2026-12-07.
 2. Audit : `./scripts/auditAppCheck.sh 7d` doit afficher `READY`.
 3. Bascule partielle sur 2 à 3 fonctions à fort impact (coût ou abus) :
-   `APPCHECK_ENFORCE=true` dans l'environnement de la fonction (`functions/.env.<projet>`),
-   puis déploiement de ces fonctions seulement.
+   `APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio,parseVoiceCommand` dans
+   `functions/.env.<projet>` (pas `APPCHECK_ENFORCE=true`, qui vise toutes les
+   fonctions). La CI redéploie toutes les fonctions à chaque push sur `main` : la
+   variable doit donc rester dans le fichier d'environnement versionné ou fourni à
+   la CI, sinon le prochain déploiement repasse les fonctions en surveillance.
+   Les autres fonctions restent non imposées.
 4. Surveillance 48 heures : Sentry (`unauthenticated`), Cloud Logging
    (`UNVERIFIED` par fonction).
-5. Extension à toutes les `onCall` (déploiement complet par la CI
-   `deploy-functions.yml`).
+5. Extension : ajouter les autres noms à `APPCHECK_ENFORCE_FUNCTIONS`, puis, une fois
+   toutes les `onCall` prêtes, poser `APPCHECK_ENFORCE=true` (déploiement complet par
+   la CI `deploy-functions.yml`).
 6. Audit à J+7 : toutes les fonctions à 100 % `VERIFIED` sur les clients récents.
 7. Firestore puis Storage : console Firebase → App Check, dans un second temps et
    après un nouveau point de décision. Surveiller les métriques App Check avant de
@@ -119,8 +126,8 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 ## Retour arrière
 
 **Fonctions appelables** (procédure à vérifier avant la première bascule) :
-1. retirer `APPCHECK_ENFORCE=true` (ou le mettre à `false`) dans
-   `functions/.env.<projet>` ;
+1. retirer le nom de la fonction de `APPCHECK_ENFORCE_FUNCTIONS` (ou retirer
+   `APPCHECK_ENFORCE=true` / le mettre à `false`) dans `functions/.env.<projet>` ;
 2. redéployer les fonctions concernées (`firebase deploy --only functions:<noms>`, ou
    la CI `deploy-functions.yml` depuis `main`).
 

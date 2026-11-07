@@ -13,7 +13,7 @@ const DELETION_REQUEST_EXPIRY_DAYS = 7;
  * - Multi-owners : pending, vote de l'initiateur = approved
  */
 const createDeletionRequest = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "createDeletionRequest"),
   async (request) => {
     monitorAppCheck(request, "createDeletionRequest");
     if (!request.auth) {
@@ -116,7 +116,7 @@ const createDeletionRequest = onCall(
  * - approved : si tous ont approuvé, soft-delete
  */
 const voteDeletionRequest = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "voteDeletionRequest"),
   async (request) => {
     monitorAppCheck(request, "voteDeletionRequest");
     if (!request.auth) {
@@ -194,7 +194,7 @@ const voteDeletionRequest = onCall(
  * transferAndLeave — Owner transfère la propriété et quitte l'enfant.
  */
 const transferAndLeave = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "transferAndLeave"),
   async (request) => {
     monitorAppCheck(request, "transferAndLeave");
     if (!request.auth) {
@@ -292,7 +292,7 @@ const transferAndLeave = onCall(
  * { children: [{ childId, childName, members: [{ uid, role, displayName? }] }] }
  */
 const getOwnershipBlockers = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "getOwnershipBlockers"),
   async (request) => {
     monitorAppCheck(request, "getOwnershipBlockers");
     if (!request.auth) {
@@ -337,7 +337,7 @@ const getOwnershipBlockers = onCall(
  * Restaure l'accès pour le demandeur (les autres owners doivent être ré-invités).
  */
 const cancelChildDeletion = onCall(
-  withAppCheck({ region: "europe-west1" }),
+  withAppCheck({ region: "europe-west1" }, "cancelChildDeletion"),
   async (request) => {
     monitorAppCheck(request, "cancelChildDeletion");
     if (!request.auth) {

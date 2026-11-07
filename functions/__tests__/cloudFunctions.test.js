@@ -1,6 +1,7 @@
 /* global Buffer, describe, it, expect, jest, beforeEach, afterEach, afterAll */
 const { mockFirestore, mockDocRef, mockGet, mockAdd, mockQueryChain, mockRunTransaction } = require("./setup");
 const fns = require("../index");
+const { handleReportCreated } = require("../src/moderation/reports");
 const auth = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true, admin: false } }, data, app: true });
 const adm = (uid, data = {}) => ({ auth: { uid, token: { email: `${uid}@t.com`, email_verified: true, admin: true } }, data, app: true });
 const doc = (data) => ({ exists: true, data: () => data, id: "id", ref: { id: "id" } });
@@ -511,7 +512,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
         { data: { reporterUserId: "u_reporter", reason: "intimate_child_nudity" } },
       ],
     });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "intimate_child_nudity",
         eventId: "e1",
@@ -528,7 +529,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
       reporterRole: "owner",
       peerReports: [],
     });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "intimate_child_nudity",
         eventId: "e1",
@@ -548,7 +549,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
         { data: { reporterUserId: "u_other", reason: "sensitive_child_photo" } },
       ],
     });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "intimate_child_nudity",
         eventId: "e1",
@@ -568,7 +569,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
         { data: { reporterUserId: "u_reporter", reason: "sensitive_child_photo" } },
       ],
     });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "intimate_child_nudity",
         eventId: "e1",
@@ -582,7 +583,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
 
   it("does not run the auto-hide path for non-photo reasons", async () => {
     const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "privacy",
         eventId: "e1",
@@ -597,7 +598,7 @@ describe("handleReportCreated (T3 — graduated photo moderation)", () => {
   it("still applies moderation effects when RESEND_API_KEY is missing", async () => {
     delete process.env.RESEND_API_KEY;
     const { eventUpdate } = setupBaseFirestore({ reporterRole: "owner" });
-    await fns.handleReportCreated(
+    await handleReportCreated(
       reportSnapshot({
         reason: "intimate_child_nudity",
         eventId: "e1",

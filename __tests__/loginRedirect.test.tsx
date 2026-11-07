@@ -80,6 +80,20 @@ async function flush() {
   });
 }
 
+// Aucun état partagé entre fichiers : l'écart venait du temps. Le premier rendu
+// de l'écran charge (et, à froid, transforme) tout son arbre de composants ; en
+// suite complète parallèle ou cache vide, il dépassait les 5 s par défaut du
+// premier test, puis le démontage forcé faisait échouer les tests suivants
+// (« Can't access .root on unmounted test renderer »). On le paie une fois, ici,
+// avec une marge, et on laisse 30 s à chaque test.
+jest.setTimeout(30000);
+beforeAll(() => {
+  setAuth(null);
+  setBaby();
+  const warmup = render(<LoginScreen />);
+  warmup.unmount();
+}, 120000);
+
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
@@ -140,7 +154,7 @@ describe("login.tsx : redirection d un utilisateur déjà connecté", () => {
     expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
   });
 
-  it("sends a consenting user with several children (or none) to explore", async () => {
+  it("sends a consenting user with several children to the child picker", async () => {
     setBaby({ children: [child, { id: "c2", name: "Tom" }] });
     render(<LoginScreen />);
     await flush();

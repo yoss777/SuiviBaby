@@ -13,7 +13,7 @@ import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { createChildDoc } from '@/services/childRepository';
 import { timestampFromDate } from '@/services/firestoreTimestamps';
-import { createOwnerAccess } from '@/utils/permissions';
+import { createOwnerAccess } from '@/services/accessRepository';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,

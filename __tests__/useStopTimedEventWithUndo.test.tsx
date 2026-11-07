@@ -72,6 +72,20 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     expect(getSuccessLabel).toHaveBeenCalledWith(expect.anything(), { elapsedMinutes: 0, isUnderOneMinute: true });
   });
 
+  it.each([[undefined], [null], ["not a date"]])(
+    "a missing or invalid heureDebut (%p) never writes a NaN duration",
+    (heureDebut) => {
+      const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+      const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+      result.current(sleep({ heureDebut }));
+      const changes = modifier.mock.calls[0][2] as Record<string, unknown>;
+      expect(changes.heureFin).toEqual(NOW);
+      expect(changes).not.toHaveProperty("duree");
+      expect(JSON.stringify(changes)).not.toContain("null");
+      expect(getSuccessLabel).toHaveBeenCalledWith(expect.anything(), { elapsedMinutes: 0, isUnderOneMinute: true });
+    },
+  );
+
   it("the undo puts heureFin and duree back to null, with the stopped event as the rollback", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));

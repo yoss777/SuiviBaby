@@ -17,6 +17,16 @@ export function toDate(value: unknown): Date {
     return (value as { toDate: () => Date }).toDate();
   }
 
+  // Objet exposant seulement toMillis() (Timestamp simplifié).
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === "function"
+  ) {
+    return new Date((value as { toMillis: () => number }).toMillis());
+  }
+
   if (typeof value === "object" && value !== null) {
     const timestampLike = value as {
       seconds?: number;

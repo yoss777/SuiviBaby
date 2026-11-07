@@ -27,6 +27,10 @@ describe("toDate", () => {
     expect(toDate({ seconds: 0 }).getTime()).toBe(0);
   });
 
+  it("lit un objet qui n'expose que toMillis()", () => {
+    expect(toDate({ toMillis: () => 1_700_000_000_000 }).getTime()).toBe(1_700_000_000_000);
+  });
+
   it("accepte nombre et chaîne", () => {
     expect(toDate(ref.getTime()).getTime()).toBe(ref.getTime());
     expect(toDate("2026-11-07T12:00:00.000Z").getTime()).toBe(

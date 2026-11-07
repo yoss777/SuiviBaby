@@ -38,7 +38,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isValidDate, toDate } from "@/utils/date";
+import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import {
   Animated,
   BackHandler,
@@ -496,7 +496,7 @@ export default function ActivitiesScreen() {
     const grouped = Object.entries(groups)
       .map(([date, items]) => {
         const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+          (a, b) => getDateTime(b.date) - getDateTime(a.date),
         );
         const counts = {
           tummyTime: 0,

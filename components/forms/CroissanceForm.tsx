@@ -29,7 +29,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { toDate } from "@/utils/date";
+import { toDateOr } from "@/utils/date";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -99,7 +99,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
   // Form state
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData ? toDate(editData.date) : new Date(),
+    editData ? toDateOr(editData.date, new Date()) : new Date(),
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [tailleCm, setTailleCm] = useState<string>(

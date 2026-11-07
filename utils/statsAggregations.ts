@@ -1,3 +1,5 @@
+import { toDate } from "@/utils/date";
+
 // Pure aggregations behind the statistics screen and its charts
 // (docs/STATS_PERF_REFONTE.md, sprint 1).
 //
@@ -29,13 +31,7 @@ export type SolideType = (typeof SOLIDE_TYPES)[number];
  * date string. NaN when the value cannot be read, so range checks reject it.
  */
 export function toMillis(value: any): number {
-  if (value === null || value === undefined) return NaN;
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value.toMillis === "function") return value.toMillis();
-  if (typeof value.toDate === "function") return value.toDate().getTime();
-  if (typeof value.seconds === "number") return value.seconds * 1000;
-  return new Date(value).getTime();
+  return toDate(value).getTime();
 }
 
 /** Monday 00:00 (local time) of the week containing `date`. */

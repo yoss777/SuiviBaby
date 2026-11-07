@@ -67,7 +67,7 @@ const parseVoiceCommand = onCall(
     timeoutSeconds: 15,
     concurrency: 40,
     secrets: ["ANTHROPIC_API_KEY"],
-  }),
+  }, "parseVoiceCommand"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");

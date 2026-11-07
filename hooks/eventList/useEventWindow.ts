@@ -1,7 +1,9 @@
 // Fenêtre de dates chargée par les écrans de liste : 14 jours se terminant à
 // 23:59:59.999, élargie par « Voir plus » et par le chargement automatique
 // quand le filtre ne montre rien. Machine à états reprise telle quelle de
-// l'écran Pompages (avant Sprint 13).
+// l'écran Pompages (avant Sprint 13), sauf le mode « extend » : la fin de la
+// fenêtre reste fixe (les anciens écrans la déplaçaient sur l'événement trouvé
+// et sortaient les jours récents de l'écouteur).
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -121,23 +123,34 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
       const exhaustedAuto = auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1;
       if ((!auto && jumpOnManual) || exhaustedAuto) {
         // Clic manuel ou auto qui a épuisé ses tentatives : sauter directement au prochain événement
-        const nextEventDate = await getNextEventDateBefore(
-          childId,
-          typesArg(typesRef.current),
-          beforeDate,
-        );
+        let nextEventDate: Date | null;
+        try {
+          nextEventDate = await getNextEventDateBefore(
+            childId,
+            typesArg(typesRef.current),
+            beforeDate,
+          );
+        } catch {
+          // Échec réseau/Firestore : pas d'écouteur à attendre, on libère le bouton.
+          pendingLoadMoreRef.current = 0;
+          setIsLoadingMore(false);
+          setAutoLoadMore(false);
+          return;
+        }
 
         if (nextEventDate) {
           if (jumpWindow === "reset") {
             setDaysWindow(DEFAULT_DAYS_WINDOW);
+            setRangeEndDate(nextEventDate);
           } else {
+            // « extend » : la fin de la fenêtre ne bouge pas (les jours récents
+            // restent écoutés) ; seule sa longueur grandit jusqu'au prochain événement.
             const startOfNext = new Date(nextEventDate);
             startOfNext.setHours(0, 0, 0, 0);
             const diffDays =
               Math.floor((endOfRange.getTime() - startOfNext.getTime()) / DAY_MS) + 1;
             setDaysWindow((prev) => Math.max(prev, diffDays));
           }
-          setRangeEndDate(nextEventDate);
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;
