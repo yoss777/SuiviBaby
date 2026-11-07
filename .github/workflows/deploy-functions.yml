@@ -180,6 +180,10 @@ jobs:
     concurrency:
       group: deploy-functions-production
       cancel-in-progress: false
+    # id-token: write → jeton OIDC pour Workload Identity Federation (S11.7).
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -195,13 +199,22 @@ jobs:
       # firebase-tools runs on the runner's Node 22 (the former w9jds/firebase-action
       # container shipped an older Node that cannot require() the ESM-only
       # expo-server-sdk, so every deploy failed at source analysis).
-      # TODO(S11.7, pending Yoss's go): replace the JSON key with Workload
-      # Identity Federation:
-      #   - uses: google-github-actions/auth@v2
-      #     with:
-      #       workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-      #       service_account: ${{ vars.GCP_DEPLOY_SA }}
-      - name: Write service account key
+      # S11.7 : Workload Identity Federation (jeton court, limité au dépôt
+      # yoss777/SuiviBaby, compte github-deploy) quand les variables du dépôt
+      # GCP_WIF_PROVIDER et GCP_DEPLOY_SA existent. La clé JSON GCP_SA_KEY ne
+      # sert plus que de secours tant qu'un déploiement WIF n'a pas réussi ;
+      # elle sera ensuite supprimée (clé GCP + secret GitHub).
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        if: ${{ vars.GCP_WIF_PROVIDER != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Write service account key (fallback)
+        if: ${{ vars.GCP_WIF_PROVIDER == '' }}
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
@@ -213,13 +226,13 @@ jobs:
             base64 -d "$RUNNER_TEMP/gcp-key.raw" > "$RUNNER_TEMP/gcp-key.json"
             rm "$RUNNER_TEMP/gcp-key.raw"
           fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp-key.json" >> "$GITHUB_ENV"
 
       # Rules and indexes WITHOUT --force: with it, the CLI deletes every index
       # and field override (TTL) not listed in firestore.indexes.json — which
       # wiped 26 production indexes and 4 overrides on 2026-11-06.
       - name: Deploy Firestore rules & indexes
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: >
           npx --yes firebase-tools@15 deploy
@@ -231,7 +244,6 @@ jobs:
       # region (old copy to delete).
       - name: Deploy Functions
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: >
           npx --yes firebase-tools@15 deploy
