@@ -35,11 +35,13 @@ jobs:
         continue-on-error: true
         run: npx expo-doctor
 
-      - name: Run app tests
-        run: npm test -- --ci --coverage
-
+      # Avant les tests de l'app : certains scripts testés (backfillLastEventAt)
+      # chargent des modules de functions/lib.
       - name: Install function dependencies
         run: cd functions && npm ci
+
+      - name: Run app tests
+        run: npm test -- --ci --coverage
 
       - name: Run CF tests (coverage thresholds in functions/jest.config.js)
         run: npm run test:functions -- --ci --coverage
@@ -71,6 +73,12 @@ jobs:
           java-version: 21
 
       - run: npm ci
+
+      # multiUser.rules.test.ts charge les vraies Cloud Functions
+      # (redeemShareCodeCF, createShareCode, setMemberRole) : il faut leurs
+      # dépendances.
+      - name: Install function dependencies
+        run: cd functions && npm ci
 
       # Every *.rules.test.ts suite (firestore, storage, multiUser), see
       # jest.config.rules.js. The demo- project id needs no credentials; the
