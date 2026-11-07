@@ -215,6 +215,9 @@ const GrowthSkeleton = React.memo(function GrowthSkeleton({
 // COMPONENT
 // ============================================
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const GROWTH_EVENT_TYPES = ["croissance"] as const;
+
 export default function GrowthScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
@@ -270,6 +273,7 @@ export default function GrowthScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<GrowthEventWithId>({
     childId: activeChild?.id,
+    eventTypes: GROWTH_EVENT_TYPES,
     transformMerged: sortMergedEvents,
   });
 

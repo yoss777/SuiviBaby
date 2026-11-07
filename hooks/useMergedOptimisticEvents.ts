@@ -9,6 +9,13 @@ type UseMergedOptimisticEventsParams<T> = {
   childId: string | undefined;
   debounceMs?: number;
   transformMerged?: (events: any[]) => T[];
+  /**
+   * Types d'événements affichés par l'écran. Le store optimiste contient les
+   * saisies en attente de TOUS les types de l'enfant : sans ce filtre, un
+   * biberon saisi hors ligne apparaissait dans Routines (et y plantait, faute
+   * de config pour ce type). Absent = aucun filtre (écrans multi-types).
+   */
+  eventTypes?: readonly string[];
 };
 
 type UseMergedOptimisticEventsResult<T> = {
@@ -62,6 +69,12 @@ export function mergeFirestoreSnapshots(current: any[], incoming: any[]): any[] 
   return [...mergedById.values()];
 }
 
+/** Keeps only the screen's event types (no filter when `types` is absent). */
+export function filterTypes(events: any[], types: readonly string[] | undefined): any[] {
+  if (!types) return events;
+  return events.filter((event) => types.includes(event?.type));
+}
+
 // Fingerprint of an empty list: the initial state, so mounting does not emit
 // a fresh [] (and re-render the screen) for nothing.
 const EMPTY_FINGERPRINT = buildEventFingerprint([]);
@@ -72,6 +85,7 @@ export function useMergedOptimisticEvents<T = any>({
   childId,
   debounceMs = 50,
   transformMerged,
+  eventTypes,
 }: UseMergedOptimisticEventsParams<T>): UseMergedOptimisticEventsResult<T> {
   // The fingerprint travels with the events it describes, so we always know
   // what is actually rendered (see remergeIfChanged).
@@ -84,6 +98,8 @@ export function useMergedOptimisticEvents<T = any>({
   const childIdRef = useRef(childId);
   const debounceMsRef = useRef(debounceMs);
   const transformMergedRef = useRef(transformMerged);
+  const eventTypesRef = useRef(eventTypes);
+  eventTypesRef.current = eventTypes;
 
   useEffect(() => {
     childIdRef.current = childId;
@@ -105,9 +121,12 @@ export function useMergedOptimisticEvents<T = any>({
     }
 
     mergeTimerRef.current = setTimeout(() => {
-      const merged = mergeWithFirestoreEvents(
-        latestFirestoreEventsRef.current,
-        childIdRef.current!,
+      const merged = filterTypes(
+        mergeWithFirestoreEvents(
+          latestFirestoreEventsRef.current,
+          childIdRef.current!,
+        ),
+        eventTypesRef.current,
       );
       const normalized = transformMergedRef.current
         ? transformMergedRef.current(merged)

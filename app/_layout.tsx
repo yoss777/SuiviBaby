@@ -33,7 +33,12 @@ import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService
 import { retryFailedOptimistic } from "@/services/eventsService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
-import { filterBreadcrumb, filterEvent, filterTransaction } from "@/utils/sentryFilters";
+import {
+  filterBreadcrumb,
+  filterEvent,
+  filterTransaction,
+  isTransientNetworkNoise,
+} from "@/utils/sentryFilters";
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "",
@@ -42,7 +47,7 @@ Sentry.init({
   // console breadcrumbs dropped, HTTP bodies removed, sensitive keys scrubbed.
   sendDefaultPii: false,
   beforeBreadcrumb: (breadcrumb) => filterBreadcrumb(breadcrumb),
-  beforeSend: (event) => filterEvent(event),
+  beforeSend: (event) => (isTransientNetworkNoise(event) ? null : filterEvent(event)),
   beforeSendTransaction: (event) => filterTransaction(event),
   environment: __DEV__ ? "development" : "production",
   // Performance monitoring
