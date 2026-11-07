@@ -65,6 +65,14 @@ type ModalContextType = {
   ) => void;
   showConfirm: (title: string, message: React.ReactNode, onConfirm: () => void) => void;
   hide: () => void;
+  /** Vrai si une modale du contexte est affichée (lecture ponctuelle, non réactive). */
+  hasOpenModal: () => boolean;
+  /**
+   * Notifie à chaque affichage d'une modale protégée (alerte santé). Sert aux
+   * écrans qui affichent une modale décorative : l'alerte santé passe toujours
+   * en premier. Renvoie la fonction de désinscription.
+   */
+  subscribeProtectedModal: (listener: () => void) => () => void;
 };
 
 const isErrorTitle = (value: string) =>
@@ -82,6 +90,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const currentProtectedRef = useRef(false);
   const queueRef = useRef<QueuedModal[]>([]);
   const currentRef = useRef<ModalContent | null>(null);
+  const protectedListenersRef = useRef<Set<() => void>>(new Set());
 
   // Couleurs lues par ref : les fonctions du contexte restent stables même si
   // le thème change (les consommateurs « actions » ne se re-rendent pas).
@@ -96,6 +105,16 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     currentProtectedRef.current = protectedModal;
     currentRef.current = content;
     setModalState(content);
+    if (protectedModal) protectedListenersRef.current.forEach((listener) => listener());
+  }, []);
+
+  const hasOpenModal = useCallback(() => currentRef.current !== null, []);
+
+  const subscribeProtectedModal = useCallback((listener: () => void) => {
+    protectedListenersRef.current.add(listener);
+    return () => {
+      protectedListenersRef.current.delete(listener);
+    };
   }, []);
 
   // Ferme la modale en cours puis affiche la suivante de la file, s'il y en a une.
@@ -107,6 +126,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     currentProtectedRef.current = next?.protectedModal ?? false;
     currentRef.current = next?.content ?? null;
     setModalState(next?.content ?? null);
+    if (next?.protectedModal) protectedListenersRef.current.forEach((listener) => listener());
   }, []);
 
   const backgroundColor = colors.background;
@@ -211,8 +231,10 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
       showAlert,
       showConfirm,
       hide,
+      hasOpenModal,
+      subscribeProtectedModal,
     }),
-    [showAlert, showConfirm, hide],
+    [showAlert, showConfirm, hide, hasOpenModal, subscribeProtectedModal],
   );
 
   return (

@@ -4,6 +4,7 @@
 import {
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
@@ -147,4 +148,33 @@ export function getCommentsForExport(childId: string, userId: string): Promise<Q
       limit(EXPORT_LIMIT),
     ),
   );
+}
+
+/**
+ * Nombre d'événements d'un enfant (filtré par types si fournis), par agrégation
+ * serveur : une lecture facturée par tranche de 1000 entrées d'index, aucun
+ * document transféré. Échoue hors ligne (l'appelant ignore alors le jalon).
+ */
+export async function countChildEvents(childId: string, types?: string[]): Promise<number> {
+  const constraints: QueryConstraint[] = [where('childId', '==', childId)];
+  if (types && types.length > 0) constraints.push(where('type', 'in', types));
+  const snap = await getCountFromServer(query(collection(db, 'events'), ...constraints));
+  return snap.data().count;
+}
+
+/** Date du plus ancien événement d'un enfant (1 lecture), ou null s'il n'en a aucun. */
+export async function getFirstEventDate(childId: string): Promise<Date | null> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'events'),
+      where('childId', '==', childId),
+      orderBy('date', 'asc'),
+      limit(1),
+    ),
+  );
+  if (snap.empty) return null;
+  const raw = snap.docs[0].data().date;
+  const date =
+    raw && typeof raw.toDate === 'function' ? raw.toDate() : raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
