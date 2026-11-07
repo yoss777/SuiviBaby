@@ -1,4 +1,3 @@
-import { db } from "@/config/firebase";
 import {
   ChildAccessDocument,
   ChildPermissions,
@@ -6,18 +5,16 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
 } from "@/types/permissions";
 import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where
-} from "firebase/firestore";
+  deleteAccessDoc,
+  deleteAccessIndex,
+  getAccessDoc,
+  getAccessDocs,
+  getUserAccessIndex,
+  mergeAccessIndex,
+  setAccessDoc,
+  updateAccessDoc,
+} from "@/services/accessRepository";
+import { nowTimestamp } from "@/services/firestoreTimestamps";
 
 import { canManageEvents } from "@/utils/eventPermissions";
 
@@ -29,8 +26,7 @@ export async function getUserChildAccess(
   userId: string,
 ): Promise<ChildAccessDocument | null> {
   try {
-    const accessRef = doc(db, "children", childId, "access", userId);
-    const accessSnap = await getDoc(accessRef);
+    const accessSnap = await getAccessDoc(childId, userId);
 
     if (!accessSnap.exists()) {
       return null;
@@ -97,9 +93,6 @@ export async function grantChildAccess(
   },
 ): Promise<void> {
   try {
-    const accessRef = doc(db, "children", childId, "access", userId);
-    const indexRef = doc(db, "user_child_access", `${userId}_${childId}`);
-
     // Permissions par défaut selon le rôle
     const defaultPermissions = DEFAULT_ROLE_PERMISSIONS[role];
 
@@ -116,22 +109,18 @@ export async function grantChildAccess(
         options?.customPermissions?.canWriteComments ??
         defaultPermissions.canWriteComments,
       grantedBy,
-      grantedAt: Timestamp.now(),
+      grantedAt: nowTimestamp(),
       ...(options?.invitationId && { invitationId: options.invitationId }),
     };
 
-    await setDoc(accessRef, accessDoc);
-    await setDoc(
-      indexRef,
-      {
-        userId,
-        childId,
-        invitationId: options?.invitationId ?? null,
-        grantedBy,
-        grantedAt: Timestamp.now(),
-      },
-      { merge: true },
-    );
+    await setAccessDoc(childId, userId, accessDoc);
+    await mergeAccessIndex(userId, childId, {
+      userId,
+      childId,
+      invitationId: options?.invitationId ?? null,
+      grantedBy,
+      grantedAt: nowTimestamp(),
+    });
   } catch (error) {
     console.error("Error granting child access:", error);
     throw error;
@@ -151,13 +140,12 @@ export async function updateChildAccess(
   updates: Partial<ChildAccessDocument>,
 ): Promise<void> {
   try {
-    const accessRef = doc(db, "children", childId, "access", userId);
     // A role change resets the write flags to that role's defaults; otherwise
     // a member demoted to viewer would keep canWriteEvents/Likes/Comments.
     const roleDefaults = updates.role
       ? (({ role: _role, ...flags }) => flags)(DEFAULT_ROLE_PERMISSIONS[updates.role])
       : {};
-    await updateDoc(accessRef, { ...roleDefaults, ...updates });
+    await updateAccessDoc(childId, userId, { ...roleDefaults, ...updates });
   } catch (error) {
     console.error("Error updating child access:", error);
     throw error;
@@ -172,10 +160,8 @@ export async function revokeChildAccess(
   userId: string,
 ): Promise<void> {
   try {
-    const accessRef = doc(db, "children", childId, "access", userId);
-    const indexRef = doc(db, "user_child_access", `${userId}_${childId}`);
-    await deleteDoc(accessRef);
-    await deleteDoc(indexRef);
+    await deleteAccessDoc(childId, userId);
+    await deleteAccessIndex(userId, childId);
   } catch (error) {
     console.error("Error revoking child access:", error);
     throw error;
@@ -189,8 +175,7 @@ export async function getAllChildAccess(
   childId: string,
 ): Promise<Record<string, ChildAccessDocument>> {
   try {
-    const accessCollectionRef = collection(db, "children", childId, "access");
-    const accessSnap = await getDocs(accessCollectionRef);
+    const accessSnap = await getAccessDocs(childId);
 
     const accesses: Record<string, ChildAccessDocument> = {};
     accessSnap.forEach((doc) => {
@@ -231,12 +216,7 @@ export async function createOwnerAccess(
  * Récupère la liste des childIds accessibles par un utilisateur
  */
 export async function getAccessibleChildIds(userId: string): Promise<string[]> {
-  const q = query(
-    collection(db, "user_child_access"),
-    where("userId", "==", userId),
-    limit(200),
-  );
-  const snapshot = await getDocs(q);
+  const snapshot = await getUserAccessIndex(userId);
 
   const ids = new Set<string>();
   snapshot.docs.forEach((docSnap) => {

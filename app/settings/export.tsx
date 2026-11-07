@@ -4,15 +4,13 @@ import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
+import { getAccessDoc } from "@/services/accessRepository";
+import { getChildDoc } from "@/services/childRepository";
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
+  getCommentsForExport,
+  getEventsForExport,
+  getLikesForExport,
+} from "@/services/eventsRepository";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -28,7 +26,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { db } from "@/config/firebase";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Child } from "@/contexts/BabyContext";
@@ -294,9 +291,7 @@ export default function ExportScreen() {
               // Role first: owners/admins export ALL events of the child,
               // others only their own entries.
               const accessDoc = user?.uid
-                ? await getDoc(
-                    doc(db, "children", child.id, "access", user.uid),
-                  ).catch(() => null)
+                ? await getAccessDoc(child.id, user.uid).catch(() => null)
                 : null;
               const role =
                 accessDoc && accessDoc.exists()
@@ -307,38 +302,15 @@ export default function ExportScreen() {
               const [eventsSnapshot, likesSnapshot, commentsSnapshot, childDoc] =
                 await Promise.all([
                   user?.uid
-                    ? getDocs(
-                        query(
-                          collection(db, "events"),
-                          where("childId", "==", child.id),
-                          ...(seesAllEvents
-                            ? []
-                            : [where("userId", "==", user.uid)]),
-                          limit(10000),
-                        ),
-                      )
+                    ? getEventsForExport(child.id, user.uid, seesAllEvents)
                     : Promise.resolve({ docs: [] } as any),
                   user?.uid
-                    ? getDocs(
-                        query(
-                          collection(db, "eventLikes"),
-                          where("childId", "==", child.id),
-                          where("userId", "==", user.uid),
-                          limit(10000),
-                        ),
-                      )
+                    ? getLikesForExport(child.id, user.uid)
                     : Promise.resolve({ docs: [] } as any),
                   user?.uid
-                    ? getDocs(
-                        query(
-                          collection(db, "eventComments"),
-                          where("childId", "==", child.id),
-                          where("userId", "==", user.uid),
-                          limit(10000),
-                        ),
-                      )
+                    ? getCommentsForExport(child.id, user.uid)
                     : Promise.resolve({ docs: [] } as any),
-                  getDoc(doc(db, "children", child.id)).catch(() => null),
+                  getChildDoc(child.id).catch(() => null),
                 ]);
 
               const events = eventsSnapshot.docs.map(

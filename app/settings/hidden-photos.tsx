@@ -23,8 +23,7 @@ import {
   onHiddenPhotosChange,
   unhidePhoto,
 } from "@/services/hiddenPhotosService";
-import { db } from "@/config/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { getEventDoc } from "@/services/eventsRepository";
 
 interface HiddenPhotoItem {
   eventId: string;
@@ -58,7 +57,7 @@ export default function HiddenPhotosScreen() {
       const results: HiddenPhotoItem[] = [];
       for (const eventId of hiddenIds) {
         try {
-          const snap = await getDoc(doc(db, "events", eventId));
+          const snap = await getEventDoc(eventId);
           if (!snap.exists()) {
             results.push({
               eventId,

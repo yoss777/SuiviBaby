@@ -5,18 +5,8 @@
 // demande, au défilement. Avant : tout l'historique des jalons était relu et
 // écouté à chaque ouverture.
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  where,
-} from "firebase/firestore";
-import { db } from "@/config/firebase";
+import type { DocumentSnapshot } from "firebase/firestore";
+import { getEventDoc, getMilestonesPageAfter } from "@/services/eventsRepository";
 import { ecouterEvenements, JalonEvent } from "@/services/eventsService";
 
 export type GalleryMilestoneEvent = JalonEvent & { id: string };
@@ -165,10 +155,10 @@ export function useGalleryMilestones(childId: string | undefined) {
       // Curseur = document du dernier jalon chargé (départage les dates égales).
       // Un jalon supprimé entre-temps est retiré de la liste locale et on prend
       // le précédent comme curseur (sinon la pagination resterait bloquée).
-      let cursor: Awaited<ReturnType<typeof getDoc>> | null = null;
+      let cursor: DocumentSnapshot | null = null;
       while (eventsRef.current.length > 0) {
         const oldest = eventsRef.current[eventsRef.current.length - 1];
-        const candidate = await getDoc(doc(db, "events", oldest.id));
+        const candidate = await getEventDoc(oldest.id);
         if (!isMountedRef.current || childIdRef.current !== cid) return;
         if (candidate.exists()) {
           cursor = candidate;
@@ -182,16 +172,7 @@ export function useGalleryMilestones(childId: string | undefined) {
         setRetryCount((c) => c + 1);
         return;
       }
-      const snapshot = await getDocs(
-        query(
-          collection(db, "events"),
-          where("childId", "==", cid),
-          where("type", "in", ["jalon"]),
-          orderBy("date", "desc"),
-          startAfter(cursor),
-          limit(GALLERY_PAGE_SIZE),
-        ),
-      );
+      const snapshot = await getMilestonesPageAfter(cid, cursor, GALLERY_PAGE_SIZE);
       // Enfant changé pendant la lecture : résultat jeté.
       if (!isMountedRef.current || childIdRef.current !== cid) return;
       const page = snapshot.docs.map(

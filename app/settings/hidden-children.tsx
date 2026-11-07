@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
-import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { formatBirthDate, getAgeLabel } from "@/utils/ageUtils";
@@ -27,7 +26,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   afficherEnfant,
 } from "@/services/userPreferencesService";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { getChildDoc } from "@/services/childRepository";
+import { listenToUserPreferencesDoc } from "@/services/userRepository";
 import { getAccessibleChildIds } from "@/utils/permissions";
 
 const { width } = Dimensions.get("window");
@@ -57,10 +57,8 @@ export default function HiddenChildrenScreen() {
     }
 
     setLoading(true);
-    const prefsRef = doc(db, "user_preferences", user.uid);
-
-    const unsubscribe = onSnapshot(
-      prefsRef,
+    const unsubscribe = listenToUserPreferencesDoc(
+      user.uid,
       async (snapshot) => {
         try {
           const data = snapshot.data();
@@ -79,7 +77,7 @@ export default function HiddenChildrenScreen() {
           const results = await Promise.allSettled(
             hiddenIds
               .filter((id) => accessibleIds.has(id))
-              .map((id) => getDoc(doc(db, "children", id)))
+              .map((id) => getChildDoc(id))
           );
           const hidden: Child[] = results.flatMap((result) =>
             result.status === "fulfilled" && result.value.exists()

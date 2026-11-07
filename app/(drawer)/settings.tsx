@@ -5,7 +5,9 @@ import { useNavigation } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { getAccessDoc } from "@/services/accessRepository";
+import { listenToOwnerDeletionRequests } from "@/services/deletionRequestRepository";
+import { listenToUserPreferencesDoc } from "@/services/userRepository";
 import {
   useCallback,
   useEffect,
@@ -28,7 +30,6 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { PromptModal } from "@/components/ui/PromptModal";
-import { db } from "@/config/firebase";
 import {
   getBackgroundTint,
   getNeutralColors,
@@ -141,9 +142,7 @@ export default function SettingsScreen() {
     (async () => {
       try {
         for (const child of children) {
-          const accessSnap = await getDoc(
-            doc(db, "children", child.id, "access", user.uid)
-          );
+          const accessSnap = await getAccessDoc(child.id, user.uid);
           if (accessSnap.exists() && accessSnap.data()?.role === "owner") {
             if (mounted) setIsOwnerOfAny(true);
             return;
@@ -166,13 +165,8 @@ export default function SettingsScreen() {
       return;
     }
 
-    const q = query(
-      collection(db, "childDeletionRequests"),
-      where("ownerIds", "array-contains", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubscribe = listenToOwnerDeletionRequests(
+      user.uid,
       (snapshot) => {
         const count = snapshot.docs.filter((d) => {
           const status = d.data().status;
@@ -228,10 +222,8 @@ export default function SettingsScreen() {
       return;
     }
 
-    const userPrefsRef = doc(db, "user_preferences", user.uid);
-
-    const unsubscribe = onSnapshot(
-      userPrefsRef,
+    const unsubscribe = listenToUserPreferencesDoc(
+      user.uid,
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data();

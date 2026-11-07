@@ -16,8 +16,7 @@ import {
   removeBookmark as removeBookmarkService,
   updateMilestoneStatus as updateMilestoneStatusService,
 } from "@/services/smartContentService";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import { listenToChildDoc } from "@/services/childRepository";
 import type { MilestoneStatus } from "@/types/content";
 import type { Insight, MilestoneRef, Tip, UserContent } from "@/types/content";
 import { DEFAULT_USER_CONTENT } from "@/types/content";
@@ -219,8 +218,8 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
   // Real-time listener for shared milestoneStatuses on child doc
   useEffect(() => {
     if (!childId) return;
-    const unsubscribe = onSnapshot(
-      doc(db, "children", childId),
+    const unsubscribe = listenToChildDoc(
+      childId,
       (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();

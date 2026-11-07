@@ -2,7 +2,9 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Stack, useRouter } from "expo-router";
-import { collection, doc, getDoc, getDocs, updateDoc } from "firebase/firestore";
+import { getAccessDoc, getAccessDocs } from "@/services/accessRepository";
+import { getChildDoc, updateChildDoc } from "@/services/childRepository";
+import { getPublicUserDoc } from "@/services/userRepository";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +23,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AllergiesEditor } from "@/components/forms/AllergiesEditor";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -121,11 +122,11 @@ export default function EditChildScreen() {
         await Promise.all(
           childIds.map(async (id) => {
             try {
-              const childSnap = await getDoc(doc(db, "children", id));
+              const childSnap = await getChildDoc(id);
               if (!childSnap.exists()) return;
-              const accessSnap = await getDoc(doc(db, "children", id, "access", user.uid));
+              const accessSnap = await getAccessDoc(id, user.uid);
               const role = accessSnap.exists() ? accessSnap.data()?.role ?? null : null;
-              const allAccessSnap = await getDocs(collection(db, "children", id, "access"));
+              const allAccessSnap = await getAccessDocs(id);
               const data = childSnap.data();
               results.push({
                 id,
@@ -202,7 +203,7 @@ export default function EditChildScreen() {
     if (!trimmedName || !editingChildId) return;
     try {
       setIsSaving(true);
-      await updateDoc(doc(db, "children", editingChildId), { name: trimmedName });
+      await updateChildDoc(editingChildId, { name: trimmedName });
       if (!isMountedRef.current) return;
       setAllChildren((prev) => prev.map((c) => c.id === editingChildId ? { ...c, name: trimmedName } : c));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -240,7 +241,7 @@ export default function EditChildScreen() {
     const next = sanitizeAllergies(allergiesDraft);
     try {
       setIsSaving(true);
-      await updateDoc(doc(db, "children", allergiesChildId), { allergies: next });
+      await updateChildDoc(allergiesChildId, { allergies: next });
       if (!isMountedRef.current) return;
       setAllChildren((prev) => prev.map((c) => c.id === allergiesChildId ? { ...c, allergies: next } : c));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -308,14 +309,14 @@ export default function EditChildScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setTransferModal({ visible: true, child, parents: [], selectedParentId: null, loading: true });
     try {
-      const accessSnap = await getDocs(collection(db, "children", child.id, "access"));
+      const accessSnap = await getAccessDocs(child.id);
       const parents: ParentInfo[] = [];
       for (const accessDoc of accessSnap.docs) {
         if (accessDoc.id === user.uid) continue;
         const data = accessDoc.data();
         let email: string | undefined;
         try {
-          const publicDoc = await getDoc(doc(db, "users_public", accessDoc.id));
+          const publicDoc = await getPublicUserDoc(accessDoc.id);
           if (publicDoc.exists()) email = publicDoc.data()?.userName || publicDoc.data()?.email;
         } catch { /* ignore */ }
         parents.push({ userId: accessDoc.id, role: data.role || "viewer", email });

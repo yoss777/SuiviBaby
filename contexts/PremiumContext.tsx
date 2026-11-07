@@ -4,7 +4,7 @@
 // et sera connecté à RevenueCat quand les API keys seront prêtes.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { doc, onSnapshot } from "firebase/firestore";
+import { listenToSubscriptionDoc } from "@/services/userRepository";
 import React, {
   createContext,
   useCallback,
@@ -14,7 +14,6 @@ import React, {
   useState,
 } from "react";
 
-import { db } from "@/config/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   initRevenueCat,
@@ -226,9 +225,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     };
 
     const syncFromFirestore = () => {
-      const docRef = doc(db, "subscriptions", firebaseUser.uid);
-      return onSnapshot(
-        docRef,
+      return listenToSubscriptionDoc(
+        firebaseUser.uid,
         (snap) => {
           if (cancelled) return;
           if (snap.exists()) {
@@ -262,9 +260,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     syncFromRevenueCat();
 
     // Firestore listener for grandfathered status (not in RevenuCat)
-    const docRef = doc(db, "subscriptions", firebaseUser.uid);
-    const unsubFirestore = onSnapshot(
-      docRef,
+    const unsubFirestore = listenToSubscriptionDoc(
+      firebaseUser.uid,
       (snap) => {
         if (cancelled) return;
         if (snap.exists()) {

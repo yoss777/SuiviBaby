@@ -974,7 +974,7 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
   décider ;
 - à voir : plage de nuit pour les rappels (`test.todo`, décision produit).
 
-## S13 — Dette structurelle (mois 3) · 🟡 2026-11-07 (13.1, 13.2 partiel, 13.4, 13.6, 13.7 faits ; 13.3 à faire ; 13.5 en attente de l'accord de Yoss ; revue ECC à faire)
+## S13 — Dette structurelle (mois 3) · 🟡 2026-11-07 (13.1, 13.2 partiel, 13.3, 13.4, 13.6, 13.7 faits ; 13.5 en attente de l'accord de Yoss ; revue ECC à faire)
 
 - [x] **13.1** Découpage de `functions/index.js` par domaine (partage,
   événements, voix, facturation, suppression, notifications, modération,
@@ -982,7 +982,7 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
 - [~] **13.2** (repas, pompages, couches migrés ; `toDate` unique) Écran de liste générique piloté par configuration, migré écran
   par écran (repas, pompages, couches d'abord) ; `toDate` unique dans
   `utils/date`.
-- [ ] **13.3** Couche d'accès aux données (`services/*Repository.ts`) et règle
+- [x] **13.3** (repositories dans `services/`, règle ESLint en erreur ; `import type` autorisé) Couche d'accès aux données (`services/*Repository.ts`) et règle
   ESLint qui interdit `firebase/firestore` hors `services/`.
 - [x] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
   `app-example/` ; `explore.tsx` renommé.

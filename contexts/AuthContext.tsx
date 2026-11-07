@@ -1,5 +1,5 @@
 // contexts/AuthContext.tsx
-import { auth, db } from "@/config/firebase";
+import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
@@ -27,7 +27,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { getUserDoc } from "@/services/userRepository";
 import {
   createContext,
   useCallback,
@@ -187,7 +187,7 @@ export function AuthProvider({
             : "patient";
 
         // Step 1: Fetch user doc (retry once after short delay for signup race condition)
-        let userDoc = await getDoc(doc(db, "users", fbUser.uid));
+        let userDoc = await getUserDoc(fbUser.uid);
         if (!isMountedRef.current) return;
 
         if (!userDoc.exists()) {
@@ -195,7 +195,7 @@ export function AuthProvider({
           // login.tsx finished writing it — wait briefly and retry
           await new Promise((r) => setTimeout(r, 1500));
           if (!isMountedRef.current) return;
-          userDoc = await getDoc(doc(db, "users", fbUser.uid));
+          userDoc = await getUserDoc(fbUser.uid);
           if (!isMountedRef.current) return;
         }
 

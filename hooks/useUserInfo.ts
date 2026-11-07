@@ -3,8 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { getPublicUserDoc } from '@/services/userRepository';
 
 interface UserInfo {
   displayName?: string;
@@ -35,8 +34,7 @@ export function useUserInfo(userId: string | null | undefined) {
 
     const fetchUserInfo = async () => {
       try {
-        const userRef = doc(db, 'users_public', userId);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await getPublicUserDoc(userId);
         if (cancelled) return;
 
         if (userSnap.exists()) {
@@ -96,8 +94,7 @@ export function useUsersInfo(userIds: string[]) {
 
         await Promise.all(
           userIds.map(async (userId) => {
-            const userRef = doc(db, 'users_public', userId);
-            const userSnap = await getDoc(userRef);
+            const userSnap = await getPublicUserDoc(userId);
 
             if (userSnap.exists()) {
               usersData[userId] = userSnap.data() as UserInfo;

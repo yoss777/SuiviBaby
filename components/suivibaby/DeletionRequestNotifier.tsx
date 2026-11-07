@@ -3,15 +3,10 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import {
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+  listenToOwnerDeletionRequests,
+  markDeletionRequestSeen,
+} from "@/services/deletionRequestRepository";
+import { getPublicUserDoc } from "@/services/userRepository";
 import { useEffect, useRef, useState } from "react";
 import {
   Modal,
@@ -23,7 +18,6 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 
-import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -66,12 +60,7 @@ export function DeletionRequestNotifier() {
     if (!user?.uid || hasChecked.current) return;
     hasChecked.current = true;
 
-    const q = query(
-      collection(db, "childDeletionRequests"),
-      where("ownerIds", "array-contains", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const unsubscribe = listenToOwnerDeletionRequests(user.uid, async (snapshot) => {
       const uid = user.uid;
 
       for (const docSnap of snapshot.docs) {
@@ -95,7 +84,7 @@ export function DeletionRequestNotifier() {
         const names: Record<string, string> = {};
         for (const ownerId of Object.keys(data.ownerVotes)) {
           try {
-            const publicDoc = await getDoc(doc(db, "users_public", ownerId));
+            const publicDoc = await getPublicUserDoc(ownerId);
             names[ownerId] = publicDoc.exists()
               ? publicDoc.data()?.userName || ownerId.slice(0, 8) + "..."
               : ownerId.slice(0, 8) + "...";
@@ -129,9 +118,7 @@ export function DeletionRequestNotifier() {
     if (currentRequest && user?.uid) {
       // Mark as seen
       try {
-        await updateDoc(doc(db, "childDeletionRequests", currentRequest.id), {
-          seenByUserIds: arrayUnion(user.uid),
-        });
+        await markDeletionRequestSeen(currentRequest.id, user.uid);
       } catch {
         // Ignore — CF-only write rule, this may fail
         // The popup just won't re-appear since we track locally

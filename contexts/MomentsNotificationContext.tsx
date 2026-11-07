@@ -1,9 +1,10 @@
-import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby } from '@/contexts/BabyContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SocialInteractionsProvider, useSocialInteractions } from '@/contexts/SocialInteractionsContext';
-import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, where } from 'firebase/firestore';
+import { listenToRecentJalons } from '@/services/eventsRepository';
+import { isFirestoreTimestamp } from '@/services/firestoreTimestamps';
+import { getUserPreferencesDoc, mergeUserPreferences } from '@/services/userRepository';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type NotificationType = 'photo' | 'like' | 'comment';
@@ -35,7 +36,7 @@ const SEEN_IDS_KEY_PREFIX = 'moments_seen_ids_';
 
 // Helper pour extraire le timestamp
 const getTimestamp = (createdAt: any): number => {
-  if (createdAt instanceof Timestamp) {
+  if (isFirestoreTimestamp(createdAt)) {
     return createdAt.toMillis();
   } else if (createdAt?.seconds) {
     return createdAt.seconds * 1000;
@@ -163,9 +164,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
         }
 
         // 2. Load from Firestore (source of truth, may override local)
-        const firestoreDoc = await getDoc(
-          doc(db, 'user_preferences', user.uid)
-        );
+        const firestoreDoc = await getUserPreferencesDoc(user.uid);
         if (cancelled) return;
         const firestoreData = firestoreDoc.data();
         const fsLastSeen = firestoreData?.momentsLastSeen as number | undefined;
@@ -216,15 +215,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
       if (__DEV__) console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
 
       // Écouter les jalons
-      const jalonsQuery = query(
-        collection(db, 'events'),
-        where('childId', '==', childId),
-        where('type', '==', 'jalon'),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      );
-
-      unsubscribes.push(onSnapshot(jalonsQuery, (snapshot) => {
+      unsubscribes.push(listenToRecentJalons(childId, (snapshot) => {
         let count = 0;
         const newJalonIds = new Set<string>();
         snapshot.docs.forEach((d) => {
@@ -287,7 +278,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
       await Promise.all([
         AsyncStorage.setItem(key, now.toString()),
         AsyncStorage.removeItem(seenKey),
-        setDoc(doc(db, 'user_preferences', user.uid), { momentsLastSeen: now, momentsSeenIds: [] }, { merge: true }),
+        mergeUserPreferences(user.uid, { momentsLastSeen: now, momentsSeenIds: [] }),
       ]);
     } catch (error) {
       console.error('[MomentsNotification] Erreur sauvegarde lastSeen:', error);
@@ -306,7 +297,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
       const ids = [...seenEventIdsRef.current].slice(-500);
       const seenKey = `${SEEN_IDS_KEY_PREFIX}${user.uid}_${activeChild.id}`;
       AsyncStorage.setItem(seenKey, JSON.stringify(ids)).catch(() => {});
-      setDoc(doc(db, 'user_preferences', user.uid), { momentsSeenIds: ids }, { merge: true }).catch(() => {});
+      mergeUserPreferences(user.uid, { momentsSeenIds: ids }).catch(() => {});
     }
 
     // Recount

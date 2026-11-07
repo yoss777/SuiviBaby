@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { collection, doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { listenToAccessCollection, listenToAccessDoc } from '@/services/accessRepository';
 import { ChildPermissions, ChildAccessDocument, ChildRole } from '@/types/permissions';
 import { calculatePermissions } from '@/utils/permissions';
 
@@ -71,8 +70,9 @@ function startAccessEntry(childId: string, userId: string, key: string): AccessE
   const listen = () => {
     if (entry.unsubscribe) return;
     let active = true;
-    const unsubscribe = onSnapshot(
-      doc(db, 'children', childId, 'access', userId),
+    const unsubscribe = listenToAccessDoc(
+      childId,
+      userId,
       (snapshot) => {
         if (!active) return;
         // Réponse reçue : l'éventuelle erreur précédente est derrière nous.
@@ -288,10 +288,8 @@ export function useChildAccesses(childId: string | null | undefined) {
       return;
     }
 
-    const accessCollectionRef = collection(db, 'children', childId, 'access');
-
-    const unsubscribe = onSnapshot(
-      accessCollectionRef,
+    const unsubscribe = listenToAccessCollection(
+      childId,
       (snapshot) => {
         const newAccesses: Record<string, ChildAccessDocument> = {};
         snapshot.forEach((doc) => {

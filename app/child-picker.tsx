@@ -10,7 +10,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { InfoModal } from '@/components/ui/InfoModal';
-import { db } from '@/config/firebase';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby, type Child } from '@/contexts/BabyContext';
@@ -21,7 +20,7 @@ import {
   type ShareInvitation,
 } from '@/services/childSharingService';
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
-import { doc, getDoc } from 'firebase/firestore';
+import { getChildDoc } from '@/services/childRepository';
 import { getAccessibleChildIds } from '@/utils/permissions';
 
 const { width } = Dimensions.get('window');
@@ -150,7 +149,7 @@ export default function ChildPicker() {
         const prefs = await obtenirPreferences();
         const childIds = await getAccessibleChildIds(user.uid);
         const childDocs = await Promise.all(
-          childIds.map((id) => getDoc(doc(db, 'children', id)))
+          childIds.map((id) => getChildDoc(id))
         );
         const allChildren: Child[] = childDocs
           .filter((snap) => snap.exists())
