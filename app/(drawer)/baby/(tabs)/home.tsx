@@ -30,6 +30,7 @@ import { useCalendarDay } from "@/hooks/useMinuteTick";
 import { useWeeklyInsightEvents, withLiveToday } from "@/hooks/useWeeklyInsightEvents";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
+import { getWeeklyEventsCache } from "@/services/weeklyEventsCache";
 import { getOptimisticEntries, subscribe as subscribeOptimistic } from "@/services/optimisticEventsStore";
 import { mergeOptimisticTemperatures } from "@/utils/mergeOptimisticTemperatures";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
@@ -67,6 +68,7 @@ import {
 } from "react-native";
 import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
 import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
+import { HomeMilestoneCelebration } from "@/components/suivibaby/home/HomeMilestoneCelebration";
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 import { startLoop } from "@/utils/motion";
 
@@ -589,6 +591,14 @@ export default function HomeDashboard() {
     // optimisticTick : le store n'est pas réactif par lui-même.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [weeklyEvents, mergedTodayEvents, activeChild?.id, optimisticTick],
+  );
+
+  // Semaine chargée (cache rempli) : condition pour évaluer série et nuits longues.
+  const weeklyLoaded = useMemo(
+    () => (activeChild?.id ? getWeeklyEventsCache(activeChild.id) !== null : false),
+    // weeklyEvents : le cache n'est pas réactif, son remplissage change cette référence.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [weeklyEvents, activeChild?.id],
   );
 
   const smartContent = useSmartContent({
@@ -1915,6 +1925,14 @@ export default function HomeDashboard() {
           />
         </StaggeredCard>
       </ScrollView>
+      {/* Célébration d'un jalon : une par jour et par enfant, jamais sur l'alerte fièvre ni une feuille */}
+      <HomeMilestoneCelebration
+        childId={activeChild?.id}
+        childName={activeChild?.name}
+        events={allEventsForInsights}
+        weeklyLoaded={weeklyLoaded}
+        blocked={showFirstTrackGuide || showMilestonesModal || deleteConfirm.visible}
+      />
       <ConfirmModal
         visible={deleteConfirm.visible}
         title="Supprimer cet événement ?"
