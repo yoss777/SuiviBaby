@@ -841,6 +841,25 @@ support en attendant une décision.
 et à la modification, lecture seule pour un Proche, ligne dans le PDF,
 validation dans les règles, export).
 
+**Décisions et backlog (Yoss, 2026-11-07, suite)** :
+- AssemblyAI reste en offre gratuite (pas de désinscription de
+  l'entraînement possible) : politique corrigée pour le dire ; **à faire :
+  remplacer AssemblyAI** — piste recommandée : reconnaissance vocale sur
+  l'appareil (iOS Speech / Android SpeechRecognizer, ex.
+  `expo-speech-recognition`), seul le texte part à Anthropic ; à comparer
+  avec une transcription API sans entraînement (hébergée UE).
+- DPO : non désigné (SASU, 1 personne, objectif ~500 utilisateurs, ≤ 10
+  salariés à terme) ; justification à noter dans le registre ; réexamen
+  au-delà de quelques milliers d'utilisateurs.
+- Médiateur de la consommation : à choisir avant la vente de Premium
+  (comparaison faite, voir conversation) ; mentions à compléter dans
+  `terms.html` et `mentions-legales.html` ensuite.
+- Montée d'Expo (13.5) : après la prochaine version publiée.
+- Plage de nuit des rappels : réglage par parent, activé par défaut
+  22 h – 7 h, fuseau du téléphone, rappel sauté pendant la plage.
+- `MilestoneCelebrationModal` : décision en attente (rebrancher ou
+  supprimer).
+
 ## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 faite, voir plus bas)
 
 - [x] **11.1** `collectCoverageFrom` pour mesurer la vraie couverture, seuils
