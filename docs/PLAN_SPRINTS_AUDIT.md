@@ -32,7 +32,7 @@
 | Q4 | Position « dispositif médical » (MDR) des alertes santé | S5 | Garder des alertes d'orientation (« consultez »), aucune interprétation ; avis juridique si doute |
 | Q5 | Contenu du récap hebdomadaire par e-mail | S3 | Plus de chiffres de santé dans l'e-mail, un lien vers l'app ; owner et admin seulement |
 | Q6 | Accès en lecture des contributeurs aux événements (D11 dit « photos seulement ») | S4 | Aligner les règles sur D11 |
-| Q7 | Offre Famille, courbes OMS, statistiques avancées (déjà 3.2 / 3.3) | S10 | À trancher avant le déploiement du site |
+| Q7 | Offre Famille, courbes OMS, statistiques avancées (déjà 3.2 / 3.3) | S10 | **Tranché 2026-11-07 (Yoss)** : courbes OMS et statistiques avancées gratuites, retirées des avantages Premium ; offre Famille supprimée, Premium seule offre payante (produits Famille laissés dans les stores mais non proposés) |
 | Q8 | Projet Firebase de staging (coût, nom) | S12 | `samaye-staging`, plan Blaze avec budget plafonné |
 | Q9 | Compte de service Google Play pour automatiser l'envoi Android | S12 | Oui, piste Alpha seulement |
 
