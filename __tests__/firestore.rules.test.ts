@@ -1862,6 +1862,36 @@ describe("device_tokens collection", () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(deleteDoc(doc(db, "device_tokens", "token1")));
   });
+
+  test("next account on the same device takes the token over", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertSucceeds(
+      setDoc(
+        doc(db, "device_tokens", "token1"),
+        { userId: BOB_UID, token: "abc123", platform: "ios", enabled: true },
+        { merge: true },
+      ),
+    );
+  });
+
+  test("takeover cannot change the token or keep the previous owner", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(
+      setDoc(
+        doc(db, "device_tokens", "token1"),
+        { userId: BOB_UID, token: "other" },
+        { merge: true },
+      ),
+    );
+    await assertFails(
+      setDoc(doc(db, "device_tokens", "token1"), { enabled: false }, { merge: true }),
+    );
+  });
+
+  test("user cannot delete another user's device token", async () => {
+    const db = authedFirestore(BOB_UID);
+    await assertFails(deleteDoc(doc(db, "device_tokens", "token1")));
+  });
 });
 
 // ===========================================================================
