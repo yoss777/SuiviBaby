@@ -60,7 +60,7 @@ const SLIDES = [
     icon: "wand-magic-sparkles" as const,
     title: "Insights intelligents",
     description:
-      "Découvrez des tendances : \"Bébé dort mieux quand couché avant 19h30\". Courbes OMS, statistiques avancées et plus avec Premium.",
+      "Découvrez des tendances : \"Bébé dort mieux quand couché avant 19h30\". Statistiques et courbes de croissance OMS incluses gratuitement.",
     color: "#8b5cf6",
   },
 ];

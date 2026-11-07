@@ -797,15 +797,30 @@ et ne pas subir d'animations si je les ai désactivées.
 
 ## S10 — Site et stores · site · ⏳
 
-- [ ] **10.1** Décisions Q7 appliquées : site aligné sur ce que l'app fait
+- [x] **10.1** Décisions Q7 appliquées : site aligné sur ce que l'app fait
   vraiment (OMS, statistiques avancées, Famille) ; −37 % / −46 % par offre.
-- [ ] **10.2** 2.3 (cases « À compléter »), 2.5 (captures avec texte
+  Fait 2026-11-07 : carte Famille retirée du site et du paywall (onglet
+  masqué, produits et tier `family` conservés), courbes OMS et statistiques
+  sorties des avantages Premium (`isAlwaysFreeFeature`), section « Famille »
+  du site renommée « Partage » (`#partage`), remise annuelle affichée
+  **−37 %** (Premium seul : 29,99 € contre 12 × 3,99 € = 47,88 €), FAQ et
+  JSON-LD alignés, CGU §9 (site 2.1 et app) sans Famille.
+- [~] **10.2** 2.3 (cases « À compléter »), 2.5 (captures avec texte
   alternatif), garde-fou `grep -c 'class="todo"'` avant déploiement.
-- [ ] **10.3** `cleanUrls`, `favicon.ico`, logo 72 px et `apple-touch-icon`
+  Fait : durée des sauvegardes (7 j quotidiennes / 30 j hebdomadaires),
+  `alt` en français sur les 5 captures, `scripts/checkSiteTodos.sh`. Restent
+  4 cases à trancher par Yoss : médiateur (CGU, mentions légales), DPO,
+  non-entraînement AssemblyAI / Anthropic (`privacy.html`).
+  **Contrôle avant déploiement du site** : `bash scripts/checkSiteTodos.sh`
+  doit sortir en 0 avant tout `firebase deploy --only hosting` (pas encore
+  branché dans la CI tant que des cases restent).
+- [x] **10.3** `cleanUrls`, `favicon.ico`, logo 72 px et `apple-touch-icon`
   180 px, og-image en JPEG, JSON-LD enrichi (captures, fonctionnalités,
-  `sameAs`).
-- [ ] **10.4** CSP : styles inline déplacés pour retirer `'unsafe-inline'` ;
-  `connect-src` vérifié pour la page de réinitialisation.
+  `sameAs`). Réécritures devenues inutiles retirées ; `no-cache` étendu aux
+  URL sans extension.
+- [x] **10.4** CSP : styles inline déplacés pour retirer `'unsafe-inline'` ;
+  `connect-src` vérifié pour la page de réinitialisation (aucun appel
+  réseau : simple redirection vers l'app, `'self'` suffit).
 - [ ] **10.5** Fiches « Confidentialité » (App Store) et « Sécurité des
   données » (Google Play) comparées aux flux réels (Sentry, Anthropic,
   AssemblyAI, Resend, RevenueCat) et mises à jour.
