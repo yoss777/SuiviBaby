@@ -301,6 +301,9 @@ function groupExcretionsByDay(excretions: Excretion[]): ExcretionGroup[] {
 // COMPONENT
 // ============================================
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const DIAPERS_EVENT_TYPES = ["miction", "selle"] as const;
+
 export default function DiapersScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
@@ -356,6 +359,7 @@ export default function DiapersScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<Excretion>({
     childId: activeChild?.id,
+    eventTypes: DIAPERS_EVENT_TYPES,
     transformMerged: sortMergedExcretions,
   });
   const latestMictionsRef = useRef<Excretion[]>([]);

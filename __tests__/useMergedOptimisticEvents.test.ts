@@ -1,10 +1,54 @@
 import { act, renderHook } from "@testing-library/react-native";
 import {
+  filterTypes,
   mergeFirestoreSnapshots,
   useMergedOptimisticEvents,
 } from "@/hooks/useMergedOptimisticEvents";
+import {
+  addOptimisticCreate,
+  resetOptimisticStoreForTests,
+} from "@/services/optimisticEventsStore";
 
 describe("useMergedOptimisticEvents", () => {
+  it("filterTypes keeps only the given types, and everything without a list", () => {
+    const events = [{ id: "1", type: "sommeil" }, { id: "2", type: "biberon" }];
+    expect(filterTypes(events, ["sommeil"])).toEqual([events[0]]);
+    expect(filterTypes(events, undefined)).toBe(events);
+  });
+
+  it("does not show another screen's pending entries (Routines crash, Sentry 1.0.9+13)", () => {
+    jest.useFakeTimers();
+    resetOptimisticStoreForTests();
+    addOptimisticCreate(
+      "child-a",
+      { type: "biberon", childId: "child-a", date: new Date("2026-11-07T08:00:00Z") },
+      "__optimistic_biberon",
+    );
+    addOptimisticCreate(
+      "child-a",
+      { type: "sommeil", childId: "child-a", date: new Date("2026-11-07T07:00:00Z") },
+      "__optimistic_sommeil",
+    );
+
+    const { result, unmount } = renderHook(() =>
+      useMergedOptimisticEvents({
+        childId: "child-a",
+        debounceMs: 0,
+        eventTypes: ["sommeil", "bain", "nettoyage_nez"],
+      }),
+    );
+    act(() => {
+      result.current.setFirestoreEvents([]);
+      jest.runOnlyPendingTimers();
+    });
+
+    expect(result.current.mergedEvents.map((e: any) => e.type)).toEqual(["sommeil"]);
+
+    unmount();
+    resetOptimisticStoreForTests();
+    jest.useRealTimers();
+  });
+
   it("keeps the current event version when a non-destructive refresh returns stale data for the same id", () => {
     const current = [
       {

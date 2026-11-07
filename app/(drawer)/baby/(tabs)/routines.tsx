@@ -253,6 +253,9 @@ const formatDuration = (minutes?: number) => {
 // COMPONENT
 // ============================================
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const ROUTINES_EVENT_TYPES = ["sommeil", "bain", "nettoyage_nez"] as const;
+
 export default function RoutinesScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
@@ -324,6 +327,7 @@ export default function RoutinesScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<RoutineEvent>({
     childId: activeChild?.id,
+    eventTypes: ROUTINES_EVENT_TYPES,
     transformMerged: sortMergedEvents,
   });
 
@@ -1288,6 +1292,7 @@ export default function RoutinesScreen() {
   const renderEventItem = useCallback((event: RoutineEvent, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
     const config = TYPE_CONFIG[event.type as RoutineType];
+    if (!config) return null; // type étranger à Routines : ne pas planter
     const isSleep = event.type === "sommeil";
     const sleepEnd = isSleep && event.heureFin ? toDate(event.heureFin) : null;
     const sleepMeta = isSleep

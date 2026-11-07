@@ -16,7 +16,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "../config/firebase";
-import { captureServiceError } from "@/utils/errorReporting";
+import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
 import { isConflictError, isNetworkError, isNotFoundError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
@@ -338,6 +338,31 @@ const listenerLog: (message: string) => void = __DEV__
 /**
  * Écoute les événements en temps réel
  */
+/**
+ * permission-denied est attendu quand l'accès à l'enfant vient de disparaître
+ * (suppression demandée : le serveur retire tous les accès, partage retiré)
+ * alors qu'un écran l'écoute encore. Dans ce cas : simple trace. Si l'accès
+ * existe toujours, c'est une vraie erreur de règle : signalée avec contexte.
+ */
+async function reportListenerError(error: unknown, childId: string, types: string) {
+  const extra = { childId, types };
+  const code = (error as { code?: string } | null)?.code;
+  if (code === "permission-denied" && auth.currentUser) {
+    try {
+      const access = await getDoc(
+        doc(db, "children", childId, "access", auth.currentUser.uid),
+      );
+      if (!access.exists()) {
+        addBreadcrumb("events", "listener stopped: child access removed", extra, "info");
+        return;
+      }
+    } catch {
+      // Access unreadable: report the original error below.
+    }
+  }
+  captureServiceError(error, { service: "events", operation: "ecouterEvenements", extra });
+}
+
 export function ecouterEvenements(
   childId: string,
   callback: (events: Event[]) => void,
@@ -439,7 +464,7 @@ export function ecouterEvenements(
     },
     (error) => {
       console.error(`[L:${lid}] ERROR:`, error);
-      captureServiceError(error, { service: "events", operation: "ecouterEvenements" });
+      reportListenerError(error, childId, tl);
       onError?.(error);
     },
   );

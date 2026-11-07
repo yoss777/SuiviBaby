@@ -246,6 +246,9 @@ interface MealGroup {
 // COMPONENT
 // ============================================
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const MEALS_EVENT_TYPES = ["tetee", "biberon", "solide"] as const;
+
 export default function MealsScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
@@ -297,6 +300,7 @@ export default function MealsScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<Meal>({
     childId: activeChild?.id,
+    eventTypes: MEALS_EVENT_TYPES,
     transformMerged: sortMergedMeals,
   });
   const latestTeteesRef = useRef<Meal[]>([]);

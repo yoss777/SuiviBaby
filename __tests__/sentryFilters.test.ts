@@ -64,3 +64,26 @@ describe("Sentry privacy filters (audit A6)", () => {
     expect(tx.spans?.[0]).toEqual({ description: "GET https://firestore.googleapis.com/x", data: { status: 200 } });
   });
 });
+
+describe("isTransientNetworkNoise", () => {
+  const { isTransientNetworkNoise } = jest.requireActual("@/utils/sentryFilters");
+  const http = (url: string, status = 504) => ({
+    exception: { values: [{ value: `HTTP Client Error with status code: ${status}` }] },
+    request: { url },
+  });
+
+  it("drops 5xx from Firestore channels and Firebase Auth", () => {
+    expect(isTransientNetworkNoise(http("https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel"))).toBe(true);
+    expect(isTransientNetworkNoise(http("https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp"))).toBe(true);
+  });
+
+  it("drops Firestore offline reads", () => {
+    expect(isTransientNetworkNoise({ exception: { values: [{ value: "Failed to get document because the client is offline." }] } })).toBe(true);
+  });
+
+  it("keeps our Cloud Functions errors, 4xx and ordinary errors", () => {
+    expect(isTransientNetworkNoise(http("https://europe-west1-samaye-53723.cloudfunctions.net/getUsageQuotaStatus"))).toBe(false);
+    expect(isTransientNetworkNoise(http("https://firestore.googleapis.com/x", 403))).toBe(false);
+    expect(isTransientNetworkNoise({ exception: { values: [{ value: "Missing or insufficient permissions." }] } })).toBe(false);
+  });
+});
