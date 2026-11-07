@@ -61,6 +61,7 @@ const mockBatchDelete = jest.fn();
 
 import {
   createShareCode,
+  setMemberRole,
   redeemShareCode,
   createEmailInvitation,
   acceptInvitation,
@@ -139,78 +140,80 @@ describe("childSharingService", () => {
   // ─── createShareCode ─────────────────────────────────────────────────
 
   describe("createShareCode", () => {
-    it("should create a share code and return it", async () => {
-      (setDoc as jest.Mock).mockResolvedValueOnce(undefined);
+    it("asks the server for the code (callable createShareCode) and returns it", async () => {
+      mockCallable.mockResolvedValueOnce({ data: { code: "ABC234", expiresAt: 123 } });
 
-      const code = await createShareCode("child-1", "Bébé");
+      const code = await createShareCode("child-1");
 
-      expect(code).toHaveLength(6);
-      expect(code).toMatch(/^[A-Z2-9]+$/);
-      expect(setDoc).toHaveBeenCalledTimes(1);
-      expect(setDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          code: expect.any(String),
-          childId: "child-1",
-          childName: "Bébé",
-          createdBy: "test-uid",
-          used: false,
-        }),
-      );
+      expect(code).toBe("ABC234");
+      expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), "createShareCode");
+      expect(mockCallable).toHaveBeenCalledWith({ childId: "child-1" });
+      // The client no longer writes the code itself.
+      expect(setDoc).not.toHaveBeenCalled();
     });
 
     it("should throw when user is not logged in", async () => {
       getAuthMock().currentUser = null;
 
-      await expect(createShareCode("child-1", "Bébé")).rejects.toThrow(
-        "Utilisateur non connecté",
+      await expect(createShareCode("child-1")).rejects.toThrow("Utilisateur non connecté");
+      expect(mockCallable).not.toHaveBeenCalled();
+    });
+
+    it("maps permission-denied to a readable message", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/permission-denied"));
+      await expect(createShareCode("child-1")).rejects.toThrow(
+        "Seul un parent de l'enfant peut créer un code de partage",
       );
-      expect(setDoc).not.toHaveBeenCalled();
     });
 
-    it("should retry on permission-denied collision", async () => {
-      const permError: Error & { code?: string } = new Error("denied");
-      permError.code = "permission-denied";
-
-      (setDoc as jest.Mock)
-        .mockRejectedValueOnce(permError)
-        .mockRejectedValueOnce(permError)
-        .mockResolvedValueOnce(undefined);
-
-      const code = await createShareCode("child-1", "Bébé");
-
-      expect(code).toHaveLength(6);
-      expect(setDoc).toHaveBeenCalledTimes(3);
+    it("maps rate limiting to a readable message", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/resource-exhausted"));
+      await expect(createShareCode("child-1")).rejects.toThrow("Trop de tentatives. Réessayez dans une minute.");
     });
 
-    it("should throw after max collision attempts", async () => {
-      const permError: Error & { code?: string } = new Error("denied");
-      permError.code = "permission-denied";
-
-      (setDoc as jest.Mock).mockRejectedValue(permError);
-
-      await expect(createShareCode("child-1", "Bébé")).rejects.toThrow(
-        "Impossible de générer un code unique",
+    it("keeps the email-not-verified error recognisable", async () => {
+      mockCallable.mockRejectedValueOnce(
+        Object.assign(callableError("functions/failed-precondition"), { details: { reason: "email-not-verified" } }),
       );
-      expect(setDoc).toHaveBeenCalledTimes(5);
+      await expect(createShareCode("child-1")).rejects.toMatchObject({ code: "email-not-verified" });
     });
 
-    it("should rethrow non-permission errors immediately", async () => {
-      (setDoc as jest.Mock).mockRejectedValueOnce(new Error("network error"));
+    it("should call captureServiceError on unexpected failure", async () => {
+      mockCallable.mockRejectedValueOnce(new Error("boom"));
 
-      await expect(createShareCode("child-1", "Bébé")).rejects.toThrow(
-        "network error",
-      );
-      expect(setDoc).toHaveBeenCalledTimes(1);
-    });
-
-    it("should call captureServiceError on failure", async () => {
-      (setDoc as jest.Mock).mockRejectedValueOnce(new Error("boom"));
-
-      await expect(createShareCode("child-1", "Bébé")).rejects.toThrow("boom");
+      await expect(createShareCode("child-1")).rejects.toThrow("boom");
       expect(captureServiceError).toHaveBeenCalledWith(
         expect.any(Error),
         { service: "childSharing", operation: "createShareCode" },
+      );
+    });
+  });
+
+  // ─── setMemberRole ───────────────────────────────────────────────────
+
+  describe("setMemberRole", () => {
+    it("calls the callable with childId, memberId and role", async () => {
+      mockCallable.mockResolvedValueOnce({ data: { success: true, role: "admin" } });
+      await setMemberRole("child-1", "u2", "admin");
+      expect(httpsCallable).toHaveBeenCalledWith(expect.anything(), "setMemberRole");
+      expect(mockCallable).toHaveBeenCalledWith({ childId: "child-1", memberId: "u2", role: "admin" });
+    });
+
+    it("maps permission-denied and failed-precondition", async () => {
+      mockCallable.mockRejectedValueOnce(callableError("functions/permission-denied"));
+      await expect(setMemberRole("c", "u", "admin")).rejects.toThrow("Seul le propriétaire peut changer un rôle");
+      mockCallable.mockRejectedValueOnce(callableError("functions/failed-precondition"));
+      await expect(setMemberRole("c", "u", "contributor")).rejects.toThrow(
+        "Le rôle d'un propriétaire ne peut pas être modifié",
+      );
+    });
+
+    it("reports unexpected errors", async () => {
+      mockCallable.mockRejectedValueOnce(new Error("boom"));
+      await expect(setMemberRole("c", "u", "admin")).rejects.toThrow("boom");
+      expect(captureServiceError).toHaveBeenCalledWith(
+        expect.any(Error),
+        { service: "childSharing", operation: "setMemberRole" },
       );
     });
   });

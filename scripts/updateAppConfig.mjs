@@ -10,7 +10,8 @@
 //   GCP_SA_KEY='{...json...}' node scripts/updateAppConfig.mjs
 //
 // Options via env vars :
-//   MIN_VERSION=1.0.0           (default: 1.0.0, = pas de force update)
+//   MIN_VERSION=1.0.0           (default: valeur actuelle du document, sinon 1.0.0
+//                                = pas de force update)
 //   RELEASE_NOTES="..."         (default: généré depuis git)
 //   IOS_STORE_URL="..."         (default: fiche App Store id6773195663)
 //   ANDROID_STORE_URL="..."     (default: depuis app.json android.package)
@@ -20,7 +21,13 @@ import { createSign } from "crypto";
 import { readFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
+
+// Fonctions pures (testées dans __tests__/appConfigScript.test.ts).
+const { resolveMinVersion, parseServiceAccountKey, updateMaskQuery } = createRequire(
+  import.meta.url,
+)("./lib/appConfigHelpers.js");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
@@ -39,7 +46,6 @@ if (!version) {
 }
 
 const packageId = appJson.expo?.android?.package ?? "com.tesfa.suivibaby";
-const minVersion = process.env.MIN_VERSION ?? "1.0.0";
 const iosStoreUrl =
   process.env.IOS_STORE_URL ??
   "https://apps.apple.com/app/id6773195663"; // App Store ID from eas.json (ascAppId)
@@ -138,8 +144,8 @@ async function getAccessTokenFromRefreshToken() {
 async function getAccessToken() {
   const saKeyJson = process.env.GCP_SA_KEY;
   if (saKeyJson) {
-    const saKey = JSON.parse(saKeyJson);
-    return getAccessTokenFromServiceAccount(saKey);
+    // The CI secret may hold the raw JSON key or its base64 encoding.
+    return getAccessTokenFromServiceAccount(parseServiceAccountKey(saKeyJson));
   }
   return getAccessTokenFromRefreshToken();
 }
@@ -179,7 +185,7 @@ function toFirestoreValue(value) {
   return { stringValue: String(value) };
 }
 
-async function fetchCurrentRemoteVersion(token, url) {
+async function fetchCurrentRemoteFields(token, url) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -188,7 +194,10 @@ async function fetchCurrentRemoteVersion(token, url) {
     throw new Error(`Failed to GET current doc: ${await res.text()}`);
   }
   const data = await res.json();
-  return data.fields?.latestVersion?.stringValue ?? null;
+  return {
+    latestVersion: data.fields?.latestVersion?.stringValue ?? null,
+    minVersion: data.fields?.minVersion?.stringValue ?? null,
+  };
 }
 
 async function main() {
@@ -202,7 +211,11 @@ async function main() {
   // Anti-regression guard: refuse to publish a version older than the one
   // currently in Firestore, to avoid accidental rollbacks (e.g. running the
   // script from an old branch). Bypass with FORCE_DOWNGRADE=true.
-  const remoteVersion = await fetchCurrentRemoteVersion(token, url);
+  const remote = await fetchCurrentRemoteFields(token, url);
+  const remoteVersion = remote?.latestVersion ?? null;
+  // Keep a minVersion raised by hand (force update) unless MIN_VERSION says
+  // otherwise: the script used to reset it to 1.0.0 on every release.
+  const minVersion = resolveMinVersion(process.env, remote);
   if (remoteVersion) {
     const cmp = compareSemver(version, remoteVersion);
     if (cmp < 0 && process.env.FORCE_DOWNGRADE !== "true") {
@@ -238,7 +251,10 @@ async function main() {
     firestoreFields[k] = toFirestoreValue(v);
   }
 
-  const res = await fetch(url, {
+  // updateMask: only the fields written here are replaced; any other field of
+  // the document (added by hand, by another tool) is left untouched. Without a
+  // mask the PATCH replaced the whole document.
+  const res = await fetch(`${url}?${updateMaskQuery(fields)}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,

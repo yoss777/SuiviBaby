@@ -1,12 +1,17 @@
 import { auth } from "@/config/firebase";
+import { defaultStorageBucket, getFirebaseWebConfig } from "@/config/firebaseEnv";
+
+const webConfig = getFirebaseWebConfig();
 
 /**
  * Photos live in the EU bucket (europe-west1). The legacy US bucket is kept,
  * and mirrored server-side, until older app versions are gone
  * (docs/MIGRATION_PHOTOS_EU.md).
  */
-export const FIREBASE_STORAGE_BUCKET = "samaye-53723-photos-eu";
-export const LEGACY_STORAGE_BUCKET = "samaye-53723.firebasestorage.app";
+// Both follow APP_ENV (production: samaye-53723-photos-eu and
+// samaye-53723.firebasestorage.app).
+export const FIREBASE_STORAGE_BUCKET = webConfig.storageBucket as string;
+export const LEGACY_STORAGE_BUCKET = defaultStorageBucket(webConfig.projectId as string);
 /** Every bucket a photo copy may live in during the migration. */
 export const PHOTO_STORAGE_BUCKETS = [FIREBASE_STORAGE_BUCKET, LEGACY_STORAGE_BUCKET];
 

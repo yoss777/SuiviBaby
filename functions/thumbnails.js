@@ -12,8 +12,9 @@
 // Les fonctions de chemin sont dupliquées dans utils/photoThumbnails.ts (app).
 const admin = require("firebase-admin");
 const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
+// Bucket résolu au déploiement (functions/.env.<projet>), voir lib/projectConfig.js.
+const { PHOTOS_BUCKET_PARAM } = require("./lib/projectConfig");
 
-const PHOTOS_BUCKET = "samaye-53723-photos-eu";
 /** Plus petit côté de la miniature (grille 3 colonnes x 3 de densité). */
 const THUMBNAIL_SIZE = 400;
 const THUMBNAIL_QUALITY = 75;
@@ -77,11 +78,11 @@ exports.generateThumbnailHandler = generateThumbnail;
 exports.deleteThumbnailHandler = deleteThumbnail;
 
 exports.generatePhotoThumbnail = onObjectFinalized(
-  { bucket: PHOTOS_BUCKET, region: "europe-west1", memory: "512MiB", timeoutSeconds: 120 },
+  { bucket: PHOTOS_BUCKET_PARAM, region: "europe-west1", memory: "512MiB", timeoutSeconds: 120 },
   generateThumbnail,
 );
 
 exports.deletePhotoThumbnail = onObjectDeleted(
-  { bucket: PHOTOS_BUCKET, region: "europe-west1" },
+  { bucket: PHOTOS_BUCKET_PARAM, region: "europe-west1" },
   deleteThumbnail,
 );

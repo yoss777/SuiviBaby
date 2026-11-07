@@ -69,20 +69,6 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "eventLikes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "eventId",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
@@ -459,20 +445,6 @@
       ]
     },
     {
-      "collectionGroup": "eventLikes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "childId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "eventComments",
       "queryScope": "COLLECTION",
       "fields": [
@@ -677,7 +649,19 @@
       "indexes": []
     },
     {
+      "collectionGroup": "deleted_idem",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "pending_assemblyai_deletes",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "access_audit",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []

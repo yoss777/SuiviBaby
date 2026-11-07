@@ -53,3 +53,6 @@ yarn-error.*
 
 app-example
 .firebase/logs/vsce-debug.log
+
+# Store service account keys (eas submit), never uploaded to EAS Build
+secrets/

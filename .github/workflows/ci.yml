@@ -26,21 +26,34 @@ jobs:
       - name: ESLint (errors fail CI; warnings are reported)
         run: npm run lint
 
-      - name: Run app tests
-        run: npm test -- --ci --coverage
+      - name: ESLint Cloud Functions (errors fail CI)
+        run: npx eslint functions --quiet
 
+      # Reports "app config fields not synced" (native folders + app.config.js).
+      # Non-blocking until that check is resolved; make it blocking afterwards.
+      - name: Expo Doctor
+        continue-on-error: true
+        run: npx expo-doctor
+
+      # Avant les tests de l'app : certains scripts testés (backfillLastEventAt)
+      # chargent des modules de functions/lib.
       - name: Install function dependencies
         run: cd functions && npm ci
 
-      - name: Run CF tests
-        run: npm run test:functions -- --ci
+      - name: Run app tests
+        run: npm test -- --ci --coverage
+
+      - name: Run CF tests (coverage thresholds in functions/jest.config.js)
+        run: npm run test:functions -- --ci --coverage
 
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: coverage/
+          path: |
+            coverage/
+            functions/coverage/
           retention-days: 7
 
   rules-test:
@@ -61,8 +74,16 @@ jobs:
 
       - run: npm ci
 
+      # multiUser.rules.test.ts charge les vraies Cloud Functions
+      # (redeemShareCodeCF, createShareCode, setMemberRole) : il faut leurs
+      # dépendances.
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
+      # Every *.rules.test.ts suite (firestore, storage, multiUser), see
+      # jest.config.rules.js. The demo- project id needs no credentials; the
+      # suites read the project from GCLOUD_PROJECT (set by emulators:exec).
       - name: Run Firestore and Storage rules tests
         run: >-
           npx -y firebase-tools@15 emulators:exec --only firestore,storage
-          --project samaye-53723
-          'npx jest __tests__/firestore.rules.test.ts __tests__/storage.rules.test.ts --runInBand --ci --config jest.config.rules.js'
+          --project demo-samaye 'npm run test:rules:run'

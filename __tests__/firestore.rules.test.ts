@@ -35,7 +35,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PROJECT_ID = "samaye-53723";
+// emulators:exec fixe GCLOUD_PROJECT (CI : projet factice demo-*, aucun identifiant requis).
+const PROJECT_ID = process.env.GCLOUD_PROJECT || "samaye-53723";
 const RULES_PATH = "firestore.rules";
 
 const ALICE_UID = "alice";
@@ -251,6 +252,20 @@ describe("children collection", () => {
       updateDoc(doc(db, "children", CHILD_ID), { deletedAt: now })
     );
   });
+
+  test("lastEventAt is maintained by the server only (reminders depend on it)", async () => {
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID), { lastEventAt: { any: now } })
+    );
+    await assertFails(
+      updateDoc(doc(db, "children", CHILD_ID), { "lastEventAt.repas": now })
+    );
+    // other fields stay writable
+    await assertSucceeds(
+      updateDoc(doc(db, "children", CHILD_ID), { name: "Still editable" })
+    );
+  });
 });
 
 // ===========================================================================
@@ -368,6 +383,89 @@ describe("children/access subcollection", () => {
     );
   });
 
+  // TRANSITION (apps <= 1.0.9): their manage-access screen updates the access
+  // doc directly. Role changes by the owner stay possible until
+  // app_config.minVersion > 1.0.9; everything else is refused.
+  describe("transition (app <= 1.0.9): owner changes a member's role directly", () => {
+    const roleFlags: Record<string, Record<string, boolean>> = {
+      admin: { canWriteEvents: true, canWriteLikes: true, canWriteComments: true },
+      contributor: { canWriteEvents: false, canWriteLikes: true, canWriteComments: true },
+      viewer: { canWriteEvents: false, canWriteLikes: false, canWriteComments: false },
+    };
+    const bobDoc = () => doc(authedFirestore(ALICE_UID), "children", CHILD_ID, "access", BOB_UID);
+
+    test("owner can set admin, contributor or viewer with consistent flags", async () => {
+      for (const role of ["admin", "contributor", "viewer"]) {
+        await assertSucceeds(updateDoc(bobDoc(), { role, ...roleFlags[role] }));
+      }
+    });
+
+    test("flags must match the role (no admin role with viewer flags, no flag-only change)", async () => {
+      await assertFails(updateDoc(bobDoc(), { role: "admin", ...roleFlags.viewer }));
+      await assertFails(updateDoc(bobDoc(), { role: "viewer", ...roleFlags.admin }));
+      await assertFails(updateDoc(bobDoc(), { role: "admin" }));
+      await assertFails(updateDoc(bobDoc(), { canWriteEvents: true }));
+    });
+
+    test("owner cannot grant the owner role, nor touch other fields", async () => {
+      await assertFails(updateDoc(bobDoc(), { role: "owner", ...roleFlags.admin }));
+      await assertFails(updateDoc(bobDoc(), { role: "admin", ...roleFlags.admin, grantedBy: BOB_UID }));
+      await assertFails(updateDoc(bobDoc(), { role: "admin", ...roleFlags.admin, userId: CHARLIE_UID }));
+    });
+
+    test("owner cannot touch own doc, an owner's doc or the primary owner's doc", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+          userId: CHARLIE_UID,
+          role: "owner",
+          grantedBy: ALICE_UID,
+        });
+      });
+      const alice = authedFirestore(ALICE_UID);
+      await assertFails(
+        updateDoc(doc(alice, "children", CHILD_ID, "access", ALICE_UID), { role: "viewer", ...roleFlags.viewer })
+      );
+      await assertFails(
+        updateDoc(doc(alice, "children", CHILD_ID, "access", CHARLIE_UID), { role: "viewer", ...roleFlags.viewer })
+      );
+      // a co-owner cannot demote the primary owner either
+      await assertFails(
+        updateDoc(doc(authedFirestore(CHARLIE_UID), "children", CHILD_ID, "access", ALICE_UID), {
+          role: "viewer",
+          ...roleFlags.viewer,
+        })
+      );
+    });
+
+    test("admins, members and strangers cannot change roles", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+          userId: CHARLIE_UID,
+          role: "admin",
+          grantedBy: ALICE_UID,
+        });
+      });
+      await assertFails(
+        updateDoc(doc(authedFirestore(CHARLIE_UID), "children", CHILD_ID, "access", BOB_UID), {
+          role: "admin",
+          ...roleFlags.admin,
+        })
+      );
+      await assertFails(
+        updateDoc(doc(authedFirestore(BOB_UID), "children", CHILD_ID, "access", BOB_UID), {
+          role: "admin",
+          ...roleFlags.admin,
+        })
+      );
+      await assertFails(
+        updateDoc(doc(authedFirestore("stranger"), "children", CHILD_ID, "access", BOB_UID), {
+          role: "admin",
+          ...roleFlags.admin,
+        })
+      );
+    });
+  });
+
   test("invitee cannot grant itself access from an invitation", async () => {
     await seedData(async (db: any) => {
       await setDoc(doc(db, "shareInvitations", "inviteX"), {
@@ -410,8 +508,8 @@ describe("children/access subcollection", () => {
       updateDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID), { role: "viewer" })
     );
     await assertFails(deleteDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID)));
-    // …but the primary owner can still manage the co-owner
-    await assertSucceeds(
+    // roles only change through setMemberRole, even for the primary owner
+    await assertFails(
       updateDoc(doc(authedFirestore(ALICE_UID), "children", CHILD_ID, "access", CHARLIE_UID), { role: "admin" })
     );
   });
@@ -515,11 +613,12 @@ describe("children/access subcollection", () => {
     );
   });
 
-  test("owner can change a member's role", async () => {
+  test("Sprint 12.6: an owner cannot change a member's role from the client (setMemberRole only)", async () => {
     const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
-        role: "contributor",
+        role: "admin",
+        canWriteEvents: true,
       })
     );
   });
@@ -1403,21 +1502,96 @@ describe("shareCodes collection", () => {
     ...overrides,
   });
 
-  test("owner can create a valid 7-day share code", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData()));
+  test("transition (app <= 1.0.9): owner/admin may still create a share code, others may not", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        userId: BOB_UID,
+        role: "admin",
+        grantedBy: ALICE_UID,
+      });
+    });
+    await assertSucceeds(setDoc(doc(authedFirestore(ALICE_UID), "shareCodes", "NEWCODE"), codeData()));
+    await assertSucceeds(
+      setDoc(doc(authedFirestore(BOB_UID), "shareCodes", "BOBCODE"), codeData({ code: "BOBCODE", createdBy: BOB_UID }))
+    );
+    await assertFails(setDoc(doc(authedFirestore(CHARLIE_UID), "shareCodes", "CHACODE"), codeData({ code: "CHACODE", createdBy: CHARLIE_UID })));
+    // Pas d'usurpation : createdBy doit être l'appelant.
+    await assertFails(setDoc(doc(authedFirestore(BOB_UID), "shareCodes", "SPOOF01"), codeData({ code: "SPOOF01", createdBy: ALICE_UID })));
   });
 
-  test("share code must be unused, match its id and expire within 8 days", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ used: true })));
-    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ code: "OTHER" })));
-    await assertFails(
-      setDoc(
-        doc(db, "shareCodes", "NEWCODE"),
-        codeData({ expiresAt: Timestamp.fromDate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)) })
-      )
-    );
+  describe("transition (app <= 1.0.9): shape of a client-created share code", () => {
+    const create = (id: string, overrides: Record<string, unknown> = {}, uid = ALICE_UID) =>
+      setDoc(doc(authedFirestore(uid), "shareCodes", id), codeData({ code: id, ...overrides }));
+    const inDays = (days: number, extraMinutes = 0) =>
+      Timestamp.fromDate(new Date(Date.now() + days * 86400000 + extraMinutes * 60000));
+
+    test("expiresAt: 8 days is accepted, 8 days + 1 minute is refused", async () => {
+      await assertSucceeds(create("EXP8D", { expiresAt: inDays(8) }));
+      await assertFails(create("EXP8D1", { expiresAt: inDays(8, 1) }));
+    });
+
+    test("expiresAt must be a timestamp", async () => {
+      await assertFails(create("EXPSTR", { expiresAt: "2099-01-01" }));
+      await assertFails(create("EXPNUM", { expiresAt: Date.now() + 1000 }));
+    });
+
+    test("a code cannot be born used", async () => {
+      await assertFails(create("USED01", { used: true }));
+    });
+
+    test("the code field must equal the document id", async () => {
+      await assertFails(create("DOCID1", { code: "OTHER1" }));
+    });
+
+    test("no extra field, childName is a string of at most 100 characters", async () => {
+      await assertFails(create("EXTRA1", { admin: true }));
+      await assertFails(create("EXTRA2", { grantRole: "owner" }));
+      await assertFails(create("NAME01", { childName: 42 }));
+      await assertSucceeds(create("NAME02", { childName: "x".repeat(100) }));
+      await assertFails(create("NAME03", { childName: "x".repeat(101) }));
+    });
+
+    test("viewer and contributor cannot create codes", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+          userId: BOB_UID,
+          role: "viewer",
+          grantedBy: ALICE_UID,
+        });
+        await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+          userId: CHARLIE_UID,
+          role: "contributor",
+          grantedBy: ALICE_UID,
+        });
+      });
+      await assertFails(create("VIEW01", { createdBy: BOB_UID }, BOB_UID));
+      await assertFails(create("CONT01", { createdBy: CHARLIE_UID }, CHARLIE_UID));
+    });
+
+    test("the primary owner (children.ownerId) may create a code without an access doc", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "children", "childOwnerOnly"), {
+          name: "Solo",
+          birthDate: now,
+          ownerId: BOB_UID,
+        });
+      });
+      await assertSucceeds(
+        setDoc(doc(authedFirestore(BOB_UID), "shareCodes", "OWNONLY"), codeData({
+          code: "OWNONLY",
+          childId: "childOwnerOnly",
+          createdBy: BOB_UID,
+        }))
+      );
+    });
+
+    test("an existing code cannot be overwritten", async () => {
+      await assertFails(create("CODE123", { childName: "Overwritten" }));
+    });
+  });
+
+  test("a share code cannot be modified from the client", async () => {
+    await assertFails(updateDoc(doc(authedFirestore(ALICE_UID), "shareCodes", "CODE123"), { used: true }));
   });
 });
 

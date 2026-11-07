@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -35,12 +35,15 @@
       },
       "ios": {
         "resourceClass": "m-medium"
-      }
+      },
+      "environment": "production"
     },
     "staging": {
+      "environment": "preview",
       "distribution": "internal",
       "env": {
-        "APP_ENV": "staging"
+        "APP_ENV": "staging",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "android": {
         "buildType": "apk",
@@ -65,6 +68,11 @@
     "production": {
       "ios": {
         "ascAppId": "6773195663"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./secrets/google-play-service-account.json",
+        "track": "alpha",
+        "releaseStatus": "completed"
       }
     }
   }

@@ -1,0 +1,126 @@
+name: Maestro nightly
+
+# Nightly end-to-end run of the Maestro flows on an Android emulator.
+# Never runs on push or pull request: schedule and manual dispatch only.
+#
+# Build under test: there is no CI build artifact yet, and a local build needs
+# Firebase config files and signing material that are not in the repository.
+# So the job downloads the latest finished EAS "preview" Android build (APK).
+#
+# Required repository secrets:
+#   EXPO_TOKEN         Expo access token (eas build:list, APK download)
+#   MAESTRO_EMAIL      e-mail of a dedicated test account (verified, has a child, is owner)
+#   MAESTRO_PASSWORD   password of that account
+#
+# Flows: 01 signup/onboarding and 02 login only. They write nothing durable in
+# the shared data beyond the test account. Flows 03 (add event) and 05 (share
+# child) create events and share codes: they come back once a staging project
+# exists (S12.1), never against production data.
+#
+# The build must be recent: a nightly run on a stale preview build tests old
+# code. It fails when the latest finished build is older than 14 days and prints
+# the commit it was built from.
+
+on:
+  schedule:
+    - cron: "30 2 * * *" # 02:30 UTC every night
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "EAS build profile to test"
+        required: false
+        default: "preview"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maestro-nightly
+  cancel-in-progress: false
+
+jobs:
+  maestro:
+    name: Maestro (Android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      BUILD_PROFILE: ${{ inputs.build_profile || 'preview' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          MAESTRO_EMAIL: ${{ secrets.MAESTRO_EMAIL }}
+          MAESTRO_PASSWORD: ${{ secrets.MAESTRO_PASSWORD }}
+        run: |
+          for v in EXPO_TOKEN MAESTRO_EMAIL MAESTRO_PASSWORD; do
+            if [ -z "${!v}" ]; then echo "::error::Missing secret $v"; exit 1; fi
+          done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Download the latest EAS Android build
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@latest build:list \
+            --platform android --build-profile "$BUILD_PROFILE" \
+            --status finished --limit 1 --non-interactive --json > builds.json
+          URL=$(jq -r '.[0].artifacts.buildUrl // empty' builds.json)
+          if [ -z "$URL" ]; then echo "::error::No finished Android build for profile $BUILD_PROFILE"; exit 1; fi
+          CREATED=$(jq -r '.[0].createdAt' builds.json)
+          COMMIT=$(jq -r '.[0].gitCommitHash // "unknown"' builds.json)
+          echo "Using build $(jq -r '.[0].id' builds.json) from $CREATED (commit $COMMIT)"
+          AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "$CREATED" +%s) ) / 86400 ))
+          if [ "$AGE_DAYS" -gt 14 ]; then
+            echo "::error::Latest $BUILD_PROFILE build is $AGE_DAYS days old (max 14), built from commit $COMMIT. Build a fresh preview first (eas build --profile $BUILD_PROFILE --platform android)."
+            exit 1
+          fi
+          curl -fsSL "$URL" -o app.apk
+          ls -l app.apk
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Maestro flows on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_EMAIL: ${{ secrets.MAESTRO_EMAIL }}
+          MAESTRO_PASSWORD: ${{ secrets.MAESTRO_PASSWORD }}
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          # One command per line: the runner executes each line in its own shell.
+          script: |
+            adb install -r app.apk
+            mkdir -p maestro-report
+            maestro test --format junit --output maestro-report/junit.xml -e EMAIL="$MAESTRO_EMAIL" -e PASSWORD="$MAESTRO_PASSWORD" maestro/01_signup_onboarding.yaml maestro/02_login_email.yaml
+
+      - name: Upload Maestro report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: |
+            maestro-report/
+            ~/.maestro/tests/
+          if-no-files-found: ignore
+          retention-days: 14

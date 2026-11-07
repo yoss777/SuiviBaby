@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "samaye-53723"
+    "default": "samaye-53723",
+    "staging": "samaye-staging"
   },
   "targets": {
     "samaye-53723": {
@@ -10,6 +11,16 @@
         ],
         "photos-eu": [
           "samaye-53723-photos-eu"
+        ]
+      }
+    },
+    "samaye-staging": {
+      "storage": {
+        "legacy": [
+          "samaye-staging.firebasestorage.app"
+        ],
+        "photos-eu": [
+          "samaye-staging-photos-eu"
         ]
       }
     }

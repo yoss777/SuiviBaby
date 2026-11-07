@@ -1,7 +1,37 @@
 name: Deploy Cloud Functions
 
+# Environments (audit S12.1, decisions Q8):
+# - Until the repository variable STAGING_ENABLED is "true", behaviour is
+#   unchanged: a push to main deploys straight to production.
+# - Once STAGING_ENABLED == 'true': a push to main deploys to the staging
+#   project (alias "staging" in .firebaserc, secret GCP_SA_KEY_STAGING), then
+#   production waits for the "production" GitHub environment approval
+#   (required reviewers set by Yoss in Settings → Environments).
+# - Manual runs (workflow_dispatch) pick the target explicitly. Production is
+#   only ever deployed from main (a dispatch from another branch skips it).
+# - Every deploy needs the "test" job (functions lint + jest + rules tests).
+# - GCP keys are only read in jobs bound to their environment: GCP_SA_KEY in
+#   "production", GCP_SA_KEY_STAGING in "staging" (docs/ENVIRONMENTS.md).
+#
+# Required configuration (not created by this file):
+#   secrets:   GCP_SA_KEY (to move to the "production" environment secrets),
+#              FIREBASE_PROJECT_ID (existing),
+#              GCP_SA_KEY_STAGING (staging environment, with the staging project)
+#   variables: STAGING_ENABLED ("true" once staging exists)
+#   environments: production (restricted to main, required reviewers once staging
+#                 is live), staging (optional)
+
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to deploy"
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
   push:
     branches: [main]
     paths:
@@ -9,10 +39,147 @@ on:
       - "firestore.rules"
       - "firestore.indexes.json"
 
+permissions:
+  contents: read
+
 jobs:
-  deploy:
-    name: Deploy to Firebase
+  test:
+    name: Lint & tests (functions, rules)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
+      - name: ESLint Cloud Functions
+        run: npx eslint functions --quiet
+
+      - name: Cloud Functions tests (coverage thresholds in functions/jest.config.js)
+        run: cd functions && npm test -- --ci --coverage
+
+      # The demo- project id needs no credentials.
+      - name: Firestore and Storage rules tests
+        run: >-
+          npx -y firebase-tools@15 emulators:exec --only firestore,storage
+          --project demo-samaye 'npm run test:rules:run'
+
+  staging:
+    name: Deploy to staging
+    needs: test
+    if: >
+      vars.STAGING_ENABLED == 'true' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'staging'))
+    runs-on: ubuntu-latest
+    environment: staging
+    # One staging deploy at a time, whatever the branch.
+    concurrency:
+      group: deploy-functions-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
+      # The staging functions must never point at production resources: no
+      # production project id may remain in the code. Only the per-project
+      # functions/.env.samaye-53723 file (not matched by *.js) may name it.
+      - name: Guard, no production project id in the functions code
+        run: |
+          if grep -R "samaye-53723" functions/*.js functions/lib; then
+            echo "::error::samaye-53723 is hard-coded in functions/ (see matches above). Derive it from the deployed project (functions/lib/projectConfig.js)."
+            exit 1
+          fi
+
+      # TODO(S11.7, pending Yoss's go): replace the JSON key with Workload
+      # Identity Federation:
+      #   - uses: google-github-actions/auth@v2
+      #     with:
+      #       workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER_STAGING }}
+      #       service_account: ${{ vars.GCP_DEPLOY_SA_STAGING }}
+      - name: Write service account key
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY_STAGING }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::Secret GCP_SA_KEY_STAGING is missing (see docs/ENVIRONMENTS.md)."
+            exit 1
+          fi
+          # The secret may hold the raw JSON key or its base64 encoding.
+          printf '%s' "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp-key.raw"
+          if head -c 1 "$RUNNER_TEMP/gcp-key.raw" | grep -q '{'; then
+            mv "$RUNNER_TEMP/gcp-key.raw" "$RUNNER_TEMP/gcp-key.json"
+          else
+            base64 -d "$RUNNER_TEMP/gcp-key.raw" > "$RUNNER_TEMP/gcp-key.json"
+            rm "$RUNNER_TEMP/gcp-key.raw"
+          fi
+
+      # Rules and indexes WITHOUT --force (see the production job).
+      - name: Deploy Firestore rules & indexes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
+        run: >
+          npx --yes firebase-tools@15 deploy
+          --only firestore:rules,firestore:indexes
+          --project staging --non-interactive
+
+      # Functions WITH --force (see the production job).
+      - name: Deploy Functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
+        run: >
+          npx --yes firebase-tools@15 deploy
+          --only functions
+          --project staging --non-interactive --force
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gcp-key.json"
+
+  production:
+    name: Deploy to production
+    needs: [test, staging]
+    # Only from main: a manual dispatch from another branch must never reach
+    # production (the code deployed with --force would be that branch's).
+    # Runs after a successful staging deploy, or directly when staging is
+    # skipped (STAGING_ENABLED not set → today's main → production behaviour,
+    # or a manual run targeting production). Never after a failed test or
+    # staging run.
+    if: >
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.test.result == 'success' &&
+      (needs.staging.result == 'success' || needs.staging.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'production'))
+    runs-on: ubuntu-latest
+    # Always bound to the "production" environment: GCP_SA_KEY is only read
+    # here, and Yoss restricts the environment to main (branch rule) and, once
+    # staging is live, adds required reviewers. Without reviewers: no gate.
+    environment: production
+    concurrency:
+      group: deploy-functions-production
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +195,12 @@ jobs:
       # firebase-tools runs on the runner's Node 22 (the former w9jds/firebase-action
       # container shipped an older Node that cannot require() the ESM-only
       # expo-server-sdk, so every deploy failed at source analysis).
+      # TODO(S11.7, pending Yoss's go): replace the JSON key with Workload
+      # Identity Federation:
+      #   - uses: google-github-actions/auth@v2
+      #     with:
+      #       workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+      #       service_account: ${{ vars.GCP_DEPLOY_SA }}
       - name: Write service account key
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}

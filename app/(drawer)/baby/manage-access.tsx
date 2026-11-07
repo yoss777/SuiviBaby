@@ -14,7 +14,8 @@ import {
 import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChildPermissions, useChildAccesses } from '@/hooks/useChildPermissions';
-import { updateChildAccess, revokeChildAccess } from '@/utils/permissions';
+import { revokeChildAccess } from '@/utils/permissions';
+import { setMemberRole } from '@/services/childSharingService';
 import { useUserInfo } from '@/hooks/useUserInfo';
 import { SkeletonBlock, SkeletonList } from '@/components/ui/Skeleton';
 import {
@@ -49,7 +50,7 @@ function AccessListItem({
   const { firebaseUser } = useAuth();
   const { childId } = useLocalSearchParams<{ childId: string }>();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const { showAlert, hide } = useModal();
+  const { showAlert } = useModal();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -62,70 +63,52 @@ function AccessListItem({
   const isMe = userId === firebaseUser?.uid;
   const isOwner = access.role === 'owner';
 
-  const handleChangeRole = useCallback((uid: string, currentRole: ChildRole) => {
-    setSelectedUserId(uid);
+  // Sprint 12.6 : deux rôles proposés, « Parent » (admin) et « Proche »
+  // (contributor). Seul le propriétaire (cet écran) bascule un membre de l'un
+  // à l'autre, via la Cloud Function setMemberRole.
+  const isParent = access.role === 'admin';
+  const targetRole: 'admin' | 'contributor' = isParent ? 'contributor' : 'admin';
+  const roleActionLabel = isParent ? 'Repasser en Proche' : 'Passer en Parent';
 
-    showAlert(
-      'Changer le rôle',
-      (
-        <View style={dynamicStyles(nc, tintColor).roleChoiceList}>
-          {(Object.keys(ROLE_LABELS) as ChildRole[]).map((role) => {
-            const isCurrent = role === currentRole;
-            return (
-              <TouchableOpacity
-                key={role}
-                style={[
-                  dynamicStyles(nc, tintColor).roleChoiceItem,
-                  isCurrent && dynamicStyles(nc, tintColor).roleChoiceItemActive,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Sélectionner le rôle ${ROLE_LABELS[role]}${isCurrent ? ', rôle actuel' : ''}`}
-                onPress={() => {
-                  hide();
-                  confirmRoleChange(uid, role);
-                }}
-              >
-                <Text style={dynamicStyles(nc, tintColor).roleChoiceLabel}>
-                  {getRoleIcon(role)} {ROLE_LABELS[role]}
-                  {isCurrent ? " (actuel)" : ""}
-                </Text>
-                <Text style={dynamicStyles(nc, tintColor).roleChoiceDescription}>
-                  {ROLE_DESCRIPTIONS[role]}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ),
-      [{ text: 'Fermer', onPress: () => { if (isMountedRef.current) setSelectedUserId(null); }, style: 'cancel' }],
-    );
-  }, [childId, nc, tintColor, showAlert, hide]);
-
-  const confirmRoleChange = async (uid: string, newRole: ChildRole) => {
+  const confirmRoleChange = useCallback(async (uid: string, newRole: 'admin' | 'contributor') => {
     if (!childId) return;
-
+    setSelectedUserId(uid);
     try {
-      await updateChildAccess(childId, uid, { role: newRole });
+      await setMemberRole(childId, uid, newRole);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (isMountedRef.current) {
-        showAlert(
-          'Succès',
-          `Rôle mis à jour vers ${ROLE_LABELS[newRole]}`,
-          [{ text: 'OK' }],
-        );
+        showAlert('Succès', `Rôle mis à jour : ${ROLE_LABELS[newRole]}`, [{ text: 'OK' }]);
       }
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du rôle:', error);
+    } catch (error: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (isMountedRef.current) {
-        showAlert('Erreur', 'Impossible de mettre à jour le rôle');
+        showAlert('Erreur', error?.message || 'Impossible de mettre à jour le rôle');
       }
     } finally {
       if (isMountedRef.current) {
         setSelectedUserId(null);
       }
     }
-  };
+  }, [childId, showAlert]);
+
+  const handleChangeRole = useCallback((uid: string, name: string, toRole: 'admin' | 'contributor') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const who = name || 'cette personne';
+    const message = toRole === 'admin'
+      ? `${who} deviendra Parent : elle pourra saisir et modifier le suivi, l'exporter en entier et partager l'enfant. Elle pourra aussi consulter, aimer et commenter les photos, comme un proche.`
+      : `${who} redeviendra Proche : elle pourra tout consulter, aimer et commenter les photos, mais ne pourra plus saisir ni modifier le suivi. Son export sera limité à ses likes et commentaires.`;
+    showAlert(
+      toRole === 'admin' ? `Passer ${who} en Parent ?` : `Repasser ${who} en Proche ?`,
+      message,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: toRole === 'admin' ? 'Passer en Parent' : 'Repasser en Proche',
+          onPress: () => { void confirmRoleChange(uid, toRole); },
+        },
+      ],
+    );
+  }, [showAlert, confirmRoleChange]);
 
   const handleRevoke = useCallback((uid: string, userName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -182,15 +165,18 @@ function AccessListItem({
 
         {!isMe && (
           <View style={ds.accessItemActions}>
-            <TouchableOpacity
-              style={ds.actionButton}
-              onPress={() => handleChangeRole(userId, access.role)}
-              disabled={selectedUserId === userId}
-              accessibilityRole="button"
-              accessibilityLabel={`Changer le rôle de ${displayName}`}
-            >
-              <Ionicons name="swap-horizontal" size={20} color={tintColor} />
-            </TouchableOpacity>
+            {!isOwner && (
+              <TouchableOpacity
+                style={[ds.roleActionButton, selectedUserId === userId && { opacity: 0.5 }]}
+                onPress={() => handleChangeRole(userId, displayName, targetRole)}
+                disabled={selectedUserId === userId}
+                accessibilityRole="button"
+                accessibilityLabel={`${roleActionLabel} : ${displayName}`}
+              >
+                <Ionicons name="swap-horizontal" size={18} color={tintColor} />
+                <Text style={ds.roleActionText}>{roleActionLabel}</Text>
+              </TouchableOpacity>
+            )}
 
             {!isOwner && (
               <TouchableOpacity
@@ -435,8 +421,10 @@ const dynamicStyles = (
     },
     accessItemHeader: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
+      gap: 8,
     },
     accessItemInfo: {
       flex: 1,
@@ -463,6 +451,7 @@ const dynamicStyles = (
     },
     accessItemActions: {
       flexDirection: 'row',
+      alignItems: 'center',
       gap: 8,
     },
     actionButton: {
@@ -524,29 +513,18 @@ const dynamicStyles = (
       color: nc.textLight,
       marginTop: 16,
     },
-    roleChoiceList: {
-      gap: 12,
-      marginTop: 12,
-    },
-    roleChoiceItem: {
-      borderRadius: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
+    roleActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minHeight: 44,
+      paddingHorizontal: 14,
+      borderRadius: 22,
       backgroundColor: nc.backgroundPressed,
     },
-    roleChoiceItemActive: {
-      borderWidth: 1,
-      borderColor: tintColor,
-      backgroundColor: tintColor + "15",
-    },
-    roleChoiceLabel: {
-      fontSize: 15,
+    roleActionText: {
+      fontSize: 14,
       fontWeight: '600',
-      color: nc.textStrong,
-      marginBottom: 2,
-    },
-    roleChoiceDescription: {
-      fontSize: 13,
-      color: nc.textLight,
+      color: tintColor,
     },
   });

@@ -5,6 +5,67 @@ const { config } = require("dotenv");
 
 config();
 
+const firebaseEnvironments = require("./config/firebaseEnvironments.json");
+
+const APP_ENVS = ["production", "staging"];
+// Project each environment must talk to (mirror of EXPECTED_PROJECT_IDS in
+// config/firebaseEnv.ts and scripts/easCopyFirebaseFiles.js).
+const EXPECTED_PROJECT_IDS = {
+  production: "samaye-53723",
+  staging: "samaye-staging",
+};
+const STAGING_PLACEHOLDER_PREFIX = "STAGING_PLACEHOLDER_";
+
+// EXPO_PUBLIC_* variables that override one field of the Firebase web config
+// (e.g. set on EAS for the staging environment once the project exists).
+const FIREBASE_ENV_OVERRIDES = {
+  apiKey: "EXPO_PUBLIC_FIREBASE_API_KEY",
+  authDomain: "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  databaseURL: "EXPO_PUBLIC_FIREBASE_DATABASE_URL",
+  projectId: "EXPO_PUBLIC_FIREBASE_PROJECT_ID",
+  storageBucket: "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET",
+  messagingSenderId: "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
+  appId: "EXPO_PUBLIC_FIREBASE_APP_ID",
+  measurementId: "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID",
+};
+
+function resolveAppEnv() {
+  const value = process.env.APP_ENV || process.env.EXPO_PUBLIC_APP_ENV || "production";
+  if (!APP_ENVS.includes(value)) {
+    throw new Error(
+      `APP_ENV must be one of ${APP_ENVS.join(", ")} (got "${value}").`,
+    );
+  }
+  return value;
+}
+
+function resolveFirebaseWebConfig(appEnv) {
+  const firebase = { ...firebaseEnvironments[appEnv] };
+  for (const [field, envName] of Object.entries(FIREBASE_ENV_OVERRIDES)) {
+    if (process.env[envName]) firebase[field] = process.env[envName];
+  }
+  const placeholders = Object.entries(firebase)
+    .filter(([, v]) => typeof v === "string" && v.startsWith(STAGING_PLACEHOLDER_PREFIX))
+    .map(([k]) => k);
+  if (placeholders.length > 0) {
+    const message =
+      `Firebase web config for APP_ENV=${appEnv} still has placeholders ` +
+      `(${placeholders.join(", ")}): fill config/firebaseEnvironments.json ` +
+      "or set the EXPO_PUBLIC_FIREBASE_* variables.";
+    // Fail an EAS build early; only warn for local tooling (expo config, lint).
+    if (process.env.EAS_BUILD) throw new Error(message);
+    console.warn(`[app.config] ${message}`);
+  }
+  // A wrong project id would send staging data to production or the reverse.
+  if (firebase.projectId !== EXPECTED_PROJECT_IDS[appEnv]) {
+    throw new Error(
+      `Firebase config for APP_ENV=${appEnv} expects project "${EXPECTED_PROJECT_IDS[appEnv]}" ` +
+        `but names "${firebase.projectId}".`,
+    );
+  }
+  return firebase;
+}
+
 function resolveExistingProjectFile(...candidates) {
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -29,11 +90,24 @@ function dedupePlugins(plugins) {
 }
 
 module.exports = ({ config: expoConfig }) => {
+  const appEnv = resolveAppEnv();
+
+  // Native Firebase files. On EAS they come from file variables
+  // (GOOGLE_SERVICES_JSON / GOOGLE_SERVICES_PLIST, one value per EAS
+  // environment); locally, from the gitignored files at the project root.
+  // The android/ and ios/ folders are committed, so EAS skips prebuild and
+  // googleServicesFile below does not reach the native projects:
+  // scripts/easCopyFirebaseFiles.js (eas-build-pre-install hook) copies the
+  // files into android/app/ and ios/SuiviBaby/. See docs/adr/0001.
+  // Bundle id / package stay com.tesfa.suivibaby for every environment: they
+  // are hard-coded in the committed native projects, so a per-env suffix here
+  // would have no effect on EAS builds.
   const androidGoogleServicesFile = resolveExistingProjectFile(
     process.env.GOOGLE_SERVICES_JSON,
     "google-services.json",
   );
   const iosGoogleServicesFile = resolveExistingProjectFile(
+    process.env.GOOGLE_SERVICES_PLIST,
     process.env.GOOGLE_SERVICE_INFO_PLIST,
     "GoogleService-Info.plist",
   );
@@ -61,6 +135,8 @@ module.exports = ({ config: expoConfig }) => {
     },
     extra: {
       ...expoConfig.extra,
+      appEnv,
+      firebase: resolveFirebaseWebConfig(appEnv),
       appCheck: {
         nativeConfigured: nativeAppCheckConfigured,
         webSiteKeyConfigured: Boolean(

@@ -127,9 +127,12 @@ service cloud.firestore {
       // Modification : owner ou admin uniquement, bloqué si soft-deleted.
       // ownerId et deletedAt ne changent que côté serveur (transfert de
       // propriété, suppression) : sinon un admin pourrait se déclarer owner.
+      // lastEventAt (dernier événement par catégorie, lu par les rappels et le
+      // récap) est tenu par les Cloud Functions : un client qui l'écrit fausserait
+      // les rappels de tous les membres.
       allow update: if isNotDeleted() && (
         isOwner(childId) || isAdmin(childId)
-      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt']);
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt', 'lastEventAt']);
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
       allow delete: if false;
@@ -157,17 +160,26 @@ service cloud.firestore {
           request.resource.data.grantedBy is string &&
           request.resource.data.userId == uid;
 
-        // Modification : un owner peut changer les rôles, avec les gardes
-        // habituelles. L'accès du propriétaire principal (children.ownerId) ne
-        // peut être ni rétrogradé ni supprimé par un co-owner (transfert via
-        // transferAndLeave uniquement).
+        // Modification : le rôle (Parent = admin, Proche = contributor) et ses
+        // drapeaux changent par la CF setMemberRole (propriétaire uniquement,
+        // Admin SDK).
+        // TRANSITION : l'écran « gérer les accès » des apps <= 1.0.9 met à jour
+        // ce document directement ; sans cette branche, ces apps ne pourraient
+        // plus changer un rôle tant qu'elles ne sont pas mises à jour. Limitée
+        // au propriétaire : rôle admin/contributor/viewer (jamais owner),
+        // drapeaux cohérents avec le rôle, aucun autre champ modifié, ni son
+        // propre accès, ni celui d'un owner, ni celui du propriétaire principal.
+        // À retirer quand app_config.minVersion > 1.0.9 (voir le plan, S12).
         allow update: if isOwner(childId) &&
-          (uid != childDoc(childId).data.ownerId ||
-            request.resource.data.role == 'owner') &&
-          request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
-          request.resource.data.grantedBy == resource.data.grantedBy &&
-          request.resource.data.userId == uid &&
-          request.resource.data.userId == resource.data.userId;
+          uid != request.auth.uid &&
+          uid != childDoc(childId).data.ownerId &&
+          resource.data.role != 'owner' &&
+          request.resource.data.role in ['admin', 'contributor', 'viewer'] &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['role', 'canWriteEvents', 'canWriteLikes', 'canWriteComments']) &&
+          request.resource.data.canWriteEvents == (request.resource.data.role == 'admin') &&
+          request.resource.data.canWriteLikes == (request.resource.data.role in ['admin', 'contributor']) &&
+          request.resource.data.canWriteComments == (request.resource.data.role in ['admin', 'contributor']);
 
         // Suppression : uniquement le owner (sauf son propre accès)
         allow delete: if isOwner(childId) && uid != request.auth.uid &&
@@ -324,8 +336,18 @@ service cloud.firestore {
         isAdmin(resource.data.childId)
       );
 
-      // Création : owner/admin (fallback via ownerId si access manquant)
+      // Création : l'app ≥ 1.0.10 passe par la CF createShareCode (code
+      // aléatoire serveur, 7 jours, un seul usage, créateur owner/admin
+      // vérifié). TRANSITION : les apps ≤ 1.0.9 déjà installées créent encore
+      // le code elles-mêmes ; sans cette branche, elles ne pourraient plus
+      // partager un enfant jusqu'à leur mise à jour. Mêmes contraintes
+      // qu'avant le sprint 12, plus la forme exacte du document (aucun champ
+      // en plus, nom d'enfant borné). À retirer quand app_config.minVersion
+      // > 1.0.9 (tâche datée dans le plan, S12).
       allow create: if isSignedIn() &&
+        request.resource.data.keys().hasOnly(['code', 'childId', 'childName', 'createdBy', 'createdAt', 'expiresAt', 'used']) &&
+        request.resource.data.childName is string &&
+        request.resource.data.childName.size() <= 100 &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.code == code &&
         request.resource.data.used == false &&

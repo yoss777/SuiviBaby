@@ -8,17 +8,11 @@ import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureFirebaseAppCheck as ensureAppCheckForApp } from "./appCheck";
+import { getFirebaseWebConfig } from "./firebaseEnv";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBJUP-b3NPExx-4RfWFLvrbAM5pEfHvAOg",
-  authDomain: "samaye-53723.firebaseapp.com",
-  databaseURL: "https://samaye-53723-default-rtdb.firebaseio.com",
-  projectId: "samaye-53723",
-  storageBucket: "samaye-53723-photos-eu",
-  messagingSenderId: "222899144223",
-  appId: "1:222899144223:web:bdec5b5754d15fc987372a",
-  measurementId: "G-SN50WE00WE"
-};
+// Web config of the environment chosen at build time by APP_ENV (production by
+// default, staging for the EAS staging profile): see config/firebaseEnv.ts.
+const firebaseConfig = getFirebaseWebConfig();
 
 const app = initializeApp(firebaseConfig);
 
