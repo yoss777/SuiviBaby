@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { collection, DocumentSnapshot, getDocs, limit, onSnapshot, orderBy, query, Query, QueryConstraint, startAfter, where } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import type { DocumentSnapshot } from "firebase/firestore";
+import { getTypedEventsPage, listenToTypedEvents } from "@/services/eventsRepository";
 
 // ============================================
 // TYPES
@@ -60,31 +60,6 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
   // FETCH FUNCTIONS
   // ============================================
 
-  const buildQuery = useCallback(
-    (withPagination = false): Query | null => {
-      if (!childId) return null;
-
-      const constraints: QueryConstraint[] = [
-        where("childId", "==", childId),
-        where("type", "==", eventType),
-        orderBy("date", "desc"),
-      ];
-
-      if (withPagination) {
-        constraints.push(limit(pageSize));
-        if (lastDocRef.current) {
-          constraints.push(startAfter(lastDocRef.current));
-        }
-      } else {
-        // Pour le temps réel, limiter aux N derniers
-        constraints.push(limit(pageSize));
-      }
-
-      return query(collection(db, "events"), ...constraints);
-    },
-    [childId, eventType, pageSize]
-  );
-
   const fetchPage = useCallback(
     async (isLoadMore = false) => {
       if (!childId) return;
@@ -97,10 +72,12 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
       }
 
       try {
-        const q = buildQuery(true);
-        if (!q) return;
-
-        const snapshot = await getDocs(q);
+        const snapshot = await getTypedEventsPage(
+          childId,
+          eventType,
+          pageSize,
+          lastDocRef.current,
+        );
         const newData = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -131,14 +108,11 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
         }));
       }
     },
-    [childId, buildQuery, pageSize, pagination.hasMore, pagination.loadingMore]
+    [childId, eventType, pageSize, pagination.hasMore, pagination.loadingMore]
   );
 
   const setupRealtimeListener = useCallback(() => {
     if (!childId || !enableRealtime) return;
-
-    const q = buildQuery(false);
-    if (!q) return;
 
     // Nettoyer l'ancien listener
     if (unsubscribeRef.current) {
@@ -146,8 +120,10 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
     }
 
     // Créer le nouveau listener
-    unsubscribeRef.current = onSnapshot(
-      q,
+    unsubscribeRef.current = listenToTypedEvents(
+      childId,
+      eventType,
+      pageSize,
       (snapshot) => {
         const realtimeData = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -192,7 +168,7 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
         }));
       }
     );
-  }, [childId, buildQuery, enableRealtime, pageSize, eventType]);
+  }, [childId, enableRealtime, pageSize, eventType]);
 
   // ============================================
   // EFFECTS

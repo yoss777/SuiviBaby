@@ -170,7 +170,7 @@ function MyComponent({ childId, currentUserId }) {
 - Modifier le rôle des parents existants
 - Révoquer l'accès
 
-**Référence** : [`components/suivibaby/PermissionsExample.tsx`](../components/suivibaby/PermissionsExample.tsx)
+**Référence** : `components/suivibaby/PermissionsExample.tsx` (supprimé en S13)
 
 ### 5. Supprimer les fallbacks (dans quelques semaines)
 
@@ -185,7 +185,7 @@ firebase deploy --only firestore:rules
 
 - [Documentation complète](./PERMISSIONS.md)
 - [Guide d'implémentation](./PERMISSIONS_IMPLEMENTATION.md)
-- [Exemples de code](../components/suivibaby/PermissionsExample.tsx)
+- Exemples de code (`PermissionsExample.tsx`, supprimé en S13)
 
 ## 🐛 Troubleshooting
 

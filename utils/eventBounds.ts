@@ -1,16 +1,16 @@
 // utils/eventBounds.ts
 //
 // Source unique des bornes quantitatives event côté client. Doit rester
-// strictement aligné avec validateEventData() dans functions/index.js et
-// avec project_event_quantity_bounds.md.
+// strictement aligné avec validateEventData() dans
+// functions/src/events/validation.js et avec project_event_quantity_bounds.md.
 //
 // Pourquoi ici plutôt que dans services/voice/enums.ts : ces bornes
 // s'appliquent à TOUS les events (UI manuelle, voice, futurs imports CSV,
 // API tiers), pas qu'au pipeline vocal. Le module voice/enums.ts garde
 // les enums vocaux (typeBiberon, typeActivite...) qui sont vocale-only.
 //
-// Toute modification ICI doit être mirrorée dans functions/index.js
-// validateEventData et inversement.
+// Toute modification ICI doit être mirrorée dans validateEventData
+// (functions/src/events/validation.js) et inversement.
 
 export const NUMERIC_BOUNDS = {
   biberon: {

@@ -1,0 +1,683 @@
+{
+  "acceptInvitationCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "cancelAccountDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "cancelChildDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "checkAndSendReminders": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 120,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 30 minutes",
+      "retryConfig": {}
+    }
+  },
+  "cleanupExpiredShareCodes": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "cleanupExpiredSubscriptions": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "consumeUsageQuota": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "createDeletionRequest": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "createShareCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "createShareInvitation": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "deleteEventCascade": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "deletePhotoThumbnail": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.deleted",
+      "eventFilters": {
+        "bucket": "params.PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "deleteUserAccount": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 300,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "ensureReferralCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "generatePhotoThumbnail": {
+    "platform": "gcfv2",
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 120,
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.finalized",
+      "eventFilters": {
+        "bucket": "params.PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "getOwnershipBlockers": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "getUsageQuotaStatus": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "handleReportCreated": {
+    "nonTrigger": "function"
+  },
+  "mirrorLegacyPhotoDelete": {
+    "platform": "gcfv2",
+    "region": [
+      "us-central1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.deleted",
+      "eventFilters": {
+        "bucket": "params.LEGACY_PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "mirrorLegacyPhotoUpload": {
+    "platform": "gcfv2",
+    "region": [
+      "us-central1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.finalized",
+      "eventFilters": {
+        "bucket": "params.LEGACY_PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "onReportCreated": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.created",
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "reports/{reportId}"
+      },
+      "retry": false
+    }
+  },
+  "parseVoiceCommand": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 15,
+    "concurrency": 40,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ANTHROPIC_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "photoRefToPath": {
+    "nonTrigger": "function"
+  },
+  "processScheduledDeletions": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      },
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "purgeDeletedChildren": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "reconcileAccessIndexNightly": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "15 3 * * *",
+      "retryConfig": {},
+      "timeZone": "Europe/Paris"
+    }
+  },
+  "recordHealthConsent": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "redeemShareCodeCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "registerAppleRevocation": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "requestAccountDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "resolveReport": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "retryAssemblyAIDeletes": {
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ASSEMBLYAI_API_KEY"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 60 minutes",
+      "retryConfig": {}
+    }
+  },
+  "revenueCatWebhook": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "REVENUECAT_WEBHOOK_SECRET"
+      }
+    ],
+    "labels": {},
+    "httpsTrigger": {}
+  },
+  "sendDeletionRequestEmail": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "sendWeeklyRecap": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 300,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      },
+      {
+        "key": "RECAP_UNSUBSCRIBE_SECRET"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every monday 08:00",
+      "retryConfig": {},
+      "timeZone": "Europe/Paris"
+    }
+  },
+  "setAdminClaim": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "INITIAL_ADMIN_EMAIL"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "setMemberRole": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "submitContentReportCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "transcribeAudio": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 120,
+    "minInstances": 1,
+    "concurrency": 30,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ASSEMBLYAI_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "transferAndLeave": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "unsubscribeRecap": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RECAP_UNSUBSCRIBE_SECRET"
+      }
+    ],
+    "labels": {},
+    "httpsTrigger": {}
+  },
+  "validateAndCreateEvent": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "validateAndUpdateEvent": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "validateReferralCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "voteDeletionRequest": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
+  "withdrawHealthConsent": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  }
+}

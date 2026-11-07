@@ -19,6 +19,8 @@ jest.mock("@/contexts/AuthContext", () => ({
 }));
 
 jest.mock("@/services/userPreferencesService", () => ({
+  // Écouteur et écriture brutes : vrais (sur le firebase/firestore simulé).
+  ...jest.requireActual("@/services/userPreferencesService"),
   obtenirPreferences: jest.fn(() =>
     Promise.resolve({ hiddenChildrenIds: [], lastActiveChildId: null }),
   ),

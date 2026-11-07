@@ -349,8 +349,8 @@ function BootScreenContent() {
       } else {
         const targetChild = activeChild ?? children[0];
         if (!targetChild) {
-          logBoot("Aucun enfant actif résolu, redirection explore");
-          navigate = () => router.replace("/explore");
+          logBoot("Aucun enfant actif résolu, redirection child-picker");
+          navigate = () => router.replace("/child-picker");
         } else {
           logBoot("Redirection baby", { childId: targetChild.id });
 

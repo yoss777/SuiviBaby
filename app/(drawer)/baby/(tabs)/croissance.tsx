@@ -80,6 +80,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supprimerEvenement as supprimerCroissance } from "@/services/eventsService";
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { getDateTime, toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -112,13 +113,6 @@ const CHART_HEIGHT = 210;
 const CHART_PADDING = { top: 16, right: 55, bottom: 30, left: 32 };
 const CHART_VISIBLE_POINTS = 5;
 const CHART_AXIS_WIDTH = 40;
-
-function toDate(value: any): Date {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-}
 
 function createSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return "";
@@ -870,7 +864,7 @@ export default function CroissanceScreen() {
   const sortMergedEntries = useCallback(
     (merged: any[]) =>
       [...(merged as CroissanceEntry[])].sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => getDateTime(b.date) - getDateTime(a.date),
       ),
     [],
   );
@@ -1161,7 +1155,7 @@ export default function CroissanceScreen() {
             ...entry,
             type: "croissance",
           }))
-          .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+          .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
         setFirestoreEvents(normalized as CroissanceEntry[]);
         if (!loadingSet) {
           loadingSet = true;
@@ -1195,7 +1189,7 @@ export default function CroissanceScreen() {
           ...entry,
           type: "croissance" as const,
         }))
-        .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+        .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
       setFirestoreEvents(normalized as CroissanceEntry[]);
     },
   });

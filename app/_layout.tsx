@@ -226,7 +226,7 @@ function AppNavigation() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="explore"
+          name="child-picker"
           options={{ headerShown: false }}
         />
         <Stack.Screen

@@ -1,5 +1,5 @@
 import { doc, updateDoc } from "firebase/firestore";
-import { updateChildAccess } from "@/utils/permissions";
+import { updateChildAccess } from "@/services/accessRepository";
 
 describe("updateChildAccess", () => {
   beforeEach(() => {

@@ -5,36 +5,18 @@
 // demande, au défilement. Avant : tout l'historique des jalons était relu et
 // écouté à chaque ouverture.
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  where,
-} from "firebase/firestore";
-import { db } from "@/config/firebase";
+import type { DocumentSnapshot } from "firebase/firestore";
+import { getEventDoc, getMilestonesPageAfter } from "@/services/eventsRepository";
 import { ecouterEvenements, JalonEvent } from "@/services/eventsService";
+import { getDateTime } from "@/utils/date";
 
 export type GalleryMilestoneEvent = JalonEvent & { id: string };
 
 /** Nombre de jalons lus par page. */
 export const GALLERY_PAGE_SIZE = 60;
 
-const toMillis = (value: unknown): number => {
-  const v = value as { seconds?: number; toMillis?: () => number; getTime?: () => number } | null;
-  if (!v) return 0;
-  if (typeof v.toMillis === "function") return v.toMillis();
-  if (typeof v.seconds === "number") return v.seconds * 1000;
-  if (typeof v.getTime === "function") return v.getTime();
-  return new Date(value as string | number).getTime() || 0;
-};
-
 const byDateDesc = (a: GalleryMilestoneEvent, b: GalleryMilestoneEvent) =>
-  toMillis(b.date) - toMillis(a.date);
+  getDateTime(b.date) - getDateTime(a.date);
 
 /**
  * Applique une nouvelle première page (direct ou relecture serveur) à la liste
@@ -49,9 +31,9 @@ export function applyFirstPage(
 ): GalleryMilestoneEvent[] {
   if (firstPage.length < pageSize) return [...firstPage].sort(byDateDesc);
   const pageIds = new Set(firstPage.map((e) => e.id));
-  const oldestInPage = Math.min(...firstPage.map((e) => toMillis(e.date)));
+  const oldestInPage = Math.min(...firstPage.map((e) => getDateTime(e.date)));
   const kept = previous.filter(
-    (e) => !pageIds.has(e.id) && toMillis(e.date) <= oldestInPage,
+    (e) => !pageIds.has(e.id) && getDateTime(e.date) <= oldestInPage,
   );
   return [...firstPage, ...kept].sort(byDateDesc);
 }
@@ -165,10 +147,10 @@ export function useGalleryMilestones(childId: string | undefined) {
       // Curseur = document du dernier jalon chargé (départage les dates égales).
       // Un jalon supprimé entre-temps est retiré de la liste locale et on prend
       // le précédent comme curseur (sinon la pagination resterait bloquée).
-      let cursor: Awaited<ReturnType<typeof getDoc>> | null = null;
+      let cursor: DocumentSnapshot | null = null;
       while (eventsRef.current.length > 0) {
         const oldest = eventsRef.current[eventsRef.current.length - 1];
-        const candidate = await getDoc(doc(db, "events", oldest.id));
+        const candidate = await getEventDoc(oldest.id);
         if (!isMountedRef.current || childIdRef.current !== cid) return;
         if (candidate.exists()) {
           cursor = candidate;
@@ -182,16 +164,7 @@ export function useGalleryMilestones(childId: string | undefined) {
         setRetryCount((c) => c + 1);
         return;
       }
-      const snapshot = await getDocs(
-        query(
-          collection(db, "events"),
-          where("childId", "==", cid),
-          where("type", "in", ["jalon"]),
-          orderBy("date", "desc"),
-          startAfter(cursor),
-          limit(GALLERY_PAGE_SIZE),
-        ),
-      );
+      const snapshot = await getMilestonesPageAfter(cid, cursor, GALLERY_PAGE_SIZE);
       // Enfant changé pendant la lecture : résultat jeté.
       if (!isMountedRef.current || childIdRef.current !== cid) return;
       const page = snapshot.docs.map(

@@ -10,7 +10,7 @@ import {
 } from "@/services/socialService";
 import { CommentInfo, EventComment, Mention } from "@/types/social";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { Timestamp } from "firebase/firestore";
+import type { Timestamp } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,

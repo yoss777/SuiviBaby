@@ -12,7 +12,7 @@
 - ✅ Types dans [`types/permissions.ts`](/types/permissions.ts)
 - ✅ Hook `useChildPermissions` dans [`hooks/useChildPermissions.ts`](/hooks/useChildPermissions.ts)
 - ✅ Fonctions utilitaires dans [`utils/permissions.ts`](/utils/permissions.ts)
-- ✅ Exemples d'utilisation dans [`components/suivibaby/PermissionsExample.tsx`](/components/suivibaby/PermissionsExample.tsx)
+- ✅ Exemples d'utilisation dans `components/suivibaby/PermissionsExample.tsx` (supprimé en S13)
 
 ### 3. Documentation
 - ✅ Documentation complète dans [`docs/PERMISSIONS.md`](/docs/PERMISSIONS.md)
@@ -147,7 +147,7 @@ Créer un écran qui permet aux owners de :
 - Modifier le rôle des parents existants
 - Révoquer l'accès
 
-**Référence** : Voir [`components/suivibaby/PermissionsExample.tsx`](/components/suivibaby/PermissionsExample.tsx)
+**Référence** : Voir `components/suivibaby/PermissionsExample.tsx` (supprimé en S13)
 
 ### Étape 5: Mettre à jour le système d'invitations
 
@@ -239,5 +239,5 @@ await updateChildAccess(childId, ownerId, { role: 'owner' });
 ## 📞 Besoin d'aide ?
 
 - Documentation complète : [`docs/PERMISSIONS.md`](/docs/PERMISSIONS.md)
-- Exemples de code : [`components/suivibaby/PermissionsExample.tsx`](/components/suivibaby/PermissionsExample.tsx)
+- Exemples de code : `components/suivibaby/PermissionsExample.tsx` (supprimé en S13)
 - Règles Firestore : [`firestore.rules`](/firestore.rules)

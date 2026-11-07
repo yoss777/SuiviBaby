@@ -56,19 +56,7 @@ import {
 import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
-
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
-
-const getDateTime = (value: any): number => {
-  const date = toDate(value);
-  const time = date.getTime();
-  return Number.isNaN(time) ? 0 : time;
-};
+import { getDateTime, toDate } from "@/utils/date";
 
 // ============================================
 // TYPES

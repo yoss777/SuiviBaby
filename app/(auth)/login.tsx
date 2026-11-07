@@ -283,7 +283,7 @@ export default function LoginScreen() {
 
     if (navigationLocked.current) return;
     navigationLocked.current = true;
-    router.replace("/explore");
+    router.replace("/child-picker");
   }, [
     authLoading,
     babyLoading,

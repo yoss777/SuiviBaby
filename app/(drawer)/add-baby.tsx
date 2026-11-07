@@ -2,7 +2,6 @@ import { ThemedView } from '@/components/themed-view';
 import { GenderRadioGroup } from '@/components/forms/GenderRadioGroup';
 import { AllergiesEditor } from '@/components/forms/AllergiesEditor';
 import { DateTimePickerRow } from '@/components/ui/DateTimePickerRow';
-import { db } from '@/config/firebase';
 import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,8 +11,9 @@ import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { Timestamp, addDoc, collection } from 'firebase/firestore';
-import { createOwnerAccess } from '@/utils/permissions';
+import { createChildDoc } from '@/services/childRepository';
+import { timestampFromDate } from '@/services/firestoreTimestamps';
+import { createOwnerAccess } from '@/services/accessRepository';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -220,7 +220,7 @@ export default function AddBabyScreen() {
       const parentEmail = user.email?.toLowerCase();
       const childData = {
         name: name.trim(),
-        birthDate: Timestamp.fromDate(birthDate),
+        birthDate: timestampFromDate(birthDate),
         gender: gender,
         ownerId: user.uid,
         parentIds: [user.uid],
@@ -230,8 +230,8 @@ export default function AddBabyScreen() {
         ...(allergies.length > 0 ? { allergies } : {}),
       };
 
-      const childRef = await addDoc(collection(db, 'children'), childData);
-      await createOwnerAccess(childRef.id, user.uid);
+      const childId = await createChildDoc(childData);
+      await createOwnerAccess(childId, user.uid);
 
       if (!isMountedRef.current) return;
 

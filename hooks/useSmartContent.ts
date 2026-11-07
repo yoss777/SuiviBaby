@@ -16,8 +16,8 @@ import {
   removeBookmark as removeBookmarkService,
   updateMilestoneStatus as updateMilestoneStatusService,
 } from "@/services/smartContentService";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import { getDateTime } from "@/utils/date";
+import { listenToChildDoc } from "@/services/childRepository";
 import type { MilestoneStatus } from "@/types/content";
 import type { Insight, MilestoneRef, Tip, UserContent } from "@/types/content";
 import { DEFAULT_USER_CONTENT } from "@/types/content";
@@ -83,21 +83,6 @@ const TIP_COOLDOWN_DAYS = 7; // Don't show the same tip again for 7 days
 // EMPREINTE DES ÉVÉNEMENTS
 // ============================================
 
-function toMillis(value: unknown): number {
-  if (value == null) return 0;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const t = new Date(value).getTime();
-    return Number.isNaN(t) ? 0 : t;
-  }
-  const v = value as { toMillis?: () => number; toDate?: () => Date; seconds?: number; _seconds?: number };
-  if (typeof v.toMillis === "function") return v.toMillis();
-  if (typeof v.toDate === "function") return v.toDate().getTime();
-  const seconds = v.seconds ?? v._seconds;
-  return typeof seconds === "number" ? seconds * 1000 : 0;
-}
-
 /**
  * Empreinte qui change à chaque modification utile d'un événement : id + type +
  * valeur + date + updatedAt. Une température corrigée (même id, même nombre
@@ -106,7 +91,7 @@ function toMillis(value: unknown): number {
 export function computeEventsFingerprint(events: SmartContentParams["events"]): string {
   if (events.length === 0) return "";
   return events
-    .map((e) => `${e.id}|${e.type}|${e.valeur ?? ""}|${toMillis(e.date)}|${toMillis(e.updatedAt)}`)
+    .map((e) => `${e.id}|${e.type}|${e.valeur ?? ""}|${getDateTime(e.date)}|${getDateTime(e.updatedAt)}`)
     .join(";");
 }
 
@@ -219,8 +204,8 @@ export function useSmartContent(params: SmartContentParams): SmartContentResult 
   // Real-time listener for shared milestoneStatuses on child doc
   useEffect(() => {
     if (!childId) return;
-    const unsubscribe = onSnapshot(
-      doc(db, "children", childId),
+    const unsubscribe = listenToChildDoc(
+      childId,
       (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();

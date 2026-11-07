@@ -841,6 +841,25 @@ support en attendant une décision.
 et à la modification, lecture seule pour un Proche, ligne dans le PDF,
 validation dans les règles, export).
 
+**Décisions et backlog (Yoss, 2026-11-07, suite)** :
+- AssemblyAI reste en offre gratuite (pas de désinscription de
+  l'entraînement possible) : politique corrigée pour le dire ; **à faire :
+  remplacer AssemblyAI** — piste recommandée : reconnaissance vocale sur
+  l'appareil (iOS Speech / Android SpeechRecognizer, ex.
+  `expo-speech-recognition`), seul le texte part à Anthropic ; à comparer
+  avec une transcription API sans entraînement (hébergée UE).
+- DPO : non désigné (SASU, 1 personne, objectif ~500 utilisateurs, ≤ 10
+  salariés à terme) ; justification à noter dans le registre ; réexamen
+  au-delà de quelques milliers d'utilisateurs.
+- Médiateur de la consommation : à choisir avant la vente de Premium
+  (comparaison faite, voir conversation) ; mentions à compléter dans
+  `terms.html` et `mentions-legales.html` ensuite.
+- Montée d'Expo (13.5) : après la prochaine version publiée.
+- Plage de nuit des rappels : réglage par parent, activé par défaut
+  22 h – 7 h, fuseau du téléphone, rappel sauté pendant la plage.
+- `MilestoneCelebrationModal` : décision en attente (rebrancher ou
+  supprimer).
+
 ## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 faite, voir plus bas)
 
 - [x] **11.1** `collectCoverageFrom` pour mesurer la vraie couverture, seuils
@@ -974,26 +993,82 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
   décider ;
 - à voir : plage de nuit pour les rappels (`test.todo`, décision produit).
 
-## S13 — Dette structurelle (mois 3) · ⏳
+## S13 — Dette structurelle (mois 3) · 🟡 2026-11-07 (13.1, 13.2 partiel, 13.3, 13.4, 13.6, 13.7 faits ; 13.5 en attente de l'accord de Yoss ; revue ECC à faire)
 
-- [ ] **13.1** Découpage de `functions/index.js` par domaine (partage,
+- [x] **13.1** Découpage de `functions/index.js` par domaine (partage,
   événements, voix, facturation, suppression, notifications, modération,
   admin) et des tests associés.
-- [ ] **13.2** Écran de liste générique piloté par configuration, migré écran
+- [~] **13.2** (repas, pompages, couches migrés ; `toDate` unique) Écran de liste générique piloté par configuration, migré écran
   par écran (repas, pompages, couches d'abord) ; `toDate` unique dans
   `utils/date`.
-- [ ] **13.3** Couche d'accès aux données (`services/*Repository.ts`) et règle
+- [x] **13.3** (repositories dans `services/`, règle ESLint en erreur ; `import type` autorisé) Couche d'accès aux données (`services/*Repository.ts`) et règle
   ESLint qui interdit `firebase/firestore` hors `services/`.
-- [ ] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
+- [x] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
   `app-example/` ; `explore.tsx` renommé.
 - [ ] **13.5** Montée d'Expo SDK (une version à la fois, testée en staging) ;
   Skia stable ou graphiques en SVG ; suppression de `scripts/patch-expo.js`.
-- [ ] **13.6** S4 : App Check imposé quand la nouvelle version est
+- [x] **13.6** S4 : App Check imposé quand la nouvelle version est
   majoritaire ; décision `expo-updates` (retour arrière OTA) dans un ADR.
-- [ ] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,
+- [x] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,
   `docs/adr/`, `todo_*` de la racine archivés.
 
-**Revue ECC (S13)** : `architect`, `code-reviewer`.
+Notes S13 (2026-11-07) :
+- 13.1 : `functions/index.js` 5835 → 102 lignes, 38 modules dans
+  `functions/src/` ; noms, déclencheurs et options des 46 exports figés par
+  `functions/__tests__/exportsSnapshot.test.js`.
+- 13.2 : `EventListScreen` + hooks `hooks/eventList/` + configs ; repas,
+  pompages et couches de ~1800–2100 lignes à 7 ; corrigé au passage :
+  « aujourd'hui » figé après minuit (repas, couches), saisies optimistes
+  étrangères (pompages), indicateur « Voir plus » qui pouvait rester
+  affiché, filtre jour qui remettait à minuit l'heure des saisies
+  optimistes. Écrans restants (soins, routines, activités…) à migrer.
+- 13.4 : 5 services par type, `app/backups`, `app-example`, gabarit Expo,
+  démos supprimés ; `explore.tsx` → `child-picker.tsx`. À trancher :
+  `MilestoneCelebrationModal` + `milestoneCelebrationService` (marqués
+  faits dans l'ancienne todo, jamais affichés), `OfflineBanner`,
+  `usePromos`, `BoundedNumberInput` ; dépendances `expo-symbols` et
+  `expo-web-browser` inutilisées (retrait au prochain build natif).
+- 13.6 : ADR 0002 (App Check : pas encore, revue 2026-12-07) et 0003
+  (`expo-updates` : pas maintenant, revue 2027-01-15).
+- 13.7 : `docs/README.md`, `docs/RUNBOOK.md`, `todo_*` archivés dans
+  `docs/archive/`. Erreurs repérées dans `FIREBASE_MONITORING.md` et
+  `STORE_SUBMISSION.md` à corriger.
+
+**Revue ECC (S13)** : `architect`, `code-reviewer`. Corrigé (2026-11-07) :
+- App Check : bascule partielle possible. `withAppCheck(options, nom)` lit
+  `APPCHECK_ENFORCE_FUNCTIONS` (noms d'export séparés par des virgules) en plus
+  de `APPCHECK_ENFORCE=true` (toutes) ; sans variable, surveillance seule. ADR
+  0002 mis à jour (la variable doit rester dans `functions/.env.<projet>`, la CI
+  redéploie tout). Le test d'exports figé enregistre désormais
+  `enforceAppCheck`, `consumeAppCheckToken` et `cors` de chaque callable.
+- Écran générique : « Voir plus » en mode `extend` gardait la fin de fenêtre
+  sur l'événement trouvé (les jours récents sortaient de l'écouteur, comme dans
+  les anciens écrans) ; la fin reste désormais fixe et seule la longueur
+  grandit. Échec de `getNextEventDateBefore` : le chargement est libéré.
+  Pompages et couches passent en `permissions: "manage"` ; édition, sélection
+  groupée et suppression sont réservées au propriétaire/admin (un Proche lit
+  tout). Drapeaux historiques de `components/eventList/types.ts` listés, à
+  trancher avec le produit avant de migrer d'autres écrans.
+- Dates : tris par `getDateTime` (plus de NaN avec `toDate(null)`), groupes et
+  filtres du jour ignorent les dates invalides, arrêt de chrono sans début,
+  doublons `toDate`/`toMillis` retirés (dont celui d'`exportService`, bogue
+  `seconds: 0`).
+- Données : `babyService` supprimé ; écritures d'accès (`grantChildAccess`,
+  `revokeChildAccess`, `updateChildAccess`, `createOwnerAccess`) déplacées dans
+  `services/accessRepository.ts` (lectures typées du document d'accès
+  ajoutées) ; `user_preferences` regroupé dans `userPreferencesService`. Règle
+  ESLint étendue (sous-chemins, SDK natif, `require`/`import()` dynamiques),
+  testée.
+- Divers : contextes d'en-tête dans `contexts/HeaderContext.tsx` ; `functions/`
+  : `revokeAppleToken` et `hasValidHealthConsent` dans `src/shared/` ;
+  commentaires périmés et RUNBOOK §2.4 / §6 corrigés ; test de connexion rendu
+  déterministe (premier rendu à froid hors du délai de 5 s).
+Reste : migrer les écrans restants vers l'écran générique (soins, routines,
+activités…) après décision produit sur les drapeaux historiques ; le mode
+`reset` des repas sort aussi les jours récents de la fenêtre (comportement
+historique conservé) ; le bouton « Ajouter » reste visible pour un Proche (les
+règles refusent l'écriture) ; `React.memo` de la ligne non fait (la ligne est un
+rendu local, pas un composant) ; décision `deviceInfo.appCheck` (ADR 0002).
 
 ## Correspondance audit → sprints
 

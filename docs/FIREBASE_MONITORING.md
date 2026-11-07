@@ -158,10 +158,12 @@
 
 ### Contexte
 Les Cloud Functions wrappées par `withAppCheck()` participent à App Check.
-L'enforcement est piloté par la variable d'env `APPCHECK_ENFORCE`. Tant
-qu'elle vaut `false` (défaut), les requêtes sans token App Check sont
-acceptées mais loguées en `UNVERIFIED`. Quand elle vaut `true`, les CFs
-rejettent en 401 toute requête sans token valide.
+L'enforcement est piloté par deux variables d'env : `APPCHECK_ENFORCE_FUNCTIONS`
+(noms d'export séparés par des virgules : seules ces fonctions imposent App
+Check) et `APPCHECK_ENFORCE=true` (toutes les fonctions appelables). Sans
+variable (défaut), les requêtes sans token App Check sont acceptées mais
+loguées en `UNVERIFIED`. Une fonction imposée rejette toute requête sans
+token valide. Voir ADR 0002.
 
 ### Procédure d'activation
 
@@ -180,9 +182,10 @@ cela, l'activation bloque les clients légitimes.
    ```bash
    # Les fonctions v2 lisent process.env : fichier d'environnement du projet
    # (functions:config:set est l'ancienne configuration v1, sans effet ici)
-   echo "APPCHECK_ENFORCE=true" >> functions/.env.samaye-53723
-   firebase deploy --only \
-     functions:transcribeAudio,functions:revenueCatWebhook,functions:consumeUsageQuota
+   # (revenueCatWebhook est un onRequest : App Check ne s'y applique pas)
+   echo "APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio,parseVoiceCommand" >> functions/.env.samaye-53723
+   firebase deploy --only functions:transcribeAudio,functions:parseVoiceCommand
+   # La variable doit rester dans le fichier : la CI redéploie toutes les fonctions.
    ```
 
 3. **Monitoring 24 h** sur Sentry + Cloud Logs :

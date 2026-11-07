@@ -2,15 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
-import {
-  collection,
-  doc,
-  getDoc,
-  limit,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { listenToOwnerDeletionRequests } from "@/services/deletionRequestRepository";
+import { getPublicUserDoc } from "@/services/userRepository";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,7 +18,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,14 +119,8 @@ export default function DeletionRequestsScreen() {
     // S4-T3: cap at 50 — a single user is never an owner on enough children
     // for this to clip real data, and the listener doc-read cost on the
     // settings tab was unbounded before.
-    const q = query(
-      collection(db, "childDeletionRequests"),
-      where("ownerIds", "array-contains", user.uid),
-      limit(50),
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubscribe = listenToOwnerDeletionRequests(
+      user.uid,
       async (snapshot) => {
         const results: DeletionRequest[] = [];
         const userIdsToResolve = new Set<string>();
@@ -161,7 +147,7 @@ export default function DeletionRequestsScreen() {
               return;
             }
             try {
-              const publicDoc = await getDoc(doc(db, "users_public", userId));
+              const publicDoc = await getPublicUserDoc(userId);
               names[userId] = publicDoc.exists()
                 ? publicDoc.data()?.userName || userId.slice(0, 8) + "..."
                 : userId.slice(0, 8) + "...";

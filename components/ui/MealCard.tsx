@@ -6,14 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
-
-const toDate = (
-  value: Date | { seconds: number } | { toDate: () => Date },
-): Date => {
-  if (value instanceof Date) return value;
-  if ("toDate" in value) return value.toDate();
-  return new Date(value.seconds * 1000);
-};
+import { toDate } from "@/utils/date";
 
 export interface MealCardProps {
   meal: {

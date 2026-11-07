@@ -36,6 +36,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { toDateOr } from "@/utils/date";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -89,37 +90,6 @@ export interface MealsFormProps {
 
 const MAX_BIBERON_ML = 300;
 
-function toDate(value: unknown): Date {
-  if (value instanceof Date) return value;
-  if (
-    value &&
-    typeof value === "object" &&
-    "toDate" in value &&
-    typeof value.toDate === "function"
-  ) {
-    return value.toDate();
-  }
-  if (
-    value &&
-    typeof value === "object" &&
-    "seconds" in value &&
-    typeof value.seconds === "number"
-  ) {
-    return new Date(value.seconds * 1000);
-  }
-  if (
-    value &&
-    typeof value === "object" &&
-    "_seconds" in value &&
-    typeof value._seconds === "number"
-  ) {
-    return new Date(value._seconds * 1000);
-  }
-
-  const parsed = new Date(value as string | number);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-}
-
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -155,7 +125,7 @@ export function MealsForm({
     editData?.type ?? initialType,
   );
   const [dateHeure, setDateHeure] = useState<Date>(
-    editData?.date ? toDate(editData.date) : new Date(),
+    editData?.date ? toDateOr(editData.date, new Date()) : new Date(),
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
 

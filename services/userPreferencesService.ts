@@ -1,8 +1,32 @@
 // services/userPreferencesService.ts
-import { arrayRemove, arrayUnion, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { arrayRemove, arrayUnion, doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import type { DocumentData, DocumentSnapshot, FirestoreError, Unsubscribe } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import type { HealthDataConsent } from "./healthConsentService";
+
+// ============================================
+// ACCÈS BRUT À user_preferences/{uid} (utilisé par les contextes et écrans)
+// ============================================
+
+/** Lit user_preferences/{uid}. */
+export function getUserPreferencesDoc(uid: string): Promise<DocumentSnapshot<DocumentData>> {
+  return getDoc(doc(db, "user_preferences", uid));
+}
+
+/** Écoute user_preferences/{uid}. */
+export function listenToUserPreferencesDoc(
+  uid: string,
+  onNext: (snapshot: DocumentSnapshot<DocumentData>) => void,
+  onError?: (error: FirestoreError) => void,
+): Unsubscribe {
+  return onSnapshot(doc(db, "user_preferences", uid), onNext, onError);
+}
+
+/** Écrit (merge) user_preferences/{uid}. */
+export function mergeUserPreferences(uid: string, data: DocumentData): Promise<void> {
+  return setDoc(doc(db, "user_preferences", uid), data, { merge: true });
+}
 
 const getUserId = () => {
   const user = auth.currentUser;

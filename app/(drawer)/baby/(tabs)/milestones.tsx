@@ -60,6 +60,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { getDateTime, toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -149,13 +150,6 @@ const formatDateKey = (date: Date) =>
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-const toDate = (value: any) => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
@@ -521,7 +515,7 @@ export default function MilestonesScreen() {
 
     sorted.forEach((group) => {
       group.events.sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime()
+        (a, b) => getDateTime(b.date) - getDateTime(a.date)
       );
     });
 

@@ -1,6 +1,6 @@
 # Offre Premium — cible et écarts d'implémentation
 
-> Créé le 30 octobre 2026. Complète [todo_monetisation.md](../todo_monetisation.md), qui reste la référence stratégique.
+> Créé le 30 octobre 2026. Complète [todo_monetisation.md](archive/2026/todo_monetisation_2026-11.md), qui reste la référence stratégique.
 
 ## Contexte
 

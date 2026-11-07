@@ -3,7 +3,7 @@ import { useModal } from "@/contexts/ModalContext";
 import { ajouterEvenementOptimistic } from "@/services/eventsService";
 import { toggleLike } from "@/services/socialService";
 import { JalonEvent } from "@/services/eventsService";
-import { toDate } from "@/hooks/useMomentsData";
+import { toDate } from "@/utils/date";
 import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import type { AnySheetProps } from "@/contexts/SheetContext";
 import type { JalonType, MilestonesEditData } from "@/components/forms/MilestonesForm";

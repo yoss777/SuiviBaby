@@ -5,6 +5,7 @@ import { useSocialInteractions } from "@/contexts/SocialInteractionsContext";
 import { JalonEvent } from "@/services/eventsService";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { toDate } from "@/utils/date";
 
 // ============================================
 // TYPES
@@ -33,13 +34,6 @@ export type PhotoMilestone = {
 // ============================================
 // HELPERS
 // ============================================
-
-export const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 export const formatTime = (date: Date) =>
   date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });

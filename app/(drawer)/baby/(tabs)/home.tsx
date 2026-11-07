@@ -35,7 +35,7 @@ import { mergeOptimisticTemperatures } from "@/utils/mergeOptimisticTemperatures
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
 import { MilestoneTimeline } from "@/components/suivibaby/MilestoneTimeline";
 import { getAgeInWeeks } from "@/utils/ageUtils";
-import { isValidDate, toDate as parseDate } from "@/utils/date";
+import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
@@ -436,19 +436,6 @@ export default function HomeDashboard() {
     }, [cancelDelete, deleteConfirm.visible, showMilestonesModal, showToast]),
   );
 
-  const toDate = useCallback((value: any) => {
-    return parseDate(value);
-  }, []);
-
-  const getDateTime = useCallback(
-    (value: any) => {
-      const date = toDate(value);
-      const time = date.getTime();
-      return Number.isNaN(time) ? 0 : time;
-    },
-    [toDate],
-  );
-
   const formatTime = useCallback((date: Date) => {
     if (!isValidDate(date)) return "--:--";
     return date.toLocaleTimeString("fr-FR", {
@@ -467,7 +454,7 @@ export default function HomeDashboard() {
 
   const buildDetails = useCallback(
     (event: any) => buildEventDetails(event, { toDate, formatDuration }),
-    [toDate, formatDuration],
+    [formatDuration],
   );
 
 
@@ -504,7 +491,7 @@ export default function HomeDashboard() {
 
     const filtered = merged
       .filter((event) => !softDeletedIds.has(event.id))
-      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
     return filtered;
   }, [
     data.biberons,
@@ -524,7 +511,6 @@ export default function HomeDashboard() {
     data.activites,
     data.jalons,
     data.nettoyagesNez,
-    toDate,
     softDeletedIds,
   ]);
 
@@ -602,7 +588,7 @@ export default function HomeDashboard() {
         : weeklyEvents,
     // optimisticTick : le store n'est pas réactif par lui-même.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [weeklyEvents, mergedTodayEvents, activeChild?.id, optimisticTick, toDate],
+    [weeklyEvents, mergedTodayEvents, activeChild?.id, optimisticTick],
   );
 
   const smartContent = useSmartContent({
@@ -625,14 +611,14 @@ export default function HomeDashboard() {
       const date = toDate(item.date);
       return date >= today && date < tomorrow;
     });
-  }, [data.jalons, toDate, softDeletedIds]);
+  }, [data.jalons, softDeletedIds]);
 
   const todayMoodEvent = useMemo(() => {
     const moods = todayJalons
       .filter((item) => item.typeJalon === "humeur")
-      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
+      .sort((a, b) => getDateTime(b.date) - getDateTime(a.date));
     return moods[0] ?? null;
-  }, [todayJalons, toDate]);
+  }, [todayJalons]);
 
   const handleSetMood = useCallback(
     (value: 1 | 2 | 3 | 4 | 5) => {
@@ -656,7 +642,7 @@ export default function HomeDashboard() {
       }
       return isValidDate(toDate(item.heureDebut));
     });
-  }, [data.sommeils, softDeletedIds, toDate]);
+  }, [data.sommeils, softDeletedIds]);
 
   // Promenade en cours detection (same pattern as sommeil)
   const promenadeEnCours = useMemo(() => {
@@ -673,7 +659,7 @@ export default function HomeDashboard() {
         return isValidDate(toDate(item.heureDebut));
       },
     );
-  }, [data.activites, softDeletedIds, toDate]);
+  }, [data.activites, softDeletedIds]);
 
   const handleEventEdit = useEventEditHandler(
     openSheet,
@@ -698,12 +684,12 @@ export default function HomeDashboard() {
     if (!sommeilEnCours?.heureDebut) return undefined;
     const start = toDate(sommeilEnCours.heureDebut);
     return isValidDate(start) ? start.getTime() : undefined;
-  }, [sommeilEnCours, toDate]);
+  }, [sommeilEnCours]);
   const promenadeStartTs = useMemo(() => {
     if (!promenadeEnCours?.heureDebut) return undefined;
     const start = toDate(promenadeEnCours.heureDebut);
     return isValidDate(start) ? start.getTime() : undefined;
-  }, [promenadeEnCours, toDate]);
+  }, [promenadeEnCours]);
 
   // Shared pulse animation for all active widgets (sleep + promenade sync)
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;
@@ -884,7 +870,6 @@ export default function HomeDashboard() {
     data.tetees,
     data.biberons,
     data.solides,
-    toDate,
     formatTime,
     canManageContent,
     remindersEnabled,
@@ -1045,7 +1030,6 @@ export default function HomeDashboard() {
     todayStats,
     data.mictions,
     data.selles,
-    toDate,
     formatTime,
     remindersEnabled,
     reminderThresholds.changes,
@@ -1108,7 +1092,7 @@ export default function HomeDashboard() {
       },
       sommeilEnCours,
     });
-  }, [activeChild?.id, sommeilEnCours, toDate, openSheet, showToast]);
+  }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {
@@ -1147,7 +1131,7 @@ export default function HomeDashboard() {
       },
       promenadeEnCours,
     });
-  }, [activeChild?.id, promenadeEnCours, toDate, openSheet, showToast]);
+  }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
 
   // ============================================
   // EFFECTS
@@ -1628,7 +1612,7 @@ export default function HomeDashboard() {
         lastTimestamp: getTimestamp(lastVaccin),
       },
     });
-  }, [data, getDateTime, toDate, softDeletedIds]);
+  }, [data, softDeletedIds]);
 
   // ============================================
   // HELPERS - UI

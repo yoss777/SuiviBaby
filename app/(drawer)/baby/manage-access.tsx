@@ -14,7 +14,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChildPermissions, useChildAccesses } from '@/hooks/useChildPermissions';
-import { revokeChildAccess } from '@/utils/permissions';
+import { revokeChildAccess } from '@/services/accessRepository';
 import { setMemberRole } from '@/services/childSharingService';
 import { useUserInfo } from '@/hooks/useUserInfo';
 import { SkeletonBlock, SkeletonList } from '@/components/ui/Skeleton';

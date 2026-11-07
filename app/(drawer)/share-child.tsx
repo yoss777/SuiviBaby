@@ -1,5 +1,4 @@
 import { ThemedView } from "@/components/themed-view";
-import { db } from "@/config/firebase";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +15,7 @@ import { HeaderBackButton } from "@react-navigation/elements";
 import * as Haptics from "expo-haptics";
 import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
+import { getChildDoc } from "@/services/childRepository";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -233,7 +232,7 @@ export default function ShareChildScreen() {
 
   const loadChildInfo = useCallback(async () => {
     try {
-      const childDoc = await getDoc(doc(db, "children", childId));
+      const childDoc = await getChildDoc(childId);
       if (childDoc.exists()) {
         setChildName(childDoc.data().name);
       }

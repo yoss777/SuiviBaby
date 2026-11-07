@@ -1,6 +1,11 @@
-import { db } from '@/config/firebase';
-import { obtenirPreferences, type ReminderPreferences } from '@/services/userPreferencesService';
-import { collection, doc, limit, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+import {
+  listenToUserPreferencesDoc,
+  mergeUserPreferences,
+  obtenirPreferences,
+  type ReminderPreferences,
+} from '@/services/userPreferencesService';
+import { listenToUserAccessIndex } from '@/services/accessRepository';
+import { listenToChildDoc } from '@/services/childRepository';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
@@ -331,9 +336,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     }
 
     const prefsTimeout = setTimeout(markPrefsResolved, PREFS_RESOLVE_TIMEOUT_MS);
-    const userPrefsRef = doc(db, 'user_preferences', user.uid);
-
-    const unsubscribe = onSnapshot(userPrefsRef, (snapshot) => {
+    const unsubscribe = listenToUserPreferencesDoc(user.uid, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
         logBaby('Préférences chargées', data.lastActiveChildId);
@@ -445,13 +448,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       setStatus('degraded');
     }, INITIAL_CHILDREN_TIMEOUT_MS);
 
-    const accessQuery = query(
-      collection(db, 'user_child_access'),
-      where('userId', '==', user.uid),
-      limit(200)
-    );
-
-    const unsubscribeAccess = onSnapshot(accessQuery, (snapshot) => {
+    const unsubscribeAccess = listenToUserAccessIndex(user.uid, (snapshot) => {
       const currentChildIds = new Set<string>();
       snapshot.docs.forEach((docSnap) => {
         const data = docSnap.data() as { childId?: string; userId?: string };
@@ -470,8 +467,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       currentChildIds.forEach((childId) => {
         if (childListeners.has(childId)) return;
 
-        const unsub = onSnapshot(
-          doc(db, 'children', childId),
+        const unsub = listenToChildDoc(
+          childId,
           (childSnap) => {
             if (!childSnap.exists()) {
               childDataRef.current.delete(childId);
@@ -648,10 +645,9 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     lastActiveChildIdRef.current = child.id;
     lastActiveOverrideRef.current = child.id;
     if (user?.uid) {
-      setDoc(
-        doc(db, 'user_preferences', user.uid),
+      mergeUserPreferences(
+        user.uid,
         { lastActiveChildId: child.id },
-        { merge: true }
       ).catch((error) => {
         console.error('Erreur sauvegarde dernier enfant actif:', error);
       });
