@@ -59,3 +59,7 @@ keystores/
 # Seed/test data scripts (ne pas déployer en production)
 functions/seedUsers.js
 scripts/seedUsers.mjs
+
+# test coverage output
+coverage/
+functions/coverage/

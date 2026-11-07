@@ -839,19 +839,28 @@ support en attendant une décision.
 **Backlog (Yoss, 2026-11-07)** : champ « allergies » dans la fiche enfant
 (ajout, modification, règles, export) — la politique les mentionne déjà.
 
-## S11 — Tests et CI · ⏳
+## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 à faire)
 
-- [ ] **11.1** `collectCoverageFrom` pour mesurer la vraie couverture, seuils
+- [x] **11.1** `collectCoverageFrom` pour mesurer la vraie couverture, seuils
   recalés sur la nouvelle mesure.
-- [ ] **11.2** Tests des tâches planifiées : `checkAndSendReminders`
+- [x] **11.2** Tests des tâches planifiées : `checkAndSendReminders`
   (déclenchement, dédoublonnage, jeton invalide), `sendWeeklyRecap`.
-- [ ] **11.3** `eventsService` : test paramétré de tous les `ajouterX`.
-- [ ] **11.4** Écrans d'authentification et garde de navigation (non
+- [x] **11.3** `eventsService` : test paramétré de tous les `ajouterX`.
+- [x] **11.4** Écrans d'authentification et garde de navigation (non
   connecté, non vérifié, suppression en attente).
-- [ ] **11.5** E2E multi-utilisateur sur émulateurs (A invite B en lecteur,
+- [x] **11.5** E2E multi-utilisateur sur émulateurs (A invite B en lecteur,
   B lit sans écrire, A révoque) ; Maestro (01, 03, 05) la nuit en CI.
-- [ ] **11.6** CI : `expo-doctor`, lint des fonctions, Dependabot ; tests
+- [x] **11.6** CI : `expo-doctor`, lint des fonctions, Dependabot ; tests
   tautologiques retirés (`firebaseConfig.test.ts`).
+Notes S11 (2026-11-07) : couverture réelle de l'app 23,4 % instructions
+(seuils 22/18/18/22 ; les anciens 55 % ne comptaient que les fichiers
+importés par les tests), fonctions 87,3 % (seuils 86/76/90/87) ;
+`expo-doctor` non bloquant (16/17 : champs de config non synchronisés car
+`android/` et `ios/` sont versionnés) ; Maestro la nuit demande les secrets
+`EXPO_TOKEN`, `MAESTRO_EMAIL`, `MAESTRO_PASSWORD` et un build Android
+`preview` sur EAS. Défauts trouvés par 11.2 : jeton push mort jamais retiré
+(→ 12.4) ; aucune plage de nuit pour les rappels (décision produit).
+
 - [ ] **11.7** Workload Identity Federation à la place de la clé `GCP_SA_KEY`.
 
 ## S12 — Environnements et livraison · ⏳

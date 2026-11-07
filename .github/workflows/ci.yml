@@ -26,21 +26,32 @@ jobs:
       - name: ESLint (errors fail CI; warnings are reported)
         run: npm run lint
 
+      - name: ESLint Cloud Functions (errors fail CI)
+        run: npx eslint functions --quiet
+
+      # Reports "app config fields not synced" (native folders + app.config.js).
+      # Non-blocking until that check is resolved; make it blocking afterwards.
+      - name: Expo Doctor
+        continue-on-error: true
+        run: npx expo-doctor
+
       - name: Run app tests
         run: npm test -- --ci --coverage
 
       - name: Install function dependencies
         run: cd functions && npm ci
 
-      - name: Run CF tests
-        run: npm run test:functions -- --ci
+      - name: Run CF tests (coverage thresholds in functions/jest.config.js)
+        run: npm run test:functions -- --ci --coverage
 
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: coverage/
+          path: |
+            coverage/
+            functions/coverage/
           retention-days: 7
 
   rules-test:
