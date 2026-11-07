@@ -18,7 +18,10 @@ import {
 } from "@/services/socialAuthService";
 import { createPatientUser } from "@/services/userService";
 import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
-import { recordHealthConsent } from "@/services/healthConsentService";
+import {
+  fetchHealthConsentStatus,
+  recordHealthConsent,
+} from "@/services/healthConsentService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -95,6 +98,11 @@ export default function LoginScreen() {
   const [hasHealthConsent, setHasHealthConsent] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
   const navigationLocked = useRef(false);
+  // Consentement santé vérifié pour ce uid (null = pas encore lu). Sans ce
+  // contrôle, une connexion Google/Apple ou e-mail allait droit à l'accueil
+  // sans passer par l'écran de consentement de boot.tsx.
+  const [consentOkUid, setConsentOkUid] = useState<string | null>(null);
+  const consentCheckUid = useRef<string | null>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [cooldownEnd, setCooldownEnd] = useState<number | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
@@ -233,6 +241,28 @@ export default function LoginScreen() {
       return;
     }
 
+    if (consentOkUid !== user.uid) {
+      if (consentCheckUid.current === user.uid) return; // lecture en cours
+      consentCheckUid.current = user.uid;
+      fetchHealthConsentStatus(user.uid)
+        .then((granted) => {
+          if (navigationLocked.current) return;
+          if (granted) {
+            setConsentOkUid(user.uid);
+          } else {
+            navigationLocked.current = true;
+            router.replace("/(auth)/health-consent");
+          }
+        })
+        .catch(() => {
+          // État inconnu (hors ligne…) : boot.tsx propose de réessayer.
+          if (navigationLocked.current) return;
+          navigationLocked.current = true;
+          router.replace("/boot");
+        });
+      return;
+    }
+
     if (babyLoading || !childrenLoaded) {
       return;
     }
@@ -255,6 +285,7 @@ export default function LoginScreen() {
     childrenLoaded,
     setActiveChild,
     router,
+    consentOkUid,
   ]);
 
   // Cooldown countdown timer
@@ -341,6 +372,10 @@ export default function LoginScreen() {
         }
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
+        // L'inscription gère sa propre navigation (consentement coché dans le
+        // formulaire, puis verify-email) : la redirection auto ne doit pas
+        // l'intercepter pendant que le consentement s'enregistre.
+        navigationLocked.current = true;
         const userCredential = await createUserWithEmailAndPassword(
           auth,
           email.trim(),
@@ -383,6 +418,7 @@ export default function LoginScreen() {
         router.replace("/(auth)/verify-email");
       }
     } catch (error: any) {
+      if (!isLogin) navigationLocked.current = false;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
       // Track failed login attempts for rate limiting
