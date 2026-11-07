@@ -55,6 +55,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { toDateOr } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -254,13 +255,8 @@ const TYPE_CONFIG: Record<
 // ============================================
 // HELPERS
 // ============================================
-const toDate = (value: any): Date => {
-  if (!value) return new Date();
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
+// Date absente ou invalide : on affiche maintenant (comportement historique).
+const toDateOrNow = (value: unknown): Date => toDateOr(value, new Date());
 
 const formatDateKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -327,7 +323,7 @@ export default function SoinsScreen() {
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
       [...(merged as HealthEvent[])].sort(
-        (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        (a, b) => toDateOrNow(b.date).getTime() - toDateOrNow(a.date).getTime(),
       ),
     [],
   );
@@ -406,7 +402,7 @@ export default function SoinsScreen() {
     return {
       id: event.id,
       type: event.type,
-      date: toDate(event.date),
+      date: toDateOrNow(event.date),
       note: event.note,
       valeur: event.valeur,
       modePrise: event.modePrise,
@@ -474,7 +470,7 @@ export default function SoinsScreen() {
 
     const filtered = events.filter((item) => {
       if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
+      const date = toDateOrNow(item.date);
       date.setHours(0, 0, 0, 0);
       const time = date.getTime();
 
@@ -492,7 +488,7 @@ export default function SoinsScreen() {
 
     const groups: Record<string, HealthEvent[]> = {};
     filtered.forEach((item) => {
-      const date = toDate(item.date);
+      const date = toDateOrNow(item.date);
       const key = formatDateKey(date);
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -501,7 +497,7 @@ export default function SoinsScreen() {
     const grouped = Object.entries(groups)
       .map(([date, items]) => {
         const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+          (a, b) => toDateOrNow(b.date).getTime() - toDateOrNow(a.date).getTime(),
         );
         const counts = {
           temperature: 0,
@@ -855,7 +851,7 @@ export default function SoinsScreen() {
   const markedDates = useMemo(() => {
     const marked: Record<string, any> = {};
     events.forEach((item) => {
-      const date = toDate(item.date);
+      const date = toDateOrNow(item.date);
       const key = formatDateKey(date);
       marked[key] = {
         ...(marked[key] || {}),
@@ -1213,7 +1209,7 @@ export default function SoinsScreen() {
   }, [loaded, groupedEvents.length, triggerHint]);
 
   const renderEventItem = useCallback((event: HealthEvent, isFirstInList: boolean = false) => {
-    const time = toDate(event.date);
+    const time = toDateOrNow(event.date);
     const config = TYPE_CONFIG[event.type];
     return (
       <ReanimatedSwipeable

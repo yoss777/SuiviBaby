@@ -251,7 +251,7 @@ exports.syncAccess = functions.firestore
 - [Documentation complète](./PERMISSIONS.md)
 - [Guide d'implémentation](./PERMISSIONS_IMPLEMENTATION.md)
 - [Guide de déploiement](./PERMISSIONS_DEPLOYMENT.md)
-- [Exemples de code](../components/suivibaby/PermissionsExample.tsx)
+- Exemples de code (`PermissionsExample.tsx`, supprimé en S13)
 
 ## 🆘 Support
 

@@ -143,7 +143,7 @@ export async function grantChildAccess(
  *
  * Sprint 12.6 : les règles Firestore refusent désormais cette écriture côté
  * client ; l'app passe par setMemberRole (childSharingService). Conservée pour
- * l'exemple PermissionsExample uniquement.
+ * scripts/testPermissions.ts et ses tests.
  */
 export async function updateChildAccess(
   childId: string,

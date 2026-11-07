@@ -147,4 +147,4 @@ npx ts-node -r tsconfig-paths/register scripts/migratePermissions.ts
 
 - [Documentation complète des permissions](../docs/PERMISSIONS.md)
 - [Guide d'implémentation](../docs/PERMISSIONS_IMPLEMENTATION.md)
-- [Exemples de code](../components/suivibaby/PermissionsExample.tsx)
+- Exemples de code (`PermissionsExample.tsx`, supprimé en S13)

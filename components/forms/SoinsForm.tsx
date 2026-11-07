@@ -30,6 +30,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { toDate } from "@/utils/date";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -169,13 +170,6 @@ const VACCINS_LIST = [
 
 const VITAMINES_LIST = ["Vitamine D", "Vitamine K", "Autre vitamine"];
 const MAX_GOUTTES_COUNT = 10;
-
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 const MODE_TEMPERATURE: ModePrise[] = [
   "axillaire",

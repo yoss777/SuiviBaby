@@ -122,14 +122,14 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     firebaseUser?.uid,
   );
 
-  // Rediriger vers explore si tous les enfants sont masqués
+  // Rediriger vers le sélecteur d'enfant si tous les enfants sont masqués
   useEffect(() => {
     if (!childrenLoaded) return;
     if (children.length === 0 && pathname.includes("/baby")) {
       if (__DEV__) console.log(
-        "[CustomDrawer] Tous les enfants masqués, redirection vers explore",
+        "[CustomDrawer] Tous les enfants masqués, redirection vers le sélecteur d'enfant",
       );
-      router.replace("/explore");
+      router.replace("/child-picker");
     }
   }, [children.length, childrenLoaded, pathname, router]);
 
@@ -162,7 +162,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         if (nextVisibleChild) {
           setActiveChild(nextVisibleChild);
         } else if (pathname.includes("/baby")) {
-          router.replace("/explore");
+          router.replace("/child-picker");
         }
       }
 

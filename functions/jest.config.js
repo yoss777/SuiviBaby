@@ -7,6 +7,7 @@ module.exports = {
   // Floors sit just below so a regression fails CI; raise as the suite grows.
   collectCoverageFrom: [
     "*.js",
+    "src/**/*.js",
     "lib/**/*.js",
     "!jest.config.js",
     "!seedUsers.js",

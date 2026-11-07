@@ -144,7 +144,7 @@ describe("login.tsx : redirection d un utilisateur déjà connecté", () => {
     setBaby({ children: [child, { id: "c2", name: "Tom" }] });
     render(<LoginScreen />);
     await flush();
-    expect(mockReplace).toHaveBeenCalledWith("/explore");
+    expect(mockReplace).toHaveBeenCalledWith("/child-picker");
   });
 
   it("waits for the children to load before routing a consenting user", async () => {

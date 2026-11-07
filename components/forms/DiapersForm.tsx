@@ -18,6 +18,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { toDate } from "@/utils/date";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -60,13 +61,6 @@ export type DiapersFormProps = {
 // ============================================
 // HELPERS
 // ============================================
-
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 // ============================================
 // COMPONENT

@@ -974,24 +974,46 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
   décider ;
 - à voir : plage de nuit pour les rappels (`test.todo`, décision produit).
 
-## S13 — Dette structurelle (mois 3) · ⏳
+## S13 — Dette structurelle (mois 3) · 🟡 2026-11-07 (13.1, 13.2 partiel, 13.4, 13.6, 13.7 faits ; 13.3 à faire ; 13.5 en attente de l'accord de Yoss ; revue ECC à faire)
 
-- [ ] **13.1** Découpage de `functions/index.js` par domaine (partage,
+- [x] **13.1** Découpage de `functions/index.js` par domaine (partage,
   événements, voix, facturation, suppression, notifications, modération,
   admin) et des tests associés.
-- [ ] **13.2** Écran de liste générique piloté par configuration, migré écran
+- [~] **13.2** (repas, pompages, couches migrés ; `toDate` unique) Écran de liste générique piloté par configuration, migré écran
   par écran (repas, pompages, couches d'abord) ; `toDate` unique dans
   `utils/date`.
 - [ ] **13.3** Couche d'accès aux données (`services/*Repository.ts`) et règle
   ESLint qui interdit `firebase/firestore` hors `services/`.
-- [ ] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
+- [x] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
   `app-example/` ; `explore.tsx` renommé.
 - [ ] **13.5** Montée d'Expo SDK (une version à la fois, testée en staging) ;
   Skia stable ou graphiques en SVG ; suppression de `scripts/patch-expo.js`.
-- [ ] **13.6** S4 : App Check imposé quand la nouvelle version est
+- [x] **13.6** S4 : App Check imposé quand la nouvelle version est
   majoritaire ; décision `expo-updates` (retour arrière OTA) dans un ADR.
-- [ ] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,
+- [x] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,
   `docs/adr/`, `todo_*` de la racine archivés.
+
+Notes S13 (2026-11-07) :
+- 13.1 : `functions/index.js` 5835 → 102 lignes, 38 modules dans
+  `functions/src/` ; noms, déclencheurs et options des 46 exports figés par
+  `functions/__tests__/exportsSnapshot.test.js`.
+- 13.2 : `EventListScreen` + hooks `hooks/eventList/` + configs ; repas,
+  pompages et couches de ~1800–2100 lignes à 7 ; corrigé au passage :
+  « aujourd'hui » figé après minuit (repas, couches), saisies optimistes
+  étrangères (pompages), indicateur « Voir plus » qui pouvait rester
+  affiché, filtre jour qui remettait à minuit l'heure des saisies
+  optimistes. Écrans restants (soins, routines, activités…) à migrer.
+- 13.4 : 5 services par type, `app/backups`, `app-example`, gabarit Expo,
+  démos supprimés ; `explore.tsx` → `child-picker.tsx`. À trancher :
+  `MilestoneCelebrationModal` + `milestoneCelebrationService` (marqués
+  faits dans l'ancienne todo, jamais affichés), `OfflineBanner`,
+  `usePromos`, `BoundedNumberInput` ; dépendances `expo-symbols` et
+  `expo-web-browser` inutilisées (retrait au prochain build natif).
+- 13.6 : ADR 0002 (App Check : pas encore, revue 2026-12-07) et 0003
+  (`expo-updates` : pas maintenant, revue 2027-01-15).
+- 13.7 : `docs/README.md`, `docs/RUNBOOK.md`, `todo_*` archivés dans
+  `docs/archive/`. Erreurs repérées dans `FIREBASE_MONITORING.md` et
+  `STORE_SUBMISSION.md` à corriger.
 
 **Revue ECC (S13)** : `architect`, `code-reviewer`.
 

@@ -186,7 +186,7 @@ export default function SettingsScreen() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // Header right: home shortcut (baby home if activeChild, explore otherwise)
+  // Header right: home shortcut (baby home if activeChild, child picker otherwise)
   useLayoutEffect(() => {
     navigation.setOptions({
       headerStyle: { backgroundColor: nc.background },
@@ -199,7 +199,7 @@ export default function SettingsScreen() {
             if (activeChild) {
               router.replace("/baby/home");
             } else {
-              router.replace("/explore");
+              router.replace("/child-picker");
             }
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

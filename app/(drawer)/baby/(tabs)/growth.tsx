@@ -54,6 +54,7 @@ import * as Haptics from "expo-haptics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { toDate } from "@/utils/date";
 
 // Enable LayoutAnimation on Android
 if (
@@ -85,13 +86,6 @@ const formatDateKey = (date: Date) =>
 
 const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-const toDate = (value: any) => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);

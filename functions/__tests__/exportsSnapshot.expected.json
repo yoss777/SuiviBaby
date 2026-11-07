@@ -1,0 +1,538 @@
+{
+  "acceptInvitationCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "cancelAccountDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "cancelChildDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "checkAndSendReminders": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 120,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 30 minutes",
+      "retryConfig": {}
+    }
+  },
+  "cleanupExpiredShareCodes": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "cleanupExpiredSubscriptions": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "consumeUsageQuota": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "createDeletionRequest": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "createShareCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "createShareInvitation": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "deleteEventCascade": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "deletePhotoThumbnail": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.deleted",
+      "eventFilters": {
+        "bucket": "params.PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "deleteUserAccount": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 300,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "ensureReferralCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "generatePhotoThumbnail": {
+    "platform": "gcfv2",
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 120,
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.finalized",
+      "eventFilters": {
+        "bucket": "params.PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "getOwnershipBlockers": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "getUsageQuotaStatus": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "handleReportCreated": {
+    "nonTrigger": "function"
+  },
+  "mirrorLegacyPhotoDelete": {
+    "platform": "gcfv2",
+    "region": [
+      "us-central1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.deleted",
+      "eventFilters": {
+        "bucket": "params.LEGACY_PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "mirrorLegacyPhotoUpload": {
+    "platform": "gcfv2",
+    "region": [
+      "us-central1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.storage.object.v1.finalized",
+      "eventFilters": {
+        "bucket": "params.LEGACY_PHOTOS_BUCKET"
+      },
+      "retry": false
+    }
+  },
+  "onReportCreated": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.created",
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "reports/{reportId}"
+      },
+      "retry": false
+    }
+  },
+  "parseVoiceCommand": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 15,
+    "concurrency": 40,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ANTHROPIC_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "photoRefToPath": {
+    "nonTrigger": "function"
+  },
+  "processScheduledDeletions": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      },
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "purgeDeletedChildren": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 24 hours",
+      "retryConfig": {}
+    }
+  },
+  "reconcileAccessIndexNightly": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "15 3 * * *",
+      "retryConfig": {},
+      "timeZone": "Europe/Paris"
+    }
+  },
+  "recordHealthConsent": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "redeemShareCodeCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "registerAppleRevocation": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "APPLE_TEAM_ID"
+      },
+      {
+        "key": "APPLE_KEY_ID"
+      },
+      {
+        "key": "APPLE_PRIVATE_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "requestAccountDeletion": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "resolveReport": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "retryAssemblyAIDeletes": {
+    "timeoutSeconds": 540,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ASSEMBLYAI_API_KEY"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every 60 minutes",
+      "retryConfig": {}
+    }
+  },
+  "revenueCatWebhook": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "REVENUECAT_WEBHOOK_SECRET"
+      }
+    ],
+    "labels": {},
+    "httpsTrigger": {}
+  },
+  "sendDeletionRequestEmail": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "sendWeeklyRecap": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 300,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RESEND_API_KEY"
+      },
+      {
+        "key": "RECAP_UNSUBSCRIBE_SECRET"
+      }
+    ],
+    "labels": {},
+    "scheduleTrigger": {
+      "schedule": "every monday 08:00",
+      "retryConfig": {},
+      "timeZone": "Europe/Paris"
+    }
+  },
+  "setAdminClaim": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "INITIAL_ADMIN_EMAIL"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "setMemberRole": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "submitContentReportCF": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "transcribeAudio": {
+    "availableMemoryMb": 512,
+    "timeoutSeconds": 120,
+    "minInstances": 1,
+    "concurrency": 30,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "ASSEMBLYAI_API_KEY"
+      }
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "transferAndLeave": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "unsubscribeRecap": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "secretEnvironmentVariables": [
+      {
+        "key": "RECAP_UNSUBSCRIBE_SECRET"
+      }
+    ],
+    "labels": {},
+    "httpsTrigger": {}
+  },
+  "validateAndCreateEvent": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "validateAndUpdateEvent": {
+    "concurrency": 50,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "validateReferralCode": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "voteDeletionRequest": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  },
+  "withdrawHealthConsent": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {}
+  }
+}

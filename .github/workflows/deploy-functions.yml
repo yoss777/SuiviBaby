@@ -106,7 +106,7 @@ jobs:
       # functions/.env.samaye-53723 file (not matched by *.js) may name it.
       - name: Guard, no production project id in the functions code
         run: |
-          if grep -R "samaye-53723" functions/*.js functions/lib; then
+          if grep -R "samaye-53723" functions/*.js functions/lib functions/src; then
             echo "::error::samaye-53723 is hard-coded in functions/ (see matches above). Derive it from the deployed project (functions/lib/projectConfig.js)."
             exit 1
           fi

@@ -43,6 +43,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../_layout";
 import { startLoop } from "@/utils/motion";
+import { toDate } from "@/utils/date";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = 2;
@@ -81,13 +82,6 @@ type GalleryListItem =
 // ============================================
 // HELPERS
 // ============================================
-
-const toDate = (value: any): Date => {
-  if (value?.seconds) return new Date(value.seconds * 1000);
-  if (value?.toDate) return value.toDate();
-  if (value instanceof Date) return value;
-  return new Date(value);
-};
 
 const MONTH_NAMES = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
