@@ -131,17 +131,16 @@ describe("checkAndSendReminders", () => {
     expect(keys(docs, "notification_history/")).toHaveLength(1);
   });
 
-  // KNOWN GAP (reported, not fixed): the job ignores push tickets, so a
-  // DeviceNotRegistered error neither disables nor deletes the token. This test
-  // pins the current behaviour; change it when token cleanup is implemented.
-  it("DeviceNotRegistered ticket: current behaviour leaves the token enabled and still records history", async () => {
+  // S12.4: the push tickets are read. DeviceNotRegistered deletes the token and
+  // no notification_history is written for a ticket in error.
+  it("DeviceNotRegistered ticket: the token is deleted and no history is written", async () => {
     expoClient.sendPushNotificationsAsync.mockResolvedValueOnce([
       { status: "error", message: "not registered", details: { error: "DeviceNotRegistered" } },
     ]);
     const docs = memoryStore(seed());
     await fns.checkAndSendReminders();
-    expect(docs.get("device_tokens/t1").enabled).toBe(true);
-    expect(keys(docs, "notification_history/")).toHaveLength(1);
+    expect(docs.has("device_tokens/t1")).toBe(false);
+    expect(keys(docs, "notification_history/")).toHaveLength(0);
   });
 
   it("night/quiet hours: the job has no quiet-hours logic (sends at any hour)", async () => {

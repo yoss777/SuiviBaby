@@ -863,23 +863,23 @@ importés par les tests), fonctions 87,3 % (seuils 86/76/90/87) ;
 
 - [ ] **11.7** Workload Identity Federation à la place de la clé `GCP_SA_KEY`.
 
-## S12 — Environnements et livraison · ⏳
+## S12 — Environnements et livraison · ✅ 2026-11-07 côté code (création staging, compte Play et environnements GitHub en attente du go de Yoss ; revue ECC S11+S12 à faire)
 
-- [ ] **12.1** Projet `samaye-staging` (Q8) : config choisie par `APP_ENV`,
+- [~] **12.1** Projet `samaye-staging` (Q8) : config choisie par `APP_ENV`,
   alias `.firebaserc`, `main` déploie en staging, production derrière un
   environnement GitHub avec validation.
-- [ ] **12.2** Android : fichiers Firebase en variables EAS de type fichier,
+- [~] **12.2** Android : fichiers Firebase en variables EAS de type fichier,
   build cloud réparé (cause notée dans un ADR), `appVersionSource: remote`,
   compte de service Play (Q9) pour `eas submit` vers Alpha.
-- [ ] **12.3** `release.yml` réécrit (build attendu, envoi du bon build,
+- [x] **12.3** `release.yml` réécrit (build attendu, envoi du bon build,
   `app_config` mis à jour après publication) ou supprimé.
-- [ ] **12.4** Rappels et récap capables de tenir la charge : `lastEventAt`
+- [x] **12.4** Rappels et récap capables de tenir la charge : `lastEventAt`
   par catégorie sur l'enfant, concurrence bornée, durée mesurée.
-- [ ] **12.5** TTL déclarés dans `firestore.indexes.json` ; rétention de
+- [x] **12.5** TTL déclarés dans `firestore.indexes.json` ; rétention de
   `webhook_logs`, `notification_history`, `recap_history` ; job nocturne de
   réconciliation des accès (`children/*/access` vs `user_child_access`) ;
   index `eventLikes` redondants supprimés.
-- [ ] **12.6** Deux rôles affichés, « Parent » (`admin` : saisit, modifie,
+- [x] **12.6** Deux rôles affichés, « Parent » (`admin` : saisit, modifie,
   exporte tout le suivi) et « Proche » (`contributor` : lit tout, like et
   commente les photos, exporte ses seules interactions). `viewer` reste dans
   le code mais n'est plus proposé. Décision Yoss du 2026-11-07 : un code de
@@ -890,6 +890,24 @@ importés par les tests), fonctions 87,3 % (seuils 86/76/90/87) ;
   côté serveur dans le même lot. Mettre à jour le message de l'export
   (`app/settings/export.tsx`, « enfant partagé avec vous ») avec les
   nouveaux libellés.
+
+Notes S12 (2026-11-07) :
+- 12.1/12.2 : code prêt (`APP_ENV`, `config/firebaseEnv.ts`, alias
+  `staging`, `deploy-functions.yml` conditionné par `STAGING_ENABLED`,
+  `appVersionSource: remote`, hook `eas-build-pre-install` qui copie les
+  fichiers Firebase, ADR `docs/adr/0001-android-cloud-build.md`) ; commandes
+  ponctuelles dans `docs/ENVIRONMENTS.md`. Avant le prochain build :
+  `eas build:version:set` (iOS 32, Android 13). Avant un déploiement staging :
+  rendre paramétrables les `samaye-53723` codés en dur dans `functions/`.
+- 12.4 : `lastEventAt` par catégorie, lots de 10, jetons morts supprimés,
+  logs de durée ; `scripts/backfillLastEventAt.js` à lancer après
+  déploiement.
+- 12.5 : TTL `deleted_idem` (30 j) et `access_audit` (90 j) ;
+  réconciliation nocturne des accès ; 2 index `eventLikes` retirés du
+  fichier, à supprimer à la main (déploiement sans `--force`).
+- 12.6 : `setMemberRole` et `createShareCode` ; règle de transition : les
+  apps ≤ 1.0.9 créent encore leurs codes (à retirer quand
+  `minVersion` > 1.0.9) ; les mises à jour client des accès sont refusées.
 
 **Revue ECC (S11 + S12)** : `architect`, `pr-test-analyzer`.
 

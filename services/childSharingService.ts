@@ -9,7 +9,6 @@ import {
   limit,
   onSnapshot,
   query,
-  setDoc,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -48,69 +47,71 @@ export interface ShareInvitation {
 }
 
 /**
- * Génère un code de partage aléatoire (6 caractères alphanumériques)
+ * Crée un code de partage pour un enfant (valide 7 jours, un seul usage).
+ *
+ * Sprint 12.6 : le code est généré et écrit par la Cloud Function
+ * createShareCode (aléa serveur, créateur vérifié owner/admin). Le client
+ * n'écrit plus dans shareCodes.
  */
-function randomBytes(length: number): Uint8Array {
-  // Generateur cryptographique (expo-crypto) : un code de partage donne un
-  // acces a l'enfant, il ne doit pas etre previsible. Repli sur Math.random
-  // uniquement si le module natif est absent (tests, build sans le module).
-  try {
-    const Crypto = require("expo-crypto");
-    return Crypto.getRandomBytes(length);
-  } catch {
-    return Uint8Array.from({ length }, () => Math.floor(Math.random() * 256));
-  }
-}
-
-export function generateShareCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Sans caractères ambigus (0, O, I, 1)
-  // 32 caractères : byte % 32 est uniforme (256 = 8 × 32), sans biais.
-  return Array.from(randomBytes(6), (byte) => chars.charAt(byte % chars.length)).join("");
-}
-
-/**
- * Crée un code de partage pour un enfant (valide 7 jours)
- */
-export async function createShareCode(
-  childId: string,
-  childName: string,
-): Promise<string> {
+export async function createShareCode(childId: string): Promise<string> {
   try {
     const user = auth.currentUser;
     if (!user) throw new Error("Utilisateur non connecté");
 
-    const maxAttempts = 5;
-    for (let attempts = 0; attempts < maxAttempts; attempts += 1) {
-      const code = generateShareCode();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // Expire dans 7 jours
-
-      const shareCodeData: ShareCode = {
-        code,
-        childId,
-        childName,
-        createdBy: user.uid,
-        createdAt: Timestamp.now(),
-        expiresAt: Timestamp.fromDate(expiresAt),
-        used: false,
-      };
-
-      try {
-        await setDoc(doc(db, "shareCodes", code), shareCodeData);
-        return code;
-      } catch (error: any) {
-        if (error?.code === "permission-denied") {
-          // Possible collision with an existing (used/expired) code.
-          continue;
-        }
-        throw error;
-      }
+    const create = httpsCallable<{ childId: string }, { code: string; expiresAt: number }>(
+      functions,
+      "createShareCode",
+    );
+    const result = await create({ childId });
+    return result.data.code;
+  } catch (error: any) {
+    if (error?.message === "Utilisateur non connecté") throw error;
+    if (isEmailNotVerifiedError(error)) throw createEmailNotVerifiedError();
+    if (error?.code === "functions/permission-denied") {
+      throw new Error("Seul un parent de l'enfant peut créer un code de partage");
     }
-
-    throw new Error("Impossible de générer un code unique");
-  } catch (error) {
+    if (error?.code === "functions/resource-exhausted") {
+      throw new Error("Trop de tentatives. Réessayez dans une minute.");
+    }
+    if (error?.code === "functions/not-found") {
+      throw new Error("Enfant introuvable");
+    }
     console.error("Erreur lors de la création du code de partage:", error);
     captureServiceError(error, { service: "childSharing", operation: "createShareCode" });
+    throw error;
+  }
+}
+
+/**
+ * Passe un membre en « Parent » (admin) ou « Proche » (contributor).
+ * Réservé au propriétaire : la Cloud Function setMemberRole écrit l'accès.
+ */
+export async function setMemberRole(
+  childId: string,
+  memberId: string,
+  role: "admin" | "contributor",
+): Promise<void> {
+  try {
+    const call = httpsCallable<
+      { childId: string; memberId: string; role: string },
+      { success: boolean; role: string }
+    >(functions, "setMemberRole");
+    await call({ childId, memberId, role });
+  } catch (error: any) {
+    if (error?.code === "functions/permission-denied") {
+      throw new Error("Seul le propriétaire peut changer un rôle");
+    }
+    if (error?.code === "functions/failed-precondition") {
+      throw new Error("Le rôle d'un propriétaire ne peut pas être modifié");
+    }
+    if (error?.code === "functions/not-found") {
+      throw new Error("Membre introuvable");
+    }
+    if (error?.code === "functions/resource-exhausted") {
+      throw new Error("Trop de tentatives. Réessayez dans une minute.");
+    }
+    console.error("Erreur lors du changement de rôle:", error);
+    captureServiceError(error, { service: "childSharing", operation: "setMemberRole" });
     throw error;
   }
 }

@@ -86,21 +86,25 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
 };
 
 /**
- * Labels pour l'affichage des rôles
+ * Labels pour l'affichage des rôles (sprint 12.6) : « Parent » = admin,
+ * « Proche » = contributor. `viewer` reste dans le code mais n'est plus proposé.
  */
 export const ROLE_LABELS: Record<ChildRole, string> = {
   owner: 'Propriétaire',
-  admin: 'Administrateur',
-  contributor: 'Contributeur',
+  admin: 'Parent',
+  contributor: 'Proche',
   viewer: 'Observateur',
 };
+
+/** Rôles qu'un propriétaire peut attribuer à un membre. */
+export const OFFERED_MEMBER_ROLES: ChildRole[] = ['admin', 'contributor'];
 
 /**
  * Descriptions des rôles
  */
 export const ROLE_DESCRIPTIONS: Record<ChildRole, string> = {
-  owner: 'Contrôle total sur l\'enfant et les permissions',
-  admin: 'Peut tout modifier sauf les permissions',
-  contributor: 'Peut liker et commenter uniquement',
+  owner: 'Contrôle total sur l\'enfant, les parents et les proches',
+  admin: 'Saisit et modifie le suivi, exporte tout le suivi, partage l\'enfant',
+  contributor: 'Lit tout, aime et commente les photos, exporte ses seules interactions',
   viewer: 'Peut seulement consulter les données',
 };

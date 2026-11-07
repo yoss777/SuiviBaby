@@ -47,6 +47,8 @@ const CONTRIBUTOR_PERMISSIONS = Object.freeze({
 const VOICE_ENUMS = require("./lib/enums");
 const voiceParse = require("./lib/voiceParse");
 const appleAuth = require("./lib/appleAuth");
+const reminderLib = require("./lib/reminders");
+const { reconcileAccessIndex } = require("./lib/accessReconciliation");
 
 admin.initializeApp();
 
@@ -55,6 +57,8 @@ const CHILD_DELETION_RETENTION_DAYS = 30;
 /** Operational logs (notification/recap history, webhook logs) live 90 days (TTL on expireAt). */
 const LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const logExpireAt = () => admin.firestore.Timestamp.fromMillis(Date.now() + LOG_RETENTION_MS);
+/** deleted_idem tombstones live 30 days (TTL on expireAt). */
+const IDEM_TOMBSTONE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const DELETION_REQUEST_EXPIRY_DAYS = 7;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
 const FREE_DAILY_VOICE_LIMIT = 3;
@@ -317,6 +321,7 @@ async function deleteChildDataBatched(db, childId) {
   // Sharing + requests
   await Promise.all([
     deleteDocsByFieldBatched(db, "shareCodes", "childId", childId),
+    deleteDocsByFieldBatched(db, "access_audit", "childId", childId),
     deleteDocsByFieldBatched(db, "shareInvitations", "childId", childId),
     deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
   ]);
@@ -2292,7 +2297,11 @@ exports.resolveReport = onCall(
         // Use deleteEventCascade logic inline (delete event + likes + comments)
         await deleteDocsByFieldBatched(db, "eventLikes", "eventId", reportData.eventId);
         await deleteDocsByFieldBatched(db, "eventComments", "eventId", reportData.eventId);
+        const removedSnap = await db.doc(`events/${reportData.eventId}`).get();
         await db.doc(`events/${reportData.eventId}`).delete();
+        if (reportData.childId && removedSnap?.exists) {
+          await reminderLib.safeRefreshLastEventAt(db, reportData.childId, [removedSnap.data()?.type]);
+        }
         console.log(`resolveReport: deleted event ${reportData.eventId} + cascade`);
       } catch (error) {
         console.warn(`resolveReport: could not delete event cascade`, error.message);
@@ -2738,6 +2747,7 @@ exports.validateAndCreateEvent = onCall(
     // App 1.0.8 peut encore créer sans clé : création classique.
     if (!hasKey) {
       const ref = await db.collection("events").add(serverData);
+      await reminderLib.safeRefreshLastEventAt(db, childId, [eventData.type]);
       return { id: ref.id };
     }
 
@@ -2756,7 +2766,9 @@ exports.validateAndCreateEvent = onCall(
 
     const tombstoneRef = db.doc(`deleted_idem/${eventId}`);
 
-    return await db.runTransaction(async (tx) => {
+    let created = false;
+    const result = await db.runTransaction(async (tx) => {
+      created = false; // the transaction may be retried
       const existing = await tx.get(eventRef);
       if (existing.exists) return { id: eventId };
       // Supprimé depuis (deleteEventCascade) : un rejeu tardif de la création
@@ -2768,8 +2780,11 @@ exports.validateAndCreateEvent = onCall(
       const legacy = await tx.get(legacyQuery);
       if (!legacy.empty) return { id: legacy.docs[0].id };
       tx.create(eventRef, serverData);
+      created = true;
       return { id: eventId };
     });
+    if (created) await reminderLib.safeRefreshLastEventAt(db, childId, [eventData.type]);
+    return result;
   }
 );
 
@@ -2827,9 +2842,13 @@ exports.validateAndUpdateEvent = onCall(
 
     const eventRef = db.doc(`events/${eventId}`);
 
+    // Types touched by the update (old and new): their lastEventAt is recomputed.
+    const touchedTypes = new Set();
+
     // Transactional read+write so the lock check can't race with a concurrent
     // update arriving between our read and write.
     await db.runTransaction(async (tx) => {
+      touchedTypes.clear(); // the transaction may be retried
       const eventDoc = await tx.get(eventRef);
 
       if (!eventDoc.exists) {
@@ -2878,8 +2897,11 @@ exports.validateAndUpdateEvent = onCall(
       }
 
       tx.update(eventRef, cleanData);
+      touchedTypes.add(current.type);
+      touchedTypes.add(type);
     });
 
+    await reminderLib.safeRefreshLastEventAt(db, childId, [...touchedTypes]);
     return { success: true };
   }
 );
@@ -2922,6 +2944,7 @@ exports.deleteEventCascade = onCall(
     if (eventDoc.data().childId !== childId) {
       throw new HttpsError("permission-denied", "Cet événement n'appartient pas à cet enfant.");
     }
+    const deletedType = eventDoc.data().type;
 
     // Supprimer likes et commentaires en sous-batches paginés (évite la limite de 500 ops/batch)
     const [deletedLikes, deletedComments] = await Promise.all([
@@ -2937,11 +2960,15 @@ exports.deleteEventCascade = onCall(
     if (eventId.startsWith("idem_")) {
       await db.doc(`deleted_idem/${eventId}`).set({
         deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // TTL (fieldOverride deleted_idem.expireAt): plus aucun rejeu de file
+        // hors ligne n'est attendu après 30 jours.
+        expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + IDEM_TOMBSTONE_RETENTION_MS),
       });
     }
 
     // Supprimer l'événement lui-même
     await eventRef.delete();
+    await reminderLib.safeRefreshLastEventAt(db, childId, [deletedType]);
 
     return {
       success: true,
@@ -4037,6 +4064,13 @@ exports.acceptInvitationCF = onCall(
 // REFERRAL SYSTEM
 // ============================================
 
+// Sprint 12.6: roles (Parent/Proche) and share codes, server-side.
+const roleHandlers = require("./lib/roles").createRoleHandlers({
+  admin, HttpsError, checkRateLimit, monitorAppCheck, assertVerifiedEmail, isValidDocId, hasChildRole,
+});
+exports.setMemberRole = onCall(withAppCheck({ region: "europe-west1" }), roleHandlers.setMemberRole);
+exports.createShareCode = onCall(withAppCheck({ region: "europe-west1" }), roleHandlers.createShareCode);
+
 // Referral codes are created by the server only (audit A2): the client can no
 // longer write referralCode / referredBy / referralCount (firestore.rules), and
 // referral_codes/{code} maps a code to its owner without a forgeable query.
@@ -4521,15 +4555,8 @@ async function usersWithPendingDeletion(db, uids) {
   return pending;
 }
 
-/**
- * Mapping catégorie de rappel → types d'événements Firestore
- */
-const REMINDER_CATEGORIES = {
-  repas: ["biberon", "tetee", "solide"],
-  pompages: ["pompage"],
-  changes: ["miction", "selle", "couche"],
-  vitamines: ["vitamine"],
-};
+/** Mapping catégorie de rappel → types d'événements Firestore (lib/reminders.js). */
+const { REMINDER_CATEGORIES } = reminderLib;
 
 const CATEGORY_LABELS = {
   repas: "repas",
@@ -4538,12 +4565,19 @@ const CATEGORY_LABELS = {
   vitamines: "vitamine",
 };
 
+/** Users (and children) handled at the same time by the scheduled jobs: bounded fan-out. */
+const JOB_USER_CONCURRENCY = 10;
+
 /**
  * checkAndSendReminders — Vérification périodique (toutes les 30 min)
  * Pour chaque utilisateur ayant des rappels activés :
- *   - Vérifie le dernier événement par catégorie et par enfant
+ *   - Lit le dernier événement par catégorie dans children/{id}.lastEventAt
+ *     (requête sur events seulement si le champ manque : migration)
  *   - Si elapsed > threshold, envoie une notification push
  *   - Anti-spam : pas de re-notification si déjà envoyée il y a < 2h
+ *   - Un ticket DeviceNotRegistered supprime le jeton ; un ticket en erreur
+ *     n'écrit pas d'historique (nouvel essai au passage suivant)
+ * Les utilisateurs sont traités par lots de JOB_USER_CONCURRENCY.
  */
 exports.checkAndSendReminders = onSchedule(
   {
@@ -4553,6 +4587,7 @@ exports.checkAndSendReminders = onSchedule(
     timeoutSeconds: 120,
   },
   async () => {
+    const startedAt = Date.now();
     const db = admin.firestore();
     const now = admin.firestore.Timestamp.now();
     const nowMs = now.toMillis();
@@ -4565,24 +4600,26 @@ exports.checkAndSendReminders = onSchedule(
 
     if (prefsSnapshot.empty) {
       console.log("checkAndSendReminders: no users with reminders enabled");
+      reminderLib.logJobSummary("checkAndSendReminders", startedAt, {
+        users: 0, sent: 0, skipped: 0, errors: 0, deadTokens: 0, fallbackReads: 0,
+      });
       return;
     }
 
-    let totalSent = 0;
-    let totalSkipped = 0;
+    const stats = { sent: 0, skipped: 0, errors: 0, deadTokens: 0, fallbackReads: 0 };
 
     // No consent, no processing; accounts being deleted get nothing either.
     const consented = prefsSnapshot.docs.filter((d) => hasValidHealthConsent(d.data()));
     const leaving = await usersWithPendingDeletion(db, consented.map((d) => d.id));
 
-    for (const prefDoc of consented) {
+    const processUser = async (prefDoc) => {
       const userId = prefDoc.id;
-      if (leaving.has(userId)) continue;
+      if (leaving.has(userId)) return;
       const prefs = prefDoc.data();
       const thresholds = prefs.notifications?.reminders?.thresholds || {};
 
       // Skip si les notifications push sont désactivées par l'utilisateur
-      if (prefs.notifications?.push === false) continue;
+      if (prefs.notifications?.push === false) return;
 
       // 2. Récupérer les device_tokens actifs de cet utilisateur
       const tokensSnap = await db
@@ -4591,13 +4628,13 @@ exports.checkAndSendReminders = onSchedule(
         .where("enabled", "==", true)
         .get();
 
-      if (tokensSnap.empty) continue;
+      if (tokensSnap.empty) return;
 
-      const pushTokens = tokensSnap.docs
-        .map((d) => d.data().token)
-        .filter((t) => getExpoModule().Expo.isExpoPushToken(t));
+      let tokenDocs = tokensSnap.docs
+        .map((d) => ({ ref: d.ref, token: d.data().token }))
+        .filter((t) => getExpoModule().Expo.isExpoPushToken(t.token));
 
-      if (pushTokens.length === 0) continue;
+      if (tokenDocs.length === 0) return;
 
       // 3. Récupérer les enfants auxquels l'utilisateur a accès
       const accessSnap = await db
@@ -4609,31 +4646,23 @@ exports.checkAndSendReminders = onSchedule(
         const { childId } = accessDoc.data();
         if (!childId) continue;
 
-        // Récupérer le nom de l'enfant
+        // Récupérer le nom de l'enfant (et lastEventAt) : une seule lecture
         const childDoc = await db.doc(`children/${childId}`).get();
         if (!childDoc.exists) continue;
-        const childName = childDoc.data().name || "Bébé";
+        const childData = childDoc.data();
+        const childName = childData.name || "Bébé";
 
         // 4. Pour chaque catégorie avec threshold > 0
-        for (const [category, eventTypes] of Object.entries(REMINDER_CATEGORIES)) {
+        for (const category of Object.keys(REMINDER_CATEGORIES)) {
+          if (tokenDocs.length === 0) return; // every token of the user turned out dead
           const thresholdHours = thresholds[category] || 0;
           if (thresholdHours <= 0) continue;
 
           const thresholdMs = thresholdHours * 3600 * 1000;
 
           // Dernier événement de cette catégorie pour cet enfant
-          const lastEventSnap = await db
-            .collection("events")
-            .where("childId", "==", childId)
-            .where("type", "in", eventTypes)
-            .orderBy("date", "desc")
-            .limit(1)
-            .get();
-
-          if (lastEventSnap.empty) continue;
-
-          const lastEvent = lastEventSnap.docs[0].data();
-          const lastEventDate = lastEvent.date?.toMillis?.() ?? 0;
+          const lastEventDate = await reminderLib.getLastEventMillis(db, childId, childData, category, stats);
+          if (lastEventDate === null) continue;
           const elapsedMs = nowMs - lastEventDate;
 
           if (elapsedMs <= thresholdMs) continue;
@@ -4650,14 +4679,14 @@ exports.checkAndSendReminders = onSchedule(
             .get();
 
           if (!recentNotifSnap.empty) {
-            totalSkipped++;
+            stats.skipped++;
             continue;
           }
 
           // 5. Envoyer la notification push
           const elapsedHours = Math.round(elapsedMs / 3600000);
           const label = CATEGORY_LABELS[category];
-          const messages = pushTokens.map((token) => ({
+          const messages = tokenDocs.map(({ token }) => ({
             to: token,
             sound: "default",
             title: `Rappel ${label} — ${childName}`,
@@ -4671,10 +4700,16 @@ exports.checkAndSendReminders = onSchedule(
           }));
 
           try {
-            const chunks = getExpoClient().chunkPushNotifications(messages);
-            for (const chunk of chunks) {
-              await getExpoClient().sendPushNotificationsAsync(chunk);
+            const { delivered, dead } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+
+            // Jeton mort (appli désinstallée) : on le supprime pour ne plus l'appeler.
+            if (dead.size > 0) {
+              stats.deadTokens += await reminderLib.removeDeadTokens(tokenDocs, dead);
+              tokenDocs = tokenDocs.filter((t) => !dead.has(t.token));
             }
+
+            // Aucun appareil joint : pas d'historique, nouvel essai au prochain passage.
+            if (delivered === 0) continue;
 
             // Enregistrer dans l'historique
             await db.collection("notification_history").add({
@@ -4687,8 +4722,9 @@ exports.checkAndSendReminders = onSchedule(
               expireAt: logExpireAt(),
             });
 
-            totalSent++;
+            stats.sent++;
           } catch (error) {
+            stats.errors++;
             console.error(
               `checkAndSendReminders: error sending to ${userId}/${childId}/${category}:`,
               error.message
@@ -4696,11 +4732,21 @@ exports.checkAndSendReminders = onSchedule(
           }
         }
       }
-    }
+    };
+
+    await reminderLib.mapInChunks(consented, JOB_USER_CONCURRENCY, async (prefDoc) => {
+      try {
+        await processUser(prefDoc);
+      } catch (error) {
+        stats.errors++;
+        console.error(`checkAndSendReminders: user ${prefDoc.id} failed:`, error?.message ?? error);
+      }
+    });
 
     console.log(
-      `checkAndSendReminders: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnapshot.size}`
+      `checkAndSendReminders: sent=${stats.sent}, skipped=${stats.skipped}, users=${prefsSnapshot.size}`
     );
+    reminderLib.logJobSummary("checkAndSendReminders", startedAt, { users: prefsSnapshot.size, ...stats });
   }
 );
 
@@ -4726,19 +4772,6 @@ function isValidRecapToken(uid, token, secret) {
   const expected = Buffer.from(recapUnsubscribeToken(uid, secret));
   const given = Buffer.from(token);
   return given.length === expected.length && crypto.timingSafeEqual(given, expected);
-}
-
-/** True when the child has at least one event in the week (no figure is read). */
-async function hadActivityInWeek(db, childId, weekStart, weekEnd) {
-  const snap = await db
-    .collection("events")
-    .where("childId", "==", childId)
-    .where("date", ">=", weekStart)
-    .where("date", "<=", weekEnd)
-    .orderBy("date", "desc")
-    .limit(1)
-    .get();
-  return !snap.empty;
 }
 
 /**
@@ -4770,6 +4803,7 @@ exports.sendWeeklyRecap = onSchedule(
     secrets: ["RESEND_API_KEY", RECAP_UNSUBSCRIBE_SECRET],
   },
   async () => {
+    const startedAt = Date.now();
     console.log("sendWeeklyRecap: START");
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
@@ -4828,23 +4862,23 @@ exports.sendWeeklyRecap = onSchedule(
 
     if (prefsSnap.empty) {
       console.log("sendWeeklyRecap: no users with email recap enabled");
+      reminderLib.logJobSummary("sendWeeklyRecap", startedAt, { users: 0, sent: 0, skipped: 0, errors: 0, fallbackReads: 0 });
       return;
     }
 
-    let totalSent = 0;
-    let totalSkipped = 0;
+    const stats = { sent: 0, skipped: 0, errors: 0, fallbackReads: 0 };
 
     // Sans consentement valide : aucun traitement. Compte en cours de
     // suppression : plus aucun e-mail. Lectures groupées (pas de N+1).
     const consented = prefsSnap.docs.filter((d) => hasValidHealthConsent(d.data()));
-    totalSkipped += prefsSnap.size - consented.length;
+    stats.skipped += prefsSnap.size - consented.length;
     const leaving = await usersWithPendingDeletion(db, consented.map((d) => d.id));
 
-    for (const prefDoc of consented) {
+    const processUser = async (prefDoc) => {
       const userId = prefDoc.id;
       if (leaving.has(userId)) {
-        totalSkipped++;
-        continue;
+        stats.skipped++;
+        return;
       }
 
       // L'adresse vient de Firebase Auth uniquement : vérifiée, compte actif.
@@ -4852,14 +4886,14 @@ exports.sendWeeklyRecap = onSchedule(
       try {
         const authUser = await admin.auth().getUser(userId);
         if (!authUser.emailVerified || authUser.disabled || !authUser.email) {
-          totalSkipped++;
-          continue;
+          stats.skipped++;
+          return;
         }
         userEmail = authUser.email;
       } catch (error) {
         console.warn(`sendWeeklyRecap: no usable Auth user for ${userId}`, error.message);
-        totalSkipped++;
-        continue;
+        stats.skipped++;
+        return;
       }
 
       // Récupérer les enfants de l'utilisateur
@@ -4876,7 +4910,7 @@ exports.sendWeeklyRecap = onSchedule(
         const roleSnap = await db.doc(`children/${childId}/access/${userId}`).get();
         const role = roleSnap.exists ? roleSnap.data()?.role : null;
         if (role !== "owner" && role !== "admin") {
-          totalSkipped++;
+          stats.skipped++;
           continue;
         }
 
@@ -4891,7 +4925,7 @@ exports.sendWeeklyRecap = onSchedule(
 
         if (!existingSnap.empty) {
           console.log(`sendWeeklyRecap: SKIP ${childId} for user ${userId} - already sent this week (docId=${existingSnap.docs[0].id})`);
-          totalSkipped++;
+          stats.skipped++;
           continue;
         }
 
@@ -4900,9 +4934,10 @@ exports.sendWeeklyRecap = onSchedule(
         if (!childDoc.exists || childDoc.data()?.deletedAt) continue;
         const childName = String(childDoc.data().name || "Bébé").trim().split(/\s+/)[0] || "Bébé";
 
-        if (!(await hadActivityInWeek(db, childId, weekStart, weekEnd))) {
+        // Activité : lue dans children/{id}.lastEventAt.any (requête de repli si absent).
+        if (!(await reminderLib.hadActivityInWeek(db, childId, childDoc.data(), weekStart, weekEnd, stats))) {
           console.log(`sendWeeklyRecap: SKIP child=${childId} - no activity this week`);
-          totalSkipped++;
+          stats.skipped++;
           continue;
         }
 
@@ -4938,19 +4973,55 @@ exports.sendWeeklyRecap = onSchedule(
             expireAt: logExpireAt(),
           });
 
-          totalSent++;
+          stats.sent++;
         } catch (error) {
+          stats.errors++;
           console.error(
             `sendWeeklyRecap: error sending uid=${userId} child=${childId}:`,
             error.message
           );
         }
       }
-    }
+    };
+
+    await reminderLib.mapInChunks(consented, JOB_USER_CONCURRENCY, async (prefDoc) => {
+      try {
+        await processUser(prefDoc);
+      } catch (error) {
+        stats.errors++;
+        console.error(`sendWeeklyRecap: user ${prefDoc.id} failed:`, error?.message ?? error);
+      }
+    });
 
     console.log(
-      `sendWeeklyRecap: sent=${totalSent}, skipped=${totalSkipped}, users=${prefsSnap.size}`
+      `sendWeeklyRecap: sent=${stats.sent}, skipped=${stats.skipped}, users=${prefsSnap.size}`
     );
+    reminderLib.logJobSummary("sendWeeklyRecap", startedAt, { users: prefsSnap.size, ...stats });
+  }
+);
+
+// ============================================
+// ACCESS INDEX RECONCILIATION (Scheduled, S12.5)
+// ============================================
+
+/**
+ * reconcileAccessIndexNightly — 03:15 Europe/Paris.
+ * children/{id}/access/{uid} fait foi ; user_child_access/{uid}_{childId} en
+ * est l'index. Crée les entrées manquantes, supprime les orphelines (voir
+ * lib/accessReconciliation.js). Idempotent, par lots bornés.
+ */
+exports.reconcileAccessIndexNightly = onSchedule(
+  {
+    schedule: "15 3 * * *",
+    timeZone: "Europe/Paris",
+    region: "europe-west1",
+    memory: "256MiB",
+    timeoutSeconds: 540,
+  },
+  async () => {
+    const startedAt = Date.now();
+    const stats = await reconcileAccessIndex(admin.firestore());
+    reminderLib.logJobSummary("reconcileAccessIndex", startedAt, stats);
   }
 );
 
@@ -5103,6 +5174,7 @@ async function softDeleteChild(db, childId, requestId, requestedBy) {
   // 7. Delete sharing-related data
   await Promise.all([
     deleteDocsByFieldBatched(db, "shareCodes", "childId", childId),
+    deleteDocsByFieldBatched(db, "access_audit", "childId", childId),
     deleteDocsByFieldBatched(db, "shareInvitations", "childId", childId),
     deleteDocsByFieldBatched(db, "babyAttachmentRequests", "childId", childId),
   ]);

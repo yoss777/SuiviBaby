@@ -63,3 +63,6 @@ scripts/seedUsers.mjs
 # test coverage output
 coverage/
 functions/coverage/
+
+# Store service account keys (eas submit), never committed nor uploaded
+secrets/

@@ -53,13 +53,17 @@ function memoryStore(initial) {
     delete: async () => docs.delete(p),
     collection: (sub) => query(`${p}/${sub}`),
   });
-  const query = (collPath) => {
+  const query = (collPath, { group = false } = {}) => {
     const filters = [];
+    const orders = [];
     let max = Infinity;
+    let after = null;
     const q = {
       where: (field, op, value) => { filters.push([field, op, value]); return q; },
       limit: (n) => { max = n; return q; },
-      orderBy: () => q,
+      // orderBy sorts (so limit(1) returns the latest); "__name__" sorts by path.
+      orderBy: (f, dir = "asc") => { orders.push([f, dir]); return q; },
+      startAfter: (snap) => { after = snap.ref.path; return q; },
       doc: (id) => ref(`${collPath}/${id ?? `auto${(nextId += 1)}`}`),
       add: async (data) => {
         const r = ref(`${collPath}/auto${(nextId += 1)}`);
@@ -68,9 +72,26 @@ function memoryStore(initial) {
       },
       get: async () => {
         const depth = collPath.split("/").length + 1;
+        const inCollection = (p) => {
+          const parts = p.split("/");
+          return group
+            ? parts.length % 2 === 0 && parts[parts.length - 2] === collPath
+            : p.startsWith(`${collPath}/`) && parts.length === depth;
+        };
+        const sortKey = (p, data, f) => (f === "__name__" ? p : comparable(field(data, f)));
         const hits = [...docs.entries()]
-          .filter(([p]) => p.startsWith(`${collPath}/`) && p.split("/").length === depth)
+          .filter(([p]) => inCollection(p))
+          .filter(([p]) => after === null || p > after)
           .filter(([, data]) => filters.every(([f, op, v]) => matches(field(data, f), op, v)))
+          .sort(([pa, a], [pb, b]) => {
+            for (const [f, dir] of orders) {
+              const x = sortKey(pa, a, f);
+              const y = sortKey(pb, b, f);
+              if (x === y) continue;
+              return (x < y ? -1 : 1) * (dir === "desc" ? -1 : 1);
+            }
+            return 0;
+          })
           .slice(0, max)
           .map(([p, data]) => ({ id: p.split("/").pop(), ref: ref(p), data: () => data }));
         return { empty: hits.length === 0, size: hits.length, docs: hits };
@@ -81,6 +102,7 @@ function memoryStore(initial) {
   mockFirestore.doc.mockImplementation((p) => ref(p));
   mockFirestore.getAll.mockImplementation(async (...refs) => Promise.all(refs.map((r) => r.get())));
   mockFirestore.collection.mockImplementation((name) => query(name));
+  mockFirestore.collectionGroup = jest.fn((name) => query(name, { group: true }));
   mockFirestore.batch.mockImplementation(() => {
     const ops = [];
     return {

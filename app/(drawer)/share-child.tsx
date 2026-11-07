@@ -278,7 +278,7 @@ export default function ShareChildScreen() {
   const handleGenerateCode = useCallback(async () => {
     setIsLoadingCode(true);
     try {
-      const code = await createShareCode(childId, childName);
+      const code = await createShareCode(childId);
       setShareCode(code);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
@@ -291,7 +291,7 @@ export default function ShareChildScreen() {
     } finally {
       setIsLoadingCode(false);
     }
-  }, [childId, childName, router, showAlert]);
+  }, [childId, router, showAlert]);
 
   const handleCopyCode = useCallback(() => {
     if (shareCode) {
@@ -307,7 +307,7 @@ export default function ShareChildScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await RNShare.share({
-        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour voir les informations de notre enfant. Le code est valide pendant 7 jours.`,
+        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour suivre notre enfant en tant que proche. Le code est valide pendant 7 jours.`,
       });
     } catch (error) {
       console.error("Erreur partage:", error);
@@ -439,7 +439,7 @@ export default function ShareChildScreen() {
               <FontAwesome name="share-alt" size={48} color={nc.todayAccent} />
               <Text style={dynamicStyles.title}>Partager {childName}</Text>
               <Text style={dynamicStyles.subtitle}>
-                Donnez accès au suivi de votre enfant à un autre parent
+                Invitez un proche à suivre votre enfant : il pourra tout consulter, aimer et commenter les photos
               </Text>
             </View>
 
@@ -508,7 +508,7 @@ export default function ShareChildScreen() {
                   </View>
 
                   <Text style={dynamicStyles.codeHelper}>
-                    L&apos;autre parent devra aller dans &quot;Ajouter un enfant&quot; puis
+                    La personne devra aller dans &quot;Ajouter un enfant&quot; puis
                     &quot;J&apos;ai un code&quot;
                   </Text>
                 </View>
@@ -551,7 +551,7 @@ export default function ShareChildScreen() {
                 </Text>
               </View>
               <Text style={dynamicStyles.methodDescription}>
-                Invitez directement un autre parent en saisissant son adresse
+                Invitez directement un proche en saisissant son adresse
                 email.
               </Text>
 
@@ -599,7 +599,7 @@ export default function ShareChildScreen() {
                 </TouchableOpacity>
 
                 <Text style={dynamicStyles.inviteHelper}>
-                  L&apos;autre parent recevra une notification dans l&apos;app et pourra
+                  La personne recevra une notification dans l&apos;app et pourra
                   accepter l&apos;invitation
                 </Text>
               </View>
@@ -609,13 +609,14 @@ export default function ShareChildScreen() {
             <View
               style={dynamicStyles.infoBox}
               accessibilityRole="text"
-              accessibilityLabel="Information de sécurité : les deux parents auront un accès complet au suivi de l'enfant"
+              accessibilityLabel="Information de sécurité : un code ou une invitation donne toujours le rôle Proche, seul le propriétaire peut passer un proche en Parent"
             >
               <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
-                Les deux parents auront un accès complet au suivi de l&apos;enfant.
-                Vous pourrez retirer l&apos;accès à tout moment depuis les
-                paramètres.
+                Un code ou une invitation donne toujours le rôle Proche : il lit
+                tout, aime et commente les photos. Vous pourrez le passer en
+                Parent (il saisit et modifie le suivi) ou retirer son accès à
+                tout moment depuis la gestion des accès.
               </Text>
             </View>
           </ScrollView>

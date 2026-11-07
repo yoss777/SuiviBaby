@@ -1,32 +1,54 @@
 name: Release
 
-# Manual only until it is rewritten (audit sprint 12): a "v*" tag used to start
-# it, but it builds Android on EAS cloud (failing since May 2026), submits the
-# previous build (`--no-wait` then `submit --latest`), updates app_config before
-# store review and redeploys functions with a broken action. Releases go
-# through the local procedure (iOS EAS cloud + auto-submit, Android local .aab).
+# Rewritten in audit S12.3. Manual only (Actions → Release → Run workflow).
+#
+# What changed from the old file and why:
+# - the build is awaited (`eas build --wait --json`) and its id read from the
+#   output, so the submit step sends exactly that build (`eas submit --id`),
+#   never `--latest` (which used to pick the previous build);
+# - Android builds on EAS cloud again: the Firebase file comes from the EAS file
+#   variable GOOGLE_SERVICES_JSON, copied by scripts/easCopyFirebaseFiles.js
+#   (docs/adr/0001-android-cloud-build.md);
+# - Android submit goes to the Play "alpha" track only (Q9) with the service
+#   account key from the GOOGLE_PLAY_SERVICE_ACCOUNT_KEY secret;
+# - app_config/latest_version (in-app update banner) is only written after a
+#   human confirms the version is LIVE in the store(s), through the
+#   "store-release" environment approval — never at submit time;
+# - Cloud Functions are no longer deployed here (deploy-functions.yml owns it).
+#
+# Required configuration (not created by this file, see docs/ENVIRONMENTS.md):
+#   secrets: EXPO_TOKEN, GOOGLE_PLAY_SERVICE_ACCOUNT_KEY (Android submit),
+#            GCP_SA_KEY (app_config write, production)
+#   environments: store-release (required reviewers: Yoss)
+#   EAS: file variable GOOGLE_SERVICES_JSON (production + preview environments),
+#        remote build numbers initialised (eas build:version:set)
 on:
   workflow_dispatch:
     inputs:
       platform:
         description: "Platform to build"
         required: true
-        default: "all"
+        default: ios
         type: choice
         options:
-          - all
           - ios
           - android
-      submit:
-        description: "Submit to stores after build"
+      profile:
+        description: "EAS build profile (production = store build + submit; staging = internal build, no submit)"
         required: true
-        default: false
-        type: boolean
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+
+concurrency:
+  group: release-${{ inputs.platform }}-${{ inputs.profile }}
+  cancel-in-progress: false
 
 jobs:
-  # Step 1: Quality gate — lint, typecheck, test
   quality:
-    name: Quality Gate
+    name: Quality gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,14 +72,15 @@ jobs:
       - name: Run CF tests
         run: npm run test:functions -- --ci
 
-  # Step 2: Build production
   build:
-    name: Build Production
+    name: EAS build (${{ inputs.platform }}, ${{ inputs.profile }})
     needs: quality
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.platform != 'all' && fromJSON(format('["{0}"]', github.event.inputs.platform)) || fromJSON('["ios", "android"]') }}
+    timeout-minutes: 150
+    outputs:
+      build_id: ${{ steps.build.outputs.build_id }}
+      app_version: ${{ steps.build.outputs.app_version }}
+      build_version: ${{ steps.build.outputs.build_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,83 +96,36 @@ jobs:
 
       - run: npm ci
 
-      - name: Build production (${{ matrix.platform }})
-        run: eas build --profile production --platform ${{ matrix.platform }} --non-interactive --no-wait
-
-  # Step 3: Submit to stores (optional)
-  submit:
-    name: Submit to Stores
-    needs: build
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.submit == 'true')
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.platform != 'all' && fromJSON(format('["{0}"]', github.event.inputs.platform)) || fromJSON('["ios", "android"]') }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - run: npm ci
-
-      - name: Submit to store (${{ matrix.platform }})
-        run: eas submit --platform ${{ matrix.platform }} --latest --non-interactive
-
-  # Step 4: Sync Firestore app_config/latest_version (on tag push, after submit)
-  # Ensures the in-app update banner is triggered for users still on the
-  # previous version. Only runs after a successful store submit on a tag push.
-  sync-app-config:
-    name: Sync Firestore app_config
-    needs: submit
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # required for git tag annotation lookup
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      - name: Extract release notes from tag annotation
-        id: notes
+      - name: Build and wait
+        id: build
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          PROFILE: ${{ inputs.profile }}
         run: |
-          NOTES=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")
-          if [ -z "$NOTES" ]; then
-            NOTES=$(git log -1 --pretty=format:'%s')
+          set -euo pipefail
+          # --wait (default) blocks until the build finishes; --json prints the
+          # finished build(s) on stdout, logs go to stderr.
+          eas build --platform "$PLATFORM" --profile "$PROFILE" \
+            --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+          STATUS=$(jq -r '.[0].status' "$RUNNER_TEMP/build.json")
+          BUILD_ID=$(jq -r '.[0].id' "$RUNNER_TEMP/build.json")
+          if [ "$STATUS" != "FINISHED" ] || [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
+            echo "::error::EAS build $BUILD_ID ended with status $STATUS"
+            exit 1
           fi
           {
-            echo "notes<<EOF"
-            echo "$NOTES"
-            echo "EOF"
+            echo "build_id=$BUILD_ID"
+            echo "app_version=$(jq -r '.[0].appVersion' "$RUNNER_TEMP/build.json")"
+            echo "build_version=$(jq -r '.[0].appBuildVersion' "$RUNNER_TEMP/build.json")"
           } >> "$GITHUB_OUTPUT"
+          echo "Build $BUILD_ID finished: https://expo.dev/accounts/yoss7/projects/suivibaby/builds/$BUILD_ID" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Update Firestore app_config/latest_version
-        run: npm run update-app-config
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          RELEASE_NOTES: ${{ steps.notes.outputs.notes }}
-
-  # Step 5: Deploy Cloud Functions (on tag push)
-  deploy-functions:
-    name: Deploy Cloud Functions
-    needs: quality
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+  submit:
+    name: Submit build ${{ needs.build.outputs.build_version }} (${{ inputs.platform }})
+    needs: build
+    if: inputs.profile == 'production'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -157,15 +133,80 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: functions/package-lock.json
 
-      - name: Install function dependencies
-        run: cd functions && npm ci
-
-      - name: Deploy Functions & Rules
-        uses: w9jds/firebase-action@v13.22.1
+      - uses: expo/expo-github-action@v8
         with:
-          args: deploy --only functions,firestore:rules,firestore:indexes
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+
+      # eas.json submit.production.android.serviceAccountKeyPath points here.
+      - name: Write Google Play service account key
+        if: inputs.platform == 'android'
+        env:
+          PLAY_KEY: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY }}
+        run: |
+          if [ -z "$PLAY_KEY" ]; then
+            echo "::error::Secret GOOGLE_PLAY_SERVICE_ACCOUNT_KEY is missing (docs/ENVIRONMENTS.md)."
+            exit 1
+          fi
+          mkdir -p secrets
+          printf '%s' "$PLAY_KEY" > secrets/google-play-service-account.raw
+          if head -c 1 secrets/google-play-service-account.raw | grep -q '{'; then
+            mv secrets/google-play-service-account.raw secrets/google-play-service-account.json
+          else
+            base64 -d secrets/google-play-service-account.raw > secrets/google-play-service-account.json
+            rm secrets/google-play-service-account.raw
+          fi
+
+      # Exactly the build produced above. iOS: App Store Connect / TestFlight
+      # (public release stays Yoss's decision). Android: Play "alpha" track.
+      - name: Submit
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          BUILD_ID: ${{ needs.build.outputs.build_id }}
+        run: >
+          eas submit --platform "$PLATFORM" --profile production
+          --id "$BUILD_ID" --non-interactive --wait
+
+      - name: Remove Google Play service account key
+        if: always()
+        run: rm -rf secrets
+
+  publish-app-config:
+    name: Update app_config (after store release)
+    needs: [build, submit]
+    if: inputs.profile == 'production'
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment: approve ONLY once version
+    # ${{ needs.build.outputs.app_version }} is publicly available on BOTH the
+    # App Store and Google Play production. latest_version is shared by both
+    # platforms, so approving earlier shows the update banner to users who
+    # cannot install the update yet. Pending approvals expire after 30 days;
+    # `npm run update-app-config` remains the manual fallback.
+    environment: store-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check app.json matches the submitted build
+        env:
+          BUILT_VERSION: ${{ needs.build.outputs.app_version }}
+        run: |
+          APP_JSON_VERSION=$(jq -r '.expo.version' app.json)
+          if [ "$APP_JSON_VERSION" != "$BUILT_VERSION" ]; then
+            echo "::error::app.json version $APP_JSON_VERSION differs from the built version $BUILT_VERSION"
+            exit 1
+          fi
+
+      # The script has no dependency (Node fetch + crypto), no npm ci needed.
+      # MIN_VERSION is not set: the script keeps the current minVersion.
+      - name: Update Firestore app_config/latest_version
+        run: node ./scripts/updateAppConfig.mjs
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          RELEASE_NOTES: Version ${{ needs.build.outputs.app_version }}

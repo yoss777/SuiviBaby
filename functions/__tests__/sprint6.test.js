@@ -118,7 +118,7 @@ describe("suppression d'un événement idempotent : pierre tombale (L5)", () => 
     const created = await fns.validateAndCreateEvent(call("u1", data));
     await fns.deleteEventCascade(call("u1", { childId: "c1", eventId: created.id }));
     const tomb = docs.get(`deleted_idem/${created.id}`);
-    expect(Object.keys(tomb)).toEqual(["deletedAt"]);
+    expect(Object.keys(tomb).sort()).toEqual(["deletedAt", "expireAt"]); // expireAt = TTL (S12.5)
   });
 
   it("une autre clé d'idempotence reste créable après cette suppression", async () => {

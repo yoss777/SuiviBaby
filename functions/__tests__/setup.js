@@ -70,6 +70,7 @@ jest.mock("firebase-admin", () => {
     increment: jest.fn((n) => ({ __increment: n })),
   };
   a.firestore.Timestamp = MockTimestamp;
+  a.firestore.FieldPath = { documentId: () => "__name__" };
   return a;
 });
 jest.mock("firebase-functions/v2/https", () => ({ onCall: jest.fn((o, h) => typeof o === "function" ? o : h), onRequest: jest.fn((o, h) => h), HttpsError: class extends Error { constructor(c, m, d) { super(m); this.code = c; this.details = d; } } }));

@@ -41,6 +41,9 @@ const CODE = "ABCD1234";
 
 let testEnv: RulesTestEnvironment;
 let redeemShareCodeCF: any;
+let createShareCodeCF: any;
+let setMemberRoleCF: any;
+let code = CODE;
 
 const asUser = (uid: string) =>
   testEnv.authenticatedContext(uid, { email: `${uid}@test.com`, email_verified: true }).firestore();
@@ -53,6 +56,8 @@ beforeAll(async () => {
   // Loaded after the emulator env is known: firebase-admin talks to the emulator.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   redeemShareCodeCF = require("../functions/index").redeemShareCodeCF;
+  createShareCodeCF = require("../functions/index").createShareCode;
+  setMemberRoleCF = require("../functions/index").setMemberRole;
 });
 
 afterAll(async () => {
@@ -81,13 +86,17 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     await assertFails(getDoc(doc(db, "children", CHILD)));
   });
 
-  test("A creates a share code under the rules", async () => {
-    await assertSucceeds(
-      setDoc(doc(asUser(A), "shareCodes", CODE), {
-        code: CODE, childId: CHILD, childName: "Baby", createdBy: A, used: false,
-        expiresAt: Timestamp.fromMillis(Date.now() + 24 * 3600 * 1000),
-      })
-    );
+  test("A creates a share code through createShareCode (server-side)", async () => {
+    const res = await createShareCodeCF.run({
+      auth: { uid: A, token: { email: `${A}@test.com`, email_verified: true } },
+      data: { childId: CHILD },
+      rawRequest: {},
+      app: { appId: "test", token: {} },
+    });
+    expect(res.code).toMatch(/^[A-Z0-9]{6}$/);
+    code = res.code;
+    // The creator can read it back under the rules.
+    await assertSucceeds(getDoc(doc(asUser(A), "shareCodes", code)));
   });
 
   test("B cannot grant himself access from the client", async () => {
@@ -98,7 +107,7 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
   test("B redeems the code through redeemShareCodeCF and becomes contributor", async () => {
     const res = await redeemShareCodeCF.run({
       auth: { uid: B, token: { email: `${B}@test.com`, email_verified: true } },
-      data: { code: CODE },
+      data: { code },
       rawRequest: {},
       app: { appId: "test", token: {} },
     });
@@ -109,7 +118,7 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
       const access = (await getDoc(doc(db, "children", CHILD, "access", B))).data();
       expect(access).toMatchObject({ userId: B, role: "contributor", grantedBy: A, canWriteEvents: false });
       expect((await getDoc(doc(db, "user_child_access", `${B}_${CHILD}`))).exists()).toBe(true);
-      expect((await getDoc(doc(db, "shareCodes", CODE))).data()).toMatchObject({ used: true, usedBy: B });
+      expect((await getDoc(doc(db, "shareCodes", code))).data()).toMatchObject({ used: true, usedBy: B });
     });
   });
 
@@ -117,7 +126,7 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     await expect(
       redeemShareCodeCF.run({
         auth: { uid: "userC", token: { email: "c@test.com", email_verified: true } },
-        data: { code: CODE },
+        data: { code },
         rawRequest: {},
         app: { appId: "test", token: {} },
       })
@@ -163,6 +172,33 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
 
   test("A can still write events", async () => {
     await assertSucceeds(setDoc(doc(asUser(A), "events", "newA"), { childId: CHILD, userId: A, type: "biberon", createdAt: Timestamp.now() }));
+  });
+
+  const callRole = (uid: string, role: string) =>
+    setMemberRoleCF.run({
+      auth: { uid, token: { email: `${uid}@test.com`, email_verified: true } },
+      data: { childId: CHILD, memberId: B, role },
+      rawRequest: {},
+      app: { appId: "test", token: {} },
+    });
+
+  test("only A (owner) switches B between Proche and Parent, and the rules follow the new role", async () => {
+    // B cannot promote himself, through the callable or the client.
+    await expect(callRole(B, "admin")).rejects.toMatchObject({ code: "permission-denied" });
+    await assertFails(updateDoc(doc(asUser(B), "children", CHILD, "access", B), { role: "admin" }));
+    // A cannot do it from the client either: only the callable writes access docs.
+    await assertFails(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "admin", canWriteEvents: true }));
+
+    await callRole(A, "admin");
+    await assertSucceeds(setDoc(doc(asUser(B), "events", "byParentB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const access = (await getDoc(doc(ctx.firestore() as any, "children", CHILD, "access", B))).data();
+      expect(access).toMatchObject({ role: "admin", canWriteEvents: true, grantedBy: A });
+    });
+
+    await callRole(A, "contributor");
+    await assertFails(setDoc(doc(asUser(B), "events", "byProcheB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
+    await assertSucceeds(getDoc(doc(asUser(B), "events", "plain")));
   });
 
   test("a non-owner cannot revoke B (C has no access, B cannot revoke himself via the child access)", async () => {

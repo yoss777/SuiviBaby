@@ -1002,8 +1002,7 @@ export default function ExportScreen() {
     </View>
   );
 
-  // Rôle contributor (futur « Proche », S12) : export limité à ses
-  // interactions. Texte à revoir quand le rôle « Parent » (admin) existera.
+  // Rôle contributor = « Proche » : export limité à ses interactions.
   const hasProcheChild = children.some((item) => item.role === "contributor");
 
   const renderChildRow = (item: ExportChild) => {
@@ -1305,9 +1304,9 @@ export default function ExportScreen() {
                   color={nc.todayAccent}
                 />
                 <ThemedText style={styles.infoText}>
-                  Pour un enfant partagé avec vous, l&apos;export contient
+                  Pour un enfant dont vous êtes proche, l&apos;export contient
                   uniquement vos likes et commentaires. Le suivi complet peut
-                  être exporté par le propriétaire de l&apos;enfant.
+                  être exporté par un parent de l&apos;enfant.
                 </ThemedText>
               </View>
             )}

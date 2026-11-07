@@ -29,9 +29,9 @@ interface OwnershipTransferModalProps {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrateur",
-  contributor: "Contributeur",
-  viewer: "Lecteur",
+  admin: "Parent",
+  contributor: "Proche",
+  viewer: "Observateur",
 };
 
 export function OwnershipTransferModal({

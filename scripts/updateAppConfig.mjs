@@ -10,7 +10,8 @@
 //   GCP_SA_KEY='{...json...}' node scripts/updateAppConfig.mjs
 //
 // Options via env vars :
-//   MIN_VERSION=1.0.0           (default: 1.0.0, = pas de force update)
+//   MIN_VERSION=1.0.0           (default: valeur actuelle du document, sinon 1.0.0
+//                                = pas de force update)
 //   RELEASE_NOTES="..."         (default: généré depuis git)
 //   IOS_STORE_URL="..."         (default: fiche App Store id6773195663)
 //   ANDROID_STORE_URL="..."     (default: depuis app.json android.package)
@@ -39,7 +40,6 @@ if (!version) {
 }
 
 const packageId = appJson.expo?.android?.package ?? "com.tesfa.suivibaby";
-const minVersion = process.env.MIN_VERSION ?? "1.0.0";
 const iosStoreUrl =
   process.env.IOS_STORE_URL ??
   "https://apps.apple.com/app/id6773195663"; // App Store ID from eas.json (ascAppId)
@@ -138,7 +138,11 @@ async function getAccessTokenFromRefreshToken() {
 async function getAccessToken() {
   const saKeyJson = process.env.GCP_SA_KEY;
   if (saKeyJson) {
-    const saKey = JSON.parse(saKeyJson);
+    // The CI secret may hold the raw JSON key or its base64 encoding.
+    const trimmed = saKeyJson.trim();
+    const saKey = JSON.parse(
+      trimmed.startsWith("{") ? trimmed : Buffer.from(trimmed, "base64").toString("utf-8"),
+    );
     return getAccessTokenFromServiceAccount(saKey);
   }
   return getAccessTokenFromRefreshToken();
@@ -179,7 +183,7 @@ function toFirestoreValue(value) {
   return { stringValue: String(value) };
 }
 
-async function fetchCurrentRemoteVersion(token, url) {
+async function fetchCurrentRemoteFields(token, url) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -188,7 +192,10 @@ async function fetchCurrentRemoteVersion(token, url) {
     throw new Error(`Failed to GET current doc: ${await res.text()}`);
   }
   const data = await res.json();
-  return data.fields?.latestVersion?.stringValue ?? null;
+  return {
+    latestVersion: data.fields?.latestVersion?.stringValue ?? null,
+    minVersion: data.fields?.minVersion?.stringValue ?? null,
+  };
 }
 
 async function main() {
@@ -202,7 +209,11 @@ async function main() {
   // Anti-regression guard: refuse to publish a version older than the one
   // currently in Firestore, to avoid accidental rollbacks (e.g. running the
   // script from an old branch). Bypass with FORCE_DOWNGRADE=true.
-  const remoteVersion = await fetchCurrentRemoteVersion(token, url);
+  const remote = await fetchCurrentRemoteFields(token, url);
+  const remoteVersion = remote?.latestVersion ?? null;
+  // Keep a minVersion raised by hand (force update) unless MIN_VERSION says
+  // otherwise: the script used to reset it to 1.0.0 on every release.
+  const minVersion = process.env.MIN_VERSION ?? remote?.minVersion ?? "1.0.0";
   if (remoteVersion) {
     const cmp = compareSemver(version, remoteVersion);
     if (cmp < 0 && process.env.FORCE_DOWNGRADE !== "true") {

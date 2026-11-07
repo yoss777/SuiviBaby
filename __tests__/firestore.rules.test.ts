@@ -410,8 +410,8 @@ describe("children/access subcollection", () => {
       updateDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID), { role: "viewer" })
     );
     await assertFails(deleteDoc(doc(db, "children", CHILD_ID, "access", ALICE_UID)));
-    // …but the primary owner can still manage the co-owner
-    await assertSucceeds(
+    // roles only change through setMemberRole, even for the primary owner
+    await assertFails(
       updateDoc(doc(authedFirestore(ALICE_UID), "children", CHILD_ID, "access", CHARLIE_UID), { role: "admin" })
     );
   });
@@ -515,11 +515,12 @@ describe("children/access subcollection", () => {
     );
   });
 
-  test("owner can change a member's role", async () => {
+  test("Sprint 12.6: an owner cannot change a member's role from the client (setMemberRole only)", async () => {
     const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
-        role: "contributor",
+        role: "admin",
+        canWriteEvents: true,
       })
     );
   });
@@ -1403,21 +1404,25 @@ describe("shareCodes collection", () => {
     ...overrides,
   });
 
-  test("owner can create a valid 7-day share code", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData()));
+  test("transition (app <= 1.0.9): owner/admin may still create a share code, others may not", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+        userId: BOB_UID,
+        role: "admin",
+        grantedBy: ALICE_UID,
+      });
+    });
+    await assertSucceeds(setDoc(doc(authedFirestore(ALICE_UID), "shareCodes", "NEWCODE"), codeData()));
+    await assertSucceeds(
+      setDoc(doc(authedFirestore(BOB_UID), "shareCodes", "BOBCODE"), codeData({ code: "BOBCODE", createdBy: BOB_UID }))
+    );
+    await assertFails(setDoc(doc(authedFirestore(CHARLIE_UID), "shareCodes", "CHACODE"), codeData({ code: "CHACODE", createdBy: CHARLIE_UID })));
+    // Pas d'usurpation : createdBy doit être l'appelant.
+    await assertFails(setDoc(doc(authedFirestore(BOB_UID), "shareCodes", "SPOOF01"), codeData({ code: "SPOOF01", createdBy: ALICE_UID })));
   });
 
-  test("share code must be unused, match its id and expire within 8 days", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ used: true })));
-    await assertFails(setDoc(doc(db, "shareCodes", "NEWCODE"), codeData({ code: "OTHER" })));
-    await assertFails(
-      setDoc(
-        doc(db, "shareCodes", "NEWCODE"),
-        codeData({ expiresAt: Timestamp.fromDate(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)) })
-      )
-    );
+  test("a share code cannot be modified from the client", async () => {
+    await assertFails(updateDoc(doc(authedFirestore(ALICE_UID), "shareCodes", "CODE123"), { used: true }));
   });
 });
 

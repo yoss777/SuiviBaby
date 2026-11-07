@@ -157,17 +157,10 @@ service cloud.firestore {
           request.resource.data.grantedBy is string &&
           request.resource.data.userId == uid;
 
-        // Modification : un owner peut changer les rôles, avec les gardes
-        // habituelles. L'accès du propriétaire principal (children.ownerId) ne
-        // peut être ni rétrogradé ni supprimé par un co-owner (transfert via
-        // transferAndLeave uniquement).
-        allow update: if isOwner(childId) &&
-          (uid != childDoc(childId).data.ownerId ||
-            request.resource.data.role == 'owner') &&
-          request.resource.data.role in ['owner', 'admin', 'contributor', 'viewer'] &&
-          request.resource.data.grantedBy == resource.data.grantedBy &&
-          request.resource.data.userId == uid &&
-          request.resource.data.userId == resource.data.userId;
+        // Modification : interdite côté client (sprint 12.6). Le rôle
+        // (Parent = admin, Proche = contributor) et ses drapeaux ne changent
+        // que par la CF setMemberRole (propriétaire uniquement, Admin SDK).
+        allow update: if false;
 
         // Suppression : uniquement le owner (sauf son propre accès)
         allow delete: if isOwner(childId) && uid != request.auth.uid &&
@@ -324,7 +317,12 @@ service cloud.firestore {
         isAdmin(resource.data.childId)
       );
 
-      // Création : owner/admin (fallback via ownerId si access manquant)
+      // Création : l'app ≥ 1.0.10 passe par la CF createShareCode (code
+      // aléatoire serveur, 7 jours, un seul usage, créateur owner/admin
+      // vérifié). TRANSITION : les apps ≤ 1.0.9 déjà installées créent encore
+      // le code elles-mêmes ; sans cette branche, elles ne pourraient plus
+      // partager un enfant jusqu'à leur mise à jour. Mêmes contraintes
+      // qu'avant le sprint 12. À retirer quand app_config.minVersion > 1.0.9.
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.code == code &&
