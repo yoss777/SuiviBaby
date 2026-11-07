@@ -837,7 +837,9 @@ aucun écran de l'app ne permet de saisir un code de parrainage
 support en attendant une décision.
 
 **Backlog (Yoss, 2026-11-07)** : champ « allergies » dans la fiche enfant
-(ajout, modification, règles, export) — la politique les mentionne déjà.
+— ✅ fait le 2026-11-07 (branche `feat/child-allergies` : éditeur à l'ajout
+et à la modification, lecture seule pour un Proche, ligne dans le PDF,
+validation dans les règles, export).
 
 ## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 faite, voir plus bas)
 
