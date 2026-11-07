@@ -12,8 +12,14 @@ name: Maestro nightly
 #   MAESTRO_EMAIL      e-mail of a dedicated test account (verified, has a child, is owner)
 #   MAESTRO_PASSWORD   password of that account
 #
-# Flows: 01 signup/onboarding (clean state), then 02 login (needed by 03 and 05
-# which assume a signed-in user), then 03 add event and 05 share child.
+# Flows: 01 signup/onboarding and 02 login only. They write nothing durable in
+# the shared data beyond the test account. Flows 03 (add event) and 05 (share
+# child) create events and share codes: they come back once a staging project
+# exists (S12.1), never against production data.
+#
+# The build must be recent: a nightly run on a stale preview build tests old
+# code. It fails when the latest finished build is older than 14 days and prints
+# the commit it was built from.
 
 on:
   schedule:
@@ -69,7 +75,14 @@ jobs:
             --status finished --limit 1 --non-interactive --json > builds.json
           URL=$(jq -r '.[0].artifacts.buildUrl // empty' builds.json)
           if [ -z "$URL" ]; then echo "::error::No finished Android build for profile $BUILD_PROFILE"; exit 1; fi
-          echo "Using build $(jq -r '.[0].id' builds.json) from $(jq -r '.[0].createdAt' builds.json)"
+          CREATED=$(jq -r '.[0].createdAt' builds.json)
+          COMMIT=$(jq -r '.[0].gitCommitHash // "unknown"' builds.json)
+          echo "Using build $(jq -r '.[0].id' builds.json) from $CREATED (commit $COMMIT)"
+          AGE_DAYS=$(( ( $(date -u +%s) - $(date -u -d "$CREATED" +%s) ) / 86400 ))
+          if [ "$AGE_DAYS" -gt 14 ]; then
+            echo "::error::Latest $BUILD_PROFILE build is $AGE_DAYS days old (max 14), built from commit $COMMIT. Build a fresh preview first (eas build --profile $BUILD_PROFILE --platform android)."
+            exit 1
+          fi
           curl -fsSL "$URL" -o app.apk
           ls -l app.apk
 
@@ -99,7 +112,7 @@ jobs:
           script: |
             adb install -r app.apk
             mkdir -p maestro-report
-            maestro test --format junit --output maestro-report/junit.xml -e EMAIL="$MAESTRO_EMAIL" -e PASSWORD="$MAESTRO_PASSWORD" maestro/01_signup_onboarding.yaml maestro/02_login_email.yaml maestro/03_add_event.yaml maestro/05_share_child.yaml
+            maestro test --format junit --output maestro-report/junit.xml -e EMAIL="$MAESTRO_EMAIL" -e PASSWORD="$MAESTRO_PASSWORD" maestro/01_signup_onboarding.yaml maestro/02_login_email.yaml
 
       - name: Upload Maestro report
         if: always()

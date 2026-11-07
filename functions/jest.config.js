@@ -2,6 +2,7 @@ module.exports = {
   testEnvironment: "node",
   testTimeout: 10000,
   testMatch: ["**/__tests__/**/*.test.js"],
+  setupFiles: ["<rootDir>/__tests__/env.js"],
   // Real coverage of the deployed code (measured 2026-11-07: 87/77/91/88).
   // Floors sit just below so a regression fails CI; raise as the suite grows.
   collectCoverageFrom: [

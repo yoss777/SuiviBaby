@@ -49,20 +49,32 @@ function createRoleHandlers(deps) {
     const db = admin.firestore();
     await checkRateLimit(db, uid, "set_member_role", 20);
 
-    // The caller's role comes from the access document, never from a claim.
-    const callerSnap = await db.doc(`children/${childId}/access/${uid}`).get();
-    if (!callerSnap.exists || !hasChildRole(callerSnap.data(), ["owner"])) {
-      throw new HttpsError("permission-denied", "Seul le propriétaire peut changer un rôle.");
-    }
-
+    // Le rôle de l'appelant vient des documents Firestore, jamais d'un claim, et
+    // il est relu DANS la transaction : un propriétaire rétrogradé entre-temps
+    // ne peut plus changer de rôle.
+    const callerRef = db.doc(`children/${childId}/access/${uid}`);
+    const childRef = db.doc(`children/${childId}`);
     const memberRef = db.doc(`children/${childId}/access/${memberId}`);
     const indexRef = db.doc(`user_child_access/${memberId}_${childId}`);
     let fromRole;
     await db.runTransaction(async (tx) => {
-      const [memberSnap, indexSnap] = await Promise.all([tx.get(memberRef), tx.get(indexRef)]);
+      const [callerSnap, childSnap, memberSnap, indexSnap] = await Promise.all([
+        tx.get(callerRef), tx.get(childRef), tx.get(memberRef), tx.get(indexRef),
+      ]);
+      if (!childSnap.exists || childSnap.data()?.deletedAt) {
+        throw new HttpsError("not-found", "Enfant introuvable.");
+      }
+      const primaryOwnerId = childSnap.data()?.ownerId;
+      // Propriétaire = rôle owner, ou propriétaire principal (repli comme createShareCode).
+      const isOwner = (callerSnap.exists && hasChildRole(callerSnap.data(), ["owner"])) ||
+        primaryOwnerId === uid;
+      if (!isOwner) {
+        throw new HttpsError("permission-denied", "Seul le propriétaire peut changer un rôle.");
+      }
       if (!memberSnap.exists) throw new HttpsError("not-found", "Membre introuvable.");
       fromRole = memberSnap.data().role;
-      if (fromRole === "owner" || memberId === uid) {
+      // Le propriétaire principal n'est jamais rétrogradé, même si son accès dit « admin ».
+      if (fromRole === "owner" || memberId === uid || memberId === primaryOwnerId) {
         throw new HttpsError("failed-precondition", "Le rôle d'un propriétaire ne peut pas être modifié.");
       }
       tx.update(memberRef, {

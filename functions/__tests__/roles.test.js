@@ -102,6 +102,60 @@ describe("setMemberRole", () => {
       .rejects.toMatchObject({ code: "resource-exhausted" });
   });
 
+  it("overwrites the flags of a viewer promoted to Parent", async () => {
+    const docs = seed({
+      "children/c1/access/vw": { role: "viewer", userId: "vw", canWriteEvents: false, canWriteLikes: false, canWriteComments: false },
+    });
+    await fns.setMemberRole(call("own", { childId: "c1", memberId: "vw", role: "admin" }));
+    expect(docs.get("children/c1/access/vw")).toMatchObject({
+      role: "admin", canWriteEvents: true, canWriteLikes: true, canWriteComments: true,
+    });
+  });
+
+  it("works when the member has no user_child_access entry (nothing is created)", async () => {
+    const docs = seed({ "children/c1/access/solo": { role: "contributor", userId: "solo" } });
+    await fns.setMemberRole(call("own", { childId: "c1", memberId: "solo", role: "admin" }));
+    expect(docs.get("children/c1/access/solo").role).toBe("admin");
+    expect(docs.has("user_child_access/solo_c1")).toBe(false);
+  });
+
+  it("refuses a soft-deleted child", async () => {
+    const docs = seed({ "children/c1": { name: "Léo", ownerId: "own", deletedAt: "2026-01-01" } });
+    await expect(fns.setMemberRole(call("own", { childId: "c1", memberId: "pro", role: "admin" })))
+      .rejects.toMatchObject({ code: "not-found" });
+    expect(docs.get("children/c1/access/pro").role).toBe("contributor");
+  });
+
+  it("falls back to children.ownerId when the owner's access doc is missing", async () => {
+    const docs = seed();
+    docs.delete("children/c1/access/own");
+    await expect(fns.setMemberRole(call("own", { childId: "c1", memberId: "pro", role: "admin" })))
+      .resolves.toEqual({ success: true, role: "admin" });
+  });
+
+  it("never demotes the primary owner, even when their access doc says admin", async () => {
+    const docs = seed();
+    docs.set("children/c1/access/own", { role: "admin", userId: "own" });
+    // the primary owner (ownerId) is the caller here; a co-owner tries on them
+    await expect(fns.setMemberRole(call("co", { childId: "c1", memberId: "own", role: "contributor" })))
+      .rejects.toMatchObject({ code: "failed-precondition" });
+    expect(docs.get("children/c1/access/own").role).toBe("admin");
+  });
+
+  it("checks the owner inside the transaction (a demotion between the reads loses)", async () => {
+    const docs = seed();
+    const { mockRunTransaction } = require("./setup");
+    const inner = mockRunTransaction.getMockImplementation();
+    mockRunTransaction.mockImplementationOnce(async (fn) => {
+      // the caller loses ownership right before the transaction body runs
+      docs.set("children/c1/access/co", { role: "contributor", userId: "co" });
+      return inner(fn);
+    });
+    await expect(fns.setMemberRole(call("co", { childId: "c1", memberId: "pro", role: "admin" })))
+      .rejects.toMatchObject({ code: "permission-denied" });
+    expect(docs.get("children/c1/access/pro").role).toBe("contributor");
+  });
+
   it("writes an audit entry", async () => {
     const docs = seed();
     await fns.setMemberRole(call("own", { childId: "c1", memberId: "pro", role: "admin" }));
@@ -167,6 +221,56 @@ describe("createShareCode", () => {
     await expect(fns.createShareCode(call("own", { childId: "c1" }))).rejects.toMatchObject({ code: "internal" });
     expect(docs.get("shareCodes/AAAAAA").childId).toBe("other");
     spy.mockRestore();
+  });
+
+  it("tries 5 codes then fails, overwriting nothing", async () => {
+    const docs = seed();
+    const spy = jest.spyOn(require("crypto"), "randomInt").mockReturnValue(0);
+    docs.set("shareCodes/AAAAAA", { code: "AAAAAA", childId: "other" });
+    const before = JSON.stringify([...docs.entries()]);
+    await expect(fns.createShareCode(call("own", { childId: "c1" }))).rejects.toMatchObject({
+      code: "internal", message: expect.stringContaining("unique"),
+    });
+    // 5 draws of 6 characters each
+    expect(spy).toHaveBeenCalledTimes(30);
+    expect(JSON.stringify([...docs.entries()].filter(([p]) => p.startsWith("shareCodes/")))).toBe(
+      JSON.stringify(JSON.parse(before).filter(([p]) => p.startsWith("shareCodes/"))),
+    );
+    spy.mockRestore();
+  });
+
+  it("does not retry an error other than already-exists", async () => {
+    seed();
+    const { mockRunTransaction } = require("./setup");
+    const inner = mockRunTransaction.getMockImplementation();
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let calls = 0;
+    mockRunTransaction.mockImplementation(async (fn) => {
+      calls += 1;
+      throw Object.assign(new Error("boom"), { code: 14 });
+    });
+    await expect(fns.createShareCode(call("own", { childId: "c1" }))).rejects.toMatchObject({
+      code: "internal", message: expect.stringContaining("créer"),
+    });
+    expect(calls).toBe(1);
+    mockRunTransaction.mockImplementation(inner);
+    errSpy.mockRestore();
+  });
+
+  it("retries after an already-exists collision and then succeeds", async () => {
+    const docs = seed();
+    const spy = jest.spyOn(require("crypto"), "randomInt");
+    spy.mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(0)
+      .mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(0); // AAAAAA once
+    docs.set("shareCodes/AAAAAA", { code: "AAAAAA", childId: "other" });
+    spy.mockRestore();
+    const spy2 = jest.spyOn(require("crypto"), "randomInt");
+    let n = 0;
+    spy2.mockImplementation(() => (n++ < 6 ? 0 : 1));
+    const res = await fns.createShareCode(call("own", { childId: "c1" }));
+    expect(res.code).toBe("BBBBBB");
+    expect(docs.get("shareCodes/AAAAAA").childId).toBe("other");
+    spy2.mockRestore();
   });
 
   it("is rate limited", async () => {

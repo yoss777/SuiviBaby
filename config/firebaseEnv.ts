@@ -15,6 +15,17 @@ export type AppEnv = "production" | "staging";
 
 export const APP_ENVS: readonly AppEnv[] = ["production", "staging"];
 
+/**
+ * Firebase project each environment must talk to. A build whose web config
+ * names another project (bad EXPO_PUBLIC_FIREBASE_PROJECT_ID, copy-paste in
+ * firebaseEnvironments.json) would write staging data to production or the
+ * reverse. Mirrored in app.config.js and scripts/easCopyFirebaseFiles.js.
+ */
+export const EXPECTED_PROJECT_IDS: Record<AppEnv, string> = {
+  production: "samaye-53723",
+  staging: "samaye-staging",
+};
+
 /** Marker used by the staging placeholders in firebaseEnvironments.json. */
 export const STAGING_PLACEHOLDER_PREFIX = "STAGING_PLACEHOLDER_";
 
@@ -59,6 +70,12 @@ export function buildFirebaseWebConfig(
         "Fill config/firebaseEnvironments.json or set the EXPO_PUBLIC_FIREBASE_* variables.",
     );
   }
+  if (config.projectId !== EXPECTED_PROJECT_IDS[appEnv]) {
+    throw new Error(
+      `Firebase config for APP_ENV=${appEnv} expects project "${EXPECTED_PROJECT_IDS[appEnv]}" ` +
+        `but names "${String(config.projectId)}".`,
+    );
+  }
   return config;
 }
 
@@ -69,6 +86,11 @@ function getExtra(): FirebaseExtra {
 /** Environment baked into this build (production when nothing says otherwise). */
 export function getAppEnv(): AppEnv {
   return resolveAppEnv(getExtra().appEnv);
+}
+
+/** Sentry `environment` tag: development in __DEV__, else the build's APP_ENV. */
+export function getSentryEnvironment(isDev: boolean): string {
+  return isDev ? "development" : getAppEnv();
 }
 
 /** Firebase web config of this build. */

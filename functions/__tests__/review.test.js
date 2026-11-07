@@ -642,6 +642,7 @@ describe("HC6 90-day retention", () => {
       "user_preferences/u": { healthDataConsent: { granted: true }, notifications: { push: true, reminders: { enabled: true, thresholds: { repas: 1 } } } },
       "device_tokens/t": { userId: "u", enabled: true, token: "ExponentPushToken[u]" },
       "children/c": { name: "L" },
+      "children/c/access/u": { role: "owner", userId: "u" },
       "user_child_access/u_c": { userId: "u", childId: "c" },
       "events/e": { childId: "c", type: "biberon", date: { toMillis: () => Date.now() - 5 * 3600 * 1000 } },
     });

@@ -13,21 +13,35 @@
  *
  * Usage:
  *   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
- *   node scripts/backfillLastEventAt.js                        # dry run, counts only
- *   node scripts/backfillLastEventAt.js --apply                # writes missing keys
- *   node scripts/backfillLastEventAt.js --apply --recompute    # also fixes stale values
- *   node scripts/backfillLastEventAt.js --project=samaye-staging
+ *   node scripts/backfillLastEventAt.js                                        # dry run (production), counts only
+ *   node scripts/backfillLastEventAt.js --apply --project=<projectId>          # writes missing keys
+ *   node scripts/backfillLastEventAt.js --apply --recompute --project=<projectId>  # also fixes stale values
+ *
+ * --apply REQUIRES an explicit --project: no default project is ever written to
+ * (a script run by habit against the wrong project would rewrite its children).
  *
  * Re-running is safe (idempotent). Safe while the app is in use: a concurrent
  * event write recomputes the same fields from the events themselves.
  */
 
-const admin = require("firebase-admin");
 const { LAST_EVENT_KEYS, lastEventQuery } = require("../functions/lib/reminders");
 
-const APPLY = process.argv.includes("--apply");
-const RECOMPUTE = process.argv.includes("--recompute");
-const PROJECT = (process.argv.find((a) => a.startsWith("--project=")) || "").split("=")[1] || "samaye-53723";
+/** Project read by a dry run when none is named (read-only). */
+const DRY_RUN_DEFAULT_PROJECT = "samaye-53723";
+
+/** Reads the command line; --apply without --project throws. */
+function parseArgs(argv) {
+  const apply = argv.includes("--apply");
+  const recompute = argv.includes("--recompute");
+  const project = (argv.find((a) => a.startsWith("--project=")) || "").split("=")[1] || null;
+  if (apply && !project) {
+    throw new Error("--apply requires an explicit --project=<projectId> (no default project is written to).");
+  }
+  return { apply, recompute, project };
+}
+
+let APPLY = false;
+let RECOMPUTE = false;
 const PAGE = 200;
 const CONCURRENCY = 10;
 
@@ -43,10 +57,14 @@ async function computeKeys(db, childId, keys) {
 }
 
 async function processChild(db, doc, stats) {
-  const known = doc.data().lastEventAt || {};
+  const raw = doc.data().lastEventAt;
+  // Valeur héritée null ou scalaire : on réécrit la map entière (un chemin
+  // pointé ne peut pas la convertir de façon sûre).
+  const isMap = raw !== null && typeof raw === "object" && !Array.isArray(raw);
+  const known = isMap ? raw : {};
   const missing = LAST_EVENT_KEYS.filter((k) => known[k] === undefined);
   if (missing.length === 0 && !RECOMPUTE) return;
-  const keys = RECOMPUTE ? LAST_EVENT_KEYS : missing;
+  const keys = isMap && !RECOMPUTE ? missing : LAST_EVENT_KEYS;
   const computed = await computeKeys(db, doc.id, keys);
   const update = {};
   for (const key of keys) {
@@ -58,10 +76,21 @@ async function processChild(db, doc, stats) {
   }
   if (Object.keys(update).length === 0) return;
   stats.childrenToUpdate += 1;
-  if (APPLY) await doc.ref.update(update);
+  if (APPLY) {
+    await doc.ref.update(
+      isMap
+        ? update
+        : { lastEventAt: Object.fromEntries(Object.entries(update).map(([k, v]) => [k.replace("lastEventAt.", ""), v])) },
+    );
+  }
 }
 
 async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  APPLY = args.apply;
+  RECOMPUTE = args.recompute;
+  const PROJECT = args.project || DRY_RUN_DEFAULT_PROJECT;
+  const admin = require("firebase-admin");
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
     projectId: PROJECT,
@@ -88,7 +117,11 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+module.exports = { parseArgs };
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  });
+}

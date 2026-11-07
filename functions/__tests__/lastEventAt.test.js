@@ -108,6 +108,68 @@ describe("maintenance of children/{id}.lastEventAt by the event callables", () =
     expect(ms(last.pompages)).toBe(D1);
   });
 
+  it("legacy child with lastEventAt: null: the whole map is written (no dotted update on a null parent)", async () => {
+    const docs = memoryStore({ ...base(), "children/c": { name: "Léa", lastEventAt: null } });
+    await fns.validateAndCreateEvent(call("u", { childId: "c", type: "biberon", quantite: 100, date: new Date(D1).toISOString() }));
+    const last = docs.get("children/c").lastEventAt;
+    expect(ms(last.repas)).toBe(D1);
+    expect(ms(last.any)).toBe(D1);
+    expect(last).toMatchObject({ pompages: null, changes: null, vitamines: null });
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("a scalar legacy lastEventAt is replaced by the map too", async () => {
+    const docs = memoryStore({ ...base(), "children/c": { name: "Léa", lastEventAt: "oops" } });
+    await fns.validateAndCreateEvent(call("u", { childId: "c", type: "bain", date: new Date(D2).toISOString() }));
+    expect(ms(docs.get("children/c").lastEventAt.any)).toBe(D2);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("transaction retry (create): `created` is reset, a concurrent winner means no refresh", async () => {
+    const refresh = jest.spyOn(reminders, "safeRefreshLastEventAt");
+    const docs = memoryStore(base(), {
+      txRetries: 1,
+      // between the attempts someone else creates the same event
+      beforeRetry: (d, attempt, paths) => d.set(paths[0], { childId: "c", userId: "u", type: "biberon", date: ts(D1) }),
+    });
+    const data = { childId: "c", type: "biberon", quantite: 100, date: new Date(D1).toISOString(), idempotencyKey: "k-retry" };
+    const { id } = await fns.validateAndCreateEvent(call("u", data));
+    expect(docs.has(`events/${id}`)).toBe(true);
+    expect(refresh).not.toHaveBeenCalled();
+    refresh.mockRestore();
+  });
+
+  it("transaction retry (update): touchedTypes is reset, only the types of the last attempt are refreshed", async () => {
+    const refresh = jest.spyOn(reminders, "safeRefreshLastEventAt");
+    memoryStore(
+      {
+        ...base(),
+        "events/e1": { childId: "c", userId: "u", type: "biberon", date: ts(D1) },
+      },
+      {
+        txRetries: 1,
+        // the first attempt saw "biberon"; a concurrent edit makes it "selle"
+        beforeRetry: (d) => d.set("events/e1", { childId: "c", userId: "u", type: "selle", date: ts(D1) }),
+      },
+    );
+    await fns.validateAndUpdateEvent(call("u", { childId: "c", eventId: "e1", type: "pompage" }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect([...refresh.mock.calls[0][2]].sort()).toEqual(["pompage", "selle"]);
+    refresh.mockRestore();
+  });
+
+  it("memory store sanity: reads after a write fail like Firestore, orderBy skips documents without the field", async () => {
+    const docs = memoryStore({ "a/1": { n: 1 }, "a/2": {}, "a/3": { n: 3 } });
+    const db = require("firebase-admin").firestore();
+    const snap = await db.collection("a").orderBy("n").get();
+    expect(snap.docs.map((d) => d.id)).toEqual(["1", "3"]);
+    await expect(db.runTransaction(async (tx) => {
+      tx.set(db.doc("a/9"), { n: 9 });
+      await tx.get(db.doc("a/1"));
+    })).rejects.toThrow(/reads to be executed before all writes/);
+    expect(docs.has("a/9")).toBe(false);
+  });
+
   it("updating the date moves the value", async () => {
     const docs = memoryStore({
       ...base(),
@@ -167,6 +229,7 @@ describe("checkAndSendReminders reads lastEventAt (no event query when present)"
     "user_preferences/u": prefs,
     "children/c": { name: "Léa", ...child },
     "user_child_access/u_c": { userId: "u", childId: "c" },
+    "children/c/access/u": { role: "owner", userId: "u" },
     "device_tokens/t1": { userId: "u", enabled: true, token: "ExponentPushToken[a]" },
     ...(withEvent ? { "events/e": withEvent } : {}),
   });
@@ -228,6 +291,7 @@ describe("checkAndSendReminders reads lastEventAt (no event query when present)"
     const data = seed(lastEvents(5));
     data["user_preferences/u2"] = prefs;
     data["user_child_access/u2_c"] = { userId: "u2", childId: "c" };
+    data["children/c/access/u2"] = { role: "admin", userId: "u2" };
     data["device_tokens/t2"] = { userId: "u2", enabled: true, token: "ExponentPushToken[b]" };
     memoryStore(data);
     expoClient.sendPushNotificationsAsync.mockRejectedValueOnce(new Error("expo down"));
@@ -247,6 +311,7 @@ describe("dead push tokens", () => {
       "user_preferences/u": prefs,
       "children/c": { name: "Léa", lastEventAt: { repas: ts(Date.now() - 5 * HOUR), pompages: null, changes: null, vitamines: null, any: ts(Date.now() - 5 * HOUR) } },
       "user_child_access/u_c": { userId: "u", childId: "c" },
+      "children/c/access/u": { role: "owner", userId: "u" },
     };
     for (const [id, token] of Object.entries(tokens)) d[`device_tokens/${id}`] = { userId: "u", enabled: true, token };
     return d;

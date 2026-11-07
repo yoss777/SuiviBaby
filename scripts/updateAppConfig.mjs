@@ -21,7 +21,13 @@ import { createSign } from "crypto";
 import { readFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
+
+// Fonctions pures (testées dans __tests__/appConfigScript.test.ts).
+const { resolveMinVersion, parseServiceAccountKey, updateMaskQuery } = createRequire(
+  import.meta.url,
+)("./lib/appConfigHelpers.js");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
@@ -139,11 +145,7 @@ async function getAccessToken() {
   const saKeyJson = process.env.GCP_SA_KEY;
   if (saKeyJson) {
     // The CI secret may hold the raw JSON key or its base64 encoding.
-    const trimmed = saKeyJson.trim();
-    const saKey = JSON.parse(
-      trimmed.startsWith("{") ? trimmed : Buffer.from(trimmed, "base64").toString("utf-8"),
-    );
-    return getAccessTokenFromServiceAccount(saKey);
+    return getAccessTokenFromServiceAccount(parseServiceAccountKey(saKeyJson));
   }
   return getAccessTokenFromRefreshToken();
 }
@@ -213,7 +215,7 @@ async function main() {
   const remoteVersion = remote?.latestVersion ?? null;
   // Keep a minVersion raised by hand (force update) unless MIN_VERSION says
   // otherwise: the script used to reset it to 1.0.0 on every release.
-  const minVersion = process.env.MIN_VERSION ?? remote?.minVersion ?? "1.0.0";
+  const minVersion = resolveMinVersion(process.env, remote);
   if (remoteVersion) {
     const cmp = compareSemver(version, remoteVersion);
     if (cmp < 0 && process.env.FORCE_DOWNGRADE !== "true") {
@@ -249,7 +251,10 @@ async function main() {
     firestoreFields[k] = toFirestoreValue(v);
   }
 
-  const res = await fetch(url, {
+  // updateMask: only the fields written here are replaced; any other field of
+  // the document (added by hand, by another tool) is left untouched. Without a
+  // mask the PATCH replaced the whole document.
+  const res = await fetch(`${url}?${updateMaskQuery(fields)}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${token}`,

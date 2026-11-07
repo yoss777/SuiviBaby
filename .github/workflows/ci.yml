@@ -72,8 +72,10 @@ jobs:
 
       - run: npm ci
 
+      # Every *.rules.test.ts suite (firestore, storage, multiUser), see
+      # jest.config.rules.js. The demo- project id needs no credentials; the
+      # suites read the project from GCLOUD_PROJECT (set by emulators:exec).
       - name: Run Firestore and Storage rules tests
         run: >-
           npx -y firebase-tools@15 emulators:exec --only firestore,storage
-          --project samaye-53723
-          'npx jest __tests__/firestore.rules.test.ts __tests__/storage.rules.test.ts --runInBand --ci --config jest.config.rules.js'
+          --project demo-samaye 'npm run test:rules:run'

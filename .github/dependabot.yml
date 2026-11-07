@@ -5,6 +5,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # Versions tied to the Expo SDK: updated together with `npx expo install --fix`
+    # on SDK upgrades, never one by one (a lone bump breaks the native build).
+    ignore:
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native-firebase/*"
+      - dependency-name: "@sentry/react-native"
     groups:
       minor-and-patch:
         update-types: [minor, patch]

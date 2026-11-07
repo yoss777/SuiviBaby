@@ -839,7 +839,7 @@ support en attendant une décision.
 **Backlog (Yoss, 2026-11-07)** : champ « allergies » dans la fiche enfant
 (ajout, modification, règles, export) — la politique les mentionne déjà.
 
-## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 à faire)
+## S11 — Tests et CI · ✅ 2026-11-07 (11.7 en attente du go IAM ; revue ECC S11+S12 faite, voir plus bas)
 
 - [x] **11.1** `collectCoverageFrom` pour mesurer la vraie couverture, seuils
   recalés sur la nouvelle mesure.
@@ -863,7 +863,7 @@ importés par les tests), fonctions 87,3 % (seuils 86/76/90/87) ;
 
 - [ ] **11.7** Workload Identity Federation à la place de la clé `GCP_SA_KEY`.
 
-## S12 — Environnements et livraison · ✅ 2026-11-07 côté code (création staging, compte Play et environnements GitHub en attente du go de Yoss ; revue ECC S11+S12 à faire)
+## S12 — Environnements et livraison · ✅ 2026-11-07 côté code (création staging, compte Play et environnements GitHub en attente du go de Yoss ; revue ECC S11+S12 faite, voir plus bas)
 
 - [~] **12.1** Projet `samaye-staging` (Q8) : config choisie par `APP_ENV`,
   alias `.firebaserc`, `main` déploie en staging, production derrière un
@@ -909,7 +909,68 @@ Notes S12 (2026-11-07) :
   apps ≤ 1.0.9 créent encore leurs codes (à retirer quand
   `minVersion` > 1.0.9) ; les mises à jour client des accès sont refusées.
 
-**Revue ECC (S11 + S12)** : `architect`, `pr-test-analyzer`.
+**Revue ECC (S11 + S12)** : `architect`, `pr-test-analyzer`. Corrigé
+(2026-11-07) :
+- déploiement : production seulement depuis `main`, environnement `production`
+  toujours lié, concurrence par cible, job `test` (lint, jest, règles) requis ;
+  `GCP_SA_KEY` lue dans le seul job production, `store-release` passe par une
+  clé dédiée `APP_CONFIG_WRITER_KEY` ;
+- `functions/` ne code plus `samaye-53723` : paramètres `defineString` +
+  `.env.samaye-53723` / `.env.samaye-staging`, garde `grep` dans le job
+  staging, tests de la config de production ;
+- release : contrôle du numéro de build distant (`eas build:version:get`),
+  confirmation `functions_ready` avant un build production, procédure locale
+  documentée ; Maestro la nuit limité aux parcours 01 et 02, build de moins de
+  14 jours ; CI : toutes les suites de règles avec un projet factice ;
+- règles : `lastEventAt` protégé ; règle de transition pour le changement de
+  rôle des apps ≤ 1.0.9 (l'écran 1.0.9 écrivait bien le document d'accès,
+  vérifié dans `f599d08`) bornée au propriétaire ; code de partage client :
+  forme exacte, nom ≤ 100 caractères ;
+- fonctions : `setMemberRole` (propriétaire relu dans la transaction, enfant
+  supprimé refusé, repli `ownerId`, propriétaire principal jamais rétrogradé),
+  réconciliation des accès (page vide, entrées mal formées comptées, erreur
+  journalisée), rappels (accès vérifié, date invalide sans rappel immédiat, lot
+  partiel enregistré, suppression de jetons tolérante aux échecs),
+  `lastEventAt` hérité `null` réécrit en entier ;
+- app : file hors ligne refuse une création de plus de 25 jours (tombstone
+  `deleted_idem` à 30 jours), `projectId` vérifié face à `APP_ENV`, tag Sentry
+  `environment` selon l'environnement, Dependabot ignore la famille Expo / React
+  Native, scripts `updateAppConfig` (`updateMask`, fonctions testées) et
+  `backfillLastEventAt` (`--project` obligatoire avec `--apply`) ;
+- tests : faux Firestore plus strict (lecture après écriture, `orderBy`
+  sans champ, mise à jour pointée sur un parent non-map, simulation de
+  reprises de transaction), tests des lots push, des jetons morts, des semaines
+  du récap (heure d'été et d'hiver), `test.todo` pour la plage de nuit.
+
+Décision M3 : les écritures client sur `events` ne sont pas verrouillées (les
+versions en circulation sont inconnues) et aucun déclencheur Firestore n'est
+ajouté (coût) ; `lastEventAt` peut donc dériver pour un événement écrit par un
+vieux client. Rattrapage : `backfillLastEventAt.js --apply --recompute
+--project=samaye-53723` chaque semaine (docs/ENVIRONMENTS.md, maintenance).
+À reprendre quand `minVersion` aura rejoint la version qui passe par les
+fonctions pour tout : verrouiller `events` en écriture.
+
+Tâches datées :
+- [ ] **12.7** (revue le 2026-12-07) retirer les deux règles de transition de
+  `firestore.rules` (création de code de partage et changement de rôle par le
+  client, apps ≤ 1.0.9) dès que `app_config.minVersion` > 1.0.9, avec leurs
+  tests (`firestore.rules.test.ts`, `multiUser.rules.test.ts`).
+
+Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
+- GitHub : restreindre les environnements `production` et `store-release` à
+  `main`, déplacer `GCP_SA_KEY` dans les secrets de l'environnement
+  `production`, créer `app-config-writer` (`roles/datastore.user`) et son
+  secret `APP_CONFIG_WRITER_KEY` dans `store-release` (commandes dans
+  docs/ENVIRONMENTS.md, section 3) ;
+- EAS : `eas build:version:set` (iOS 32, Android 13) avant le prochain build ;
+- avant la création de staging : vérifier la région du bucket par défaut
+  staging pour les deux fonctions miroir (`us-central1`) ;
+- décision : le récap hebdomadaire calcule ses bornes de semaine en heure du
+  processus (UTC sur Cloud Functions), pas en heure de Paris : jusqu'à 2 h de
+  décalage aux bornes de la semaine. Les tests figent le comportement en
+  `TZ=Europe/Paris` ; passer à un calcul explicite en Europe/Paris est à
+  décider ;
+- à voir : plage de nuit pour les rappels (`test.todo`, décision produit).
 
 ## S13 — Dette structurelle (mois 3) · ⏳
 

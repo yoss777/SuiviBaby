@@ -7,10 +7,11 @@ import {
 import { readFileSync } from "fs";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 
-const PROJECT_ID = "samaye-53723";
+// emulators:exec fixe GCLOUD_PROJECT (CI : projet factice demo-*, aucun identifiant requis).
+const PROJECT_ID = process.env.GCLOUD_PROJECT || "samaye-53723";
 const FIRESTORE_RULES_PATH = "firestore.rules";
 const STORAGE_RULES_PATH = "storage.rules";
-const STORAGE_BUCKET = "gs://samaye-53723.firebasestorage.app";
+const STORAGE_BUCKET = `gs://${PROJECT_ID}.firebasestorage.app`;
 
 const ALICE_UID = "alice";
 const BOB_UID = "bob";

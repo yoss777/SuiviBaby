@@ -33,6 +33,7 @@ import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService
 import { retryFailedOptimistic } from "@/services/eventsService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { ensureFirebaseAppCheck } from "@/config/firebase";
+import { getSentryEnvironment } from "@/config/firebaseEnv";
 import {
   filterBreadcrumb,
   filterEvent,
@@ -49,7 +50,8 @@ Sentry.init({
   beforeBreadcrumb: (breadcrumb) => filterBreadcrumb(breadcrumb),
   beforeSend: (event) => (isTransientNetworkNoise(event) ? null : filterEvent(event)),
   beforeSendTransaction: (event) => filterTransaction(event),
-  environment: __DEV__ ? "development" : "production",
+  // production / staging selon APP_ENV du build (config/firebaseEnv.ts).
+  environment: getSentryEnvironment(__DEV__),
   // Performance monitoring
   tracesSampleRate: 0.2,
   enableAutoSessionTracking: true,

@@ -9,6 +9,7 @@
  * once; a failure on one entry is counted and does not stop the run.
  */
 const admin = require("firebase-admin");
+const logger = require("firebase-functions/logger");
 const { mapInChunks } = require("./reminders");
 
 const DEFAULT_PAGE_SIZE = 300;
@@ -38,7 +39,7 @@ function parseAccessPath(path) {
 }
 
 async function reconcileAccessIndex(db, { pageSize = DEFAULT_PAGE_SIZE, concurrency = DEFAULT_CONCURRENCY } = {}) {
-  const stats = { accessScanned: 0, indexScanned: 0, created: 0, deleted: 0, errors: 0 };
+  const stats = { accessScanned: 0, indexScanned: 0, created: 0, deleted: 0, malformed: 0, errors: 0 };
 
   // 1. access -> index: create the missing entries.
   await forEachPage(db.collectionGroup("access"), pageSize, async (docs) => {
@@ -74,6 +75,10 @@ async function reconcileAccessIndex(db, { pageSize = DEFAULT_PAGE_SIZE, concurre
       return { ref: d.ref, userId: data.userId, childId: data.childId };
     });
     const valid = entries.filter((e) => typeof e.userId === "string" && typeof e.childId === "string");
+    // Entrées sans userId/childId exploitable : comptées, jamais supprimées.
+    stats.malformed += entries.length - valid.length;
+    // getAll() sans argument lève dans le vrai SDK (page entièrement invalide).
+    if (valid.length === 0) return;
     const accessSnaps = await db.getAll(...valid.map((e) => db.doc(`children/${e.childId}/access/${e.userId}`)));
     const orphans = valid.filter((_, i) => !accessSnaps[i].exists);
     await mapInChunks(orphans, concurrency, async (entry) => {
@@ -93,6 +98,9 @@ async function reconcileAccessIndex(db, { pageSize = DEFAULT_PAGE_SIZE, concurre
     });
   });
 
+  if (stats.errors > 0) {
+    logger.error("reconcileAccessIndex: some entries could not be reconciled", stats);
+  }
   return stats;
 }
 

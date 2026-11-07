@@ -32,7 +32,9 @@ import {
   getExhaustedEvents,
   onExhaustedChange,
   onQueueChange,
+  MAX_CREATE_AGE_MS,
   processQueue,
+  setOnQueueFailure,
   startAutoSync,
   stopAutoSync,
 } from "@/services/offlineQueueService";
@@ -237,6 +239,59 @@ describe("M8 : écriture abandonnée par la file", () => {
     const extra = captured.mock.calls[0][1].extra;
     expect(extra).toMatchObject({ action: "create", reason: "permanent", orphanPhotos: 1 });
     expect(JSON.stringify(extra)).not.toContain("jalons/a.jpg");
+  });
+});
+
+describe("L1 : création trop ancienne refusée (tombstones deleted_idem expirées à 30 jours)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const sentTo = () => (httpsCallable as jest.Mock).mock.calls.length;
+
+  it("le plafond est de 25 jours, sous les 30 jours de la tombstone", () => {
+    expect(MAX_CREATE_AGE_MS).toBe(25 * DAY);
+  });
+
+  it("refuse une création de 26 jours : rien n'est envoyé, elle est marquée en échec avec la raison, et signalée", async () => {
+    const onFailure = jest.fn();
+    setOnQueueFailure(onFailure);
+    addOptimisticCreate("c1", { type: "biberon", idempotencyKey: "key-1" }, "__optimistic_a");
+    markOptimisticQueued("__optimistic_a");
+    const call = jest.fn().mockResolvedValue({ data: { id: "x" } });
+    (httpsCallable as jest.Mock).mockReturnValue(call);
+    mockDb.getAllAsync.mockResolvedValueOnce([row({ createdAt: Date.now() - 26 * DAY })]);
+
+    await processQueue();
+
+    expect(call).not.toHaveBeenCalled();
+    const failed = mockDb.runAsync.mock.calls.find(([sql]: [string]) => /SET status = 'failed'/.test(sql));
+    expect(failed).toBeDefined();
+    expect(failed![1]).toBe(3); // MAX_RETRIES : comme les autres écritures épuisées
+    expect(String(failed![2])).toMatch(/25 jours/);
+    // l'écran ne la montre plus comme enregistrée, l'utilisateur est prévenu, Sentry aussi
+    expect(getOptimisticEntries("c1")).toHaveLength(0);
+    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ count: 1 }));
+    expect(captured.mock.calls[0][1].extra).toMatchObject({ action: "create", reason: "stale" });
+    setOnQueueFailure(null as any);
+  });
+
+  it("envoie encore une création de 24 jours", async () => {
+    const call = jest.fn().mockResolvedValue({ data: { id: "x" } });
+    (httpsCallable as jest.Mock).mockReturnValue(call);
+    mockDb.getAllAsync.mockResolvedValueOnce([row({ createdAt: Date.now() - 24 * DAY })]);
+    await processQueue();
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne touche ni aux modifications ni aux suppressions anciennes (rejeu sans danger)", async () => {
+    const call = jest.fn().mockResolvedValue({ data: { success: true } });
+    (httpsCallable as jest.Mock).mockReturnValue(call);
+    mockDb.getAllAsync.mockResolvedValueOnce([
+      row({ id: "u1", action: "update", payload: JSON.stringify({ childId: "c1", eventId: "e1" }), createdAt: Date.now() - 40 * DAY }),
+      row({ id: "d1", action: "delete", payload: JSON.stringify({ childId: "c1", eventId: "e2" }), createdAt: Date.now() - 40 * DAY }),
+    ]);
+    const done = processQueue();
+    await jest.advanceTimersByTimeAsync(1000);
+    await done;
+    expect(sentTo()).toBe(2);
   });
 });
 

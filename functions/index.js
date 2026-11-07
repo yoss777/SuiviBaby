@@ -7,6 +7,13 @@ const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https")
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onObjectFinalized, onObjectDeleted } = require("firebase-functions/v2/storage");
 const { defineSecret } = require("firebase-functions/params");
+const {
+  LEGACY_PHOTOS_BUCKET_PARAM,
+  photosBucket,
+  legacyPhotosBucket,
+  photoBuckets,
+  functionsBaseUrl,
+} = require("./lib/projectConfig");
 
 // Every function runs in the EU unless it says otherwise (only the legacy US
 // bucket mirrors do). Without this, a function without an explicit region
@@ -68,9 +75,8 @@ const FREE_MAX_SHARED_USERS = 2;
 // Photos migrate from the US default bucket to an EU bucket
 // (docs/MIGRATION_PHOTOS_EU.md). Until the legacy bucket is deleted, every
 // deletion must hit both so no copy survives in either region.
-const PHOTOS_BUCKET = "samaye-53723-photos-eu";
-const LEGACY_PHOTOS_BUCKET = "samaye-53723.firebasestorage.app";
-const PHOTO_BUCKETS = [PHOTOS_BUCKET, LEGACY_PHOTOS_BUCKET];
+// Les noms viennent du projet déployé (lib/projectConfig.js), jamais d'un
+// littéral : le staging ne doit pas écrire dans les buckets de production.
 
 // Sign in with Apple key (Apple Developer > Keys). Bound only to the functions
 // that call Apple: registerAppleRevocation and every caller of purgeUserData.
@@ -86,8 +92,7 @@ const HEALTH_CONSENT_VERSION = "2.2";
 /** Proof of consent is kept this long after the account is deleted. */
 const CONSENT_RETENTION_YEARS = 5;
 
-/** Public URL of an europe-west1 HTTPS function of this project. */
-const FUNCTIONS_BASE_URL = "https://europe-west1-samaye-53723.cloudfunctions.net";
+// URL publique d'une fonction HTTPS europe-west1 : functionsBaseUrl() (projet déployé).
 
 /** Reads a secret from the environment without the SDK warning when it is unset. */
 function secretValue(secret) {
@@ -107,7 +112,7 @@ function getAppleCredentials() {
 /** Deletes one photo path from every photo bucket. Missing objects are ignored. */
 async function deletePhotoEverywhere(path) {
   await Promise.all(
-    PHOTO_BUCKETS.map((name) =>
+    photoBuckets().map((name) =>
       admin.storage().bucket(name).file(path).delete({ ignoreNotFound: true }),
     ),
   );
@@ -195,7 +200,7 @@ async function deleteUserEventPhotos(db, uid) {
 async function deleteChildPhotosEverywhere(childId) {
   let deleted = 0;
   let failed = 0;
-  for (const name of PHOTO_BUCKETS) {
+  for (const name of photoBuckets()) {
     // One bucket failing must not leave the other untouched.
     try {
       const [files] = await admin.storage().bucket(name).getFiles({ prefix: `children/${childId}/` });
@@ -4646,6 +4651,15 @@ exports.checkAndSendReminders = onSchedule(
         const { childId } = accessDoc.data();
         if (!childId) continue;
 
+        // L'index user_child_access peut survivre à une révocation : le document
+        // d'accès (source de vérité) doit exister, comme pour le récap. L'audience
+        // ne change pas : tout rôle ayant un accès reçoit les rappels.
+        const roleSnap = await db.doc(`children/${childId}/access/${userId}`).get();
+        if (!roleSnap.exists) {
+          stats.skipped++;
+          continue;
+        }
+
         // Récupérer le nom de l'enfant (et lastEventAt) : une seule lecture
         const childDoc = await db.doc(`children/${childId}`).get();
         if (!childDoc.exists) continue;
@@ -4700,7 +4714,9 @@ exports.checkAndSendReminders = onSchedule(
           }));
 
           try {
-            const { delivered, dead } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+            const { delivered, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+            // Lot partiel : les lots livrés comptent (historique ci-dessous), l'échec est signalé.
+            if (chunkErrors > 0) stats.errors++;
 
             // Jeton mort (appli désinstallée) : on le supprime pour ne plus l'appeler.
             if (dead.size > 0) {
@@ -4763,7 +4779,7 @@ function recapUnsubscribeToken(uid, secret) {
 }
 
 function recapUnsubscribeUrl(uid, secret) {
-  return `${FUNCTIONS_BASE_URL}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${recapUnsubscribeToken(uid, secret)}`;
+  return `${functionsBaseUrl()}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${recapUnsubscribeToken(uid, secret)}`;
 }
 
 /** Constant-time check of an unsubscribe token (length checked first: timingSafeEqual throws otherwise). */
@@ -5040,7 +5056,7 @@ function unsubscribePage(title, bodyHtml) {
  * page; POST (button, or one-click unsubscribe from the mail client, RFC 8058)
  * sets user_preferences/{uid}.notifications.email = false.
  * token = hex HMAC-SHA256(uid) with RECAP_UNSUBSCRIBE_SECRET.
- * URL: https://europe-west1-samaye-53723.cloudfunctions.net/unsubscribeRecap
+ * URL: https://europe-west1-<projet>.cloudfunctions.net/unsubscribeRecap
  */
 exports.unsubscribeRecap = onRequest(
   { region: "europe-west1", secrets: [RECAP_UNSUBSCRIBE_SECRET] },
@@ -5074,7 +5090,7 @@ exports.unsubscribeRecap = onRequest(
     }
 
     if (req.method === "GET") {
-      const action = `${FUNCTIONS_BASE_URL}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${token}`;
+      const action = `${functionsBaseUrl()}/unsubscribeRecap?uid=${encodeURIComponent(uid)}&token=${token}`;
       res.status(200).send(unsubscribePage(
         "Se désabonner des récaps",
         `<p>Vous ne recevrez plus le récap hebdomadaire par e-mail.</p>
@@ -5791,26 +5807,26 @@ function isChildPhotoObject(name) {
 }
 
 exports.mirrorLegacyPhotoUpload = onObjectFinalized(
-  { bucket: LEGACY_PHOTOS_BUCKET, region: "us-central1" },
+  { bucket: LEGACY_PHOTOS_BUCKET_PARAM, region: "us-central1" },
   async (event) => {
     const name = event.data.name;
     if (!isChildPhotoObject(name)) return;
     await admin
       .storage()
-      .bucket(LEGACY_PHOTOS_BUCKET)
+      .bucket(legacyPhotosBucket())
       .file(name)
-      .copy(admin.storage().bucket(PHOTOS_BUCKET).file(name));
-    console.log(`mirrorLegacyPhotoUpload: copied ${name} to ${PHOTOS_BUCKET}`);
+      .copy(admin.storage().bucket(photosBucket()).file(name));
+    console.log(`mirrorLegacyPhotoUpload: copied ${name} to ${photosBucket()}`);
   },
 );
 
 exports.mirrorLegacyPhotoDelete = onObjectDeleted(
-  { bucket: LEGACY_PHOTOS_BUCKET, region: "us-central1" },
+  { bucket: LEGACY_PHOTOS_BUCKET_PARAM, region: "us-central1" },
   async (event) => {
     const name = event.data.name;
     if (!isChildPhotoObject(name)) return;
-    await admin.storage().bucket(PHOTOS_BUCKET).file(name).delete({ ignoreNotFound: true });
-    console.log(`mirrorLegacyPhotoDelete: removed ${name} from ${PHOTOS_BUCKET}`);
+    await admin.storage().bucket(photosBucket()).file(name).delete({ ignoreNotFound: true });
+    console.log(`mirrorLegacyPhotoDelete: removed ${name} from ${photosBucket()}`);
   },
 );
 

@@ -111,4 +111,46 @@ describe("reconcileAccessIndex", () => {
       expect.objectContaining({ job: "reconcileAccessIndex", created: 1, deleted: 0, errors: 0, durationMs: expect.any(Number) })
     );
   });
+
+  it("an all-invalid index page does not call getAll() without argument (real SDK throws)", async () => {
+    const docs = memoryStore({
+      "user_child_access/bad1": { userId: 3, childId: "c1" },
+      "user_child_access/bad2": { childId: "c1" },
+      "user_child_access/bad3": {},
+    });
+    const stats = await reconcileAccessIndex(db());
+    expect(stats).toMatchObject({ indexScanned: 3, malformed: 3, deleted: 0, errors: 0 });
+    // malformed entries are counted, never deleted
+    expect(docs.size).toBe(3);
+  });
+
+  it("pageSize exactly equal to the number of documents ends cleanly", async () => {
+    const initial = {};
+    for (let i = 0; i < 4; i += 1) {
+      initial[`children/c${i}/access/u`] = { role: "owner", userId: "u" };
+      initial[`user_child_access/u_c${i}`] = { userId: "u", childId: `c${i}` };
+    }
+    initial["user_child_access/u_gone"] = { userId: "u", childId: "gone" };
+    const docs = memoryStore(initial);
+    const stats = await reconcileAccessIndex(db(), { pageSize: 5 });
+    expect(stats).toMatchObject({ accessScanned: 4, indexScanned: 5, deleted: 1, errors: 0 });
+    expect(docs.has("user_child_access/u_gone")).toBe(false);
+  });
+
+  it("logs an error when some entries failed", async () => {
+    const errSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
+    memoryStore({ "user_child_access/u_gone": { userId: "u", childId: "gone" } });
+    const { mockRunTransaction } = require("./setup");
+    mockRunTransaction.mockImplementation(async () => { throw new Error("contention"); });
+    const stats = await reconcileAccessIndex(db());
+    expect(stats.errors).toBe(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("reconcileAccessIndex"), expect.objectContaining({ errors: 1 }));
+  });
+
+  it("does not log an error on a clean run", async () => {
+    const errSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
+    memoryStore({ "children/c1/access/u1": { role: "owner", userId: "u1" } });
+    await reconcileAccessIndex(db());
+    expect(errSpy).not.toHaveBeenCalled();
+  });
 });

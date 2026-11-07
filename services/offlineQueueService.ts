@@ -55,6 +55,18 @@ export const MAX_RETRIES = 3;
 export const MAX_TRANSIENT_FAILURES = 8;
 
 /**
+ * Âge maximal d'une création en file. Le serveur évite de ressusciter un
+ * événement supprimé grâce à une tombstone `deleted_idem` qui expire (TTL) au
+ * bout de 30 jours : une création rejouée plus tard que cela pourrait recréer
+ * un événement supprimé entre-temps. On la refuse bien avant (25 jours).
+ */
+export const MAX_CREATE_AGE_MS = 25 * 24 * 60 * 60 * 1000;
+
+/** Création mise en file depuis trop longtemps (cf. MAX_CREATE_AGE_MS). */
+const STALE_CREATE_CODE = "offline-queue/stale-create";
+const isStaleCreateError = (error: any) => error?.code === STALE_CREATE_CODE;
+
+/**
  * Conflit de version (`aborted`, verrou optimiste T2.2) : l'écriture a été
  * calculée sur une version périmée, la rejouer échouera toujours. Définitif.
  * Testé sur le CODE : le message « The request was aborted because there was no
@@ -431,6 +443,15 @@ export async function processQueue(): Promise<number> {
         // Appeler la Cloud Function appropriée
         switch (event.action) {
           case "create": {
+            // Trop ancienne : refusée avant tout envoi (tombstone expirée côté serveur).
+            if (Date.now() - event.createdAt > MAX_CREATE_AGE_MS) {
+              throw Object.assign(
+                new Error(
+                  "Enregistrement trop ancien (plus de 25 jours) : il n'est plus envoyé pour ne pas recréer un événement supprimé entre-temps.",
+                ),
+                { code: STALE_CREATE_CODE },
+              );
+            }
             // Écriture mise en file par une ancienne version (1.0.8) sans clé :
             // l'identifiant de la ligne, stable d'un rejeu à l'autre, en tient lieu.
             if (!payload.idempotencyKey) payload.idempotencyKey = event.id;
@@ -479,12 +500,24 @@ export async function processQueue(): Promise<number> {
         const errorMessage =
           error?.message || error?.code || "Erreur inconnue";
         const conflict = isConflictError(error);
-        const transient = isTransientError(error);
+        const stale = isStaleCreateError(error);
+        const transient = !stale && isTransientError(error);
         let exhausted = false;
-        let reason: "conflict" | "permanent" | "transient-cap" = "permanent";
+        let reason: "conflict" | "permanent" | "transient-cap" | "stale" = "permanent";
 
         try {
-        if (conflict) {
+        if (stale) {
+          // Définitif tout de suite : rejouer ne changerait rien. Visible comme
+          // les autres écritures épuisées, avec la raison dans lastError.
+          exhausted = true;
+          reason = "stale";
+          await database.runAsync(
+            `UPDATE pending_events SET status = 'failed', retryCount = ?, lastError = ? WHERE id = ?`,
+            MAX_RETRIES,
+            errorMessage,
+            event.id,
+          );
+        } else if (conflict) {
           // Conflit de version : définitif tout de suite, inutile de réessayer.
           exhausted = true;
           reason = "conflict";

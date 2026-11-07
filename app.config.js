@@ -8,6 +8,12 @@ config();
 const firebaseEnvironments = require("./config/firebaseEnvironments.json");
 
 const APP_ENVS = ["production", "staging"];
+// Project each environment must talk to (mirror of EXPECTED_PROJECT_IDS in
+// config/firebaseEnv.ts and scripts/easCopyFirebaseFiles.js).
+const EXPECTED_PROJECT_IDS = {
+  production: "samaye-53723",
+  staging: "samaye-staging",
+};
 const STAGING_PLACEHOLDER_PREFIX = "STAGING_PLACEHOLDER_";
 
 // EXPO_PUBLIC_* variables that override one field of the Firebase web config
@@ -49,6 +55,13 @@ function resolveFirebaseWebConfig(appEnv) {
     // Fail an EAS build early; only warn for local tooling (expo config, lint).
     if (process.env.EAS_BUILD) throw new Error(message);
     console.warn(`[app.config] ${message}`);
+  }
+  // A wrong project id would send staging data to production or the reverse.
+  if (firebase.projectId !== EXPECTED_PROJECT_IDS[appEnv]) {
+    throw new Error(
+      `Firebase config for APP_ENV=${appEnv} expects project "${EXPECTED_PROJECT_IDS[appEnv]}" ` +
+        `but names "${firebase.projectId}".`,
+    );
   }
   return firebase;
 }

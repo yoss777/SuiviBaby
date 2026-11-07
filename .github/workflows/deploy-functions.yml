@@ -7,13 +7,19 @@ name: Deploy Cloud Functions
 #   project (alias "staging" in .firebaserc, secret GCP_SA_KEY_STAGING), then
 #   production waits for the "production" GitHub environment approval
 #   (required reviewers set by Yoss in Settings → Environments).
-# - Manual runs (workflow_dispatch) pick the target explicitly.
+# - Manual runs (workflow_dispatch) pick the target explicitly. Production is
+#   only ever deployed from main (a dispatch from another branch skips it).
+# - Every deploy needs the "test" job (functions lint + jest + rules tests).
+# - GCP keys are only read in jobs bound to their environment: GCP_SA_KEY in
+#   "production", GCP_SA_KEY_STAGING in "staging" (docs/ENVIRONMENTS.md).
 #
 # Required configuration (not created by this file):
-#   secrets:   GCP_SA_KEY (production, existing), FIREBASE_PROJECT_ID (existing),
-#              GCP_SA_KEY_STAGING (staging, to create with the staging project)
+#   secrets:   GCP_SA_KEY (to move to the "production" environment secrets),
+#              FIREBASE_PROJECT_ID (existing),
+#              GCP_SA_KEY_STAGING (staging environment, with the staging project)
 #   variables: STAGING_ENABLED ("true" once staging exists)
-#   environments: production (required reviewers), staging (optional)
+#   environments: production (restricted to main, required reviewers once staging
+#                 is live), staging (optional)
 
 on:
   workflow_dispatch:
@@ -33,19 +39,56 @@ on:
       - "firestore.rules"
       - "firestore.indexes.json"
 
-concurrency:
-  group: deploy-functions-${{ github.ref }}
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
+  test:
+    name: Lint & tests (functions, rules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
+      - name: ESLint Cloud Functions
+        run: npx eslint functions --quiet
+
+      - name: Cloud Functions tests (coverage thresholds in functions/jest.config.js)
+        run: cd functions && npm test -- --ci --coverage
+
+      # The demo- project id needs no credentials.
+      - name: Firestore and Storage rules tests
+        run: >-
+          npx -y firebase-tools@15 emulators:exec --only firestore,storage
+          --project demo-samaye 'npm run test:rules:run'
+
   staging:
     name: Deploy to staging
+    needs: test
     if: >
       vars.STAGING_ENABLED == 'true' &&
       (github.event_name == 'push' ||
        (github.event_name == 'workflow_dispatch' && inputs.target == 'staging'))
     runs-on: ubuntu-latest
     environment: staging
+    # One staging deploy at a time, whatever the branch.
+    concurrency:
+      group: deploy-functions-staging
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +100,16 @@ jobs:
 
       - name: Install function dependencies
         run: cd functions && npm ci
+
+      # The staging functions must never point at production resources: no
+      # production project id may remain in the code. Only the per-project
+      # functions/.env.samaye-53723 file (not matched by *.js) may name it.
+      - name: Guard, no production project id in the functions code
+        run: |
+          if grep -R "samaye-53723" functions/*.js functions/lib; then
+            echo "::error::samaye-53723 is hard-coded in functions/ (see matches above). Derive it from the deployed project (functions/lib/projectConfig.js)."
+            exit 1
+          fi
 
       # TODO(S11.7, pending Yoss's go): replace the JSON key with Workload
       # Identity Federation:
@@ -105,18 +158,28 @@ jobs:
 
   production:
     name: Deploy to production
-    needs: staging
+    needs: [test, staging]
+    # Only from main: a manual dispatch from another branch must never reach
+    # production (the code deployed with --force would be that branch's).
     # Runs after a successful staging deploy, or directly when staging is
     # skipped (STAGING_ENABLED not set → today's main → production behaviour,
-    # or a manual run targeting production). Never after a failed staging run.
+    # or a manual run targeting production). Never after a failed test or
+    # staging run.
     if: >
       always() &&
+      github.ref == 'refs/heads/main' &&
+      needs.test.result == 'success' &&
       (needs.staging.result == 'success' || needs.staging.result == 'skipped') &&
       (github.event_name == 'push' ||
        (github.event_name == 'workflow_dispatch' && inputs.target == 'production'))
     runs-on: ubuntu-latest
-    # Approval gate only once staging is live, so nothing changes before.
-    environment: ${{ vars.STAGING_ENABLED == 'true' && 'production' || '' }}
+    # Always bound to the "production" environment: GCP_SA_KEY is only read
+    # here, and Yoss restricts the environment to main (branch rule) and, once
+    # staging is live, adds required reviewers. Without reviewers: no gate.
+    environment: production
+    concurrency:
+      group: deploy-functions-production
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 

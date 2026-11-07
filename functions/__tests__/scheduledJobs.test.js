@@ -25,7 +25,7 @@ describe("checkAndSendReminders", () => {
   let logSpy;
   let errSpy;
 
-  function seed({ prefs = {}, hoursAgo = 5, type = "biberon", tokens = { t1: "ExponentPushToken[a]" }, extra = {} } = {}) {
+  function seed({ prefs = {}, hoursAgo = 5, type = "biberon", tokens = { t1: "ExponentPushToken[a]" }, extra = {}, access = true } = {}) {
     const data = {
       "user_preferences/u": {
         healthDataConsent: { granted: true, version: "2.2" },
@@ -34,6 +34,7 @@ describe("checkAndSendReminders", () => {
       },
       "children/c": { name: "Léa" },
       "user_child_access/u_c": { userId: "u", childId: "c" },
+      ...(access ? { "children/c/access/u": { role: "owner", userId: "u" } } : {}),
       ...extra,
     };
     for (const [id, token] of Object.entries(tokens)) data[`device_tokens/${id}`] = { userId: "u", enabled: true, token };
@@ -143,15 +144,123 @@ describe("checkAndSendReminders", () => {
     expect(keys(docs, "notification_history/")).toHaveLength(0);
   });
 
-  it("night/quiet hours: the job has no quiet-hours logic (sends at any hour)", async () => {
-    jest.useFakeTimers({ now: new Date(2026, 10, 9, 3, 0, 0), doNotFake: ["nextTick", "setImmediate", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "queueMicrotask", "hrtime", "performance"] });
-    try {
-      memoryStore(seed());
+  // Décision produit en attente (notes S11) : aucune plage de nuit aujourd'hui.
+  it.todo("night/quiet hours: no reminder between the user's quiet hours (product decision pending)");
+
+  it("skips a child whose access document is gone, even if the index entry remains (revoked member)", async () => {
+    memoryStore(seed({ access: false }));
+    await fns.checkAndSendReminders();
+    expect(expoClient.sendPushNotificationsAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the audience: any role with an access document is reminded", async () => {
+    for (const role of ["owner", "admin", "contributor", "viewer"]) {
+      jest.clearAllMocks();
+      expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+      memoryStore(seed({ extra: { "children/c/access/u": { role, userId: "u" } } }));
       await fns.checkAndSendReminders();
       expect(pushed()).toHaveLength(1);
-    } finally {
-      jest.useRealTimers();
     }
+  });
+
+  it("an event whose date is missing or invalid never triggers an immediate reminder (fallback query)", async () => {
+    for (const date of ["not a date", 12345, undefined]) {
+      jest.clearAllMocks();
+      const data = seed({ hoursAgo: null });
+      data["events/bad"] = { childId: "c", type: "biberon", ...(date === undefined ? {} : { date }) };
+      memoryStore(data);
+      await fns.checkAndSendReminders();
+      expect(expoClient.sendPushNotificationsAsync).not.toHaveBeenCalled();
+    }
+  });
+
+  it("several overdue categories after the only token died: one send, the rest is skipped", async () => {
+    expoClient.sendPushNotificationsAsync.mockResolvedValue([
+      { status: "error", message: "gone", details: { error: "DeviceNotRegistered" } },
+    ]);
+    const data = seed({
+      prefs: { notifications: { push: true, reminders: { enabled: true, thresholds: { repas: 3, changes: 3, vitamines: 3 } } } },
+    });
+    data["events/e2"] = { childId: "c", type: "couche", date: ts(Date.now() - 6 * HOUR) };
+    data["events/e3"] = { childId: "c", type: "vitamine", date: ts(Date.now() - 6 * HOUR) };
+    const docs = memoryStore(data);
+    await fns.checkAndSendReminders();
+    expect(expoClient.sendPushNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(docs.has("device_tokens/t1")).toBe(false);
+    expect(keys(docs, "notification_history/")).toHaveLength(0);
+  });
+
+  it("mixed tickets: the live device counts as delivered (history written), the dead token is removed", async () => {
+    expoClient.sendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: "ok", id: "1" },
+      { status: "error", message: "gone", details: { error: "DeviceNotRegistered" } },
+    ]);
+    const docs = memoryStore(seed({ tokens: { live: "ExponentPushToken[live]", dead: "ExponentPushToken[dead]" } }));
+    await fns.checkAndSendReminders();
+    expect(docs.has("device_tokens/live")).toBe(true);
+    expect(docs.has("device_tokens/dead")).toBe(false);
+    expect(keys(docs, "notification_history/")).toHaveLength(1);
+  });
+
+  it("a ticket in error other than DeviceNotRegistered keeps the token and writes no history", async () => {
+    expoClient.sendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: "error", message: "rate", details: { error: "MessageRateExceeded" } },
+    ]);
+    const docs = memoryStore(seed());
+    await fns.checkAndSendReminders();
+    expect(docs.has("device_tokens/t1")).toBe(true);
+    expect(keys(docs, "notification_history/")).toHaveLength(0);
+  });
+
+  it("two push chunks, the second throws: history is recorded for the delivered first chunk, no duplicate on retry", async () => {
+    expoClient.chunkPushNotifications.mockImplementationOnce((m) => m.map((x) => [x]));
+    expoClient.sendPushNotificationsAsync
+      .mockResolvedValueOnce([{ status: "ok", id: "1" }])
+      .mockRejectedValueOnce(new Error("expo down"));
+    const docs = memoryStore(seed({ tokens: { a: "ExponentPushToken[a]", b: "ExponentPushToken[b]" } }));
+    await fns.checkAndSendReminders();
+    expect(keys(docs, "notification_history/")).toHaveLength(1);
+
+    jest.clearAllMocks();
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+    await fns.checkAndSendReminders();
+    // within the 2 h window: nobody is notified twice
+    expect(expoClient.sendPushNotificationsAsync).not.toHaveBeenCalled();
+  });
+
+  it("two push chunks that both throw: no history, error reported, retried next run", async () => {
+    expoClient.chunkPushNotifications.mockImplementationOnce((m) => m.map((x) => [x]));
+    expoClient.sendPushNotificationsAsync.mockRejectedValue(new Error("expo down"));
+    const docs = memoryStore(seed({ tokens: { a: "ExponentPushToken[a]", b: "ExponentPushToken[b]" } }));
+    await fns.checkAndSendReminders();
+    expect(keys(docs, "notification_history/")).toHaveLength(0);
+    expect(errSpy).toHaveBeenCalled();
+  });
+});
+
+describe("removeDeadTokens", () => {
+  const reminders = require("../lib/reminders");
+  const tok = (token, del) => ({ token, ref: { delete: del } });
+
+  it("a failed delete does not reject (the reminder history is not dropped) and counts only the deleted tokens", async () => {
+    const ok = jest.fn().mockResolvedValue();
+    const ko = jest.fn().mockRejectedValue(new Error("unavailable"));
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const count = await reminders.removeDeadTokens(
+      [tok("a", ok), tok("b", ko), tok("live", jest.fn())],
+      new Set(["a", "b"]),
+    );
+    expect(count).toBe(1);
+    expect(ok).toHaveBeenCalled();
+    expect(ko).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("deletes nothing when no token is dead", async () => {
+    const del = jest.fn();
+    expect(await reminders.removeDeadTokens([tok("a", del)], new Set())).toBe(0);
+    expect(del).not.toHaveBeenCalled();
   });
 });
 
@@ -222,5 +331,96 @@ describe("sendWeeklyRecap (additional cases)", () => {
     memoryStore(d);
     await fns.sendWeeklyRecap();
     expect(sent()).toEqual([]);
+  });
+});
+
+// Bornes de la semaine du récap, y compris les semaines de changement d'heure.
+// Le code calcule en heure locale du processus : on fixe TZ=Europe/Paris ici
+// (en production le runtime est en UTC, voir les notes de la revue ECC).
+describe("sendWeeklyRecap week boundaries (Europe/Paris, DST weeks)", () => {
+  const originalTz = process.env.TZ;
+  let spies;
+  const sent = () => Resend.mock.results.flatMap((r) => r.value.emails.send.mock.calls.map(([p]) => p));
+  const FAKE = ["nextTick", "setImmediate", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "queueMicrotask", "hrtime", "performance"];
+  const run = async (nowLocal, eventLocal) => {
+    jest.useFakeTimers({ now: nowLocal, doNotFake: FAKE });
+    const docs = memoryStore({
+      "user_preferences/u": { notifications: { email: true }, healthDataConsent: { granted: true, version: "2.2" } },
+      "children/c": { name: "Léa" },
+      "children/c/access/u": { role: "owner", userId: "u" },
+      "user_child_access/u_c": { userId: "u", childId: "c" },
+      "events/e": { childId: "c", type: "biberon", date: ts(eventLocal.getTime()) },
+    });
+    await fns.sendWeeklyRecap();
+    jest.useRealTimers();
+    return docs;
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.TZ = "Europe/Paris";
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.RECAP_UNSUBSCRIBE_SECRET = "s".repeat(32);
+    adminMod.auth.mockReturnValue({ getUser: jest.fn(async () => ({ email: "o@t.com", emailVerified: true, disabled: false })) });
+    spies = ["log", "warn", "error"].map((m) => jest.spyOn(console, m).mockImplementation(() => {}));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.RECAP_UNSUBSCRIBE_SECRET;
+    spies.forEach((s) => s.mockRestore());
+  });
+
+  it("the test really runs in Paris time", () => {
+    expect(new Date(2026, 6, 1).getTimezoneOffset()).toBe(-120);
+    expect(new Date(2026, 0, 1).getTimezoneOffset()).toBe(-60);
+  });
+
+  it("normal week (Mon 9 Nov 2026): Monday 00:00 and Sunday 23:59:59 are inside, the neighbours are outside", async () => {
+    const now = new Date(2026, 10, 9, 8, 0, 0);
+    expect(sent()).toHaveLength(0);
+    const inside = [new Date(2026, 10, 2, 0, 0, 0), new Date(2026, 10, 8, 23, 59, 59)];
+    const outside = [new Date(2026, 10, 1, 23, 59, 59), new Date(2026, 10, 9, 0, 0, 0)];
+    for (const d of inside) {
+      jest.clearAllMocks();
+      await run(now, d);
+      expect(sent()).toHaveLength(1);
+    }
+    for (const d of outside) {
+      jest.clearAllMocks();
+      await run(now, d);
+      expect(sent()).toHaveLength(0);
+    }
+  });
+
+  it("week after the spring change (Mon 30 Mar 2026, 7 days minus 1 h): bounds are local midnights", async () => {
+    const now = new Date(2026, 2, 30, 8, 0, 0);
+    const docs = await run(now, new Date(2026, 2, 29, 23, 30, 0));
+    expect(sent()).toHaveLength(1);
+    const [h] = keys(docs, "recap_history/");
+    expect(docs.get(h).weekStart.toMillis()).toBe(new Date(2026, 2, 23, 0, 0, 0, 0).getTime());
+    expect(docs.get(h).weekEnd.toMillis()).toBe(new Date(2026, 2, 29, 23, 59, 59, 999).getTime());
+    jest.clearAllMocks();
+    await run(now, new Date(2026, 2, 30, 0, 30, 0)); // Monday morning: next week
+    expect(sent()).toHaveLength(0);
+    await run(now, new Date(2026, 2, 22, 23, 30, 0)); // previous Sunday: previous week
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("week after the autumn change (Mon 26 Oct 2026, 7 days plus 1 h): bounds are local midnights", async () => {
+    const now = new Date(2026, 9, 26, 8, 0, 0);
+    const docs = await run(now, new Date(2026, 9, 25, 23, 30, 0));
+    expect(sent()).toHaveLength(1);
+    const [h] = keys(docs, "recap_history/");
+    expect(docs.get(h).weekStart.toMillis()).toBe(new Date(2026, 9, 19, 0, 0, 0, 0).getTime());
+    expect(docs.get(h).weekEnd.toMillis()).toBe(new Date(2026, 9, 25, 23, 59, 59, 999).getTime());
+    jest.clearAllMocks();
+    await run(now, new Date(2026, 9, 19, 0, 30, 0)); // first night of the week
+    expect(sent()).toHaveLength(1);
+    jest.clearAllMocks();
+    await run(now, new Date(2026, 9, 26, 0, 30, 0));
+    expect(sent()).toHaveLength(0);
   });
 });

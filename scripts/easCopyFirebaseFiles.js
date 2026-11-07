@@ -45,7 +45,8 @@ const TARGETS = {
 };
 
 function run({ rootDir, env, log = console.log }) {
-  const appEnv = env.APP_ENV || "production";
+  // Same resolution as app.config.js.
+  const appEnv = env.APP_ENV || env.EXPO_PUBLIC_APP_ENV || "production";
   const expectedProjectId = EXPECTED_PROJECT_IDS[appEnv];
   if (!expectedProjectId) {
     throw new Error(`Unknown APP_ENV "${appEnv}".`);
@@ -81,7 +82,15 @@ function run({ rootDir, env, log = console.log }) {
       continue;
     }
 
-    const projectId = target.readProjectId(fs.readFileSync(dest, "utf8"));
+    let projectId;
+    try {
+      projectId = target.readProjectId(fs.readFileSync(dest, "utf8"));
+    } catch (error) {
+      throw new Error(`[firebase-files] ${platform}: ${target.dest} cannot be read (${error.message}).`);
+    }
+    if (!projectId) {
+      throw new Error(`[firebase-files] ${platform}: ${target.dest} has no project id.`);
+    }
     if (projectId !== expectedProjectId) {
       throw new Error(
         `[firebase-files] ${platform}: ${target.dest} belongs to project "${projectId}" ` +

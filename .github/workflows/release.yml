@@ -16,10 +16,22 @@ name: Release
 #   "store-release" environment approval — never at submit time;
 # - Cloud Functions are no longer deployed here (deploy-functions.yml owns it).
 #
+# - release ordering (ECC review M4): the app calls the Cloud Functions
+#   setMemberRole and createShareCode; a store build must not go out before they
+#   are deployed in production. This workflow has no gcloud credentials, so the
+#   check is an explicit confirmation input (functions_ready) for the production
+#   profile, with the command to run in docs/ENVIRONMENTS.md;
+# - remote build numbers (appVersionSource: remote) are checked before every
+#   production build: never initialised, or lower than the last known number,
+#   fails with the command to run (docs/ENVIRONMENTS.md).
+#
 # Required configuration (not created by this file, see docs/ENVIRONMENTS.md):
 #   secrets: EXPO_TOKEN, GOOGLE_PLAY_SERVICE_ACCOUNT_KEY (Android submit),
-#            GCP_SA_KEY (app_config write, production)
-#   environments: store-release (required reviewers: Yoss)
+#            APP_CONFIG_WRITER_KEY (app_config write; a dedicated service
+#            account with roles/datastore.user, stored as a secret of the
+#            "store-release" environment). GCP_SA_KEY is NOT read here: it is
+#            reserved to the "production" environment (deploy-functions.yml).
+#   environments: store-release (required reviewers: Yoss, restricted to main)
 #   EAS: file variable GOOGLE_SERVICES_JSON (production + preview environments),
 #        remote build numbers initialised (eas build:version:set)
 on:
@@ -41,6 +53,11 @@ on:
         options:
           - production
           - staging
+      functions_ready:
+        description: "Production profile: I checked that setMemberRole and createShareCode are deployed in production (docs/ENVIRONMENTS.md, release ordering)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: release-${{ inputs.platform }}-${{ inputs.profile }}
@@ -51,6 +68,17 @@ jobs:
     name: Quality gate
     runs-on: ubuntu-latest
     steps:
+      # Release ordering: apps >= 1.0.10 call setMemberRole / createShareCode.
+      - name: Functions deployed before the store build (production profile)
+        if: inputs.profile == 'production'
+        env:
+          FUNCTIONS_READY: ${{ inputs.functions_ready }}
+        run: |
+          if [ "$FUNCTIONS_READY" != "true" ]; then
+            echo "::error::Deploy the Cloud Functions first (deploy-functions.yml), check that setMemberRole and createShareCode exist in production (docs/ENVIRONMENTS.md, 'Ordre de release'), then re-run with functions_ready = true."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -95,6 +123,32 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - run: npm ci
+
+      # appVersionSource is remote: the counter lives on EAS. A counter never
+      # initialised (or lower than the last known build) makes the store reject
+      # the upload, after a 30 minute build. Minimums = last known numbers,
+      # documented in docs/ENVIRONMENTS.md (update both together).
+      - name: Check the remote build number (production profile)
+        if: inputs.profile == 'production'
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          MIN_IOS_BUILD_NUMBER: "32"
+          MIN_ANDROID_VERSION_CODE: "13"
+        run: |
+          set -euo pipefail
+          eas build:version:get --platform "$PLATFORM" --profile production \
+            --non-interactive --json > "$RUNNER_TEMP/version.json"
+          CURRENT=$(jq -r '.buildNumber // .versionCode // .appBuildVersion // empty' "$RUNNER_TEMP/version.json")
+          if [ "$PLATFORM" = "ios" ]; then MIN="$MIN_IOS_BUILD_NUMBER"; else MIN="$MIN_ANDROID_VERSION_CODE"; fi
+          if ! printf '%s' "$CURRENT" | grep -Eq '^[0-9]+$'; then
+            echo "::error::No remote $PLATFORM build number is set for the production profile. Run: eas build:version:set --platform $PLATFORM --profile production (value >= $MIN, see docs/ENVIRONMENTS.md)."
+            exit 1
+          fi
+          if [ "$CURRENT" -lt "$MIN" ]; then
+            echo "::error::Remote $PLATFORM build number is $CURRENT, lower than the last known number $MIN. Run: eas build:version:set --platform $PLATFORM --profile production (docs/ENVIRONMENTS.md)."
+            exit 1
+          fi
+          echo "Remote $PLATFORM build number: $CURRENT (minimum $MIN, next build $((CURRENT + 1)))" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build and wait
         id: build
@@ -205,8 +259,16 @@ jobs:
 
       # The script has no dependency (Node fetch + crypto), no npm ci needed.
       # MIN_VERSION is not set: the script keeps the current minVersion.
+      # Dedicated service account (roles/datastore.user only), secret of the
+      # store-release environment: the deploy key (GCP_SA_KEY) stays out of reach
+      # of this job.
       - name: Update Firestore app_config/latest_version
-        run: node ./scripts/updateAppConfig.mjs
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::Secret APP_CONFIG_WRITER_KEY is missing in the store-release environment (docs/ENVIRONMENTS.md). Fallback: npm run update-app-config from a trusted machine."
+            exit 1
+          fi
+          node ./scripts/updateAppConfig.mjs
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY: ${{ secrets.APP_CONFIG_WRITER_KEY }}
           RELEASE_NOTES: Version ${{ needs.build.outputs.app_version }}

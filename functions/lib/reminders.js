@@ -58,13 +58,20 @@ async function refreshLastEventAt(db, childId, types) {
   await db.runTransaction(async (tx) => {
     const childSnap = await tx.get(childRef);
     if (!childSnap.exists) return;
-    const known = childSnap.data()?.lastEventAt || {};
-    const todo = LAST_EVENT_KEYS.filter((k) => wanted.has(k) || known[k] === undefined);
+    const raw = childSnap.data()?.lastEventAt;
+    // Valeur héritée null ou scalaire : un chemin pointé `lastEventAt.x` ne peut
+    // pas la convertir de façon sûre, on réécrit alors la map entière.
+    const isMap = raw !== null && typeof raw === "object" && !Array.isArray(raw);
+    const known = isMap ? raw : {};
+    const todo = LAST_EVENT_KEYS.filter((k) => !isMap || wanted.has(k) || known[k] === undefined);
     const snaps = await Promise.all(todo.map((k) => tx.get(lastEventQuery(db, childId, k))));
-    const patch = {};
+    const values = {};
     todo.forEach((k, i) => {
-      patch[`lastEventAt.${k}`] = snaps[i].empty ? null : (snaps[i].docs[0].data().date ?? null);
+      values[k] = snaps[i].empty ? null : (snaps[i].docs[0].data().date ?? null);
     });
+    const patch = isMap
+      ? Object.fromEntries(Object.entries(values).map(([k, v]) => [`lastEventAt.${k}`, v]))
+      : { lastEventAt: values };
     tx.update(childRef, patch);
   });
 }
@@ -97,7 +104,9 @@ async function getLastEventMillis(db, childId, childData, category, stats) {
   if (stats) stats.fallbackReads += 1;
   const snap = await lastEventQuery(db, childId, category).get();
   if (snap.empty) return null;
-  return toMillis(snap.docs[0].data().date) ?? 0;
+  // Date absente ou invalide : on ne sait pas quand a eu lieu l'événement, donc
+  // aucun rappel (un 0 ferait partir un rappel immédiat à chaque passage).
+  return toMillis(snap.docs[0].data().date);
 }
 
 /** True when the child has at least one event in [weekStart, weekEnd] (no figure is read). */
@@ -150,8 +159,20 @@ async function sendPushWithTickets(client, messages) {
   const dead = new Set();
   let delivered = 0;
   let failed = 0;
+  let chunkErrors = 0;
+  let firstError = null;
   for (const chunk of client.chunkPushNotifications(messages)) {
-    const tickets = await client.sendPushNotificationsAsync(chunk);
+    // Un lot qui échoue ne doit pas faire oublier les lots déjà livrés : sinon
+    // l'historique n'est pas écrit et le prochain passage renotifie ces appareils.
+    let tickets;
+    try {
+      tickets = await client.sendPushNotificationsAsync(chunk);
+    } catch (error) {
+      chunkErrors += 1;
+      failed += chunk.length;
+      firstError = firstError || error;
+      continue;
+    }
     chunk.forEach((message, i) => {
       const ticket = Array.isArray(tickets) ? tickets[i] : undefined;
       if (ticket?.status === "error") {
@@ -162,14 +183,23 @@ async function sendPushWithTickets(client, messages) {
       }
     });
   }
-  return { delivered, failed, dead };
+  // Rien n'est parti : l'erreur remonte (nouvel essai au passage suivant).
+  if (firstError && delivered === 0) throw firstError;
+  return { delivered, failed, dead, chunkErrors };
 }
 
 /** Delete the device_tokens documents whose token is dead. */
 async function removeDeadTokens(tokenDocs, dead) {
   const victims = tokenDocs.filter((t) => dead.has(t.token));
-  await Promise.all(victims.map((t) => t.ref.delete()));
-  return victims.length;
+  // allSettled : un jeton qui ne se supprime pas ne doit pas faire échouer
+  // l'envoi déjà livré (l'historique serait perdu, donc un doublon au passage suivant).
+  const results = await Promise.allSettled(victims.map((t) => t.ref.delete()));
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.warn(`removeDeadTokens: could not delete token ${victims[i].ref?.id ?? ""}:`, r.reason?.message ?? r.reason);
+    }
+  });
+  return results.filter((r) => r.status === "fulfilled").length;
 }
 
 /** One structured log line at the end of a run. */

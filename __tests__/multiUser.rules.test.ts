@@ -10,7 +10,7 @@
  *
  * Run: npm run test:rules (Firestore + Storage emulators).
  */
-process.env.GCLOUD_PROJECT = "samaye-53723";
+process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || "samaye-53723";
 
 import {
   initializeTestEnvironment,
@@ -33,7 +33,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-const PROJECT_ID = "samaye-53723";
+const PROJECT_ID = process.env.GCLOUD_PROJECT as string;
 const A = "userA";
 const B = "userB";
 const CHILD = "childAB";
@@ -186,8 +186,10 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     // B cannot promote himself, through the callable or the client.
     await expect(callRole(B, "admin")).rejects.toMatchObject({ code: "permission-denied" });
     await assertFails(updateDoc(doc(asUser(B), "children", CHILD, "access", B), { role: "admin" }));
-    // A cannot do it from the client either: only the callable writes access docs.
-    await assertFails(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "admin", canWriteEvents: true }));
+    // A cannot write an inconsistent role from the client either (the callable
+    // is the way; the transition rule below only accepts consistent flags).
+    await assertFails(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "admin" }));
+    await assertFails(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "owner", canWriteEvents: true }));
 
     await callRole(A, "admin");
     await assertSucceeds(setDoc(doc(asUser(B), "events", "byParentB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
@@ -199,6 +201,16 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     await callRole(A, "contributor");
     await assertFails(setDoc(doc(asUser(B), "events", "byProcheB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
     await assertSucceeds(getDoc(doc(asUser(B), "events", "plain")));
+  });
+
+  test("transition (app <= 1.0.9): A can still switch B's role from the client with consistent flags, B cannot", async () => {
+    const flags = {
+      admin: { canWriteEvents: true, canWriteLikes: true, canWriteComments: true },
+      contributor: { canWriteEvents: false, canWriteLikes: true, canWriteComments: true },
+    };
+    await assertFails(updateDoc(doc(asUser(B), "children", CHILD, "access", B), { role: "admin", ...flags.admin }));
+    await assertSucceeds(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "admin", ...flags.admin }));
+    await assertSucceeds(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "contributor", ...flags.contributor }));
   });
 
   test("a non-owner cannot revoke B (C has no access, B cannot revoke himself via the child access)", async () => {
