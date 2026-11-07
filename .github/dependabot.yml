@@ -14,6 +14,18 @@ updates:
       - dependency-name: "react-native-*"
       - dependency-name: "@react-native-firebase/*"
       - dependency-name: "@sentry/react-native"
+      # Liés au SDK Expo / Reanimated (PR #34, #36 fermées le 2026-11-07) :
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "@types/react"
+      - dependency-name: "@shopify/react-native-skia"
+      - dependency-name: "@react-navigation/*"
+      - dependency-name: "@gorhom/bottom-sheet"
+      - dependency-name: "@react-native-picker/picker"
+      - dependency-name: "@react-native-async-storage/async-storage"
+      # Majeures du SDK Firebase web : lot dédié avec tests sur appareil (#35).
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
@@ -22,6 +34,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # Majeures du socle serveur : lot « socle serveur » testé (#31–#33).
+    ignore:
+      - dependency-name: "firebase-functions"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-server-sdk"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
