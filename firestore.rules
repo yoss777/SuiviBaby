@@ -485,9 +485,17 @@ service cloud.firestore {
       // Création : l'utilisateur ne peut créer que des tokens à son nom
       allow create: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid;
+      // Mise à jour : son propre token, ou reprise d'un token posé par un
+      // autre compte sur le même appareil. L'id du doc dérive du token Expo,
+      // identique pour tous les comptes d'un téléphone : sans reprise, le
+      // compte suivant n'était jamais enregistré (permission refusée) et
+      // l'ancien continuait de recevoir ses notifications sur cet appareil.
+      // Le token lui-même ne change pas ; écrire ce doc suppose de le
+      // connaître, ce que seul l'appareil (ou son propriétaire) peut faire.
       allow update: if isSignedIn() &&
-        resource.data.userId == request.auth.uid &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        (resource.data.userId == request.auth.uid ||
+          request.resource.data.token == resource.data.token);
       // Suppression : uniquement ses propres tokens
       allow delete: if isSignedIn() &&
         resource.data.userId == request.auth.uid;

@@ -4,7 +4,7 @@
 // Google/Apple confirm) -> requestAccountDeletion -> sign out -> login.
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -135,6 +135,29 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
 
   const modals = (
     <>
+      {/* La vérification des enfants partagés appelle une Cloud Function
+          (démarrage à froid : plusieurs secondes). Sans retour visuel, la
+          popup précédente se fermait et l'app semblait reprendre la main. */}
+      <Modal
+        visible={isChecking}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {}}
+      >
+        <View style={styles.checkingBackdrop}>
+          <View
+            style={[styles.checkingCard, { backgroundColor: colors.backgroundCard }]}
+            accessibilityRole="progressbar"
+            accessibilityLabel="Préparation de la suppression du compte"
+          >
+            <IconPulseDots />
+            <Text style={[styles.loaderText, { color: colors.textStrong }]}>
+              Préparation de la suppression…
+            </Text>
+          </View>
+        </View>
+      </Modal>
       <InfoModal
         visible={infoModal.visible}
         title={infoModal.title}
@@ -232,4 +255,17 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
 const styles = StyleSheet.create({
   loader: { alignItems: "center", gap: 12, paddingVertical: 8 },
   loaderText: { fontSize: 15, fontWeight: "600" },
+  checkingBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  checkingCard: {
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+  },
 });

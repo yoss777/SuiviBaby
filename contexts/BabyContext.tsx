@@ -428,6 +428,13 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     }
 
     const childListeners = childListenersRef.current;
+    // Enfants dont le listener a répondu au moins une fois (données, absence,
+    // soft-delete). Comparer des tailles (childData vs accès) restait bloqué
+    // sur 'degraded' dès qu'un enfant soft-deleted gardait son accès, ou quand
+    // le snapshot des accès arrivait après ceux des enfants.
+    const resolvedChildIds = new Set<string>();
+    const allChildrenResolved = () =>
+      [...currentChildIdsRef.current].every((id) => resolvedChildIds.has(id));
 
     const initialLoadTimeout = setTimeout(() => {
       if (hasCachedBootstrapRef.current) {
@@ -477,10 +484,11 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
               }
             }
 
+            resolvedChildIds.add(childId);
             // Single call to recompute state
             syncState();
 
-            if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+            if (allChildrenResolved()) {
               hasResolvedInitialLiveDataRef.current = true;
               clearTimeout(initialLoadTimeout);
               setLoading(false);
@@ -495,9 +503,10 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
             childListeners.delete(childId);
             childDataRef.current.delete(childId);
             currentChildIdsRef.current.delete(childId);
+            resolvedChildIds.delete(childId);
             syncState();
             // Ensure loading resolves even if all children fail
-            if (childDataRef.current.size >= currentChildIdsRef.current.size) {
+            if (allChildrenResolved()) {
               hasResolvedInitialLiveDataRef.current = true;
               clearTimeout(initialLoadTimeout);
               setLoading(false);
@@ -520,6 +529,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           unsub();
           childListeners.delete(childId);
           childDataRef.current.delete(childId);
+          resolvedChildIds.delete(childId);
         }
       });
 
@@ -527,6 +537,14 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
       syncState();
 
       if (currentChildIds.size === 0) {
+        hasResolvedInitialLiveDataRef.current = true;
+        clearTimeout(initialLoadTimeout);
+        setLoading(false);
+        setChildrenLoaded(true);
+        setStatus('ready');
+      } else if (allChildrenResolved()) {
+        // Changement d'accès sans nouvel enfant à attendre : les données
+        // live sont déjà là, rien à « actualiser ».
         hasResolvedInitialLiveDataRef.current = true;
         clearTimeout(initialLoadTimeout);
         setLoading(false);

@@ -202,8 +202,11 @@ export async function getOfferings(): Promise<{
   family: PurchasesOffering | null;
 }> {
   try {
-    // S'assurer que le SDK est initialisé avant d'appeler
+    // S'assurer que le SDK est initialisé avant d'appeler. Sans clé valide
+    // (clés de production pas encore posées), il ne l'est jamais : appeler
+    // Purchases lèverait "There is no singleton instance".
     await initRevenueCat();
+    if (!isInitialized) return { default: null, family: null };
     const offerings = await Purchases.getOfferings();
     return {
       default: offerings.current,
@@ -224,6 +227,9 @@ export async function purchasePackage(
 ): Promise<{ success: boolean; customerInfo: CustomerInfo | null }> {
   try {
     await initRevenueCat();
+    if (!isInitialized) {
+      throw new Error("RevenueCat non configuré : achat impossible");
+    }
     const { customerInfo } = await Purchases.purchasePackage(pkg);
     return { success: true, customerInfo };
   } catch (error: any) {

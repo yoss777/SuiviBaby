@@ -813,6 +813,17 @@ et ne pas subir d'animations si je les ai désactivées.
   `webhook_logs`, `notification_history`, `recap_history` ; job nocturne de
   réconciliation des accès (`children/*/access` vs `user_child_access`) ;
   index `eventLikes` redondants supprimés.
+- [ ] **12.6** Deux rôles affichés, « Parent » (`admin` : saisit, modifie,
+  exporte tout le suivi) et « Proche » (`contributor` : lit tout, like et
+  commente les photos, exporte ses seules interactions). `viewer` reste dans
+  le code mais n'est plus proposé. Décision Yoss du 2026-11-07 : un code de
+  partage ou une invitation donne toujours « Proche » (un code qui fuit ne
+  donne jamais plus) ; seul le propriétaire passe un membre en « Parent » ou
+  le repasse en « Proche », depuis la fiche de l'enfant, via une Cloud
+  Function (les accès restent écrits côté serveur). Codes de partage créés
+  côté serveur dans le même lot. Mettre à jour le message de l'export
+  (`app/settings/export.tsx`, « enfant partagé avec vous ») avec les
+  nouveaux libellés.
 
 **Revue ECC (S11 + S12)** : `architect`, `pr-test-analyzer`.
 
