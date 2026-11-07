@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     marginTop: 4,
-    fontSize: 11,
+    fontSize: 12,
     color: "#dc2626",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     textAlign: "center",

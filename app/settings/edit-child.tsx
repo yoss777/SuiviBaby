@@ -326,7 +326,7 @@ export default function EditChildScreen() {
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-              <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement...</Text>
+              <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement...</Text>
             </View>
           ) : allChildren.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -335,7 +335,7 @@ export default function EditChildScreen() {
             </View>
           ) : (
             <View style={styles.childrenList}>
-              <Text style={[styles.infoText, { color: nc.textMuted }]}>
+              <Text style={[styles.infoText, { color: nc.textLight }]}>
                 Appuyez sur un enfant pour modifier son nom. Seuls les enfants dont vous êtes propriétaire sont modifiables.
               </Text>
               {allChildren.map((child) => {
@@ -397,7 +397,7 @@ export default function EditChildScreen() {
                           accessibilityLabel={child.isOwner ? `Modifier le nom de ${child.name}` : `${child.name}`}
                         >
                           <Text style={[styles.childName, { color: nc.textStrong }]}>{child.name}</Text>
-                          <Text style={[styles.childAge, { color: nc.textMuted }]}>
+                          <Text style={[styles.childAge, { color: nc.textLight }]}>
                             {ageText}{isHidden ? " • masqué" : ""}
                           </Text>
                         </TouchableOpacity>
@@ -506,7 +506,7 @@ export default function EditChildScreen() {
               {transferModal.loading && transferModal.parents.length === 0 ? (
                 <ActivityIndicator size="small" color={Colors[colorScheme].tint} style={{ marginVertical: 20 }} />
               ) : transferModal.parents.length === 0 ? (
-                <Text style={[styles.noParentsText, { color: nc.textMuted }]}>Aucun autre parent disponible.</Text>
+                <Text style={[styles.noParentsText, { color: nc.textLight }]}>Aucun autre parent disponible.</Text>
               ) : (
                 <View style={styles.parentsList}>
                   {transferModal.parents.map((parent) => {
@@ -521,7 +521,7 @@ export default function EditChildScreen() {
                         <Ionicons name={isSelected ? "radio-button-on" : "radio-button-off"} size={20} color={isSelected ? Colors[colorScheme].tint : nc.textMuted} />
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.parentName, { color: nc.textStrong }]}>{parent.email || parent.userId.slice(0, 8) + "..."}</Text>
-                          <Text style={[styles.parentRole, { color: nc.textMuted }]}>{parent.role}</Text>
+                          <Text style={[styles.parentRole, { color: nc.textLight }]}>{parent.role}</Text>
                         </View>
                       </TouchableOpacity>
                     );

@@ -1202,7 +1202,7 @@ export default function GrowthScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                { color: nc.textMuted },
+                { color: nc.textLight },
                 isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
               ]}
             >
@@ -1326,7 +1326,7 @@ export default function GrowthScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 mesure{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1343,7 +1343,7 @@ export default function GrowthScreen() {
             return (
               <View key={key} style={styles.statsBreakdownItem}>
                 <View style={[styles.statsBreakdownDot, { backgroundColor: color }]} />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>{label}</Text>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>{label}</Text>
                 <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{count}</Text>
               </View>
             );
@@ -1472,7 +1472,7 @@ export default function GrowthScreen() {
                   ? "Aucune mesure enregistrée"
                   : "Aucune mesure pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 Suivez le poids, la taille et le périmètre crânien
               </ThemedText>
               {events.length === 0 && (
@@ -1624,7 +1624,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   dayContent: {
     gap: 10,
@@ -1717,7 +1717,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   deltaText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   expandTrigger: {
@@ -1782,7 +1782,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   skeletonContainer: {

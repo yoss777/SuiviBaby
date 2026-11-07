@@ -247,7 +247,7 @@ export default function NotificationsScreen() {
     <View style={styles.settingItem}>
       <View style={styles.settingContent}>
         <ThemedText style={styles.settingTitle}>{title}</ThemedText>
-        <Text style={[styles.settingDescription, { color: nc.textMuted }]}>
+        <Text style={[styles.settingDescription, { color: nc.textLight }]}>
           {description}
         </Text>
       </View>
@@ -316,7 +316,7 @@ export default function NotificationsScreen() {
           <Text
             style={[
               styles.settingDescription,
-              { color: nc.textMuted },
+              { color: nc.textLight },
               (isDisabled || isRowMuted) && styles.settingDescriptionDisabled,
             ]}
           >

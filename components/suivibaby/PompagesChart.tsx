@@ -1211,7 +1211,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tooltipTime: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   tooltipValue: {

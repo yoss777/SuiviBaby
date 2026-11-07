@@ -881,7 +881,7 @@ export function SoinsForm({
               Retour
             </Text>
           </Pressable>
-          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>
+          <Text style={[styles.breadcrumbText, { color: nc.textLight }]}>
             Soins / Vaccins / Choisir
           </Text>
         </View>
@@ -1014,7 +1014,7 @@ export function SoinsForm({
               Retour
             </Text>
           </Pressable>
-          <Text style={[styles.breadcrumbText, { color: nc.textMuted }]}>
+          <Text style={[styles.breadcrumbText, { color: nc.textLight }]}>
             Soins / Vitamines / Choisir
           </Text>
         </View>
@@ -1608,7 +1608,7 @@ export function SoinsForm({
             <Text
               style={[
                 styles.selectorText,
-                { color: nc.textMuted },
+                { color: nc.textLight },
                 vaccinName && {
                   color: nc.textStrong,
                   fontWeight: "500" as const,
@@ -1705,7 +1705,7 @@ export function SoinsForm({
             <Text
               style={[
                 styles.selectorText,
-                { color: nc.textMuted },
+                { color: nc.textLight },
                 vitamineName && {
                   color: nc.textStrong,
                   fontWeight: "500" as const,

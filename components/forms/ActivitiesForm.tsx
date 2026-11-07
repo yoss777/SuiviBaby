@@ -528,7 +528,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 -
@@ -557,7 +557,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 +

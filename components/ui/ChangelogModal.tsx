@@ -102,7 +102,7 @@ export const ChangelogModal = memo(function ChangelogModal({
         </Text>
 
         {/* Date */}
-        <Text style={[styles.slideDate, { color: nc.textMuted }]}>
+        <Text style={[styles.slideDate, { color: nc.textLight }]}>
           {item.date}
         </Text>
 

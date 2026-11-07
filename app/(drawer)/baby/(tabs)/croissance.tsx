@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
   },
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   summaryLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     elevation: 6,
     zIndex: 1000,
     width: 90,
-    height: 54,
+    minHeight: 54,
   },
   tooltipContent: {
     padding: 8,
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tooltipTime: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
   },
   tooltipValue: {
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   omsLegendTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   omsLegendText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   cardSwipeWrapper: {
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   showMoreButton: {

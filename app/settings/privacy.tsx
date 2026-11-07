@@ -134,7 +134,7 @@ const sections = [
             <Text
               style={[
                 styles.headerDate,
-                { color: nc.textMuted },
+                { color: nc.textLight },
               ]}
             >
               Version 2.2 — dernière mise à jour : 6 novembre 2026

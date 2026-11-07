@@ -311,7 +311,7 @@ export default function PremiumScreen() {
               ? "Choisissez votre plan"
               : "Gérez votre abonnement"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {currentTier === "free"
               ? "Sans engagement, résiliable à tout moment."
               : "Changez de plan ou de cycle à tout moment."}
@@ -380,7 +380,7 @@ export default function PremiumScreen() {
                   <Text
                     style={[
                       styles.cycleButtonText,
-                      { color: selectedPlan === key ? nc.white : nc.textMuted },
+                      { color: selectedPlan === key ? nc.white : nc.textLight },
                     ]}
                   >
                     {labels[key]}
@@ -786,7 +786,7 @@ export default function PremiumScreen() {
                 />
               </View>
               {expandedFaq === index && (
-                <Text style={[styles.faqAnswer, { color: nc.textMuted }]}>
+                <Text style={[styles.faqAnswer, { color: nc.textLight }]}>
                   {item.a}
                 </Text>
               )}
@@ -821,7 +821,7 @@ export default function PremiumScreen() {
                       styles.devButtonText,
                       {
                         color:
-                          currentTier === t ? nc.todayAccent : nc.textMuted,
+                          currentTier === t ? nc.todayAccent : nc.textLight,
                       },
                     ]}
                   >
@@ -852,7 +852,7 @@ export default function PremiumScreen() {
                     style={[
                       styles.devButtonText,
                       {
-                        color: currentBilling === b ? nc.success : nc.textMuted,
+                        color: currentBilling === b ? nc.success : nc.textLight,
                       },
                     ]}
                   >
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
   tabLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   activeTabDot: { width: 6, height: 6, borderRadius: 3 },
   savingsBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  savingsBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  savingsBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   planCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -949,7 +949,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderBottomLeftRadius: 12,
   },
-  planBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  planBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   planName: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   priceRow: { flexDirection: "row", alignItems: "baseline", marginBottom: 2 },
   price: { fontSize: 32, fontWeight: "800" },
@@ -1032,7 +1032,7 @@ const styles = StyleSheet.create({
   manageButtonText: { fontSize: 14, fontWeight: "500" },
   linksRow: { alignItems: "center", gap: 16, paddingVertical: 16 },
   devSection: { marginTop: 20, alignItems: "center" },
-  devLabel: { fontSize: 11, marginBottom: 6 },
+  devLabel: { fontSize: 12, marginBottom: 6 },
   devButtons: { flexDirection: "row", gap: 8 },
   devButton: {
     paddingHorizontal: 14,

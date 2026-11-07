@@ -1,5 +1,6 @@
 import {
   getCategoryColors,
+  getCategoryTextColors,
   getNeutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
@@ -64,10 +65,13 @@ export const SleepWidget = memo(function SleepWidget({
 
   const sleepColors = {
     primary: cat.sommeil.primary,
+    // Texte/icône posés sur fond clair : variante foncée (≥ 4.5:1)
+    text: getCategoryTextColors(colorScheme).sommeil,
     background: cat.sommeil.background,
     border: cat.sommeil.border,
     textDark: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B",
-    textMuted: colorScheme === "dark" ? "#9B8CBF" : "#7A6B9A",
+    // Texte secondaire lisible (≥ 4.5:1 sur le fond lavande)
+    textMuted: colorScheme === "dark" ? "#9B8CBF" : "#6B5C8C",
     buttonSecondaryBg: colorScheme === "dark" ? "#2A2140" : "#EDE9F4",
   };
 
@@ -254,7 +258,7 @@ export const SleepWidget = memo(function SleepWidget({
             <Text
               style={[
                 styles.startButtonText,
-                { color: preferNight ? sleepColors.primary : nc.backgroundCard },
+                { color: preferNight ? sleepColors.text : nc.backgroundCard },
               ]}
             >
               Sieste
@@ -281,7 +285,7 @@ export const SleepWidget = memo(function SleepWidget({
             <Text
               style={[
                 styles.startButtonText,
-                { color: preferNight ? nc.backgroundCard : sleepColors.primary },
+                { color: preferNight ? nc.backgroundCard : sleepColors.text },
               ]}
             >
               Nuit

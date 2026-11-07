@@ -1165,7 +1165,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1281,7 +1281,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tooltipDetail: {
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
     textAlign: "center",
   },
@@ -1307,7 +1307,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
   },
   // Where baby sleeps best section
@@ -1376,7 +1376,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   rankingValue: {
-    fontSize: 11,
+    fontSize: 12,
     width: 80,
     textAlign: "right",
   },
@@ -1394,7 +1394,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   momentLabel: {
-    fontSize: 10,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.3,
   },
@@ -1404,7 +1404,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   momentDetail: {
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
   },
   qualityRow: {

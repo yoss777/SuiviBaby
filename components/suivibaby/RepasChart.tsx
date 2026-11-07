@@ -1633,7 +1633,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   typeFilterLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   toggleContainer: {
@@ -1721,7 +1721,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1811,7 +1811,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tooltipDetail: {
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
   },
   statsContainer: {
@@ -1836,7 +1836,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
   },
   insightContainer: {

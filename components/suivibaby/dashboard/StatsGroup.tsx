@@ -286,7 +286,7 @@ export const StatsGroup = memo(function StatsGroup({
                 <Text
                   style={[
                     styles.timeSince,
-                    { color: nc.textMuted },
+                    { color: nc.textLight },
                     isWarning && { color: nc.error },
                   ]}
                 >

@@ -158,7 +158,7 @@ export default function ThemeScreen() {
             <Text
               style={[
                 styles.themeDescription,
-                { color: nc.textMuted },
+                { color: nc.textLight },
               ]}
             >
               {option.description}

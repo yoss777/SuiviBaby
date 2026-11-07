@@ -135,7 +135,7 @@ export default function ProfileScreen() {
                 placeholderTextColor={nc.textMuted}
               />
               {isInvalid && (
-                <Text style={[styles.helperText, { color: nc.textMuted }]}>
+                <Text style={[styles.helperText, { color: nc.textLight }]}>
                   6 caractères minimum.
                 </Text>
               )}

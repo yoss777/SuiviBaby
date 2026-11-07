@@ -1244,11 +1244,11 @@ export default function ActivitiesScreen() {
               if (walkStart && walkEnd) {
                 return (
                   <>
-                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                    <Text style={[styles.sessionTimeText, { color: nc.textLight }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
                       {formatTime(walkStart)}
                     </Text>
                     <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>{"↓"}</Text>
-                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }]}>
+                    <Text style={[styles.sessionTimeText, { color: nc.textLight }]}>
                       {formatTime(walkEnd)}
                     </Text>
                   </>
@@ -1257,7 +1257,7 @@ export default function ActivitiesScreen() {
               if (walkOngoing) {
                 return (
                   <>
-                    <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                    <Text style={[styles.sessionTimeText, { color: nc.textLight }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
                       {formatTime(walkStart)}
                     </Text>
                     <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>{"↓"}</Text>
@@ -1268,7 +1268,7 @@ export default function ActivitiesScreen() {
                 );
               }
               return (
-                <Text style={[styles.sessionTimeText, { color: nc.textMuted }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
+                <Text style={[styles.sessionTimeText, { color: nc.textLight }, isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }]]}>
                   {formatTime(time)}
                 </Text>
               );
@@ -1303,7 +1303,7 @@ export default function ActivitiesScreen() {
                       <Text style={[styles.sessionMetricSep, { color: nc.textMuted }]}> · </Text>
                     )}
                     {details.description && (
-                      <Text style={[styles.sessionMetricLight, { color: nc.textMuted }]} numberOfLines={1}>
+                      <Text style={[styles.sessionMetricLight, { color: nc.textLight }]} numberOfLines={1}>
                         {details.description}
                       </Text>
                     )}
@@ -1347,7 +1347,7 @@ export default function ActivitiesScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 activité{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1366,7 +1366,7 @@ export default function ActivitiesScreen() {
                     { backgroundColor: config.color },
                   ]}
                 />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>{config.label}</Text>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>{config.label}</Text>
                 <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{count}</Text>
               </View>
             );
@@ -1548,7 +1548,7 @@ export default function ActivitiesScreen() {
                   ? "Aucune activité enregistrée"
                   : "Aucune activité pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 {"Suivez les activités et le temps d'éveil"}
               </ThemedText>
               {events.length === 0 && (
@@ -1698,7 +1698,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1751,11 +1751,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   sessionTimeArrow: {
-    fontSize: 10,
+    fontSize: 12,
     lineHeight: 12,
   },
   sessionTimeOngoing: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   sessionTimeTextLast: {
@@ -1885,7 +1885,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

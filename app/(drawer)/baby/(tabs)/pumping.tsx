@@ -1173,7 +1173,7 @@ export default function PumpingScreen() {
           <Text
             style={[
               styles.sessionTimeText,
-              { color: nc.textMuted },
+              { color: nc.textLight },
               isLatest && { color: nc.textStrong, fontWeight: "600" },
             ]}
           >
@@ -1222,7 +1222,7 @@ export default function PumpingScreen() {
         {/* Total */}
         <View style={styles.sessionTotal}>
           <Text style={styles.sessionTotalValue}>{totalQty}</Text>
-          <Text style={[styles.sessionTotalUnit, { color: nc.textMuted }]}>ml</Text>
+          <Text style={[styles.sessionTotalUnit, { color: nc.textLight }]}>ml</Text>
         </View>
 
         {/* Edit icon */}
@@ -1266,7 +1266,7 @@ export default function PumpingScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.pompages.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 session{item.pompages.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1275,7 +1275,7 @@ export default function PumpingScreen() {
               <Text style={[styles.dayStatValue, styles.dayStatValueAccent]}>
                 {item.totalQuantity}
               </Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>ml total</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>ml total</Text>
             </View>
           </View>
         </View>
@@ -1286,7 +1286,7 @@ export default function PumpingScreen() {
             <View
               style={[styles.statsBreakdownDot, { backgroundColor: nc.success }]}
             />
-            <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Gauche</Text>
+            <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>Gauche</Text>
             <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
               {item.totalQuantityLeft} ml
             </Text>
@@ -1295,7 +1295,7 @@ export default function PumpingScreen() {
             <View
               style={[styles.statsBreakdownDot, { backgroundColor: nc.todayAccent }]}
             />
-            <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>Droite</Text>
+            <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>Droite</Text>
             <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
               {item.totalQuantityRight} ml
             </Text>
@@ -1428,7 +1428,7 @@ export default function PumpingScreen() {
                   ? "Aucune session enregistrée"
                   : "Aucune session pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 Suivez vos sessions de tire-lait
               </ThemedText>
               {pompages.length === 0 && (
@@ -1563,7 +1563,7 @@ const styles = StyleSheet.create({
     color: eventColors.pumping.dark,
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   dayStatDivider: {
     width: 1,
@@ -1659,7 +1659,7 @@ const styles = StyleSheet.create({
     backgroundColor: neutralColors.todayAccent,
   },
   quantityLabelValue: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   sessionTotal: {
@@ -1675,7 +1675,7 @@ const styles = StyleSheet.create({
     color: eventColors.pumping.dark,
   },
   sessionTotalUnit: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
 
@@ -1764,7 +1764,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: neutralColors.white,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 

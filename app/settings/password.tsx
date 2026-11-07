@@ -300,7 +300,7 @@ export default function PasswordScreen() {
                 disabled={isSaving}
                 accessibilityState={{ disabled: isSaving }}
               >
-                <Text style={[styles.forgotLinkText, { color: nc.textMuted }]}>
+                <Text style={[styles.forgotLinkText, { color: nc.textLight }]}>
                   Mot de passe oublié ?
                 </Text>
               </TouchableOpacity>
@@ -343,7 +343,7 @@ export default function PasswordScreen() {
                 </TouchableOpacity>
               </View>
               {newPassword.length > 0 && unmetRules.length > 0 && (
-                <Text style={[styles.hint, { color: nc.textMuted }]}>
+                <Text style={[styles.hint, { color: nc.textLight }]}>
                   {unmetRules.map((rule) => rule.label).join(", ")}
                 </Text>
               )}
@@ -370,7 +370,7 @@ export default function PasswordScreen() {
                 />
               </View>
               {newPassword.length > 0 && (
-                <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.strengthLabel, { color: nc.textLight }]}>
                   Force: {strengthLabel}
                 </Text>
               )}

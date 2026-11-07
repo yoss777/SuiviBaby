@@ -1385,7 +1385,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   photoDate: {
-    fontSize: 11,
+    fontSize: 12,
     color: "rgba(255, 255, 255, 0.6)",
     fontStyle: "italic",
   },
@@ -1463,7 +1463,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   verticalHintText: {
-    fontSize: 11,
+    fontSize: 12,
     color: "rgba(255, 255, 255, 0.4)",
   },
 });

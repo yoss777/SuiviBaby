@@ -1273,7 +1273,7 @@ export default function DiapersScreen() {
               <Text
                 style={[
                   styles.sessionTimeText,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   isLast && { color: nc.textStrong, fontWeight: "600" },
                 ]}
               >
@@ -1303,7 +1303,7 @@ export default function DiapersScreen() {
                   {typeLabel}
                 </Text>
                 {detailsText.length > 0 && (
-                  <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+                  <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                     {detailsText}
                   </Text>
                 )}
@@ -1360,7 +1360,7 @@ export default function DiapersScreen() {
                 <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>
                   {item.mictionsCount + item.sellesCount}
                 </Text>
-                <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                   excretion{item.mictionsCount + item.sellesCount > 1 ? "s" : ""}
                 </Text>
               </View>
@@ -1377,7 +1377,7 @@ export default function DiapersScreen() {
                     { backgroundColor: eventColors.miction.dark },
                   ]}
                 />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                   Miction{item.mictionsCount > 1 ? "s" : ""}
                 </Text>
                 <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
@@ -1393,7 +1393,7 @@ export default function DiapersScreen() {
                     { backgroundColor: eventColors.selle.dark },
                   ]}
                 />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                   Selle{item.sellesCount > 1 ? "s" : ""}
                 </Text>
                 <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>
@@ -1548,7 +1548,7 @@ export default function DiapersScreen() {
                 ? "Aucune couche enregistrée"
                 : "Aucune couche pour ce filtre"}
             </ThemedText>
-            <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+            <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
               Suivez les changes de bébé
             </ThemedText>
 
@@ -1699,7 +1699,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   // Stats breakdown
   statsBreakdown: {
@@ -1853,7 +1853,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

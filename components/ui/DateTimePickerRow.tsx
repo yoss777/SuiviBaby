@@ -220,7 +220,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
                   accessibilityRole="button"
                   accessibilityLabel="Annuler"
                 >
-                  <Text style={[styles.toolbarButton, { color: nc.textMuted }]}>
+                  <Text style={[styles.toolbarButton, { color: nc.textLight }]}>
                     Annuler
                   </Text>
                 </TouchableOpacity>

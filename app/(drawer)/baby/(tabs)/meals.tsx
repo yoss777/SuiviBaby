@@ -1324,7 +1324,7 @@ export default function MealsScreen() {
           <Text
             style={[
               styles.sessionTimeText,
-              { color: nc.textMuted },
+              { color: nc.textLight },
               isLatest && { color: nc.textNormal, fontWeight: "600" },
             ]}
           >
@@ -1350,7 +1350,7 @@ export default function MealsScreen() {
           <View style={styles.sessionDetails}>
             <Text style={[styles.sessionType, { color: nc.textStrong }]}>{getTypeLabel()}</Text>
             {isTetee && !hasDuration && (
-              <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+              <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                 {meal.coteGauche && meal.coteDroit
                   ? "Sein gauche · Sein droit"
                   : meal.coteGauche
@@ -1381,7 +1381,7 @@ export default function MealsScreen() {
                     <View
                       style={[styles.durationDot, styles.durationDotLeft, { backgroundColor: nc.success }]}
                     />
-                    <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>G</Text>
+                    <Text style={[styles.durationLabelText, { color: nc.textLight }]}>G</Text>
                     <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
                       {leftDuration} min
                     </Text>
@@ -1390,7 +1390,7 @@ export default function MealsScreen() {
                     <View
                       style={[styles.durationDot, styles.durationDotRight, { backgroundColor: nc.todayAccent }]}
                     />
-                    <Text style={[styles.durationLabelText, { color: nc.textMuted }]}>D</Text>
+                    <Text style={[styles.durationLabelText, { color: nc.textLight }]}>D</Text>
                     <Text style={[styles.durationLabelValue, { color: nc.textNormal }]}>
                       {rightDuration} min
                     </Text>
@@ -1493,7 +1493,7 @@ export default function MealsScreen() {
         {isTetee && hasDuration && (
           <View style={styles.sessionTotal}>
             <Text style={styles.sessionTotalValue}>{totalDuration}</Text>
-            <Text style={[styles.sessionTotalUnit, { color: nc.textMuted }]}>min</Text>
+            <Text style={[styles.sessionTotalUnit, { color: nc.textLight }]}>min</Text>
           </View>
         )}
 
@@ -1542,7 +1542,7 @@ export default function MealsScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textStrong }]}>{item.meals.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>repas</Text>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>repas</Text>
             </View>
           </View>
         </View>
@@ -1728,7 +1728,7 @@ export default function MealsScreen() {
                   ? "Aucun repas enregistré"
                   : "Aucun repas pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 Suivez les repas et biberons
               </ThemedText>
               {meals.length === 0 && (
@@ -1865,7 +1865,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   // Stats Breakdown
   statsBreakdown: {
@@ -1978,11 +1978,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#6366f1",
   },
   durationLabelText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   durationLabelValue: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   sessionTotal: {
@@ -1998,7 +1998,7 @@ const styles = StyleSheet.create({
     color: eventColors.meal.dark,
   },
   sessionTotalUnit: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
 
@@ -2112,7 +2112,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

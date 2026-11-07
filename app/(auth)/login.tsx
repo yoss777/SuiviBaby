@@ -561,7 +561,7 @@ export default function LoginScreen() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {isLogin ? "Bienvenue" : "Créer un compte"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {isLogin
               ? "Connectez-vous pour suivre le quotidien de votre bébé"
               : "Commencez à suivre le quotidien de votre bébé"}
@@ -700,7 +700,7 @@ export default function LoginScreen() {
                   ]}
                 />
               </View>
-              <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.strengthLabel, { color: nc.textLight }]}>
                 Force: {strengthLabel}
               </Text>
             </View>
@@ -778,7 +778,7 @@ export default function LoginScreen() {
           {/* Séparateur social */}
           <View style={styles.dividerRow}>
             <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
-            <Text style={[styles.dividerText, { color: nc.textMuted }]}>ou</Text>
+            <Text style={[styles.dividerText, { color: nc.textLight }]}>ou</Text>
             <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
           </View>
 
@@ -854,7 +854,7 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   showConsentError && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
@@ -881,7 +881,7 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   showConsentError && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
@@ -907,7 +907,7 @@ export default function LoginScreen() {
                   la politique de confidentialité
                 </Text>
               </TouchableOpacity>
-              <Text style={[styles.legalText, { color: nc.textMuted }]}>.</Text>
+              <Text style={[styles.legalText, { color: nc.textLight }]}>.</Text>
             </View>
           )}
 
@@ -940,7 +940,7 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted, flex: 1 },
+                  { color: nc.textLight, flex: 1 },
                   showConsentError && !hasHealthConsent && { color: nc.error, fontWeight: "bold" },
                 ]}
               >
@@ -974,7 +974,7 @@ export default function LoginScreen() {
 
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
-            <Text style={[styles.switchText, { color: nc.textMuted }]}>
+            <Text style={[styles.switchText, { color: nc.textLight }]}>
               {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
             </Text>
             <TouchableOpacity
@@ -993,7 +993,7 @@ export default function LoginScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+          <Text style={[styles.footerText, { color: nc.textLight }]}>
             Vos données sont sécurisées et privées
           </Text>
         </View>
@@ -1209,7 +1209,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   socialLegalText: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
     lineHeight: 16,
   },

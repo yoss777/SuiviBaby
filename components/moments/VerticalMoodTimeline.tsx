@@ -85,7 +85,7 @@ const TimelineItem = ({
     >
       {/* Time label */}
       <View style={styles.timeColumn}>
-        <Text style={[styles.timeText, { color: nc.textMuted }]}>
+        <Text style={[styles.timeText, { color: nc.textLight }]}>
           {formatTime(mood.date)}
         </Text>
       </View>

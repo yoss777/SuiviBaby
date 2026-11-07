@@ -146,7 +146,7 @@ export default function TermsScreen() {
             <ThemedText style={styles.headerTitle}>
               Conditions d&apos;utilisation
             </ThemedText>
-            <Text style={[styles.headerDate, { color: nc.textMuted }]}>
+            <Text style={[styles.headerDate, { color: nc.textLight }]}>
               Dernière mise à jour : 30 octobre 2026
             </Text>
           </View>

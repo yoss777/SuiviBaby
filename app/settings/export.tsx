@@ -679,7 +679,7 @@ export default function ExportScreen() {
                 <Text
                   style={[
                     styles.summaryEmpty,
-                    { color: nc.textMuted },
+                    { color: nc.textLight },
                   ]}
                 >
                   Aucun événement à exporter
@@ -690,7 +690,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.summaryLabel,
-                        { color: nc.textMuted },
+                        { color: nc.textLight },
                       ]}
                     >
                       {row.label}
@@ -729,7 +729,7 @@ export default function ExportScreen() {
             <Text
               style={[
                 styles.summaryHint,
-                { color: nc.textMuted },
+                { color: nc.textLight },
               ]}
             >
               {summaryIndex + 1}/{summary.length}
@@ -987,7 +987,7 @@ export default function ExportScreen() {
           <Text
             style={[
               styles.formatDescription,
-              { color: nc.textMuted },
+              { color: nc.textLight },
             ]}
           >
             {format.description}
@@ -1056,7 +1056,7 @@ export default function ExportScreen() {
               <Text
                 style={[
                   styles.childSubtitle,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                 ]}
               >
                 {totalEvents === 0
@@ -1066,7 +1066,7 @@ export default function ExportScreen() {
               <Text
                 style={[
                   styles.childSubtitle,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                 ]}
               >
                 {totalInteractions === 0
@@ -1273,7 +1273,7 @@ export default function ExportScreen() {
                     <Text
                       style={[
                         styles.childSubtitle,
-                        { color: nc.textMuted },
+                        { color: nc.textLight },
                       ]}
                     >
                       Chargement des enfants...
@@ -1283,7 +1283,7 @@ export default function ExportScreen() {
                   <Text
                     style={[
                       styles.childSubtitle,
-                      { color: nc.textMuted },
+                      { color: nc.textLight },
                     ]}
                   >
                     Aucun enfant disponible.
@@ -1410,7 +1410,7 @@ export default function ExportScreen() {
                 <Text
                   style={[
                     styles.childSubtitle,
-                    { color: nc.textMuted },
+                    { color: nc.textLight },
                   ]}
                 >
                   Aucune donnée à exporter.

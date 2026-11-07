@@ -306,7 +306,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 -
@@ -334,7 +334,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 +
@@ -370,7 +370,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 -
@@ -398,7 +398,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 +

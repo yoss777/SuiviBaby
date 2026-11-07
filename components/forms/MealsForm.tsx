@@ -1064,7 +1064,7 @@ export function MealsForm({
                 <Text
                   style={[
                     styles.quantiteSolideDesc,
-                    { color: nc.textMuted },
+                    { color: nc.textLight },
                     quantiteSolide === option.value &&
                       styles.quantiteSolideDescActive,
                     quantiteSolide === option.value && {
@@ -1668,7 +1668,7 @@ const styles = StyleSheet.create({
   },
   quantiteSolideDesc: {
     width: "100%",
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 2,
     textAlign: "center",
   },

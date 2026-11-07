@@ -1055,7 +1055,7 @@ export default function StatsScreen() {
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   isActive && { color: activeColor, fontWeight: "700" },
                 ]}
               >
@@ -1088,7 +1088,7 @@ export default function StatsScreen() {
       {!loadError && (
           <View>
             <View style={styles.weekLabelRow}>
-              <Text style={[styles.weekLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.weekLabel, { color: nc.textLight }]}>
                 {weekLabel}
               </Text>
               {historyLoading && (
@@ -1112,7 +1112,7 @@ export default function StatsScreen() {
               </TouchableOpacity>
             )}
             {refreshFailed && (
-              <Text style={[styles.statusNote, { color: nc.textMuted }]}>
+              <Text style={[styles.statusNote, { color: nc.textLight }]}>
                 Actualisation impossible, données non mises à jour
               </Text>
             )}
@@ -1142,7 +1142,7 @@ export default function StatsScreen() {
                 ) : (
                   <SkeletonBlock width={22} height={18} radius={4} />
                 )}
-                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.resumeLabel, { color: nc.textLight }]}>
                   repas
                 </Text>
               </TouchableOpacity>
@@ -1171,7 +1171,7 @@ export default function StatsScreen() {
                 ) : (
                   <SkeletonBlock width={22} height={18} radius={4} />
                 )}
-                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.resumeLabel, { color: nc.textLight }]}>
                   pompages
                 </Text>
               </TouchableOpacity>
@@ -1200,7 +1200,7 @@ export default function StatsScreen() {
                 ) : (
                   <SkeletonBlock width={22} height={18} radius={4} />
                 )}
-                <Text style={[styles.resumeLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.resumeLabel, { color: nc.textLight }]}>
                   sommeils
                 </Text>
               </TouchableOpacity>
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
   },
@@ -1451,7 +1451,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   weekLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 6,
@@ -1476,7 +1476,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   resumeLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   exportButton: {

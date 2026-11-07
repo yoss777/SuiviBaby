@@ -214,7 +214,7 @@ export default function HiddenChildrenScreen() {
             <Text
               style={[
                 styles.emptyDescription,
-                { color: nc.textMuted },
+                { color: nc.textLight },
               ]}
             >
               Les enfants que vous masquez depuis le menu principal apparaîtront ici.
@@ -267,7 +267,7 @@ export default function HiddenChildrenScreen() {
                       <Text
                         style={[
                           styles.childMeta,
-                          { color: nc.textMuted },
+                          { color: nc.textLight },
                         ]}
                         numberOfLines={1}
                       >
@@ -343,7 +343,7 @@ export default function HiddenChildrenScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Annuler la restauration"
                 >
-                  <Text style={[styles.cancelButtonText, { color: nc.textMuted }]}>Annuler</Text>
+                  <Text style={[styles.cancelButtonText, { color: nc.textLight }]}>Annuler</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.confirmButton, { backgroundColor: nc.success }]}

@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   filterChipBadge: {
     minWidth: 18,
-    height: 18,
+    minHeight: 18,
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   filterChipBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -682,16 +682,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   cardTimeArrow: {
-    fontSize: 10,
-    lineHeight: 10,
+    fontSize: 12,
+    lineHeight: 12,
     fontWeight: "600",
   },
   cardTimeTextSecondary: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   cardTimeOngoing: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   cardDetails: {
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   // P4: Calendar & date chip styles
@@ -2656,7 +2656,7 @@ export default function ChronoScreen() {
                               {
                                 color: allSelected
                                   ? colors.tint
-                                  : colors.secondary,
+                                  : colors.secondaryText,
                               },
                             ]}
                           >
@@ -2698,7 +2698,7 @@ export default function ChronoScreen() {
                         color={colors.secondary}
                       />
                       <Text
-                        style={[styles.emptyText, { color: colors.secondary }]}
+                        style={[styles.emptyText, { color: colors.secondaryText }]}
                       >
                         {selectedTypes.length === 0
                           ? "Sélectionnez au moins un type pour afficher la timeline."

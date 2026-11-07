@@ -560,7 +560,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
       {/* Photo */}
       <View style={styles.inputGroup}>
         <Text style={[styles.inputLabel, { color: nc.textLight }]}>Photo</Text>
-        <Text style={[styles.photoPolicyHint, { color: nc.textMuted }]}>
+        <Text style={[styles.photoPolicyHint, { color: nc.textLight }]}>
           {
             "Gardez les photos dans un cadre privé entre adultes autorisés. Ne partagez pas d'image montrant les parties intimes de l'enfant ou un contenu corporel sensible."
           }
@@ -574,7 +574,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           >
             <ActivityIndicator size="small" color={eventColors.jalon.dark} />
             <Text
-              style={[styles.photoPlaceholderText, { color: nc.textMuted }]}
+              style={[styles.photoPlaceholderText, { color: nc.textLight }]}
             >
               {"Préparation de l'image..."}
             </Text>
@@ -649,7 +649,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           >
             <FontAwesome5 name="camera" size={20} color={nc.textMuted} />
             <Text
-              style={[styles.photoPlaceholderText, { color: nc.textMuted }]}
+              style={[styles.photoPlaceholderText, { color: nc.textLight }]}
             >
               Ajouter une photo
             </Text>
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   moodLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
   },

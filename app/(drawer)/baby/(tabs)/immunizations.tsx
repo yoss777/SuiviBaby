@@ -2071,8 +2071,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
-    color: "#9ca3af",
+    fontSize: 12,
+    color: "#6b7280",
   },
 
   // Stats breakdown
@@ -2133,7 +2133,7 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#9ca3af",
+    color: "#6b7280",
   },
   sessionTimeTextLast: {
     color: "#374151",
@@ -2254,7 +2254,7 @@ const styles = StyleSheet.create({
   vaccinSelectorText: {
     flex: 1,
     fontSize: 16,
-    color: "#999",
+    color: "#6b7280",
   },
   vaccinSelectorTextSelected: {
     color: "#333",
@@ -2332,7 +2332,7 @@ const styles = StyleSheet.create({
   },
   sheetBreadcrumbText: {
     fontSize: 12,
-    color: "#999",
+    color: "#6b7280",
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },

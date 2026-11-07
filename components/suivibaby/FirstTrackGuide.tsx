@@ -79,7 +79,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
         <Text style={[styles.celebrationTitle, { color: nc.textStrong }]}>
           Bravo !
         </Text>
-        <Text style={[styles.celebrationSubtitle, { color: nc.textMuted }]}>
+        <Text style={[styles.celebrationSubtitle, { color: nc.textLight }]}>
           {babyName} est bien suivi{activeChild?.gender === "female" ? "e" : ""}{" "}
           ! Vous pouvez ajouter des événements à tout moment avec le bouton + en
           bas à droite.
@@ -121,7 +121,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
       <Text style={[styles.title, { color: nc.textStrong }]}>
         Premier suivi de {babyName}
       </Text>
-      <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+      <Text style={[styles.subtitle, { color: nc.textLight }]}>
         Enregistrez votre premier événement — ça prend 3 secondes !
       </Text>
 
