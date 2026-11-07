@@ -167,6 +167,44 @@ describe("BabyContext", () => {
     });
   });
 
+  it("stays ready when a child is soft-deleted and when access changes after the children resolved", async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
+      JSON.stringify({
+        children: [{ id: "child-a", name: "A", birthDate: "01/01/2024" }],
+        activeChildId: "child-a",
+        cachedAt: Date.now(),
+      }),
+    );
+    const access = (ids: string[]) => ({
+      docs: ids.map((childId) => ({ data: () => ({ userId: "user-1", childId }) })),
+    });
+    const child = (name: string, extra: object = {}) => ({
+      exists: () => true,
+      data: () => ({ name, birthDate: "01/01/2024", ...extra }),
+    });
+
+    const { result } = renderHook(() => useBaby(), { wrapper });
+    await waitFor(() => expect(result.current.status).toBe("degraded"));
+
+    await act(async () => accessCallbacks[0]?.(access(["child-a", "child-b"])));
+    await act(async () => childCallbacks.get("child-a")?.(child("A")));
+    await act(async () => childCallbacks.get("child-b")?.(child("B")));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Deletion request: child-b is soft-deleted but keeps its access doc.
+    await act(async () =>
+      childCallbacks.get("child-b")?.(child("B", { deletedAt: "2026-11-07" })),
+    );
+    await waitFor(() => {
+      expect(result.current.children.map((c) => c.id)).toEqual(["child-a"]);
+      expect(result.current.status).toBe("ready");
+    });
+
+    // Access snapshot fires again (access doc touched) with nothing new to load.
+    await act(async () => accessCallbacks[0]?.(access(["child-a", "child-b"])));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+  });
+
   it("does not let late cache hydration overwrite live ready data", async () => {
     const deferredCache = createDeferred<string | null>();
     (AsyncStorage.getItem as jest.Mock).mockReturnValue(deferredCache.promise);
