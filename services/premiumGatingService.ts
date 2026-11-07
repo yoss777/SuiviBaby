@@ -58,7 +58,7 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
   pdf_export_limit: {
     title: "Export PDF utilisé",
     description: "Votre export PDF gratuit a été utilisé. Le rapport PDF est réservé à Premium et Famille. L'export JSON de vos données reste gratuit.",
-    ctaText: "Exporter en PDF",
+    ctaText: "Passer à Premium",
   },
   history_limit: {
     title: "Historique limité à 90 jours",
