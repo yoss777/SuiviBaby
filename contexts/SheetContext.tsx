@@ -5,6 +5,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
 } from 'react';
 import { BackHandler } from 'react-native';
@@ -172,14 +173,22 @@ export function isContentSheetProps(props: FormSheetProps): props is ContentShee
   return props.formType === 'content';
 }
 
-interface SheetContextType {
+interface SheetStateType {
   isOpen: boolean;
   viewProps: AnySheetProps | null;
+}
+
+interface SheetActionsType {
   openSheet: (props: AnySheetProps) => void;
   closeSheet: () => void;
 }
 
-const SheetContext = createContext<SheetContextType | undefined>(undefined);
+interface SheetContextType extends SheetStateType, SheetActionsType {}
+
+// Deux contextes : l'état change à chaque ouverture/fermeture, les actions sont
+// stables. Les écrans qui ne font qu'ouvrir une feuille n'utilisent que les actions.
+const SheetStateContext = createContext<SheetStateType | undefined>(undefined);
+const SheetActionsContext = createContext<SheetActionsType | undefined>(undefined);
 
 export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
   const [viewProps, setViewProps] = useState<AnySheetProps | null>(null);
@@ -225,24 +234,48 @@ export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.remove();
   }, [closeSheet]);
 
-  const value = {
-    isOpen: viewProps !== null,
-    viewProps,
-    openSheet,
-    closeSheet,
-  };
+  const stateValue = useMemo(
+    () => ({ isOpen: viewProps !== null, viewProps }),
+    [viewProps],
+  );
+  const actionsValue = useMemo(
+    () => ({ openSheet, closeSheet }),
+    [openSheet, closeSheet],
+  );
 
   return (
-    <SheetContext.Provider value={value}>
-      {children}
-    </SheetContext.Provider>
+    <SheetActionsContext.Provider value={actionsValue}>
+      <SheetStateContext.Provider value={stateValue}>
+        {children}
+      </SheetStateContext.Provider>
+    </SheetActionsContext.Provider>
   );
 };
 
-export const useSheet = () => {
-  const context = useContext(SheetContext);
+// État de la feuille seul (se met à jour à chaque ouverture/fermeture).
+export const useSheetState = (): SheetStateType => {
+  const context = useContext(SheetStateContext);
   if (context === undefined) {
-    throw new Error('useSheet must be used within a SheetProvider');
+    throw new Error('useSheetState must be used within a SheetProvider');
   }
   return context;
+};
+
+// Actions seules : identité stable, aucun re-rendu quand la feuille change.
+export const useSheetActions = (): SheetActionsType => {
+  const context = useContext(SheetActionsContext);
+  if (context === undefined) {
+    throw new Error('useSheetActions must be used within a SheetProvider');
+  }
+  return context;
+};
+
+// Compatibilité : état + actions (se re-rend avec l'état).
+export const useSheet = (): SheetContextType => {
+  const state = useContext(SheetStateContext);
+  const actions = useContext(SheetActionsContext);
+  if (state === undefined || actions === undefined) {
+    throw new Error('useSheet must be used within a SheetProvider');
+  }
+  return useMemo(() => ({ ...state, ...actions }), [state, actions]);
 };

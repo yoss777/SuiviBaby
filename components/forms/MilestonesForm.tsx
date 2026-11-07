@@ -324,13 +324,6 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
     setDateHeureDirty(true);
   }, []);
 
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(toDate(editData.date));
-    setDateHeureDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
-
   // ============================================
   // HANDLERS
   // ============================================

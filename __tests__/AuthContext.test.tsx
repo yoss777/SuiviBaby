@@ -40,6 +40,14 @@ jest.mock("@/services/todayEventsCache", () => ({
   clearTodayEventsCache: jest.fn(),
 }));
 
+jest.mock("@/services/weeklyEventsCache", () => ({
+  clearWeeklyEventsCache: jest.fn(),
+}));
+
+jest.mock("@/hooks/useChildPermissions", () => ({
+  resetChildPermissionsStore: jest.fn(),
+}));
+
 jest.mock("@/services/socialAuthService", () => ({
   signOutGoogle: jest.fn(() => Promise.resolve()),
 }));
@@ -68,6 +76,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { canUserAccessApp, createPatientUser } from "@/services/userService";
 import { startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
+import { clearWeeklyEventsCache } from "@/services/weeklyEventsCache";
+import { resetChildPermissionsStore } from "@/hooks/useChildPermissions";
 
 // Helper: create a mock Firebase user
 function mockFirebaseUser(overrides: Partial<any> = {}) {
@@ -297,8 +307,25 @@ describe("AuthContext", () => {
       });
 
       expect(clearTodayEventsCache).toHaveBeenCalled();
+      expect(clearWeeklyEventsCache).toHaveBeenCalled();
+      expect(resetChildPermissionsStore).toHaveBeenCalled();
       expect(firebaseSignOut).toHaveBeenCalled();
       expect(cleanupStaleExports).toHaveBeenCalledWith(0);
+    });
+
+    it("clears the weekly cache and the shared permissions store on a forced sign-out (CLEAR_USER)", async () => {
+      renderHook(() => useAuth(), { wrapper });
+      const authCallback = captureAuthCallback();
+      await act(async () => {
+        await authCallback(mockFirebaseUser());
+      });
+      jest.clearAllMocks();
+      await act(async () => {
+        await authCallback(null);
+      });
+      expect(clearTodayEventsCache).toHaveBeenCalled();
+      expect(clearWeeklyEventsCache).toHaveBeenCalled();
+      expect(resetChildPermissionsStore).toHaveBeenCalled();
     });
 
     it("still signs out when the export cleanup fails", async () => {

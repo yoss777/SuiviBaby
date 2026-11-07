@@ -1,4 +1,4 @@
-// hooks/useVoiceEventCreator.ts
+// services/voiceEventCreator.ts
 // Firebase event creation/modification/deletion from parsed voice commands.
 
 import VoiceCommandService from "@/services/voiceCommandService";

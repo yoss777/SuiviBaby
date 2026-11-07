@@ -12,7 +12,13 @@ const adminMod = require("firebase-admin");
 const { Expo } = require("expo-server-sdk");
 const { Resend } = require("resend");
 
-const expoInstance = Expo.mock.results[0].value;
+// Le client Expo est créé à la demande (S7.9) : on lit l'instance au moment de
+// l'usage ; tant qu'aucun envoi n'a eu lieu, un mock vide fait office de neuf.
+const expoInstance = {
+  get sendPushNotificationsAsync() {
+    return Expo.mock.results[0]?.value.sendPushNotificationsAsync ?? jest.fn();
+  },
+};
 Expo.isExpoPushToken = jest.fn(() => true);
 
 const DAY = 24 * 3600 * 1000;

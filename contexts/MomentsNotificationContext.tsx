@@ -2,6 +2,7 @@ import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBaby } from '@/contexts/BabyContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SocialInteractionsProvider, useSocialInteractions } from '@/contexts/SocialInteractionsContext';
 import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, Timestamp, where } from 'firebase/firestore';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,6 +17,16 @@ interface MomentsNotificationContextType {
   markMomentsAsSeen: () => void;
   markEventAsSeen: (eventId: string) => void;
 }
+
+type BadgeState = {
+  childId: string | undefined;
+  count: number;
+  ids: Set<string>;
+  types: Map<string, NotificationType>;
+};
+const EMPTY_IDS: Set<string> = new Set();
+const EMPTY_TYPES: Map<string, NotificationType> = new Map();
+const EMPTY_BADGE: BadgeState = { childId: undefined, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES };
 
 const MomentsNotificationContext = createContext<MomentsNotificationContextType | undefined>(undefined);
 
@@ -34,13 +45,54 @@ const getTimestamp = (createdAt: any): number => {
   return 0;
 };
 
+/**
+ * Événements ayant de nouveaux likes/commentaires d'un AUTRE utilisateur depuis
+ * le dernier passage. Les documents arrivent triés du plus récent au plus
+ * ancien : on s'arrête au premier plus ancien que `lastSeen`, le badge est donc
+ * borné par date et ne parcourt jamais tout l'historique.
+ */
+export function collectNewInteractionEventIds(
+  docs: readonly { userId?: string; eventId?: string; createdAt?: any }[],
+  userId: string,
+  lastSeen: number,
+  seenEventIds: ReadonlySet<string>,
+): { count: number; eventIds: Set<string> } {
+  let count = 0;
+  const eventIds = new Set<string>();
+  for (const data of docs) {
+    const timestamp = getTimestamp(data.createdAt);
+    // Triés par date décroissante : tout ce qui suit est déjà vu.
+    if (timestamp > 0 && timestamp <= lastSeen) break;
+    if (data.userId !== userId && timestamp > lastSeen && !seenEventIds.has(data.eventId as string)) {
+      count++;
+      if (data.eventId) eventIds.add(data.eventId);
+    }
+  }
+  return { count, eventIds };
+}
+
+/**
+ * Le provider enveloppe le provider social partagé : les likes et commentaires
+ * sont lus une seule fois pour tout le monde (badge, Moments, Galerie).
+ */
 export function MomentsNotificationProvider({ children }: { children: ReactNode }) {
+  return (
+    <SocialInteractionsProvider>
+      <MomentsNotificationInner>{children}</MomentsNotificationInner>
+    </SocialInteractionsProvider>
+  );
+}
+
+function MomentsNotificationInner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { activeChild } = useBaby();
-  const [hasNewMoments, setHasNewMoments] = useState(false);
-  const [newMomentsCount, setNewMomentsCount] = useState(0);
-  const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
-  const [newEventTypes, setNewEventTypes] = useState<Map<string, NotificationType>>(new Map());
+  const { likes: sharedLikes, comments: sharedComments } = useSocialInteractions();
+  const activeChildId = activeChild?.id;
+  const activeChildIdRef = useRef(activeChildId);
+  activeChildIdRef.current = activeChildId;
+  // Badge rattaché à l'enfant qui l'a produit : après un changement d'enfant,
+  // celui du précédent n'est jamais exposé (même une frame).
+  const [badge, setBadge] = useState<BadgeState>(EMPTY_BADGE);
   const lastSeenTimestampRef = useRef<number>(0);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
@@ -56,8 +108,6 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
 
   const updateTotalCount = useCallback(() => {
     const total = countsRef.current.jalons + countsRef.current.likes + countsRef.current.comments;
-    setNewMomentsCount(total);
-    setHasNewMoments(total > 0);
 
     // Combiner tous les IDs d'événements avec nouvelles interactions
     const allIds = new Set<string>([
@@ -65,7 +115,6 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
       ...eventIdsRef.current.likesEvents,
       ...eventIdsRef.current.commentsEvents,
     ]);
-    setNewEventIds(allIds);
 
     // Build type map with priority: photo > comment > like
     const typesMap = new Map<string, NotificationType>();
@@ -78,21 +127,21 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     for (const id of eventIdsRef.current.jalons) {
       typesMap.set(id, 'photo');
     }
-    setNewEventTypes(typesMap);
+    setBadge({ childId: activeChildIdRef.current, count: total, ids: allIds, types: typesMap });
   }, []);
 
   // Charger le dernier timestamp vu depuis AsyncStorage
   useEffect(() => {
-    if (!activeChild?.id || !user?.uid) {
-      setHasNewMoments(false);
-      setNewMomentsCount(0);
-      setNewEventIds(new Set());
-      setNewEventTypes(new Map());
-      setIsInitialized(false);
-      countsRef.current = { jalons: 0, likes: 0, comments: 0 };
-      eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
-      return;
-    }
+    // Remise à zéro à chaque changement d'enfant / d'utilisateur : ni badge,
+    // ni lastSeen, ni IDs vus de l'enfant précédent ne doivent survivre.
+    setBadge({ childId: activeChildIdRef.current, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES });
+    setIsInitialized(false);
+    countsRef.current = { jalons: 0, likes: 0, comments: 0 };
+    eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
+    lastSeenTimestampRef.current = 0;
+    seenEventIdsRef.current = new Set();
+    if (!activeChild?.id || !user?.uid) return;
+    let cancelled = false;
 
     const loadLastSeen = async () => {
       try {
@@ -105,6 +154,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
           AsyncStorage.getItem(localSeenKey),
         ]);
 
+        if (cancelled) return;
         if (localStored) {
           lastSeenTimestampRef.current = parseInt(localStored, 10);
         }
@@ -116,6 +166,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
         const firestoreDoc = await getDoc(
           doc(db, 'user_preferences', user.uid)
         );
+        if (cancelled) return;
         const firestoreData = firestoreDoc.data();
         const fsLastSeen = firestoreData?.momentsLastSeen as number | undefined;
         const fsSeenIds = firestoreData?.momentsSeenIds as string[] | undefined;
@@ -138,6 +189,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
 
         setIsInitialized(true);
       } catch (error) {
+        if (cancelled) return;
         console.error('[MomentsNotification] Erreur chargement lastSeen:', error);
         lastSeenTimestampRef.current = Date.now();
         setIsInitialized(true);
@@ -145,6 +197,9 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     };
 
     loadLastSeen();
+    return () => {
+      cancelled = true;
+    };
   }, [activeChild?.id, user?.uid]);
 
   // R6: Defer listeners — start after a short delay so Home renders first
@@ -158,7 +213,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     let unsubscribes: (() => void)[] = [];
 
     const timer = setTimeout(() => {
-      console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
+      if (__DEV__) console.log(`[MomentsNotification] Démarrage des listeners, lastSeen=${lastSeenTimestampRef.current}, userId=${userId}, user.uid=${user?.uid}`);
 
       // Écouter les jalons
       const jalonsQuery = query(
@@ -179,76 +234,16 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
           if (hasPhotos && data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(d.id)) {
             count++;
             newJalonIds.add(d.id);
-            console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
+            if (__DEV__) console.log(`[MomentsNotification] NEW jalon with photo: ${d.id}, createdAt=${timestamp}, lastSeen=${lastSeenTimestampRef.current}, by=${data.userId}`);
           }
         });
 
-        console.log(`[MomentsNotification] jalons: ${count} new out of ${snapshot.size} total`);
+        if (__DEV__) console.log(`[MomentsNotification] jalons: ${count} new out of ${snapshot.size} total`);
         countsRef.current.jalons = count;
         eventIdsRef.current.jalons = newJalonIds;
         updateTotalCount();
       }, (error) => {
         console.error('[MomentsNotification] Erreur listener jalons:', error);
-      }));
-
-      // Écouter les likes
-      const likesQuery = query(
-        collection(db, 'eventLikes'),
-        where('childId', '==', childId),
-        orderBy('createdAt', 'desc'),
-        limit(500)
-      );
-
-      unsubscribes.push(onSnapshot(likesQuery, (snapshot) => {
-        let count = 0;
-        const newLikeEventIds = new Set<string>();
-        snapshot.docs.forEach((d) => {
-          const data = d.data();
-          const timestamp = getTimestamp(data.createdAt);
-          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(data.eventId)) {
-            count++;
-            if (data.eventId) {
-              newLikeEventIds.add(data.eventId);
-            }
-          }
-        });
-
-        console.log(`[MomentsNotification] likes: ${count} new out of ${snapshot.size} total`);
-        countsRef.current.likes = count;
-        eventIdsRef.current.likesEvents = newLikeEventIds;
-        updateTotalCount();
-      }, (error) => {
-        console.error('[MomentsNotification] Erreur listener likes:', error);
-      }));
-
-      // Écouter les commentaires
-      const commentsQuery = query(
-        collection(db, 'eventComments'),
-        where('childId', '==', childId),
-        orderBy('createdAt', 'desc'),
-        limit(500)
-      );
-
-      unsubscribes.push(onSnapshot(commentsQuery, (snapshot) => {
-        let count = 0;
-        const newCommentEventIds = new Set<string>();
-        snapshot.docs.forEach((d) => {
-          const data = d.data();
-          const timestamp = getTimestamp(data.createdAt);
-          if (data.userId !== userId && timestamp > lastSeenTimestampRef.current && !seenEventIdsRef.current.has(data.eventId)) {
-            count++;
-            if (data.eventId) {
-              newCommentEventIds.add(data.eventId);
-            }
-          }
-        });
-
-        console.log(`[MomentsNotification] comments: ${count} new out of ${snapshot.size} total`);
-        countsRef.current.comments = count;
-        eventIdsRef.current.commentsEvents = newCommentEventIds;
-        updateTotalCount();
-      }, (error) => {
-        console.error('[MomentsNotification] Erreur listener comments:', error);
       }));
     }, 1500);
 
@@ -258,6 +253,24 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     };
   }, [activeChild?.id, user?.uid, isInitialized, updateTotalCount]);
 
+  // Likes et commentaires : lus par le provider partagé (un écouteur chacun),
+  // ici on ne fait que calculer le badge. Recalcul à chaque changement des
+  // documents partagés, une fois lastSeen / seenIds chargés.
+  useEffect(() => {
+    if (!user?.uid || !isInitialized) return;
+    const likesResult = collectNewInteractionEventIds(
+      sharedLikes, user.uid, lastSeenTimestampRef.current, seenEventIdsRef.current,
+    );
+    const commentsResult = collectNewInteractionEventIds(
+      sharedComments, user.uid, lastSeenTimestampRef.current, seenEventIdsRef.current,
+    );
+    countsRef.current.likes = likesResult.count;
+    eventIdsRef.current.likesEvents = likesResult.eventIds;
+    countsRef.current.comments = commentsResult.count;
+    eventIdsRef.current.commentsEvents = commentsResult.eventIds;
+    updateTotalCount();
+  }, [sharedLikes, sharedComments, user?.uid, isInitialized, updateTotalCount]);
+
   const markMomentsAsSeen = useCallback(async () => {
     if (!activeChild?.id || !user?.uid) return;
 
@@ -266,10 +279,7 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
     seenEventIdsRef.current = new Set();
     countsRef.current = { jalons: 0, likes: 0, comments: 0 };
     eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
-    setHasNewMoments(false);
-    setNewMomentsCount(0);
-    setNewEventIds(new Set());
-    setNewEventTypes(new Map());
+    setBadge({ childId: activeChildIdRef.current, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES });
 
     try {
       const key = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
@@ -311,6 +321,11 @@ export function MomentsNotificationProvider({ children }: { children: ReactNode 
   // observed pieces actually changes — without this, every render of the
   // parent (BabyProvider, AuthProvider, etc.) created a fresh value object
   // and forced every useMomentsNotification() consumer to re-render.
+  const current = badge.childId === activeChildId ? badge : EMPTY_BADGE;
+  const hasNewMoments = current.count > 0;
+  const newMomentsCount = current.count;
+  const newEventIds = current.ids;
+  const newEventTypes = current.types;
   const value = useMemo<MomentsNotificationContextType>(
     () => ({
       hasNewMoments,

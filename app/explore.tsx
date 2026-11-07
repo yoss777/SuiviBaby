@@ -119,7 +119,7 @@ export default function Explore() {
   React.useEffect(() => {
     if (!redirectAfterUnhideRef.current) return;
     if (children.length === 1 && !loading) {
-      console.log('[Explore] Un seul enfant réactivé, redirection automatique');
+      if (__DEV__) console.log('[Explore] Un seul enfant réactivé, redirection automatique');
       setActiveChild(children[0]);
       router.replace('/(drawer)/baby' as any);
       redirectAfterUnhideRef.current = false;

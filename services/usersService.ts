@@ -80,7 +80,7 @@ export async function creerOuMettreAJourProfil(data: {
       { merge: true },
     );
 
-    console.log("Profil utilisateur mis à jour");
+    if (__DEV__) console.log("Profil utilisateur mis à jour");
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour du profil :", e);
@@ -99,7 +99,7 @@ export async function obtenirProfil(): Promise<UserProfile | null> {
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() } as UserProfile;
     } else {
-      console.log("Aucun profil trouvé pour cet utilisateur");
+      if (__DEV__) console.log("Aucun profil trouvé pour cet utilisateur");
       return null;
     }
   } catch (e) {
@@ -141,7 +141,7 @@ export async function modifierNomUtilisateur(nouveauNom: string) {
       updatedAt: new Date(),
     });
 
-    console.log("Nom d'utilisateur modifié avec succès");
+    if (__DEV__) console.log("Nom d'utilisateur modifié avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification du nom :", e);

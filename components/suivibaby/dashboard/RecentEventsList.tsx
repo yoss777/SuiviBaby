@@ -11,7 +11,8 @@ import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { memo, useCallback, useEffect, useRef } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import {
   ActivityIndicator,
   Pressable,
@@ -46,7 +47,16 @@ export interface RecentEventsListProps {
   loading: boolean;
   showHint: boolean;
   colorScheme: "light" | "dark";
-  currentTime: Date;
+  /** Heure courante imposée ; sinon la liste porte son propre tick à la minute (S7.6). */
+  currentTime?: Date;
+  /**
+   * Fenêtre des événements « récents » (heures) et nombre maximum affiché :
+   * filtrage fait ici avec le tick interne, pour que l'écran parent ne se
+   * re-rende pas chaque minute. `events` doit être trié du plus récent au plus
+   * ancien. Sans `cutoffHours`, `events` est affiché tel quel.
+   */
+  cutoffHours?: number;
+  maxEvents?: number;
   onEventPress?: (event: RecentEvent) => void;
   onEventDelete?: (event: RecentEvent) => void;
   onViewAllPress: () => void;
@@ -631,11 +641,13 @@ const EventRow = memo(function EventRow({
 // ============================================
 
 function RecentEventsListComponent({
-  events,
+  events: allEvents,
   loading,
   showHint,
   colorScheme,
-  currentTime,
+  currentTime: currentTimeProp,
+  cutoffHours,
+  maxEvents,
   onEventPress,
   onEventDelete,
   onViewAllPress,
@@ -646,6 +658,14 @@ function RecentEventsListComponent({
   getDayLabel,
 }: RecentEventsListProps) {
   const nc = getNeutralColors(colorScheme);
+  const { currentTime: tickTime } = useMinuteTick(currentTimeProp === undefined);
+  const currentTime = currentTimeProp ?? tickTime;
+  const events = useMemo(() => {
+    if (cutoffHours === undefined) return allEvents;
+    const cutoff = currentTime.getTime() - cutoffHours * 60 * 60 * 1000;
+    const filtered = allEvents.filter((e) => toDate(e.date).getTime() >= cutoff);
+    return maxEvents !== undefined ? filtered.slice(0, maxEvents) : filtered;
+  }, [allEvents, cutoffHours, maxEvents, currentTime, toDate]);
   const hasPlayedEntranceRef = useRef(false);
 
   const shouldAnimateRows = !loading && !hasPlayedEntranceRef.current;

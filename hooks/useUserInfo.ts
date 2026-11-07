@@ -29,10 +29,15 @@ export function useUserInfo(userId: string | null | undefined) {
       return;
     }
 
+    // Annulation : pas de setState après démontage ni après changement d'uid.
+    let cancelled = false;
+    setLoading(true);
+
     const fetchUserInfo = async () => {
       try {
         const userRef = doc(db, 'users_public', userId);
         const userSnap = await getDoc(userRef);
+        if (cancelled) return;
 
         if (userSnap.exists()) {
           setUserInfo(userSnap.data() as UserInfo);
@@ -40,14 +45,18 @@ export function useUserInfo(userId: string | null | undefined) {
           setUserInfo(null);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('Erreur lors de la récupération des infos utilisateur:', error);
         setUserInfo(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchUserInfo();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   // Générer un nom d'affichage à partir des données disponibles
@@ -80,6 +89,7 @@ export function useUsersInfo(userIds: string[]) {
       return;
     }
 
+    let cancelled = false;
     const fetchUsersInfo = async () => {
       try {
         const usersData: Record<string, UserInfo> = {};
@@ -95,15 +105,20 @@ export function useUsersInfo(userIds: string[]) {
           })
         );
 
+        if (cancelled) return;
         setUsersInfo(usersData);
       } catch (error) {
+        if (cancelled) return;
         console.error('Erreur lors de la récupération des infos utilisateurs:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchUsersInfo();
+    return () => {
+      cancelled = true;
+    };
   }, [userIds.join(',')]);
 
   return { usersInfo, loading };

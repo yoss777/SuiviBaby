@@ -31,7 +31,7 @@ export async function ajouterPompage(childId: string, data: Record<string, unkno
       userId,
       createdAt: new Date(),
     });
-    console.log("Session pompage tire-lait ajoutée avec l'ID :", ref.id);
+    if (__DEV__) console.log("Session pompage tire-lait ajoutée avec l'ID :", ref.id);
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
@@ -48,7 +48,7 @@ export async function obtenirPompage(childId: string, id: string) {
     if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
-      console.log("Aucune session de pompage trouvée avec cet ID ou accès refusé");
+      if (__DEV__) console.log("Aucune session de pompage trouvée avec cet ID ou accès refusé");
       return null;
     }
   } catch (e) {
@@ -137,7 +137,7 @@ export async function modifierPompage(
       ...nouveausDonnees,
       updatedAt: new Date(),
     });
-    console.log("Session de pompage modifiée avec succès");
+    if (__DEV__) console.log("Session de pompage modifiée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
@@ -156,7 +156,7 @@ export async function supprimerPompage(childId: string, id: string) {
     }
 
     await deleteDoc(docRef);
-    console.log("Session de pompage supprimée avec succès");
+    if (__DEV__) console.log("Session de pompage supprimée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);

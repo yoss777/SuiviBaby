@@ -66,7 +66,7 @@ export function EventScreen({ childId, currentUserId }: EventScreenProps) {
       {permissions.canWriteEvents && (
         <Button
           title="Ajouter un événement"
-          onPress={() => console.log('Ajouter un événement')}
+          onPress={() => __DEV__ && console.log('Ajouter un événement')}
         />
       )}
     </View>
@@ -138,7 +138,7 @@ export function ManageAccessScreen({
   const handleChangeRole = async (userId: string, newRole: ChildRole) => {
     try {
       await updateChildAccess(childId, userId, { role: newRole });
-      console.log(`Rôle mis à jour pour ${userId}`);
+      if (__DEV__) console.log(`Rôle mis à jour pour ${userId}`);
     } catch (error) {
       console.error('Erreur lors de la mise à jour du rôle:', error);
     }
@@ -147,7 +147,7 @@ export function ManageAccessScreen({
   const handleRevoke = async (userId: string) => {
     try {
       await revokeChildAccess(childId, userId);
-      console.log(`Accès révoqué pour ${userId}`);
+      if (__DEV__) console.log(`Accès révoqué pour ${userId}`);
     } catch (error) {
       console.error('Erreur lors de la révocation:', error);
     }
@@ -184,7 +184,7 @@ export function ManageAccessScreen({
                   title="Changer rôle"
                   onPress={() => {
                     // Ouvrir un modal pour choisir le nouveau rôle
-                    console.log('Changer rôle de', userId);
+                    if (__DEV__) console.log('Changer rôle de', userId);
                   }}
                 />
                 <Button
@@ -200,7 +200,7 @@ export function ManageAccessScreen({
 
       <Button
         title="Inviter un nouveau parent"
-        onPress={() => console.log('Ouvrir écran d\'invitation')}
+        onPress={() => __DEV__ && console.log('Ouvrir écran d\'invitation')}
       />
     </View>
   );
@@ -227,7 +227,7 @@ export async function inviteParent({
     // Accorder l'accès avec le rôle sélectionné
     await grantChildAccess(childId, invitedUserId, selectedRole, currentUserId);
 
-    console.log(
+    if (__DEV__) console.log(
       `Accès ${ROLE_LABELS[selectedRole]} accordé à ${invitedUserId}`
     );
 

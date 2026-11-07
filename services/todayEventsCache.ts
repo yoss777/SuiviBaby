@@ -135,8 +135,47 @@ export const getTodayEventsCache = (childId: string) => {
   return entry.data;
 };
 
+// Génération incrémentée à chaque clear (déconnexion) : une lecture démarrée
+// avant ne doit pas réécrire le cache après coup avec les données de l'ancienne session.
+let cacheGeneration = 0;
+
 export const clearTodayEventsCache = () => {
+  cacheGeneration += 1;
   cacheMap.clear();
+  inFlightMap.clear();
 };
 
 export const getTodayTypes = () => TODAY_TYPES.slice();
+
+// S7.5 : une seule lecture « du jour » par enfant et par jour, partagée entre
+// le démarrage (`app/boot.tsx`) et le préchargement de `BabyContext`. Tant
+// qu'une lecture est en vol pour cet enfant, les appelants suivants attendent
+// la même promesse au lieu de relancer la requête. Le chargeur est injecté
+// pour éviter une dépendance circulaire avec `eventsService`.
+const inFlightMap = new Map<string, Promise<TodayEventsData>>();
+
+export const loadTodayEventsOnce = (
+  childId: string,
+  fetcher: (childId: string) => Promise<Event[]>,
+): Promise<TodayEventsData> => {
+  const cached = getTodayEventsCache(childId);
+  if (cached) return Promise.resolve(cached);
+
+  const key = `${childId}:${getTodayKey()}`;
+  const existing = inFlightMap.get(key);
+  if (existing) return existing;
+
+  const generation = cacheGeneration;
+  const promise = fetcher(childId)
+    .then((events) => {
+      const data = buildTodayEventsData(events);
+      if (generation === cacheGeneration) setTodayEventsCache(childId, data);
+      return data;
+    })
+    .finally(() => {
+      // Ne retire que sa propre entrée (un clear + nouvel appel peut l'avoir remplacée).
+      if (inFlightMap.get(key) === promise) inFlightMap.delete(key);
+    });
+  inFlightMap.set(key, promise);
+  return promise;
+};

@@ -432,6 +432,7 @@ export default function StatsScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: fetchLoadedRangeFromServer,
     apply: applyServerRange,
   });

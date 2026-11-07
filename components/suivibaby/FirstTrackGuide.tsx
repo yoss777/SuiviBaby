@@ -4,7 +4,7 @@
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
-import { useSheet } from "@/contexts/SheetContext";
+import { useSheetActions } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -26,7 +26,7 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const { activeChild } = useBaby();
-  const { openSheet } = useSheet();
+  const { openSheet } = useSheetActions();
   const [showCelebration, setShowCelebration] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;

@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { obtenirEvenementsDuJour } from '@/services/eventsService';
-import { buildTodayEventsData, getTodayEventsCache, setTodayEventsCache } from '@/services/todayEventsCache';
+import { getTodayEventsCache, loadTodayEventsOnce } from '@/services/todayEventsCache';
 
 export interface Child {
   id: string;
@@ -608,9 +608,8 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
 
       preloadInFlight.current.add(inFlightKey);
       try {
-        const events = await obtenirEvenementsDuJour(childId);
-        if (cancelled) return;
-        setTodayEventsCache(childId, buildTodayEventsData(events));
+        // S7.5 : lecture partagée avec le démarrage (une seule requête par enfant).
+        await loadTodayEventsOnce(childId, obtenirEvenementsDuJour);
       } catch (error) {
         console.warn('[BabyContext] Préchargement today échoué:', error);
       } finally {
@@ -641,7 +640,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
     return () => {
       cancelled = true;
     };
-  }, [children, loading, user]);
+  }, [children, loading, user?.uid]);
 
   const setActiveChild = useCallback((child: Child) => {
     setActiveChildState(child);

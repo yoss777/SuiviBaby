@@ -30,7 +30,7 @@ export async function ajouterCroissance(childId: string, data: Record<string, un
       userId,
       createdAt: new Date(),
     });
-    console.log("Croissance ajoutée avec l'ID :", ref.id);
+    if (__DEV__) console.log("Croissance ajoutée avec l'ID :", ref.id);
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
@@ -47,7 +47,7 @@ export async function obtenirCroissance(childId: string, id: string) {
     if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     }
-    console.log("Aucune croissance trouvée avec cet ID ou accès refusé");
+    if (__DEV__) console.log("Aucune croissance trouvée avec cet ID ou accès refusé");
     return null;
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
@@ -117,7 +117,7 @@ export async function modifierCroissance(
       ...nouvellesDonnees,
       updatedAt: new Date(),
     });
-    console.log("Croissance modifiée avec succès");
+    if (__DEV__) console.log("Croissance modifiée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
@@ -139,7 +139,7 @@ export async function supprimerCroissance(childId: string, id: string) {
     }
 
     await deleteDoc(docRef);
-    console.log("Croissance supprimée avec succès");
+    if (__DEV__) console.log("Croissance supprimée avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);

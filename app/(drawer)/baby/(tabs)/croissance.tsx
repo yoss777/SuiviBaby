@@ -1180,6 +1180,7 @@ export default function CroissanceScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       return obtenirEvenements(activeChild.id, {

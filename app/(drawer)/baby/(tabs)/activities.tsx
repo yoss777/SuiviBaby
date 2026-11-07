@@ -17,6 +17,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
@@ -304,7 +305,6 @@ export default function ActivitiesScreen() {
   const [pendingEditData, setPendingEditData] = useState<ActivitiesEditData | null>(null);
   const [pendingActiviteType, setPendingActiviteType] = useState<ActiviteType>("tummyTime");
 
-  const [groupedEvents, setGroupedEvents] = useState<ActivityGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ activites: false });
   const [loadError, setLoadError] = useState(false);
@@ -345,13 +345,8 @@ export default function ActivitiesScreen() {
     ) as (ActivityEventWithId & { heureDebut: any }) | undefined;
   }, [events]);
 
-  // Real-time elapsed timer for ongoing promenade
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    if (!promenadeEnCours) return;
-    const interval = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(interval);
-  }, [promenadeEnCours]);
+  // Temps écoulé de la promenade en cours : minuteur partagé, actif seulement si besoin
+  const { currentTime: now } = useMinuteTick(!!promenadeEnCours);
 
   const elapsedPromenadeMinutes = useMemo(() => {
     if (!promenadeEnCours?.heureDebut) return 0;
@@ -465,6 +460,68 @@ export default function ActivitiesScreen() {
   const clearSelectedDate = useCallback(() => {
     applyTodayFilter();
   }, [applyTodayFilter]);
+
+  const groupedEvents = useMemo<ActivityGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+
+      if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number);
+        const selected = new Date(year, month - 1, day);
+        selected.setHours(0, 0, 0, 0);
+        return time === selected.getTime();
+      }
+
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+
+    const groups: Record<string, ActivityEventWithId[]> = {};
+    filtered.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const grouped = Object.entries(groups)
+      .map(([date, items]) => {
+        const sorted = items.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        const counts = {
+          tummyTime: 0,
+          jeux: 0,
+          lecture: 0,
+          promenade: 0,
+          massage: 0,
+          musique: 0,
+          eveil: 0,
+          sortie: 0,
+          autre: 0,
+        } as Record<ActiviteType, number>;
+        sorted.forEach((item) => {
+          counts[item.typeActivite as ActiviteType] += 1;
+        });
+        return {
+          date,
+          events: sorted,
+          counts,
+          lastEvent: sorted[0],
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    return grouped;
+  }, [events, selectedFilter, selectedDate, softDeletedIds]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: () => openAddModal("tummyTime") },
@@ -615,6 +672,7 @@ export default function ActivitiesScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -653,7 +711,6 @@ export default function ActivitiesScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedEvents([]);
     setLoaded({ activites: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
@@ -789,68 +846,6 @@ export default function ActivitiesScreen() {
       }
     }, [applyTodayFilter, selectedDate]),
   );
-
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    const filtered = events.filter((item) => {
-      if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-
-      if (selectedDate) {
-        const [year, month, day] = selectedDate.split("-").map(Number);
-        const selected = new Date(year, month - 1, day);
-        selected.setHours(0, 0, 0, 0);
-        return time === selected.getTime();
-      }
-
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      return true;
-    });
-
-    const groups: Record<string, ActivityEventWithId[]> = {};
-    filtered.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    const grouped = Object.entries(groups)
-      .map(([date, items]) => {
-        const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const counts = {
-          tummyTime: 0,
-          jeux: 0,
-          lecture: 0,
-          promenade: 0,
-          massage: 0,
-          musique: 0,
-          eveil: 0,
-          sortie: 0,
-          autre: 0,
-        } as Record<ActiviteType, number>;
-        sorted.forEach((item) => {
-          counts[item.typeActivite as ActiviteType] += 1;
-        });
-        return {
-          date,
-          events: sorted,
-          counts,
-          lastEvent: sorted[0],
-        };
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-
-    setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {

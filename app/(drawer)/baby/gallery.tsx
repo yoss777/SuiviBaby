@@ -14,15 +14,11 @@ import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
-import { JalonEvent } from "@/services/eventsService";
+import { obtenirEvenements } from "@/services/eventsService";
+import { useGalleryMilestones, GALLERY_PAGE_SIZE, type GalleryMilestoneEvent } from "@/hooks/useGalleryMilestones";
+import { useSocialInteractions } from "@/contexts/SocialInteractionsContext";
 import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
-import {
-  ecouterInteractionsSociales,
-  getUserNames,
-  toggleLike,
-} from "@/services/socialService";
-import { LikeInfo } from "@/types/social";
+import { getUserNames, toggleLike } from "@/services/socialService";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { HeaderBackButton } from "@react-navigation/elements";
@@ -34,6 +30,7 @@ import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
+  ActivityIndicator,
   Dimensions,
   Animated as RNAnimated,
   FlatList,
@@ -55,7 +52,7 @@ const THUMB_SIZE = (SCREEN_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 // TYPES
 // ============================================
 
-type MilestoneEventWithId = JalonEvent & { id: string };
+type MilestoneEventWithId = GalleryMilestoneEvent;
 
 type PhotoMilestone = {
   id: string;
@@ -125,6 +122,9 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  footerLoader: {
+    paddingVertical: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -418,6 +418,7 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
       ) : (
         <PhotoImage
           photoRef={photo.photo}
+          thumbnail
           style={styles.thumbImage}
           resizeMode="cover"
           onError={() => setImageError(true)}
@@ -478,19 +479,24 @@ export default function GalleryScreen() {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent = canManageEvents(permissions.role);
 
-  const [events, setEvents] = useState<MilestoneEventWithId[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  // S7.4 : jalons paginés par 60 (première page en direct, suite au défilement).
+  const {
+    events,
+    loaded,
+    loadError,
+    hasMore,
+    loadingMore,
+    loadMore,
+    reload,
+    retry,
+    applyFirstPageResult,
+  } = useGalleryMilestones(activeChild?.id);
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const isMountedRef = useRef(true);
 
-  // Social interactions state
-  const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>({});
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
-    {},
-  );
+  // Likes / commentaires : écouteurs partagés par enfant (S7.2)
+  const { likesInfo, commentCounts } = useSocialInteractions();
   // Author names for photos not by current user
   const [authorNames, setAuthorNames] = useState<Record<string, string>>({});
 
@@ -686,53 +692,24 @@ export default function GalleryScreen() {
     return items;
   }, [allPhotoMilestones]);
 
-  // Data loading - load all jalons (not just 30 days)
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    setLoadError(false);
-    const unsubscribe = ecouterEvenements(
-      activeChild.id,
-      (data) => {
-        if (!isMountedRef.current) return;
-        setEvents(data as MilestoneEventWithId[]);
-        setLoaded(true);
-        setLoadError(false);
-      },
-      { type: "jalon", waitForServer: true },
-      (error) => {
-        console.error("[Gallery] Erreur listener jalons:", error);
-        if (!isMountedRef.current) return;
-        setLoaded(true);
-        setLoadError(true);
-      },
-    );
-
-    return () => unsubscribe();
-  }, [activeChild?.id, retryCount]);
-
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       return obtenirEvenements(activeChild.id, {
         type: "jalon",
+        limite: GALLERY_PAGE_SIZE,
         source: "server",
       }) as Promise<MilestoneEventWithId[]>;
     },
     apply: (freshEvents) => {
       if (!isMountedRef.current) return;
-      setEvents(freshEvents);
-      setLoaded(true);
-      setLoadError(false);
+      applyFirstPageResult(freshEvents);
     },
   });
 
-  // Stable keys for dependency tracking
-  const photoIdsKey = useMemo(
-    () => allPhotoMilestones.map((p) => p.id).join(","),
-    [allPhotoMilestones],
-  );
+  // Stable key for dependency tracking
   const otherUserIdsKey = useMemo(() => {
     if (!firebaseUser?.uid) return "";
     return [...new Set(
@@ -758,21 +735,12 @@ export default function GalleryScreen() {
     return () => { cancelled = true; };
   }, [otherUserIdsKey]);
 
-  // Social interactions listener
+  // Une page de 60 jalons peut contenir peu de photos (humeurs, dents sans
+  // photo...) : on complète tant que la grille serait presque vide.
   useEffect(() => {
-    if (!activeChild?.id || !photoIdsKey) return;
-
-    const eventIds = photoIdsKey.split(",");
-
-    const unsubscribe = ecouterInteractionsSociales(
-      activeChild.id,
-      eventIds,
-      (newLikesInfo) => setLikesInfo(newLikesInfo),
-      (newCommentCounts) => setCommentCounts(newCommentCounts),
-    );
-
-    return () => unsubscribe();
-  }, [activeChild?.id, photoIdsKey]);
+    if (loaded && hasMore && allPhotoMilestones.length < 18) loadMore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relancé à chaque page reçue
+  }, [loaded, hasMore, events.length]);
 
   const handlePhotoPress = useCallback(
     (photo: PhotoMilestone) => {
@@ -907,12 +875,7 @@ export default function GalleryScreen() {
   );
 
   // Retry loading after error
-  const handleRetry = useCallback(() => {
-    setLoaded(false);
-    setLoadError(false);
-    setEvents([]);
-    setRetryCount((c) => c + 1);
-  }, []);
+  const handleRetry = retry;
 
   const handleCloseGallery = useCallback(() => {
     setGalleryVisible(false);
@@ -968,15 +931,15 @@ export default function GalleryScreen() {
           ))}
       </View>
     );
-  }, [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, newEventIds, newEventTypes, nc]);
+  }, [handlePhotoPress, canManageContent, handleEditPhoto, likesInfo, commentCounts, newEventIds, newEventTypes, nc]);
 
   // Pull-to-refresh
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    setRetryCount((c) => c + 1);
+    reload();
     setTimeout(() => setIsRefreshing(false), 800);
-  }, []);
+  }, [reload]);
 
   // Loading state - skeleton shimmer
   if (!loaded) {
@@ -1005,7 +968,8 @@ export default function GalleryScreen() {
         <View style={styles.headerBlock}>
           <Text style={[styles.title, { color: nc.textStrong }]}>Souvenirs</Text>
           <Text style={[styles.subtitle, { color: nc.textLight }]}>
-            {allPhotoMilestones.length} photo
+            {allPhotoMilestones.length}
+            {hasMore ? "+" : ""} photo
             {allPhotoMilestones.length > 1 ? "s" : ""}
           </Text>
         </View>
@@ -1040,6 +1004,17 @@ export default function GalleryScreen() {
             maxToRenderPerBatch={12}
             windowSize={7}
             removeClippedSubviews={true}
+            onEndReached={hasMore ? loadMore : undefined}
+            onEndReachedThreshold={0.6}
+            ListFooterComponent={
+              loadingMore ? (
+                <ActivityIndicator
+                  style={styles.footerLoader}
+                  color={nc.textMuted}
+                  accessibilityLabel="Chargement des photos suivantes"
+                />
+              ) : null
+            }
             refreshControl={
               <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
             }

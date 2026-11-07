@@ -59,6 +59,15 @@ service firebase.storage {
       allow delete: if canWriteChildMedia(childId);
     }
 
+    // Miniatures 400 px (S7.3), générées par la fonction Storage
+    // generatePhotoThumbnail (functions/thumbnails.js). Lecture : mêmes
+    // personnes que l'original. Aucune écriture cliente : seul le serveur
+    // (admin SDK, hors règles) crée et supprime les miniatures.
+    match /children/{childId}/thumbs/{fileName} {
+      allow read: if hasAccess(childId);
+      allow write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

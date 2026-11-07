@@ -245,7 +245,6 @@ export default function GrowthScreen() {
   const [pendingEditData, setPendingEditData] =
     useState<CroissanceEditData | null>(null);
 
-  const [groupedEvents, setGroupedEvents] = useState<GrowthGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({ croissance: false });
   const [loadError, setLoadError] = useState(false);
@@ -446,6 +445,60 @@ export default function GrowthScreen() {
     applyTodayFilter();
   }, [applyTodayFilter]);
 
+  const groupedEvents = useMemo<GrowthGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+
+      if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number);
+        const selected = new Date(year, month - 1, day);
+        selected.setHours(0, 0, 0, 0);
+        return time === selected.getTime();
+      }
+
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+
+    const groups: Record<string, GrowthEventWithId[]> = {};
+    filtered.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const grouped = Object.entries(groups)
+      .map(([date, items]) => {
+        const sorted = items.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        const counts = { poids: 0, taille: 0, tete: 0 };
+        sorted.forEach((e) => {
+          if (e.poidsKg) counts.poids++;
+          if (e.tailleCm) counts.taille++;
+          if (e.teteCm) counts.tete++;
+        });
+        return {
+          date,
+          events: sorted,
+          lastEvent: sorted[0],
+          counts,
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    return grouped;
+  }, [events, selectedFilter, selectedDate, softDeletedIds]);
+
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: openAddModal },
     ...(groupedEvents.length > 0 || selectionMode ? [{
@@ -598,6 +651,7 @@ export default function GrowthScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -636,7 +690,6 @@ export default function GrowthScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedEvents([]);
     setLoaded({ croissance: false });
     setEmptyDelayDone(false);
     setDaysWindow(14);
@@ -808,60 +861,6 @@ export default function GrowthScreen() {
       }
     }, [applyTodayFilter, selectedDate]),
   );
-
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    const filtered = events.filter((item) => {
-      if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-
-      if (selectedDate) {
-        const [year, month, day] = selectedDate.split("-").map(Number);
-        const selected = new Date(year, month - 1, day);
-        selected.setHours(0, 0, 0, 0);
-        return time === selected.getTime();
-      }
-
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      return true;
-    });
-
-    const groups: Record<string, GrowthEventWithId[]> = {};
-    filtered.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    const grouped = Object.entries(groups)
-      .map(([date, items]) => {
-        const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const counts = { poids: 0, taille: 0, tete: 0 };
-        sorted.forEach((e) => {
-          if (e.poidsKg) counts.poids++;
-          if (e.tailleCm) counts.taille++;
-          if (e.teteCm) counts.tete++;
-        });
-        return {
-          date,
-          events: sorted,
-          lastEvent: sorted[0],
-          counts,
-        };
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-
-    setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {

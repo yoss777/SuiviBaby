@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
+  DevSettings,
 } from "react-native";
 
 interface ErrorBoundaryProps {
@@ -15,6 +16,8 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
+  /** Incrémenté à chaque « Relancer » : remonte tout l'arbre enfant. */
+  resetKey: number;
 }
 
 export class ErrorBoundary extends React.Component<
@@ -23,10 +26,10 @@ export class ErrorBoundary extends React.Component<
 > {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, resetKey: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 
@@ -36,8 +39,21 @@ export class ErrorBoundary extends React.Component<
     });
   }
 
+  // « Relancer » : expo-updates n'est pas installé, donc pas de reloadAsync.
+  // En développement on recharge le bundle JS (DevSettings.reload) ; en
+  // production on remonte entièrement l'arbre (nouvelle `key`) : tous les
+  // états locaux des écrans sont recréés, comme après un redémarrage à froid
+  // de l'interface.
   private handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    if (__DEV__ && typeof DevSettings?.reload === "function") {
+      DevSettings.reload();
+      return;
+    }
+    this.setState((prev) => ({
+      hasError: false,
+      error: null,
+      resetKey: prev.resetKey + 1,
+    }));
   };
 
   render() {
@@ -64,7 +80,11 @@ export class ErrorBoundary extends React.Component<
       );
     }
 
-    return this.props.children;
+    return (
+      <React.Fragment key={this.state.resetKey}>
+        {this.props.children}
+      </React.Fragment>
+    );
   }
 }
 

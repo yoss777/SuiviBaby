@@ -164,7 +164,7 @@ async function sendValidationEmail(
     // const sendEmailFunction = httpsCallable(functions, 'sendValidationEmail');
     // await sendEmailFunction({ email, simId, requestId, childName });
 
-    console.log(`Email de validation envoyé à ${email} pour ${childName} (SIM ${simId})`);
+    if (__DEV__) console.log(`Email de validation envoyé à ${email} pour ${childName} (SIM ${simId})`);
     console.log(`Lien de validation: https://mediscope.app/validate-attachment/${requestId}`);
 
     // Pour le développement, vous pouvez utiliser un service d'email comme SendGrid, Mailgun, etc.

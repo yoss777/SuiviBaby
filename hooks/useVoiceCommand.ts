@@ -1,8 +1,8 @@
 // hooks/useVoiceCommand.ts
-// Thin facade composing useAudioRecorder, useVoiceParser, and useVoiceEventCreator.
+// Thin facade composing useAudioRecorder, useVoiceParser, and the voiceEventCreator service.
 // Preserves the exact same public API so consumers need zero changes.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth } from "@/config/firebase";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -26,7 +26,7 @@ import {
   executeMultipleCommands,
   isAmbiguous,
   type ModalFeedback,
-} from "./useVoiceEventCreator";
+} from "@/services/voiceEventCreator";
 
 type ConfirmHandlerResult = void | boolean | Promise<void | boolean>;
 
@@ -77,6 +77,42 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   const [permissionModal, setPermissionModal] = useState(false);
   const [transcriptionErrorModal, setTranscriptionErrorModal] = useState(false);
 
+  // --- Session de commande : invalidée au changement d'enfant et au démontage ---
+  // Toute commande en vol (transcription, analyse, confirmation) capture le
+  // numéro de session au départ : si elle n'est plus courante, on abandonne
+  // sans jamais créer d'événement pour l'enfant précédent.
+  const runIdRef = useRef(0);
+  const previousChildIdRef = useRef(childId);
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
+
+  useEffect(() => {
+    if (previousChildIdRef.current === childId) return;
+    previousChildIdRef.current = childId;
+    runIdRef.current += 1;
+    setPendingCommand(null);
+    setDiaperChoiceState(true);
+    diaperChoiceRef.current = true;
+    setExcretionSelectionState({ pipi: false, popo: false });
+    excretionSelectionRef.current = { pipi: false, popo: false };
+    setConfirmModal((prev) =>
+      prev.visible ? { ...prev, visible: false, onConfirm: null } : prev,
+    );
+    setTestPromptVisible(false);
+    setTestPromptText("");
+    setIsProcessing(false);
+    if (recorderRef.current.isRecording) {
+      void recorderRef.current.cancelRecording();
+    }
+  }, [childId]);
+
+  // Démontage : plus aucune commande en cours ne doit aboutir.
+  useEffect(() => {
+    return () => {
+      runIdRef.current += 1;
+    };
+  }, []);
+
   // --- Feedback helper passed to event creator ---
   const feedback: ModalFeedback = {
     showInfo: (title: string, message: string) => {
@@ -101,11 +137,13 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       : "";
     const confirmMessage = `${commands.length} événements détectés:${truncationNotice}\n\n${eventDescriptions}`;
 
+    const runId = runIdRef.current;
     setConfirmModal({
       visible: true,
       title: "Confirmer les ajouts",
       message: confirmMessage,
       onConfirm: async () => {
+        if (runIdRef.current !== runId) return false;
         const { successCount, errors, notices, alert } = await executeMultipleCommands(
           commands,
           childId,
@@ -139,11 +177,14 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   // Traite la commande vocale transcrite
   // =========================================================================
   const processVoiceCommand = async (text: string) => {
+    const runId = runIdRef.current;
+    const isStale = () => runIdRef.current !== runId;
     try {
       setTranscription(text);
 
       const { commands, truncated, source } = await parseCommandsSmart(text);
-      console.log(`🧠 Analyse: ${source}`);
+      if (isStale()) return;
+      if (__DEV__) console.log(`🧠 Analyse: ${source}`);
 
       if (commands.length === 0) {
         setInfoModal({
@@ -175,7 +216,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       }
 
       const commandsWithChildId = commands.map(cmd => ({ ...cmd, childId }));
-      console.log(`✅ ${commandsWithChildId.length} événement(s) détecté(s):`, commandsWithChildId.map(c => c.type));
+      if (__DEV__) console.log(`✅ ${commandsWithChildId.length} événement(s) détecté(s):`, commandsWithChildId.map(c => c.type));
 
       // T3.4 — pre-check role to avoid silent server-side rejection.
       // Voice CFs (validateAndCreate/Update/deleteEventCascade) require
@@ -186,6 +227,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       if (currentUid) {
         try {
           const access = await getUserChildAccess(childId, currentUid);
+          if (isStale()) return;
           const role = access?.role;
           if (!canManageEvents(role)) {
             setInfoModal({
@@ -232,17 +274,20 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       // Pour modification/suppression, rechercher l'événement cible
       let targetEvent: AppEvent | null = null;
       if ((action === "modify" || action === "delete") && commandWithChildId.eventIdentifier) {
-        console.log("🔍 Recherche de l'événement cible...");
+        if (__DEV__) console.log("🔍 Recherche de l'événement cible...");
         let found: Awaited<ReturnType<typeof findEventByIdentifier>>;
         try {
           found = await findEventByIdentifier(commandWithChildId.eventIdentifier, childId);
         } catch (lookupError) {
+          if (isStale()) return;
           // Réseau ou autre échec : surtout pas « événement non trouvé ».
           const { title, message } = lookupFailureMessage(lookupError);
           setInfoModal({ visible: true, title, message });
           setIsProcessing(false);
           return;
         }
+
+        if (isStale()) return;
 
         if (!found) {
           setInfoModal({
@@ -278,7 +323,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         }
 
         targetEvent = found;
-        console.log("✅ Événement trouvé:", targetEvent.id);
+        if (__DEV__) console.log("✅ Événement trouvé:", targetEvent.id);
       }
 
       // Confirmation avant action
@@ -321,6 +366,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         title: confirmTitle,
         message: confirmMessage,
         onConfirm: async () => {
+          if (isStale()) return false;
           const success = await executeCommand(
             commandWithChildId,
             childId,
@@ -335,6 +381,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
         },
       });
     } catch (error) {
+      if (isStale()) return;
       console.error("Erreur processing:", error);
       setInfoModal({
         visible: true,
@@ -394,6 +441,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
   };
 
   const stopVoiceCommand = async () => {
+    const runId = runIdRef.current;
     try {
       if (!recorder.isRecording) {
         setIsProcessing(false);
@@ -411,6 +459,11 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
       if (!audioUri) {
         throw new Error("Pas d'enregistrement disponible");
       }
+      if (runIdRef.current !== runId) {
+        // Enfant changé ou écran quitté pendant l'arrêt : l'audio ne sert plus.
+        await VoiceCommandService.deleteRecording(audioUri);
+        return;
+      }
 
       // MODE TEST (after recording — legacy path, kept for safety)
       if (testMode) {
@@ -423,6 +476,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       // MODE PRODUCTION: AssemblyAI
       const result = await transcribeAudio(audioUri);
+      if (runIdRef.current !== runId) return;
 
       if (result.error === "no-api-key") {
         setConfirmModal({
@@ -460,6 +514,7 @@ export function useVoiceCommand(childId: string, useTestMode: boolean = false) {
 
       await processVoiceCommand(result.text);
     } catch (error) {
+      if (runIdRef.current !== runId) return;
       console.error("Erreur traitement commande vocale:", error);
       setInfoModal({
         visible: true,

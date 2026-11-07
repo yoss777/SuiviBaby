@@ -21,7 +21,6 @@ import {
   CommentInfo,
   EventComment,
   EventLike,
-  LatestComment,
   LikeInfo,
   Mention,
 } from "../types/social";
@@ -604,146 +603,88 @@ export const ecouterCommentaires = (
 // COMBINED
 // ============================================
 
-/**
- * Écouter toutes les interactions sociales d'un enfant en temps réel
- * Utile pour mettre à jour l'UI quand un autre parent ajoute un like/commentaire
- */
-export const ecouterInteractionsSociales = (
-  childId: string,
-  eventIds: string[],
-  onLikesUpdate: (likesInfo: Record<string, LikeInfo>) => void,
-  onCommentsUpdate: (commentCounts: Record<string, number>) => void,
-  onLatestCommentsUpdate?: (latestComments: Record<string, LatestComment>) => void
-): (() => void) => {
-  const userId = getUserId();
+/** Nombre maximal de likes / commentaires lus par écouteur d'enfant. */
+export const SOCIAL_LISTENER_LIMIT = 500;
 
-  // Listener pour les likes
-  const likesQuery = query(
+/**
+ * Écouteur UNIQUE des likes d'un enfant (les plus récents d'abord). Il alimente
+ * le provider partagé (`contexts/SocialInteractionsContext.tsx`) : badge de
+ * notifications, Moments et Galerie lisent ces mêmes documents au lieu d'ouvrir
+ * chacun leur écouteur.
+ */
+export const ecouterLikesEnfant = (
+  childId: string,
+  onUpdate: (likes: EventLike[]) => void,
+  onError?: (error: unknown) => void
+): (() => void) => {
+  const q = query(
     collection(db, "eventLikes"),
     where("childId", "==", childId),
-    limit(500)
+    orderBy("createdAt", "desc"),
+    limit(SOCIAL_LISTENER_LIMIT)
   );
+  return onSnapshot(
+    q,
+    (snapshot) =>
+      onUpdate(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as EventLike)),
+    onError
+  );
+};
 
-  let likesVersion = 0;
-  const unsubLikes = onSnapshot(likesQuery, (snapshot) => {
-    const currentVersion = ++likesVersion;
-    const likesInfo: Record<string, LikeInfo> = {};
-
-    // Initialiser
-    eventIds.forEach((id) => {
-      likesInfo[id] = { count: 0, likedByMe: false, likedByNames: [] };
-    });
-
-    // Collecter tous les userIds uniques pour les récupérer en batch
-    const likes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as EventLike);
-    const uniqueUserIds = [...new Set(likes.map((l) => l.userId))];
-
-    // Récupérer les noms à jour depuis les profils
-    getUserNames(uniqueUserIds).then((userNames) => {
-      if (currentVersion !== likesVersion) return;
-
-      likes.forEach((like) => {
-        if (!likesInfo[like.eventId]) {
-          likesInfo[like.eventId] = {
-            count: 0,
-            likedByMe: false,
-            likedByNames: [],
-          };
-        }
-
-        const info = likesInfo[like.eventId];
-        info.count++;
-        if (like.userId === userId) {
-          info.likedByMe = true;
-        }
-        if (info.likedByNames.length < 3) {
-          // Utiliser le nom du profil (à jour) au lieu du nom stocké
-          const displayName = like.userId === userId
-            ? "Moi"
-            : userNames.get(like.userId) || like.userName;
-          info.likedByNames.push(displayName);
-        }
-      });
-
-      onLikesUpdate(likesInfo);
-    });
-  });
-
-  // Listener pour les commentaires
-  const commentsQuery = query(
+/** Écouteur UNIQUE des commentaires d'un enfant (les plus récents d'abord). */
+export const ecouterCommentairesEnfant = (
+  childId: string,
+  onUpdate: (comments: EventComment[]) => void,
+  onError?: (error: unknown) => void
+): (() => void) => {
+  const q = query(
     collection(db, "eventComments"),
     where("childId", "==", childId),
-    limit(500)
+    orderBy("createdAt", "desc"),
+    limit(SOCIAL_LISTENER_LIMIT)
   );
+  return onSnapshot(
+    q,
+    (snapshot) =>
+      onUpdate(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as EventComment)),
+    onError
+  );
+};
 
-  let commentsVersion = 0;
-  const unsubComments = onSnapshot(commentsQuery, (snapshot) => {
-    const currentVersion = ++commentsVersion;
-    const commentCounts: Record<string, number> = {};
-    const latestComments: Record<string, LatestComment> = {};
-
-    // Initialiser
-    eventIds.forEach((id) => {
-      commentCounts[id] = 0;
+/** Agrège les likes d'un enfant par événement (fonction pure). */
+export const construireLikesInfo = (
+  likes: EventLike[],
+  userId: string | undefined,
+  userNames: Map<string, string>
+): Record<string, LikeInfo> => {
+  const result: Record<string, LikeInfo> = {};
+  likes.forEach((like) => {
+    const info = (result[like.eventId] ??= {
+      count: 0,
+      likedByMe: false,
+      likedByNames: [],
     });
-
-    // Grouper les commentaires par eventId et trouver le plus récent
-    const commentsByEvent: Record<string, EventComment[]> = {};
-
-    snapshot.docs.forEach((d) => {
-      const comment = { id: d.id, ...d.data() } as EventComment;
-      if (commentCounts[comment.eventId] === undefined) {
-        commentCounts[comment.eventId] = 0;
-      }
-      commentCounts[comment.eventId]++;
-
-      // Grouper pour trouver le dernier commentaire
-      if (!commentsByEvent[comment.eventId]) {
-        commentsByEvent[comment.eventId] = [];
-      }
-      commentsByEvent[comment.eventId].push(comment);
-    });
-
-    // Trouver le dernier commentaire de chaque événement
-    if (onLatestCommentsUpdate) {
-      // Collecter les userIds des derniers commentaires
-      const latestCommentsPerEvent: EventComment[] = [];
-
-      Object.entries(commentsByEvent).forEach(([eventId, comments]) => {
-        // Trier par date décroissante et prendre le premier
-        const sorted = comments.sort(
-          (a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()
-        );
-        if (sorted.length > 0) {
-          latestCommentsPerEvent.push(sorted[0]);
-        }
-      });
-
-      // Récupérer les noms à jour
-      const uniqueUserIds = [...new Set(latestCommentsPerEvent.map((c) => c.userId))];
-      getUserNames(uniqueUserIds).then((userNames) => {
-        if (currentVersion !== commentsVersion) return;
-
-        latestCommentsPerEvent.forEach((comment) => {
-          const displayName = comment.userId === userId
-            ? "Moi"
-            : userNames.get(comment.userId) || comment.userName;
-          latestComments[comment.eventId] = {
-            userName: displayName,
-            content: comment.content,
-          };
-        });
-
-        onLatestCommentsUpdate(latestComments);
-      });
+    info.count++;
+    if (userId && like.userId === userId) info.likedByMe = true;
+    if (info.likedByNames.length < 3) {
+      // Nom du profil (à jour) plutôt que le nom stocké dans le like
+      info.likedByNames.push(
+        userId && like.userId === userId
+          ? "Moi"
+          : userNames.get(like.userId) || like.userName
+      );
     }
-
-    onCommentsUpdate(commentCounts);
   });
+  return result;
+};
 
-  // Retourner une fonction pour se désabonner des deux listeners
-  return () => {
-    unsubLikes();
-    unsubComments();
-  };
+/** Nombre de commentaires par événement (fonction pure). */
+export const compterCommentaires = (
+  comments: EventComment[]
+): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  comments.forEach((c) => {
+    counts[c.eventId] = (counts[c.eventId] ?? 0) + 1;
+  });
+  return counts;
 };

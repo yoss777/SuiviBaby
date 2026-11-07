@@ -21,7 +21,7 @@ const TAILLE = NUMERIC_BOUNDS.croissance.tailleCm;
 const POIDS = NUMERIC_BOUNDS.croissance.poidsKg;
 const TETE = NUMERIC_BOUNDS.croissance.teteCm;
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -125,13 +125,6 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     setDateHeure(nextDate);
     setDateHeureDirty(true);
   }, []);
-
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(toDate(editData.date));
-    setDateHeureDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;

@@ -19,7 +19,7 @@ import {
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -363,13 +363,6 @@ export function SoinsForm({
     setDateHeure(nextDate);
     setDateHeureDirty(true);
   }, []);
-
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(toDate(editData.date));
-    setDateHeureDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   // Filtered lists for pickers
   const filteredVaccins = useMemo(

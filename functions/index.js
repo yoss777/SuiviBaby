@@ -13,8 +13,27 @@ const { defineSecret } = require("firebase-functions/params");
 // silently landed in us-central1 (SUIVI_ACTIONS 4.5 / D9).
 setGlobalOptions({ region: "europe-west1" });
 
-const { Expo } = require("expo-server-sdk");
-const { Resend } = require("resend");
+// SDK lourds (expo-server-sdk ~130-260 ms, resend ~30-45 ms, @anthropic-ai/sdk
+// ~180-320 ms au require) chargés à la première utilisation, pas au démarrage à
+// froid : toutes les fonctions partagent ce module, donc validateAndCreateEvent
+// payait le chargement de SDK qu'elle n'appelle jamais (SUIVI_ACTIONS S7.9).
+let expoModule = null;
+/** Module expo-server-sdk, chargé à la demande. */
+function getExpoModule() {
+  if (!expoModule) expoModule = require("expo-server-sdk");
+  return expoModule;
+}
+let expoClient = null;
+/** Client Expo partagé (une instance par instance de fonction), créé à la demande. */
+function getExpoClient() {
+  if (!expoClient) expoClient = new (getExpoModule().Expo)();
+  return expoClient;
+}
+/** Nouveau client Resend, SDK chargé à la demande. */
+function newResend(apiKey) {
+  const { Resend } = require("resend");
+  return new Resend(apiKey);
+}
 const { buildRecapHTML } = require("./emailTemplates");
 const { hasChildRole } = require("./accessControl");
 
@@ -27,7 +46,6 @@ const CONTRIBUTOR_PERMISSIONS = Object.freeze({
 });
 const VOICE_ENUMS = require("./lib/enums");
 const voiceParse = require("./lib/voiceParse");
-const Anthropic = require("@anthropic-ai/sdk").default;
 const appleAuth = require("./lib/appleAuth");
 
 admin.initializeApp();
@@ -39,7 +57,6 @@ const LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const logExpireAt = () => admin.firestore.Timestamp.fromMillis(Date.now() + LOG_RETENTION_MS);
 const DELETION_REQUEST_EXPIRY_DAYS = 7;
 const APP_CHECK_ENFORCED = process.env.APPCHECK_ENFORCE === "true";
-const expo = new Expo();
 const FREE_DAILY_VOICE_LIMIT = 3;
 const FREE_TOTAL_PDF_EXPORTS = 1;
 const FREE_MAX_SHARED_USERS = 2;
@@ -1551,6 +1568,7 @@ let anthropicClientKey = null;
 /** One client per instance (keeps the HTTP agent warm across invocations). */
 function getAnthropicClient(apiKey) {
   if (!anthropicClient || anthropicClientKey !== apiKey) {
+    const Anthropic = require("@anthropic-ai/sdk").default;
     anthropicClient = new Anthropic({ apiKey });
     anthropicClientKey = apiKey;
   }
@@ -1834,7 +1852,7 @@ async function handleReportCreated(snapshot, context) {
     // moderation effects below; if RESEND_API_KEY is missing we still
     // hide for the reporter and apply the auto-hide rules).
     if (apiKey) {
-      const resend = new Resend(apiKey);
+      const resend = newResend(apiKey);
       // Every field below comes from a client or from Auth: escape it all.
       const safe = Object.fromEntries(
         Object.entries({
@@ -1965,7 +1983,7 @@ async function handleReportCreated(snapshot, context) {
           const tokens = tokenSnap.docs
             .map((d) => d.data().token)
             .filter(Boolean)
-            .filter((t) => expo.isExpoPushToken(t));
+            .filter((t) => getExpoClient().isExpoPushToken(t));
 
           if (tokens.length > 0) {
             const messages = tokens.map((token) => ({
@@ -1975,9 +1993,9 @@ async function handleReportCreated(snapshot, context) {
               body: "Une photo que vous avez ajoutée a été signalée et est en cours d'examen.",
               data: { type: "photo_reported", eventId: data.eventId },
             }));
-            const chunks = expo.chunkPushNotifications(messages);
+            const chunks = getExpoClient().chunkPushNotifications(messages);
             for (const chunk of chunks) {
-              await expo.sendPushNotificationsAsync(chunk).catch(() => {});
+              await getExpoClient().sendPushNotificationsAsync(chunk).catch(() => {});
             }
             console.log(`onReportCreated: push sent to author ${authorId}`);
           }
@@ -2310,7 +2328,7 @@ exports.resolveReport = onCall(
         reporterEmail = reporterRecord.email;
 
         if (reporterEmail) {
-          const resend = new Resend(apiKey);
+          const resend = newResend(apiKey);
           const isRemoved = action === "remove_photo" || action === "remove_event";
           await resend.emails.send({
             from: "Suivi Baby <noreply@suivibaby.com>",
@@ -4230,7 +4248,7 @@ async function deliverDeletionRequestEmail(db, uid, deletionDateIso) {
     console.error(`deliverDeletionRequestEmail: could not store e-mail for uid=${uid}`, e);
   });
 
-  const resend = new Resend(apiKey);
+  const resend = newResend(apiKey);
   await sendEmailOrThrow(resend, {
     from: "Suivi Baby <noreply@suivibaby.com>",
     to: email,
@@ -4434,7 +4452,7 @@ exports.processScheduledDeletions = onSchedule(
           console.error(`processScheduledDeletions: no confirmation e-mail for uid=${uid} (${!email ? "no address" : "RESEND_API_KEY missing"})`);
         } else {
           try {
-            await sendEmailOrThrow(new Resend(apiKey), {
+            await sendEmailOrThrow(newResend(apiKey), {
               from: "Suivi Baby <noreply@suivibaby.com>",
               to: email,
               subject: "Votre compte Suivi Baby a ete supprime",
@@ -4577,7 +4595,7 @@ exports.checkAndSendReminders = onSchedule(
 
       const pushTokens = tokensSnap.docs
         .map((d) => d.data().token)
-        .filter((t) => Expo.isExpoPushToken(t));
+        .filter((t) => getExpoModule().Expo.isExpoPushToken(t));
 
       if (pushTokens.length === 0) continue;
 
@@ -4653,9 +4671,9 @@ exports.checkAndSendReminders = onSchedule(
           }));
 
           try {
-            const chunks = expo.chunkPushNotifications(messages);
+            const chunks = getExpoClient().chunkPushNotifications(messages);
             for (const chunk of chunks) {
-              await expo.sendPushNotificationsAsync(chunk);
+              await getExpoClient().sendPushNotificationsAsync(chunk);
             }
 
             // Enregistrer dans l'historique
@@ -4764,7 +4782,7 @@ exports.sendWeeklyRecap = onSchedule(
       return;
     }
 
-    const resend = new Resend(apiKey);
+    const resend = newResend(apiKey);
     const db = admin.firestore();
 
     // Calculer les bornes de la semaine à récapituler
@@ -5723,3 +5741,7 @@ exports.mirrorLegacyPhotoDelete = onObjectDeleted(
     console.log(`mirrorLegacyPhotoDelete: removed ${name} from ${PHOTOS_BUCKET}`);
   },
 );
+
+// Miniatures 400 px des photos de jalons (S7.3) : voir functions/thumbnails.js
+exports.generatePhotoThumbnail = require("./thumbnails").generatePhotoThumbnail;
+exports.deletePhotoThumbnail = require("./thumbnails").deletePhotoThumbnail;
