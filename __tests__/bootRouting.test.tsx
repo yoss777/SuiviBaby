@@ -56,6 +56,7 @@ jest.mock("@/services/eventsService", () => ({
 }));
 jest.mock("@/services/userPreferencesService", () => ({
   obtenirPreferencesNotifications: jest.fn(() => Promise.resolve({})),
+  synchroniserFuseauHoraire: jest.fn(() => Promise.resolve(false)),
 }));
 jest.mock("@/services/userPreferencesCache", () => ({
   setPreferencesCache: jest.fn(),

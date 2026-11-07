@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Linking,
   Platform,
@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
+import { DateTimePickerRow } from "@/components/ui/DateTimePickerRow";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -29,7 +30,18 @@ import {
   mettreAJourPreferencesNotifications,
   obtenirPreferencesNotifications,
 } from "@/services/userPreferencesService";
+import {
+  DEFAULT_QUIET_HOURS,
+  dateToHHMM,
+  getDeviceTimeZone,
+  hhmmToDate,
+  normalizeQuietHours,
+  type QuietHours,
+} from "@/utils/quietHours";
 import * as Notifications from "expo-notifications";
+
+/** Délai avant d'écrire une heure choisie : le sélecteur iOS notifie à chaque cran. */
+const QUIET_HOURS_SAVE_DELAY_MS = 800;
 
 export default function NotificationsScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -51,6 +63,14 @@ export default function NotificationsScreen() {
     changes: 0,
     vitamines: 0,
   });
+  const [quietHours, setQuietHours] = useState<QuietHours>(DEFAULT_QUIET_HOURS);
+  // Dernière valeur enregistrée (retour arrière en cas d'échec), valeur affichée
+  // et écriture différée en cours.
+  const savedQuietHoursRef = useRef<QuietHours>(DEFAULT_QUIET_HOURS);
+  const quietHoursRef = useRef<QuietHours>(DEFAULT_QUIET_HOURS);
+  const quietSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remindersEnabledRef = useRef(true);
+  const reminderThresholdsRef = useRef({ repas: 0, pompages: 0, changes: 0, vitamines: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [modalConfig, setModalConfig] = useState({
     visible: false,
@@ -89,6 +109,10 @@ export default function NotificationsScreen() {
           allDisabled ? false : (preferences.reminders?.enabled ?? true),
         );
         setReminderThresholds(loadedThresholds);
+        const loadedQuietHours = normalizeQuietHours(preferences.reminders?.quietHours);
+        savedQuietHoursRef.current = loadedQuietHours;
+        quietHoursRef.current = loadedQuietHours;
+        setQuietHours(loadedQuietHours);
       } catch (error) {
         if (!isMounted) return;
         setModalConfig({
@@ -293,6 +317,71 @@ export default function NotificationsScreen() {
     }
   };
 
+  // Les écritures différées lisent l'état courant des rappels via des refs.
+  useEffect(() => {
+    remindersEnabledRef.current = remindersEnabled;
+    reminderThresholdsRef.current = reminderThresholds;
+  }, [remindersEnabled, reminderThresholds]);
+
+  const saveQuietHours = useCallback(
+    async (value: QuietHours) => {
+      try {
+        await mettreAJourPreferencesNotifications({
+          reminders: {
+            enabled: remindersEnabledRef.current,
+            thresholds: reminderThresholdsRef.current,
+            // Le fuseau du téléphone accompagne toujours les heures : le serveur
+            // les applique à l'heure locale de cet appareil.
+            quietHours: { ...value, timeZone: getDeviceTimeZone() },
+          },
+        });
+        savedQuietHoursRef.current = value;
+        showToast("Heures calmes mises à jour");
+      } catch (error) {
+        quietHoursRef.current = savedQuietHoursRef.current;
+        setQuietHours(savedQuietHoursRef.current);
+        showActionToast("Impossible de mettre à jour les heures calmes", "Réessayer", () =>
+          updateQuietHours(value, true),
+        );
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showToast, showActionToast],
+  );
+
+  /** Bascule : écriture immédiate. Heures : écriture différée (dernier choix). */
+  const updateQuietHours = useCallback(
+    (patch: Partial<QuietHours>, immediate = false) => {
+      const next = { ...quietHoursRef.current, ...patch };
+      quietHoursRef.current = next;
+      setQuietHours(next);
+      if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
+      quietSaveTimerRef.current = null;
+      if (immediate) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        saveQuietHours(next);
+      } else {
+        quietSaveTimerRef.current = setTimeout(() => {
+          quietSaveTimerRef.current = null;
+          saveQuietHours(quietHoursRef.current);
+        }, QUIET_HOURS_SAVE_DELAY_MS);
+      }
+    },
+    [saveQuietHours],
+  );
+
+  // Quitter l'écran avec un choix d'heure en attente : on l'enregistre.
+  useEffect(
+    () => () => {
+      if (quietSaveTimerRef.current) {
+        clearTimeout(quietSaveTimerRef.current);
+        quietSaveTimerRef.current = null;
+        saveQuietHours(quietHoursRef.current);
+      }
+    },
+    [saveQuietHours],
+  );
+
   const renderReminderItem = (
     label: string,
     description: string,
@@ -463,6 +552,42 @@ export default function NotificationsScreen() {
               24,
               (value) => updateReminders({ vitamines: value }),
             )}
+            {renderSettingItem(
+              "Pas de rappels la nuit",
+              quietHours.enabled
+                ? `Aucun rappel entre ${quietHours.start} et ${quietHours.end}, à l'heure de cet appareil. Un rappel encore dû part ensuite.`
+                : "Les rappels peuvent arriver à toute heure.",
+              quietHours.enabled,
+              (value) => updateQuietHours({ enabled: value }, true),
+            )}
+            {quietHours.enabled && (
+              <View style={styles.quietTimes}>
+                <DateTimePickerRow
+                  label="Début"
+                  accessibilityLabel="Début des heures calmes"
+                  value={hhmmToDate(quietHours.start)}
+                  mode="time"
+                  colorScheme={colorScheme}
+                  disabled={isLoading}
+                  onChange={(date) => updateQuietHours({ start: dateToHHMM(date) })}
+                />
+                <DateTimePickerRow
+                  label="Fin"
+                  accessibilityLabel="Fin des heures calmes"
+                  value={hhmmToDate(quietHours.end)}
+                  mode="time"
+                  colorScheme={colorScheme}
+                  disabled={isLoading}
+                  onChange={(date) => updateQuietHours({ end: dateToHHMM(date) })}
+                />
+                {quietHours.start === quietHours.end && (
+                  <Text style={[styles.settingDescription, { color: nc.textLight }]}>
+                    Début et fin identiques : aucune pause, les rappels restent actifs
+                    à toute heure.
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
 
           <View
@@ -590,6 +715,9 @@ const styles = StyleSheet.create({
   settingDescription: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  quietTimes: {
+    paddingBottom: 8,
   },
   settingTitleDisabled: {
     opacity: 0.5,

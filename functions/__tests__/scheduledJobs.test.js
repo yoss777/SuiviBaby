@@ -19,6 +19,13 @@ const fns = require("../index");
 const HOUR = 3600 * 1000;
 const ts = (ms) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
 const keys = (docs, prefix) => [...docs.keys()].filter((k) => k.startsWith(prefix));
+/** Fige seulement Date (les promesses et timers réels restent intacts). */
+const setNow = (iso) => {
+  jest.useFakeTimers({
+    now: Date.parse(iso),
+    doNotFake: ["nextTick", "setImmediate", "clearImmediate", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "queueMicrotask", "performance", "hrtime"],
+  });
+};
 const pushed = () => expoClient.sendPushNotificationsAsync.mock.calls.flatMap(([chunk]) => chunk);
 
 describe("checkAndSendReminders", () => {
@@ -44,11 +51,17 @@ describe("checkAndSendReminders", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Heures calmes par défaut 22:00-07:00 : l'horloge est fixée à midi (Paris)
+    // pour que les cas hors heures calmes ne dépendent pas de l'heure du test.
+    setNow("2026-06-15T10:00:00Z");
     expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
     logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
   });
-  afterEach(() => [logSpy, errSpy].forEach((s) => s.mockRestore()));
+  afterEach(() => {
+    [logSpy, errSpy].forEach((s) => s.mockRestore());
+    jest.useRealTimers();
+  });
 
   it("notifies when the threshold is exceeded, with child and category in the message, and records history", async () => {
     const docs = memoryStore(seed({ hoursAgo: 5 }));
@@ -144,8 +157,136 @@ describe("checkAndSendReminders", () => {
     expect(keys(docs, "notification_history/")).toHaveLength(0);
   });
 
-  // Décision produit en attente (notes S11) : aucune plage de nuit aujourd'hui.
-  it.todo("night/quiet hours: no reminder between the user's quiet hours (product decision pending)");
+  describe("heures calmes (quiet hours)", () => {
+    const quiet = (quietHours, extra = {}) => ({
+      notifications: { push: true, reminders: { enabled: true, thresholds: { repas: 3 }, ...(quietHours ? { quietHours } : {}) } },
+      ...extra,
+    });
+    const logger = require("firebase-functions/logger");
+    let infoSpy;
+    beforeEach(() => { infoSpy = jest.spyOn(logger, "info").mockImplementation(() => {}); });
+    afterEach(() => infoSpy.mockRestore());
+    const summary = () => infoSpy.mock.calls.filter(([m]) => m === "checkAndSendReminders: done").pop()?.[1];
+
+    it("par défaut (champ absent) : rien entre 22:00 et 07:00 à Paris, envoi le jour", async () => {
+      setNow("2026-06-15T21:00:00Z"); // 23:00 Paris
+      const docs = memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(expoClient.sendPushNotificationsAsync).not.toHaveBeenCalled();
+      expect(keys(docs, "notification_history/")).toHaveLength(0);
+
+      setNow("2026-06-16T05:00:00Z"); // 07:00 Paris : la fin est exclue
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+    });
+
+    it("pas de file d'attente : le rappel part au passage suivant après la fin, dédup de 2 h conservée", async () => {
+      const docs = memoryStore(seed({ hoursAgo: 5 }));
+      setNow("2026-06-16T04:30:00Z"); // 06:30 Paris
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+      setNow("2026-06-16T05:00:00Z"); // 07:00 Paris
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+      setNow("2026-06-16T05:30:00Z"); // 07:30 : dédup 2 h
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+      expect(keys(docs, "notification_history/")).toHaveLength(1);
+    });
+
+    it("plage qui passe minuit, plage dans la journée et heures personnalisées", async () => {
+      setNow("2026-06-15T22:30:00Z"); // 00:30 Paris
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet({ enabled: true, start: "23:00", end: "06:00", timeZone: "Europe/Paris" }) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+
+      setNow("2026-06-15T10:00:00Z"); // 12:00 Paris, plage 12:00-14:00
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet({ enabled: true, start: "12:00", end: "14:00", timeZone: "Europe/Paris" }) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+
+      setNow("2026-06-15T05:00:00Z"); // 07:00 Paris, plage 23:00-06:00 : dehors
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet({ enabled: true, start: "23:00", end: "06:00", timeZone: "Europe/Paris" }) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+    });
+
+    it("désactivé ou début == fin : envoi même la nuit", async () => {
+      setNow("2026-06-15T23:30:00Z"); // 01:30 Paris
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet({ enabled: false, start: "22:00", end: "07:00", timeZone: "Europe/Paris" }) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+
+      jest.clearAllMocks();
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet({ enabled: true, start: "22:00", end: "22:00", timeZone: "Europe/Paris" }) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+    });
+
+    it("heure du fuseau de l'utilisateur (America/Montreal)", async () => {
+      const mtl = { enabled: true, start: "22:00", end: "07:00", timeZone: "America/Montreal" };
+      setNow("2026-06-15T20:00:00Z"); // 22:00 Paris mais 16:00 Montréal : envoi
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet(mtl) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+
+      jest.clearAllMocks();
+      setNow("2026-06-15T10:00:00Z"); // 12:00 Paris mais 06:00 Montréal : silence
+      memoryStore(seed({ hoursAgo: 5, prefs: quiet(mtl) }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+    });
+
+    it("changement d'heure à Paris : 22:00 locale suit l'offset réel (CET puis CEST)", async () => {
+      setNow("2027-03-27T20:30:00Z"); // 21:30 CET : envoi
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+
+      jest.clearAllMocks();
+      setNow("2027-03-27T21:00:00Z"); // 22:00 CET : silence
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+
+      setNow("2027-03-28T04:30:00Z"); // 06:30 CEST (nuit de 23 h) : silence
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(0);
+
+      setNow("2027-03-28T05:00:00Z"); // 07:00 CEST : envoi
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(pushed()).toHaveLength(1);
+    });
+
+    it("valeurs invalides : repli sur les défauts, le job ne plante pas", async () => {
+      setNow("2026-06-15T21:00:00Z"); // 23:00 Paris
+      for (const bad of [
+        { enabled: true, start: "99:99", end: "xx", timeZone: "Mars/Olympus" },
+        { enabled: "oui", start: 22, end: null, timeZone: 7 },
+        "n'importe quoi",
+      ]) {
+        memoryStore(seed({ hoursAgo: 5, prefs: quiet(bad) }));
+        await fns.checkAndSendReminders();
+      }
+      expect(pushed()).toHaveLength(0);
+      expect(errSpy).not.toHaveBeenCalled();
+    });
+
+    it("compte skippedQuietHours dans le journal structuré du job", async () => {
+      setNow("2026-06-15T21:00:00Z");
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(summary()).toMatchObject({ job: "checkAndSendReminders", skippedQuietHours: 1, sent: 0 });
+
+      setNow("2026-06-15T10:00:00Z");
+      memoryStore(seed({ hoursAgo: 5 }));
+      await fns.checkAndSendReminders();
+      expect(summary()).toMatchObject({ skippedQuietHours: 0, sent: 1 });
+    });
+  });
 
   it("skips a child whose access document is gone, even if the index entry remains (revoked member)", async () => {
     memoryStore(seed({ access: false }));
