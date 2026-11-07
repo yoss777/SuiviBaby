@@ -103,6 +103,19 @@ service cloud.firestore {
 
     // Enfants - document principal
     match /children/{childId} {
+      // Allergies connues (donnée de santé) : liste de 0 à 15 textes de 1 à 40
+      // caractères. Les règles n'ont pas de boucle : chaque position est testée.
+      function allergyAt(a, i) {
+        return a.size() <= i || (a[i] is string && a[i].size() >= 1 && a[i].size() <= 40);
+      }
+      function validAllergies(a) {
+        return a is list && a.size() <= 15 &&
+          allergyAt(a, 0) && allergyAt(a, 1) && allergyAt(a, 2) && allergyAt(a, 3) &&
+          allergyAt(a, 4) && allergyAt(a, 5) && allergyAt(a, 6) && allergyAt(a, 7) &&
+          allergyAt(a, 8) && allergyAt(a, 9) && allergyAt(a, 10) && allergyAt(a, 11) &&
+          allergyAt(a, 12) && allergyAt(a, 13) && allergyAt(a, 14);
+      }
+
       // Helper: enfant non soft-deleted
       function isNotDeleted() {
         return !('deletedAt' in resource.data) || resource.data.deletedAt == null;
@@ -122,7 +135,8 @@ service cloud.firestore {
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.name is string &&
         request.resource.data.name.size() > 0 &&
-        request.resource.data.birthDate is timestamp;
+        request.resource.data.birthDate is timestamp &&
+        (!('allergies' in request.resource.data) || validAllergies(request.resource.data.allergies));
 
       // Modification : owner ou admin uniquement, bloqué si soft-deleted.
       // ownerId et deletedAt ne changent que côté serveur (transfert de
@@ -132,7 +146,9 @@ service cloud.firestore {
       // les rappels de tous les membres.
       allow update: if isNotDeleted() && (
         isOwner(childId) || isAdmin(childId)
-      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt', 'lastEventAt']);
+      ) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'ownerlessSince', 'deletedAt', 'lastEventAt']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['allergies']) ||
+          validAllergies(request.resource.data.allergies));
 
       // Suppression : uniquement via CF (purge RGPD) — plus de delete direct client
       allow delete: if false;

@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AllergiesEditor } from "@/components/forms/AllergiesEditor";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { db } from "@/config/firebase";
@@ -33,6 +34,7 @@ import {
 } from "@/services/childDeletionService";
 import { getAccessibleChildIds } from "@/utils/permissions";
 import { getAgeLabel } from "@/utils/ageUtils";
+import { sanitizeAllergies } from "@/utils/childAllergies";
 
 // ============================================
 // TYPES
@@ -40,6 +42,8 @@ import { getAgeLabel } from "@/utils/ageUtils";
 
 interface ChildWithOwnership extends Child {
   isOwner: boolean;
+  /** Parent (owner ou admin) : peut modifier les allergies ; Proche : lecture seule. */
+  canEditAllergies: boolean;
   hasOtherParents: boolean;
 }
 
@@ -69,6 +73,8 @@ export default function EditChildScreen() {
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [originalName, setOriginalName] = useState("");
+  const [allergiesChildId, setAllergiesChildId] = useState<string | null>(null);
+  const [allergiesDraft, setAllergiesDraft] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [modalConfig, setModalConfig] = useState({
@@ -128,6 +134,8 @@ export default function EditChildScreen() {
                 gender: data.gender,
                 photoUri: data.photoUri,
                 isOwner: role === "owner",
+                canEditAllergies: role === "owner" || role === "admin",
+                allergies: sanitizeAllergies(data.allergies),
                 hasOtherParents: allAccessSnap.size > 1,
               });
             } catch {
@@ -210,6 +218,41 @@ export default function EditChildScreen() {
 
   const trimmedEditName = useMemo(() => editName.trim(), [editName]);
   const isSaveDisabled = isSaving || !trimmedEditName || trimmedEditName === originalName;
+
+  // ============================================
+  // ALLERGIES HANDLERS
+  // ============================================
+
+  const startEditingAllergies = useCallback((child: ChildWithOwnership) => {
+    if (!child.canEditAllergies) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAllergiesChildId(child.id);
+    setAllergiesDraft(child.allergies ?? []);
+  }, []);
+
+  const cancelEditingAllergies = useCallback(() => {
+    setAllergiesChildId(null);
+    setAllergiesDraft([]);
+  }, []);
+
+  const handleSaveAllergies = useCallback(async () => {
+    if (!allergiesChildId) return;
+    const next = sanitizeAllergies(allergiesDraft);
+    try {
+      setIsSaving(true);
+      await updateDoc(doc(db, "children", allergiesChildId), { allergies: next });
+      if (!isMountedRef.current) return;
+      setAllChildren((prev) => prev.map((c) => c.id === allergiesChildId ? { ...c, allergies: next } : c));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Allergies enregistrées");
+      cancelEditingAllergies();
+    } catch {
+      if (!isMountedRef.current) return;
+      setModalConfig({ visible: true, title: "Erreur", message: "Impossible d'enregistrer les allergies." });
+    } finally {
+      if (isMountedRef.current) setIsSaving(false);
+    }
+  }, [allergiesChildId, allergiesDraft, showToast, cancelEditingAllergies]);
 
   // ============================================
   // DELETE HANDLERS
@@ -424,6 +467,55 @@ export default function EditChildScreen() {
                       )}
                     </View>
 
+                    {/* Allergies connues : éditables par les Parents, lecture seule pour un Proche */}
+                    <View style={[styles.allergiesSection, { backgroundColor: nc.backgroundCard }]}>
+                      {allergiesChildId === child.id ? (
+                        <>
+                          <AllergiesEditor
+                            value={allergiesDraft}
+                            onChange={setAllergiesDraft}
+                            colorScheme={colorScheme}
+                            disabled={isSaving}
+                          />
+                          <View style={styles.allergiesActions}>
+                            <TouchableOpacity
+                              style={[styles.allergiesButton, { backgroundColor: nc.backgroundPressed }]}
+                              onPress={cancelEditingAllergies}
+                              disabled={isSaving}
+                              accessibilityRole="button"
+                              accessibilityLabel="Annuler la modification des allergies"
+                            >
+                              <Text style={[styles.dangerButtonText, { color: nc.textNormal }]}>Annuler</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.allergiesButton, { backgroundColor: nc.success }, isSaving && { opacity: 0.5 }]}
+                              onPress={handleSaveAllergies}
+                              disabled={isSaving}
+                              accessibilityRole="button"
+                              accessibilityLabel="Enregistrer les allergies"
+                            >
+                              <Text style={[styles.dangerButtonText, { color: nc.white }]}>Enregistrer</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : child.canEditAllergies ? (
+                        <TouchableOpacity
+                          style={styles.allergiesSummary}
+                          onPress={() => startEditingAllergies(child)}
+                          disabled={isSaving || isDeleting}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Modifier les allergies de ${child.name}`}
+                        >
+                          <Text style={[styles.allergiesLabel, { color: nc.textStrong }]}>Allergies connues</Text>
+                          <Text style={[styles.childAge, { color: nc.textLight }]}>
+                            {child.allergies && child.allergies.length > 0 ? child.allergies.join(", ") : "Aucune renseignée. Appuyez pour ajouter."}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <AllergiesEditor value={child.allergies ?? []} onChange={() => {}} colorScheme={colorScheme} readOnly />
+                      )}
+                    </View>
+
                     {/* Danger zone below card when editing */}
                     {isEditing && (
                       <View style={[styles.dangerZone, { borderTopColor: nc.border }]}>
@@ -586,6 +678,11 @@ const styles = StyleSheet.create({
   childDetails: { flex: 1 },
   childName: { fontSize: 16, fontWeight: "600", marginBottom: 2 },
   childAge: { fontSize: 13 },
+  allergiesSection: { padding: 16, borderRadius: 12, marginBottom: 4 },
+  allergiesSummary: { minHeight: 44, justifyContent: "center", gap: 2 },
+  allergiesLabel: { fontSize: 16, fontWeight: "600" },
+  allergiesActions: { flexDirection: "row", gap: 12, marginTop: 12 },
+  allergiesButton: { flex: 1, minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   // Inline edit: input takes flex space, checkmark button at end
   inlineEditRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   inlineInput: {

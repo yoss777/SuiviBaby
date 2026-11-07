@@ -266,6 +266,66 @@ describe("children collection", () => {
       updateDoc(doc(db, "children", CHILD_ID), { name: "Still editable" })
     );
   });
+
+  describe("allergies", () => {
+    const base = (uid: string) => ({ name: "Baby", birthDate: now, ownerId: uid });
+
+    test("owner can set valid allergies", async () => {
+      const db = authedFirestore(ALICE_UID);
+      await assertSucceeds(
+        updateDoc(doc(db, "children", CHILD_ID), { allergies: ["Lait", "Kiwi"] })
+      );
+      await assertSucceeds(updateDoc(doc(db, "children", CHILD_ID), { allergies: [] }));
+    });
+
+    test("admin can set allergies, contributor cannot", async () => {
+      await seedData(async (db: any) => {
+        await setDoc(doc(db, "children", CHILD_ID, "access", BOB_UID), {
+          userId: BOB_UID,
+          role: "admin",
+          grantedBy: ALICE_UID,
+        });
+        await setDoc(doc(db, "children", CHILD_ID, "access", CHARLIE_UID), {
+          userId: CHARLIE_UID,
+          role: "contributor",
+          grantedBy: ALICE_UID,
+        });
+      });
+      await assertSucceeds(
+        updateDoc(doc(authedFirestore(BOB_UID), "children", CHILD_ID), { allergies: ["Lait"] })
+      );
+      await assertFails(
+        updateDoc(doc(authedFirestore(CHARLIE_UID), "children", CHILD_ID), { allergies: ["Lait"] })
+      );
+    });
+
+    test("rejects non-list, too many, empty, too long and non-string entries", async () => {
+      const ref = doc(authedFirestore(ALICE_UID), "children", CHILD_ID);
+      await assertFails(updateDoc(ref, { allergies: "Lait" }));
+      await assertFails(
+        updateDoc(ref, { allergies: Array.from({ length: 16 }, (_, i) => `a${i}`) })
+      );
+      await assertFails(updateDoc(ref, { allergies: ["Lait", ""] }));
+      await assertFails(updateDoc(ref, { allergies: ["a".repeat(41)] }));
+      await assertFails(updateDoc(ref, { allergies: ["Lait", 3] }));
+      await assertSucceeds(
+        updateDoc(ref, { allergies: Array.from({ length: 15 }, () => "a".repeat(40)) })
+      );
+    });
+
+    test("create accepts valid allergies and rejects invalid ones", async () => {
+      const db = authedFirestore(BOB_UID);
+      await assertSucceeds(
+        setDoc(doc(db, "children", "c-ok"), { ...base(BOB_UID), allergies: ["Lait"] })
+      );
+      await assertFails(
+        setDoc(doc(db, "children", "c-ko"), { ...base(BOB_UID), allergies: ["a".repeat(41)] })
+      );
+      await assertFails(
+        setDoc(doc(db, "children", "c-ko2"), { ...base(BOB_UID), allergies: "Lait" })
+      );
+    });
+  });
 });
 
 // ===========================================================================

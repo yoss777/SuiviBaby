@@ -17,6 +17,7 @@ import {
 } from "@/hooks/useMergedOptimisticEvents";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import { decidePdfExportAccess } from "@/services/premiumGatingService";
+import { buildAllergiesReportLine } from "@/utils/childAllergies";
 import {
   consumeExportQuota,
   getExportUsageStatus,
@@ -860,6 +861,7 @@ export default function StatsScreen() {
       <body>
         <h1>Rapport 3 mois — ${name}</h1>
         <div class="subtitle">${dateStr} · Tendance sur 12 semaines</div>
+        ${buildAllergiesReportLine(activeChild?.allergies)}
         ${
           partialSince
             ? `<div class="subtitle" style="color:#b45309">Données partielles : généré hors connexion, semaines antérieures au ${partialSince.toLocaleDateString("fr-FR")} non incluses.</div>`
@@ -931,7 +933,7 @@ export default function StatsScreen() {
       return false;
     }
     return true;
-  }, [activeChild?.id, activeChild?.name, tetees, pompages, sommeils]);
+  }, [activeChild?.id, activeChild?.name, activeChild?.allergies, tetees, pompages, sommeils]);
 
   const handleExportPDF = useCallback(async () => {
     if (isExporting) return;

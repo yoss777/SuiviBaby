@@ -1,5 +1,6 @@
 import { ThemedView } from '@/components/themed-view';
 import { GenderRadioGroup } from '@/components/forms/GenderRadioGroup';
+import { AllergiesEditor } from '@/components/forms/AllergiesEditor';
 import { DateTimePickerRow } from '@/components/ui/DateTimePickerRow';
 import { db } from '@/config/firebase';
 import { getNeutralColors } from '@/constants/dashboardColors';
@@ -40,6 +41,8 @@ export default function AddBabyScreen() {
     return today;
   });
   const [gender, setGender] = useState<'male' | 'female' | ''>('');
+  const [allergies, setAllergies] = useState<string[]>([]);
+  const [showAllergies, setShowAllergies] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const isMountedRef = useRef(true);
 
@@ -223,6 +226,8 @@ export default function AddBabyScreen() {
         parentIds: [user.uid],
         parentEmails: parentEmail ? [parentEmail] : [],
         photoUri: "",
+        // Facultatif : champ absent plutôt que liste vide à la création
+        ...(allergies.length > 0 ? { allergies } : {}),
       };
 
       const childRef = await addDoc(collection(db, 'children'), childData);
@@ -255,6 +260,8 @@ export default function AddBabyScreen() {
       resetDate.setHours(0, 0, 0, 0);
       setBirthDate(resetDate);
       setGender('');
+      setAllergies([]);
+      setShowAllergies(false);
     } catch (error) {
       if (!isMountedRef.current) return;
       console.error('Erreur lors de l\'ajout de l\'enfant:', error);
@@ -265,7 +272,7 @@ export default function AddBabyScreen() {
         setIsLoading(false);
       }
     }
-  }, [validateForm, user, name, birthDate, gender, showAlert]);
+  }, [validateForm, user, name, birthDate, gender, allergies, showAlert]);
 
   return (
     <ThemedView style={styles.screen}>
@@ -347,6 +354,33 @@ export default function AddBabyScreen() {
               />
             </View>
 
+            {/* Allergies connues (facultatif, repliées par défaut) */}
+            <View style={styles.formGroup}>
+              <TouchableOpacity
+                style={styles.allergiesToggle}
+                onPress={() => setShowAllergies((v) => !v)}
+                disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Allergies connues, facultatif"
+                accessibilityState={{ expanded: showAllergies }}
+              >
+                <Text style={dynamicStyles.label}>
+                  Allergies connues <Text style={{ color: nc.textLight, fontWeight: '400' }}>(facultatif)</Text>
+                </Text>
+                <FontAwesome name={showAllergies ? 'chevron-up' : 'chevron-down'} size={14} color={nc.textLight} />
+              </TouchableOpacity>
+              {showAllergies ? (
+                <AllergiesEditor
+                  value={allergies}
+                  onChange={setAllergies}
+                  colorScheme={colorScheme}
+                  disabled={isLoading}
+                />
+              ) : allergies.length > 0 ? (
+                <Text style={dynamicStyles.helperText}>{allergies.join(', ')}</Text>
+              ) : null}
+            </View>
+
             {/* Bouton d'ajout */}
             <TouchableOpacity
               style={[
@@ -402,6 +436,12 @@ const styles = StyleSheet.create({
   },
   required: {
     // couleur appliquée en ligne : nc.errorText (≥ 4.5:1 dans les deux thèmes)
+  },
+  allergiesToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
   },
   genderContainer: {
     flexDirection: "row",

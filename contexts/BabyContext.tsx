@@ -13,6 +13,7 @@ export interface Child {
   birthDate: string; // Format DD/MM/YYYY
   gender?: 'male' | 'female';
   photoUri?: string;
+  allergies?: string[];
 }
 
 const DEFAULT_REMINDERS: ReminderPreferences = {
