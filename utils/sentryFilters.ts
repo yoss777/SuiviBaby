@@ -109,3 +109,23 @@ export function filterTransaction<T>(event: T): T {
   }
   return next as T;
 }
+
+/**
+ * Transient network noise from Google endpoints the SDKs retry on their own:
+ * Firestore's real-time channels (Listen/Write) and Firebase Auth answer 5xx
+ * on drops and the HTTP client integration reported each one as an error
+ * (Sentry, 1.0.9+13). Also Firestore "client is offline" reads. Our own
+ * Cloud Functions (cloudfunctions.net) stay reported.
+ */
+const RETRIED_GOOGLE_HOSTS = /^https:\/\/(firestore|identitytoolkit|securetoken)\.googleapis\.com\//;
+
+export function isTransientNetworkNoise(event: unknown): boolean {
+  const e = event as SentryEventLike;
+  const value = e.exception?.values?.[0]?.value ?? e.message ?? "";
+  if (/client is offline/i.test(value)) return true;
+  if (/^HTTP Client Error with status code: 5\d\d/.test(value)) {
+    const url = typeof e.request?.url === "string" ? e.request.url : "";
+    return RETRIED_GOOGLE_HOSTS.test(url);
+  }
+  return false;
+}

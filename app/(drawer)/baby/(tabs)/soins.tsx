@@ -273,6 +273,9 @@ const formatTemperature = (value?: number) =>
 // COMPONENT
 // ============================================
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const SOINS_EVENT_TYPES = ["temperature", "medicament", "symptome", "vaccin", "vitamine"] as const;
+
 export default function SoinsScreen() {
   const { activeChild } = useBaby();
   const { setHeaderRight } = useHeaderRight();
@@ -333,6 +336,7 @@ export default function SoinsScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<HealthEvent>({
     childId: activeChild?.id,
+    eventTypes: SOINS_EVENT_TYPES,
     transformMerged: sortMergedEvents,
   });
   const latestTemperaturesRef = useRef<HealthEvent[]>([]);

@@ -813,6 +813,9 @@ const CroissanceSkeleton = React.memo(function CroissanceSkeleton({
   );
 });
 
+// Types affichés ici : filtre les saisies optimistes des autres écrans.
+const CROISSANCE_EVENT_TYPES = ["croissance"] as const;
+
 export default function CroissanceScreen() {
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
@@ -876,6 +879,7 @@ export default function CroissanceScreen() {
     refreshMerged,
   } = useMergedOptimisticEvents<CroissanceEntry>({
     childId: activeChild?.id,
+    eventTypes: CROISSANCE_EVENT_TYPES,
     transformMerged: sortMergedEntries,
   });
 
