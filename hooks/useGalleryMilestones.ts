@@ -65,8 +65,15 @@ export function appendOlderPage(
   return [...previous, ...olderPage.filter((e) => !ids.has(e.id))].sort(byDateDesc);
 }
 
+const EMPTY_EVENTS: GalleryMilestoneEvent[] = [];
+
 export function useGalleryMilestones(childId: string | undefined) {
-  const [events, setEvents] = useState<GalleryMilestoneEvent[]>([]);
+  // Les jalons sont rattachés à l'enfant qui les a produits : après un changement
+  // d'enfant, ceux du précédent ne sont jamais exposés (même une frame).
+  const [eventsState, setEventsState] = useState<{
+    childId: string | undefined;
+    events: GalleryMilestoneEvent[];
+  }>({ childId, events: EMPTY_EVENTS });
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -75,6 +82,11 @@ export function useGalleryMilestones(childId: string | undefined) {
   const isMountedRef = useRef(true);
   const eventsRef = useRef<GalleryMilestoneEvent[]>([]);
   const loadingMoreRef = useRef(false);
+  // Jeton par appel de loadMore : seul le dernier appel peut relâcher le drapeau.
+  const loadTokenRef = useRef(0);
+  // Vrai après « tirer pour rafraîchir » : la prochaine première page remplace tout
+  // (les pages suivantes ne sont plus réconciliées, elles sont relues à la demande).
+  const resetPagesRef = useRef(false);
   const childIdRef = useRef(childId);
   const loadedChildRef = useRef<string | undefined>(undefined);
 
@@ -87,17 +99,21 @@ export function useGalleryMilestones(childId: string | undefined) {
 
   const commit = useCallback((next: GalleryMilestoneEvent[]) => {
     eventsRef.current = next;
-    setEvents(next);
+    setEventsState({ childId: childIdRef.current, events: next });
   }, []);
 
   /** Première page : reçue de l'écouteur ou d'une relecture serveur. */
   const applyFirstPageResult = useCallback(
     (page: GalleryMilestoneEvent[]) => {
       if (!isMountedRef.current) return;
-      const next = applyFirstPage(eventsRef.current, page);
+      const resetPages = resetPagesRef.current;
+      resetPagesRef.current = false;
+      const next = resetPages
+        ? applyFirstPage([], page)
+        : applyFirstPage(eventsRef.current, page);
       // Une première page incomplète = tout l'historique est chargé.
       if (page.length < GALLERY_PAGE_SIZE) setHasMore(false);
-      else if (eventsRef.current.length <= GALLERY_PAGE_SIZE) setHasMore(true);
+      else if (resetPages || eventsRef.current.length <= GALLERY_PAGE_SIZE) setHasMore(true);
       commit(next);
       setLoaded(true);
       setLoadError(false);
@@ -115,6 +131,8 @@ export function useGalleryMilestones(childId: string | undefined) {
       setHasMore(false);
       setLoadingMore(false);
       loadingMoreRef.current = false;
+      loadTokenRef.current += 1;
+      resetPagesRef.current = false;
       setLoaded(false);
       setLoadError(false);
     }
@@ -138,18 +156,29 @@ export function useGalleryMilestones(childId: string | undefined) {
   const loadMore = useCallback(async () => {
     const cid = childIdRef.current;
     if (!cid || loadingMoreRef.current || !hasMore) return;
-    const current = eventsRef.current;
-    const oldest = current[current.length - 1];
-    if (!oldest) return;
+    if (eventsRef.current.length === 0) return;
 
+    const token = ++loadTokenRef.current;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       // Curseur = document du dernier jalon chargé (départage les dates égales).
-      const cursor = await getDoc(doc(db, "events", oldest.id));
-      if (!isMountedRef.current || childIdRef.current !== cid) return;
-      if (!cursor.exists()) {
-        // Ce jalon vient d'être supprimé : on repart de la première page.
+      // Un jalon supprimé entre-temps est retiré de la liste locale et on prend
+      // le précédent comme curseur (sinon la pagination resterait bloquée).
+      let cursor: Awaited<ReturnType<typeof getDoc>> | null = null;
+      while (eventsRef.current.length > 0) {
+        const oldest = eventsRef.current[eventsRef.current.length - 1];
+        const candidate = await getDoc(doc(db, "events", oldest.id));
+        if (!isMountedRef.current || childIdRef.current !== cid) return;
+        if (candidate.exists()) {
+          cursor = candidate;
+          break;
+        }
+        commit(eventsRef.current.filter((e) => e.id !== oldest.id));
+      }
+      if (!cursor) {
+        // Plus aucun curseur valide : on repart de la première page.
+        resetPagesRef.current = true;
         setRetryCount((c) => c + 1);
         return;
       }
@@ -173,13 +202,18 @@ export function useGalleryMilestones(childId: string | undefined) {
     } catch (error) {
       console.error("[Gallery] Erreur page suivante:", error);
     } finally {
-      loadingMoreRef.current = false;
-      if (isMountedRef.current) setLoadingMore(false);
+      if (loadTokenRef.current === token) {
+        loadingMoreRef.current = false;
+        if (isMountedRef.current) setLoadingMore(false);
+      }
     }
   }, [hasMore, commit]);
 
   /** Tirer pour rafraîchir : relance l'écouteur, la liste affichée reste en place. */
-  const reload = useCallback(() => setRetryCount((c) => c + 1), []);
+  const reload = useCallback(() => {
+    resetPagesRef.current = true;
+    setRetryCount((c) => c + 1);
+  }, []);
 
   /** Après une erreur : repart de zéro avec l'écran de chargement. */
   const retry = useCallback(() => {
@@ -190,12 +224,13 @@ export function useGalleryMilestones(childId: string | undefined) {
     setRetryCount((c) => c + 1);
   }, [commit]);
 
+  const isCurrent = eventsState.childId === childId;
   return {
-    events,
-    loaded,
-    loadError,
-    hasMore,
-    loadingMore,
+    events: isCurrent ? eventsState.events : EMPTY_EVENTS,
+    loaded: isCurrent && loaded,
+    loadError: isCurrent && loadError,
+    hasMore: isCurrent && hasMore,
+    loadingMore: isCurrent && loadingMore,
     loadMore,
     reload,
     retry,

@@ -88,20 +88,26 @@ export function useWeeklyInsightEvents(
   childId: string | null | undefined,
   refreshKey = 0,
 ): WeeklyInsightEvent[] {
-  const [events, setEvents] = useState<WeeklyInsightEvent[]>(
-    () => (childId ? getWeeklyEventsCache<WeeklyInsightEvent>(childId) : null) ?? EMPTY,
-  );
+  // Événements rattachés à l'enfant qui les a produits : après un changement
+  // d'enfant, ceux du précédent ne sont jamais renvoyés (même une frame).
+  const [state, setState] = useState<{
+    childId: string | null | undefined;
+    events: WeeklyInsightEvent[];
+  }>(() => ({
+    childId,
+    events: (childId ? getWeeklyEventsCache<WeeklyInsightEvent>(childId) : null) ?? EMPTY,
+  }));
 
   useEffect(() => {
     if (!childId) {
-      setEvents(EMPTY);
+      setState({ childId, events: EMPTY });
       return;
     }
     let cancelled = false;
 
     // Données du jour déjà connues : affichage immédiat, sans lecture si fraîches.
     const cached = getWeeklyEventsCache<WeeklyInsightEvent>(childId);
-    setEvents(cached ?? EMPTY);
+    setState({ childId, events: cached ?? EMPTY });
     if (cached && refreshKey === 0 && isWeeklyEventsCacheFresh(childId)) return;
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -116,7 +122,7 @@ export function useWeeklyInsightEvents(
           // Le cache est rempli même si l'écran a changé d'enfant entre-temps.
           setWeeklyEventsCache(childId, mapped);
           if (cancelled) return;
-          setEvents(mapped);
+          setState({ childId, events: mapped });
         })
         .catch(console.warn);
     });
@@ -127,5 +133,7 @@ export function useWeeklyInsightEvents(
     };
   }, [childId, refreshKey]);
 
-  return events;
+  if (state.childId === childId) return state.events;
+  // Rendu intermédiaire d'un changement d'enfant : cache du nouvel enfant ou rien.
+  return (childId ? getWeeklyEventsCache<WeeklyInsightEvent>(childId) : null) ?? EMPTY;
 }

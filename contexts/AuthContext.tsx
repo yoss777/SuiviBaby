@@ -5,6 +5,8 @@ import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
+import { clearWeeklyEventsCache } from "@/services/weeklyEventsCache";
+import { resetChildPermissionsStore } from "@/hooks/useChildPermissions";
 import { signOutGoogle } from "@/services/socialAuthService";
 import { cleanupStaleExports } from "@/services/tempShareService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -137,6 +139,17 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 }
 
 const AUTH_LOADING_TIMEOUT_MS = 8000;
+
+// Caches mémoire liés à la session : ne doivent pas survivre à la déconnexion
+// (appareil partagé, changement de compte). Les écouteurs de permissions sont
+// fermés et les consommateurs montés notifiés.
+function clearSessionCaches() {
+  clearTodayEventsCache();
+  clearWeeklyEventsCache();
+  clearPreferencesCache();
+  clearPermissionsCache();
+  resetChildPermissionsStore();
+}
 
 export function AuthProvider({
   children: childrenProp,
@@ -297,6 +310,8 @@ export function AuthProvider({
           startAutoSync();
         }
       } else {
+        // Déconnexion forcée / compte supprimé : mêmes caches à purger que signOut.
+        clearSessionCaches();
         dispatch({ type: "CLEAR_USER" });
       }
     });
@@ -309,9 +324,7 @@ export function AuthProvider({
 
   const signOut = useCallback(async () => {
     try {
-      clearTodayEventsCache();
-      clearPreferencesCache();
-      clearPermissionsCache();
+      clearSessionCaches();
       await onOfflineQueueSignOut();
       await cancelAllReminders();
       // Exports (health data) must not outlive the session on a shared device.

@@ -52,6 +52,24 @@ describe("useWeeklyInsightEvents (S7.6)", () => {
     expect(result.current[0].type).toBe("sommeil");
   });
 
+  it("ne renvoie jamais les événements de l'enfant précédent après un changement d'enfant", async () => {
+    const seen: [string, number][] = [];
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const r = useWeeklyInsightEvents(id);
+        seen.push([id, r.length]);
+        return r;
+      },
+      { initialProps: { id: "child-1" } },
+    );
+    act(() => runInteractions?.());
+    await waitFor(() => expect(result.current).toHaveLength(1));
+    rerender({ id: "child-2" });
+    const forChild2 = seen.filter(([id]) => id === "child-2");
+    expect(forChild2.length).toBeGreaterThan(0);
+    expect(forChild2.every(([, n]) => n === 0)).toBe(true);
+  });
+
   it("sert le cache du jour sans relire au remontage", async () => {
     const first = renderHook(() => useWeeklyInsightEvents("child-1"));
     act(() => runInteractions?.());

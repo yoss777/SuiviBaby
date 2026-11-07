@@ -16,6 +16,7 @@ import { CroissanceForm } from '@/components/forms/CroissanceForm';
 import { ArticleReader } from '@/components/suivibaby/ArticleReader';
 import { eventColors } from '@/constants/eventColors';
 import { Colors } from '@/constants/theme';
+import { getNeutralColors } from '@/constants/dashboardColors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchTipById, bookmarkTip, removeBookmark, submitTipFeedback, getUserContentState } from '@/services/smartContentService';
 import type { Tip, UserContent } from '@/types/content';
@@ -39,7 +40,8 @@ export function getSheetKey(props: AnySheetProps | null): string {
   } else if (isPumpingFormProps(props)) {
     editId = props.editData?.id;
   } else if (isActivitiesFormProps(props)) {
-    subtype = props.activiteType;
+    // promenadeEnCours est lu dans l'état initial du formulaire : il fait partie de la clé.
+    subtype = `${props.activiteType}:${props.promenadeEnCours?.id ?? 'none'}`;
     editId = props.editData?.id;
   } else if (isMilestonesFormProps(props)) {
     subtype = props.jalonType;
@@ -48,7 +50,8 @@ export function getSheetKey(props: AnySheetProps | null): string {
     subtype = props.diapersType;
     editId = props.editData?.id;
   } else if (isRoutinesFormProps(props)) {
-    subtype = props.routineType;
+    // sleepMode est lu dans l'état initial du formulaire : il fait partie de la clé.
+    subtype = `${props.routineType}:${props.sleepMode ?? 'nap'}`;
     editId = props.editData?.id;
   } else if (isCroissanceFormProps(props)) {
     editId = props.editData?.id;
@@ -59,19 +62,25 @@ export function getSheetKey(props: AnySheetProps | null): string {
 }
 
 // Repli affiché à la place d'un formulaire qui a planté : la feuille reste
-// fermable, le reste de l'app n'est pas touché.
-function FormCrashFallback({ onClose }: { onClose: () => void }) {
+// fermable, le reste de l'app n'est pas touché. Couleurs du thème (mode sombre).
+function FormCrashFallback({ onClose, onCrash }: { onClose: () => void; onCrash?: () => void }) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const neutral = getNeutralColors(colorScheme);
+  // Un formulaire planté en plein sélecteur ne doit pas bloquer la fermeture par glissement.
+  useEffect(() => {
+    onCrash?.();
+  }, [onCrash]);
   return (
     <View style={fallbackStyles.container} accessibilityRole="alert">
-      <Text style={fallbackStyles.title}>Ce formulaire n&apos;a pas pu s&apos;afficher</Text>
-      <Text style={fallbackStyles.message}>
+      <Text style={[fallbackStyles.title, { color: neutral.error }]}>Ce formulaire n&apos;a pas pu s&apos;afficher</Text>
+      <Text style={[fallbackStyles.message, { color: neutral.textNormal }]}>
         L&apos;équipe a été notifiée. Vous pouvez fermer cette fenêtre et réessayer.
       </Text>
       <Pressable
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Fermer"
-        style={fallbackStyles.button}
+        style={[fallbackStyles.button, { backgroundColor: Colors[colorScheme].tint }]}
       >
         <Text style={fallbackStyles.buttonText}>Fermer</Text>
       </Pressable>
@@ -81,9 +90,9 @@ function FormCrashFallback({ onClose }: { onClose: () => void }) {
 
 const fallbackStyles = StyleSheet.create({
   container: { padding: 24, alignItems: 'center', gap: 12 },
-  title: { fontSize: 16, fontWeight: '700', color: '#991b1b', textAlign: 'center' },
-  message: { fontSize: 14, color: '#7f1d1d', textAlign: 'center' },
-  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: '#4A90E2' },
+  title: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  message: { fontSize: 14, textAlign: 'center' },
+  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
 });
 
@@ -91,14 +100,16 @@ const fallbackStyles = StyleSheet.create({
 function FormBoundary({
   name,
   onClose,
+  onCrash,
   children,
 }: {
   name: string;
   onClose: () => void;
+  onCrash?: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <SafeBoundary name={`sheet.${name}`} fallback={<FormCrashFallback onClose={onClose} />}>
+    <SafeBoundary name={`sheet.${name}`} fallback={<FormCrashFallback onClose={onClose} onCrash={onCrash} />}>
       {children}
     </SafeBoundary>
   );
@@ -195,6 +206,8 @@ const GlobalSheetManagerInner = () => {
     }
   }, [isOpen, formKey]);
 
+  const resetPicker = useCallback(() => setIsInPicker(false), []);
+
   const handleFormStepChange = useCallback((inPicker: boolean) => {
     setIsInPicker(inPicker);
   }, []);
@@ -232,7 +245,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="SoinsForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="SoinsForm" onClose={closeSheet} onCrash={resetPicker}>
             <SoinsForm
               key={formKey}
               initialType={soinsType}
@@ -268,7 +281,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="MealsForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="MealsForm" onClose={closeSheet} onCrash={resetPicker}>
             <MealsForm
               key={formKey}
               initialType={mealType}
@@ -304,7 +317,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="PumpingForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="PumpingForm" onClose={closeSheet} onCrash={resetPicker}>
             <PumpingForm
               key={formKey}
               onSuccess={handleSuccess}
@@ -339,7 +352,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="ActivitiesForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="ActivitiesForm" onClose={closeSheet} onCrash={resetPicker}>
             <ActivitiesForm
               key={formKey}
               initialType={activiteType}
@@ -381,7 +394,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={handleCancel}
           onClose={handleCancel}
         >
-          <FormBoundary key={formKey} name="MilestonesForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="MilestonesForm" onClose={handleCancel} onCrash={resetPicker}>
             <MilestonesForm
               key={formKey}
               initialType={jalonType}
@@ -422,7 +435,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="DiapersForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="DiapersForm" onClose={closeSheet} onCrash={resetPicker}>
             <DiapersForm
               key={formKey}
               initialType={diapersType}
@@ -486,7 +499,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="RoutinesForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="RoutinesForm" onClose={closeSheet} onCrash={resetPicker}>
             <RoutinesForm
               key={formKey}
               initialType={routineType}
@@ -525,7 +538,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="CroissanceForm" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="CroissanceForm" onClose={closeSheet} onCrash={resetPicker}>
             <CroissanceForm
               key={formKey}
               onSuccess={handleSuccess}
@@ -558,7 +571,7 @@ const GlobalSheetManagerInner = () => {
           onCancel={closeSheet}
           onClose={closeSheet}
         >
-          <FormBoundary key={formKey} name="ContentSheet" onClose={closeSheet}>
+          <FormBoundary key={formKey} name="ContentSheet" onClose={closeSheet} onCrash={resetPicker}>
             <ContentSheetContent tipId={viewProps.tipId} onClose={closeSheet} />
           </FormBoundary>
         </FormBottomSheet>
@@ -578,13 +591,25 @@ const GlobalSheetManagerInner = () => {
   );
 };
 
+// Repli du gestionnaire entier : un crash hors FormBoundary (titre, icône,
+// FormBottomSheet...) laisse viewProps non nul ; sans reset, la clé de la
+// boundary resterait « open » et plus rien ne s'afficherait. On ferme donc la
+// feuille (état remis à zéro) : l'ouverture suivante réarme la boundary.
+function SheetCrashReset() {
+  const { closeSheet } = useSheetActions();
+  useEffect(() => {
+    closeSheet();
+  }, [closeSheet]);
+  return null;
+}
+
 // Le gestionnaire entier est isolé : un crash de la feuille ne doit pas faire
 // tomber l'app. La clé change à la fermeture, ce qui réarme la boundary après
-// un crash (la fermeture de la feuille reste possible via le bouton retour).
+// un crash (le repli ferme la feuille pour que l'état se réinitialise).
 export const GlobalSheetManager = () => {
   const { viewProps } = useSheetState();
   return (
-    <SafeBoundary key={viewProps ? 'open' : 'closed'} name="GlobalSheetManager" fallback={null}>
+    <SafeBoundary key={viewProps ? 'open' : 'closed'} name="GlobalSheetManager" fallback={<SheetCrashReset />}>
       <GlobalSheetManagerInner />
     </SafeBoundary>
   );

@@ -129,6 +129,47 @@ describe("fournisseur partagé", () => {
   });
 });
 
+describe("changement d'enfant : aucune donnée de l'enfant précédent, même une frame", () => {
+  it("expose des listes vides et un badge à zéro dès le premier rendu du nouvel enfant", async () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => <MomentsNotificationProvider>{children}</MomentsNotificationProvider>;
+    const seen: { child: string; likes: number; comments: number; likesInfo: number; counts: number; badge: number }[] = [];
+    const { rerender } = renderHook(
+      () => {
+        const social = useSocialInteractions();
+        const badge = useMomentsNotification();
+        seen.push({
+          child: mockActiveChild.current!.id,
+          likes: social.likes.length,
+          comments: social.comments.length,
+          likesInfo: Object.keys(social.likesInfo).length,
+          counts: Object.keys(social.commentCounts).length,
+          badge: badge.newMomentsCount,
+        });
+        return null;
+      },
+      { wrapper },
+    );
+    await flush();
+    const lastSeen = Date.now();
+    await act(async () => {
+      mockListeners.find((l) => l.collection === "eventLikes")!.cb(docsOf([
+        { eventId: "e1", userId: "u2", userName: "Papa", createdAt: ts(lastSeen + 1000) },
+      ]));
+      mockListeners.find((l) => l.collection === "eventComments")!.cb(docsOf([
+        { eventId: "e1", userId: "u3", content: "a", createdAt: ts(lastSeen + 2000) },
+      ]));
+      await jest.advanceTimersByTimeAsync(10);
+    });
+    expect(seen[seen.length - 1]).toMatchObject({ child: "c1", likes: 1, comments: 1, badge: 2 });
+
+    mockActiveChild.current = { id: "c2" };
+    rerender({});
+    const c2 = seen.filter((r) => r.child === "c2");
+    expect(c2.length).toBeGreaterThan(0);
+    c2.forEach((r) => expect(r).toMatchObject({ likes: 0, comments: 0, likesInfo: 0, counts: 0, badge: 0 }));
+  });
+});
+
 describe("collectNewInteractionEventIds (badge borné par date)", () => {
   it("stops at the first document older than last seen (sorted newest first)", () => {
     const reads: number[] = [];

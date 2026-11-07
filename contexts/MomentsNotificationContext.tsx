@@ -18,6 +18,16 @@ interface MomentsNotificationContextType {
   markEventAsSeen: (eventId: string) => void;
 }
 
+type BadgeState = {
+  childId: string | undefined;
+  count: number;
+  ids: Set<string>;
+  types: Map<string, NotificationType>;
+};
+const EMPTY_IDS: Set<string> = new Set();
+const EMPTY_TYPES: Map<string, NotificationType> = new Map();
+const EMPTY_BADGE: BadgeState = { childId: undefined, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES };
+
 const MomentsNotificationContext = createContext<MomentsNotificationContextType | undefined>(undefined);
 
 const LAST_SEEN_KEY_PREFIX = 'moments_last_seen_';
@@ -77,10 +87,12 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { activeChild } = useBaby();
   const { likes: sharedLikes, comments: sharedComments } = useSocialInteractions();
-  const [hasNewMoments, setHasNewMoments] = useState(false);
-  const [newMomentsCount, setNewMomentsCount] = useState(0);
-  const [newEventIds, setNewEventIds] = useState<Set<string>>(new Set());
-  const [newEventTypes, setNewEventTypes] = useState<Map<string, NotificationType>>(new Map());
+  const activeChildId = activeChild?.id;
+  const activeChildIdRef = useRef(activeChildId);
+  activeChildIdRef.current = activeChildId;
+  // Badge rattaché à l'enfant qui l'a produit : après un changement d'enfant,
+  // celui du précédent n'est jamais exposé (même une frame).
+  const [badge, setBadge] = useState<BadgeState>(EMPTY_BADGE);
   const lastSeenTimestampRef = useRef<number>(0);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
@@ -96,8 +108,6 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
 
   const updateTotalCount = useCallback(() => {
     const total = countsRef.current.jalons + countsRef.current.likes + countsRef.current.comments;
-    setNewMomentsCount(total);
-    setHasNewMoments(total > 0);
 
     // Combiner tous les IDs d'événements avec nouvelles interactions
     const allIds = new Set<string>([
@@ -105,7 +115,6 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
       ...eventIdsRef.current.likesEvents,
       ...eventIdsRef.current.commentsEvents,
     ]);
-    setNewEventIds(allIds);
 
     // Build type map with priority: photo > comment > like
     const typesMap = new Map<string, NotificationType>();
@@ -118,21 +127,21 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
     for (const id of eventIdsRef.current.jalons) {
       typesMap.set(id, 'photo');
     }
-    setNewEventTypes(typesMap);
+    setBadge({ childId: activeChildIdRef.current, count: total, ids: allIds, types: typesMap });
   }, []);
 
   // Charger le dernier timestamp vu depuis AsyncStorage
   useEffect(() => {
-    if (!activeChild?.id || !user?.uid) {
-      setHasNewMoments(false);
-      setNewMomentsCount(0);
-      setNewEventIds(new Set());
-      setNewEventTypes(new Map());
-      setIsInitialized(false);
-      countsRef.current = { jalons: 0, likes: 0, comments: 0 };
-      eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
-      return;
-    }
+    // Remise à zéro à chaque changement d'enfant / d'utilisateur : ni badge,
+    // ni lastSeen, ni IDs vus de l'enfant précédent ne doivent survivre.
+    setBadge({ childId: activeChildIdRef.current, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES });
+    setIsInitialized(false);
+    countsRef.current = { jalons: 0, likes: 0, comments: 0 };
+    eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
+    lastSeenTimestampRef.current = 0;
+    seenEventIdsRef.current = new Set();
+    if (!activeChild?.id || !user?.uid) return;
+    let cancelled = false;
 
     const loadLastSeen = async () => {
       try {
@@ -145,6 +154,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(localSeenKey),
         ]);
 
+        if (cancelled) return;
         if (localStored) {
           lastSeenTimestampRef.current = parseInt(localStored, 10);
         }
@@ -156,6 +166,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
         const firestoreDoc = await getDoc(
           doc(db, 'user_preferences', user.uid)
         );
+        if (cancelled) return;
         const firestoreData = firestoreDoc.data();
         const fsLastSeen = firestoreData?.momentsLastSeen as number | undefined;
         const fsSeenIds = firestoreData?.momentsSeenIds as string[] | undefined;
@@ -178,6 +189,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
 
         setIsInitialized(true);
       } catch (error) {
+        if (cancelled) return;
         console.error('[MomentsNotification] Erreur chargement lastSeen:', error);
         lastSeenTimestampRef.current = Date.now();
         setIsInitialized(true);
@@ -185,6 +197,9 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
     };
 
     loadLastSeen();
+    return () => {
+      cancelled = true;
+    };
   }, [activeChild?.id, user?.uid]);
 
   // R6: Defer listeners — start after a short delay so Home renders first
@@ -264,10 +279,7 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
     seenEventIdsRef.current = new Set();
     countsRef.current = { jalons: 0, likes: 0, comments: 0 };
     eventIdsRef.current = { jalons: new Set(), likesEvents: new Set(), commentsEvents: new Set() };
-    setHasNewMoments(false);
-    setNewMomentsCount(0);
-    setNewEventIds(new Set());
-    setNewEventTypes(new Map());
+    setBadge({ childId: activeChildIdRef.current, count: 0, ids: EMPTY_IDS, types: EMPTY_TYPES });
 
     try {
       const key = `${LAST_SEEN_KEY_PREFIX}${user.uid}_${activeChild.id}`;
@@ -309,6 +321,11 @@ function MomentsNotificationInner({ children }: { children: ReactNode }) {
   // observed pieces actually changes — without this, every render of the
   // parent (BabyProvider, AuthProvider, etc.) created a fresh value object
   // and forced every useMomentsNotification() consumer to re-render.
+  const current = badge.childId === activeChildId ? badge : EMPTY_BADGE;
+  const hasNewMoments = current.count > 0;
+  const newMomentsCount = current.count;
+  const newEventIds = current.ids;
+  const newEventTypes = current.types;
   const value = useMemo<MomentsNotificationContextType>(
     () => ({
       hasNewMoments,

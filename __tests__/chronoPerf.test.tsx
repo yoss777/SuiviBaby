@@ -52,6 +52,23 @@ describe("useOngoingClock : rendus par minute", () => {
     expect(renders.ongoing - before.ongoing).toBe(5);
   });
 
+  it("premier rendu après une longue pause sans abonné : heure courante, pas l'ancienne", () => {
+    const values: number[] = [];
+    const Row = () => {
+      const v = useOngoingClock(true);
+      values.push(v);
+      return <Text>{v}</Text>;
+    };
+    const first = render(<Row />);
+    first.unmount();
+    values.length = 0;
+    jest.setSystemTime(new Date(2026, 10, 7, 14, 0, 0));
+    const second = render(<Row />);
+    // Tout premier rendu (avant l'abonnement qui recale l'heure).
+    expect(Math.abs(values[0] - Date.now())).toBeLessThan(1000);
+    second.unmount();
+  });
+
   it("se désabonne au démontage (plus de minuteur)", () => {
     const Row = () => <Text>{useOngoingClock(true)}</Text>;
     const { unmount } = render(<Row />);

@@ -33,10 +33,16 @@ interface AccessEntry {
   listeners: Set<() => void>;
   unsubscribe: (() => void) | null;
   releaseTimer: ReturnType<typeof setTimeout> | null;
+  /** Relance d'un écouteur arrêté (erreur ou reset) ; no-op si déjà actif. */
+  restart: () => void;
+  /** Reprise automatique après une erreur tant que des consommateurs sont montés. */
+  retryTimer: ReturnType<typeof setTimeout> | null;
 }
 
 /** Durée pendant laquelle un écouteur sans consommateur reste ouvert. */
 export const ACCESS_LISTENER_LINGER_MS = 30_000;
+/** Délai avant de relancer un écouteur tombé en erreur (consommateurs toujours montés). */
+export const ACCESS_ERROR_RETRY_MS = 10_000;
 
 const accessEntries = new Map<string, AccessEntry>();
 
@@ -48,27 +54,62 @@ function startAccessEntry(childId: string, userId: string, key: string): AccessE
     listeners: new Set(),
     unsubscribe: null,
     releaseTimer: null,
+    retryTimer: null,
+    restart: () => {},
   };
   const publish = (state: ChildPermissions) => {
     entry.state = state;
     entry.listeners.forEach((listener) => listener());
   };
+  const clearRetry = () => {
+    if (entry.retryTimer) {
+      clearTimeout(entry.retryTimer);
+      entry.retryTimer = null;
+    }
+  };
 
-  entry.unsubscribe = onSnapshot(
-    doc(db, 'children', childId, 'access', userId),
-    (snapshot) => {
-      if (snapshot.exists()) {
-        publish(calculatePermissions(snapshot.data() as ChildAccessDocument));
-      } else {
-        // L'utilisateur n'a pas d'accès
-        publish({ ...NO_ACCESS, loading: false });
-      }
-    },
-    (error) => {
-      console.error('Error listening to child access:', error);
-      publish({ ...entry.state, loading: false, error });
-    },
-  );
+  const listen = () => {
+    if (entry.unsubscribe) return;
+    let active = true;
+    const unsubscribe = onSnapshot(
+      doc(db, 'children', childId, 'access', userId),
+      (snapshot) => {
+        if (!active) return;
+        // Réponse reçue : l'éventuelle erreur précédente est derrière nous.
+        clearRetry();
+        if (snapshot.exists()) {
+          publish(calculatePermissions(snapshot.data() as ChildAccessDocument));
+        } else {
+          // L'utilisateur n'a pas d'accès
+          publish({ ...NO_ACCESS, loading: false });
+        }
+      },
+      (error) => {
+        if (!active) return;
+        console.error('Error listening to child access:', error);
+        // Écouteur mort : on ne garde surtout pas les droits précédents
+        // (ex. écriture encore autorisée après une révocation).
+        active = false;
+        entry.unsubscribe?.();
+        entry.unsubscribe = null;
+        publish({ ...NO_ACCESS, loading: false, error });
+        // Reprise automatique tant que des consommateurs sont montés ; sinon
+        // le prochain subscribe relance un écouteur frais.
+        clearRetry();
+        entry.retryTimer = setTimeout(() => {
+          entry.retryTimer = null;
+          if (entry.listeners.size > 0) entry.restart();
+        }, ACCESS_ERROR_RETRY_MS);
+      },
+    );
+    entry.unsubscribe = () => {
+      active = false;
+      unsubscribe();
+    };
+  };
+
+  entry.restart = listen;
+  listen();
   accessEntries.set(key, entry);
   return entry;
 }
@@ -77,6 +118,8 @@ function subscribeToAccess(childId: string, userId: string, onChange: () => void
   const key = accessKey(childId, userId);
   let entry = accessEntries.get(key);
   if (!entry) entry = startAccessEntry(childId, userId, key);
+  // Écouteur arrêté (erreur / reset) : un nouveau consommateur en relance un frais.
+  else if (!entry.unsubscribe) entry.restart();
   if (entry.releaseTimer) {
     clearTimeout(entry.releaseTimer);
     entry.releaseTimer = null;
@@ -89,6 +132,9 @@ function subscribeToAccess(childId: string, userId: string, onChange: () => void
     if (current.listeners.size > 0 || current.releaseTimer) return;
     current.releaseTimer = setTimeout(() => {
       current.unsubscribe?.();
+      current.unsubscribe = null;
+      if (current.retryTimer) clearTimeout(current.retryTimer);
+      current.retryTimer = null;
       if (accessEntries.get(key) === current) accessEntries.delete(key);
     }, ACCESS_LISTENER_LINGER_MS);
   };
@@ -96,16 +142,34 @@ function subscribeToAccess(childId: string, userId: string, onChange: () => void
 
 /** Nombre d'écouteurs d'accès ouverts (diagnostic et tests). */
 export function getOpenAccessListenerCount(): number {
-  return accessEntries.size;
+  let count = 0;
+  accessEntries.forEach((entry) => {
+    if (entry.unsubscribe) count += 1;
+  });
+  return count;
 }
 
-/** Referme tous les écouteurs partagés (déconnexion, tests). */
+/**
+ * Referme tous les écouteurs partagés (déconnexion, tests) et notifie les
+ * consommateurs montés : ils passent à « sans accès » (pas de chargement
+ * infini). Une entrée encore consommée est conservée, arrêtée ; le prochain
+ * subscribe en relance un écouteur frais.
+ */
 export function resetChildPermissionsStore(): void {
-  accessEntries.forEach((entry) => {
+  accessEntries.forEach((entry, key) => {
     if (entry.releaseTimer) clearTimeout(entry.releaseTimer);
+    entry.releaseTimer = null;
+    if (entry.retryTimer) clearTimeout(entry.retryTimer);
+    entry.retryTimer = null;
     entry.unsubscribe?.();
+    entry.unsubscribe = null;
+    if (entry.listeners.size === 0) {
+      accessEntries.delete(key);
+      return;
+    }
+    entry.state = { ...NO_ACCESS, loading: false };
+    entry.listeners.forEach((listener) => listener());
   });
-  accessEntries.clear();
 }
 
 /**

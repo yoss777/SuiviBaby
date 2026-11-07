@@ -135,7 +135,12 @@ export const getTodayEventsCache = (childId: string) => {
   return entry.data;
 };
 
+// Génération incrémentée à chaque clear (déconnexion) : une lecture démarrée
+// avant ne doit pas réécrire le cache après coup avec les données de l'ancienne session.
+let cacheGeneration = 0;
+
 export const clearTodayEventsCache = () => {
+  cacheGeneration += 1;
   cacheMap.clear();
   inFlightMap.clear();
 };
@@ -160,14 +165,16 @@ export const loadTodayEventsOnce = (
   const existing = inFlightMap.get(key);
   if (existing) return existing;
 
+  const generation = cacheGeneration;
   const promise = fetcher(childId)
     .then((events) => {
       const data = buildTodayEventsData(events);
-      setTodayEventsCache(childId, data);
+      if (generation === cacheGeneration) setTodayEventsCache(childId, data);
       return data;
     })
     .finally(() => {
-      inFlightMap.delete(key);
+      // Ne retire que sa propre entrée (un clear + nouvel appel peut l'avoir remplacée).
+      if (inFlightMap.get(key) === promise) inFlightMap.delete(key);
     });
   inFlightMap.set(key, promise);
   return promise;

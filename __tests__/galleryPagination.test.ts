@@ -141,4 +141,75 @@ describe("useGalleryMilestones", () => {
     expect(result.current.events).toHaveLength(60);
     err.mockRestore();
   });
+
+  it("cursor milestone deleted: it is dropped locally and the previous one becomes the cursor", async () => {
+    const { result } = renderHook(() => useGalleryMilestones("c1"));
+    act(() => mockLiveCb!(range(0, 60)));
+    mockGetDoc
+      .mockResolvedValueOnce({ exists: () => false } as any)
+      .mockResolvedValueOnce({ exists: () => true } as any);
+    mockGetDocs.mockResolvedValueOnce({
+      docs: range(60, 70).map((e) => ({ id: e.id, data: () => ({ date: e.date, type: "jalon" }) })),
+    });
+    await act(async () => { await result.current.loadMore(); });
+    expect(mockGetDoc).toHaveBeenNthCalledWith(1, "events/e59");
+    expect(mockGetDoc).toHaveBeenNthCalledWith(2, "events/e58");
+    expect(ids(result.current.events)).not.toContain("e59");
+    expect(result.current.events).toHaveLength(69);
+  });
+
+  it("pull-to-refresh resets the pages beyond the first", async () => {
+    const { result } = renderHook(() => useGalleryMilestones("c1"));
+    act(() => mockLiveCb!(range(0, 60)));
+    mockGetDocs.mockResolvedValueOnce({
+      docs: range(60, 120).map((e) => ({ id: e.id, data: () => ({ date: e.date, type: "jalon" }) })),
+    });
+    await act(async () => { await result.current.loadMore(); });
+    expect(result.current.events).toHaveLength(120);
+    act(() => result.current.reload());
+    act(() => mockLiveCb!(range(0, 60)));
+    expect(result.current.events).toHaveLength(60);
+    expect(result.current.hasMore).toBe(true);
+  });
+
+  it("never exposes the previous child's milestones after a child switch (not even one frame)", () => {
+    const seen: [string, number][] = [];
+    const { rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const r = useGalleryMilestones(id);
+        seen.push([id, r.events.length]);
+        return r;
+      },
+      { initialProps: { id: "c1" } },
+    );
+    act(() => mockLiveCb!(range(0, 12)));
+    rerender({ id: "c2" });
+    const c2 = seen.filter(([id]) => id === "c2");
+    expect(c2.length).toBeGreaterThan(0);
+    expect(c2.every(([, n]) => n === 0)).toBe(true);
+  });
+
+  it("a previous child's in-flight read does not release the loading flag of the new child", async () => {
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => useGalleryMilestones(id),
+      { initialProps: { id: "c1" } },
+    );
+    act(() => mockLiveCb!(range(0, 60)));
+    let releaseA: (v: unknown) => void = () => {};
+    let releaseB: (v: unknown) => void = () => {};
+    // A reste bloqué sur la lecture du curseur, B sur la lecture de page.
+    mockGetDoc.mockReturnValueOnce(new Promise((r) => { releaseA = r; }) as any);
+    mockGetDocs.mockReturnValueOnce(new Promise((r) => { releaseB = r; }));
+    let pA: Promise<void> = Promise.resolve();
+    await act(async () => { pA = result.current.loadMore(); await Promise.resolve(); });
+    rerender({ id: "c2" });
+    act(() => mockLiveCb!(range(0, 60)));
+    let pB: Promise<void> = Promise.resolve();
+    await act(async () => { pB = result.current.loadMore(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(mockGetDocs).toHaveBeenCalledTimes(1);
+    await act(async () => { releaseA({ exists: () => true }); await pA; });
+    await act(async () => { void result.current.loadMore(); await new Promise((r) => setTimeout(r, 0)); });
+    expect(mockGetDocs).toHaveBeenCalledTimes(1);
+    await act(async () => { releaseB({ docs: [] }); await pB; });
+  });
 });

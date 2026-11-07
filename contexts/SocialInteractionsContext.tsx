@@ -33,6 +33,8 @@ interface SocialInteractionsContextType {
   commentCounts: Record<string, number>;
 }
 
+type Owned<T> = { childId: string | undefined; data: T };
+
 const EMPTY_LIKES: EventLike[] = [];
 const EMPTY_COMMENTS: EventComment[] = [];
 const EMPTY_LIKES_INFO: Record<string, LikeInfo> = {};
@@ -46,24 +48,32 @@ export function SocialInteractionsProvider({ children }: { children: ReactNode }
   const childId = activeChild?.id;
   const userId = user?.uid;
 
-  const [likes, setLikes] = useState<EventLike[]>(EMPTY_LIKES);
-  const [comments, setComments] = useState<EventComment[]>(EMPTY_COMMENTS);
-  const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>(EMPTY_LIKES_INFO);
+  // Chaque jeu de données est rattaché à l'enfant qui l'a produit : après un
+  // changement d'enfant, ceux du précédent ne sont jamais exposés (même une frame).
+  const [likesState, setLikesState] = useState<Owned<EventLike[]>>({ childId, data: EMPTY_LIKES });
+  const [commentsState, setCommentsState] = useState<Owned<EventComment[]>>({ childId, data: EMPTY_COMMENTS });
+  const [likesInfoState, setLikesInfoState] = useState<Owned<Record<string, LikeInfo>>>({
+    childId,
+    data: EMPTY_LIKES_INFO,
+  });
+  const likes = likesState.childId === childId ? likesState.data : EMPTY_LIKES;
+  const comments = commentsState.childId === childId ? commentsState.data : EMPTY_COMMENTS;
+  const likesInfo = likesInfoState.childId === childId ? likesInfoState.data : EMPTY_LIKES_INFO;
 
   // Deux écouteurs au total pour l'enfant actif, ouverts après un court délai.
   useEffect(() => {
-    setLikes(EMPTY_LIKES);
-    setComments(EMPTY_COMMENTS);
-    setLikesInfo(EMPTY_LIKES_INFO);
+    setLikesState({ childId, data: EMPTY_LIKES });
+    setCommentsState({ childId, data: EMPTY_COMMENTS });
+    setLikesInfoState({ childId, data: EMPTY_LIKES_INFO });
     if (!childId || !userId) return;
 
     let unsubLikes: (() => void) | undefined;
     let unsubComments: (() => void) | undefined;
     const timer = setTimeout(() => {
-      unsubLikes = ecouterLikesEnfant(childId, setLikes, (error) =>
+      unsubLikes = ecouterLikesEnfant(childId, (data) => setLikesState({ childId, data }), (error) =>
         console.error('[SocialInteractions] Erreur listener likes:', error),
       );
-      unsubComments = ecouterCommentairesEnfant(childId, setComments, (error) =>
+      unsubComments = ecouterCommentairesEnfant(childId, (data) => setCommentsState({ childId, data }), (error) =>
         console.error('[SocialInteractions] Erreur listener commentaires:', error),
       );
     }, SOCIAL_LISTENERS_START_DELAY_MS);
@@ -78,23 +88,23 @@ export function SocialInteractionsProvider({ children }: { children: ReactNode }
   // Agrégat des likes : noms à jour depuis les profils (cache 5 min dans le service).
   useEffect(() => {
     if (likes.length === 0) {
-      setLikesInfo(EMPTY_LIKES_INFO);
+      setLikesInfoState({ childId, data: EMPTY_LIKES_INFO });
       return;
     }
     let cancelled = false;
     const uniqueUserIds = [...new Set(likes.map((like) => like.userId))];
     getUserNames(uniqueUserIds)
       .then((names) => {
-        if (!cancelled) setLikesInfo(construireLikesInfo(likes, userId, names));
+        if (!cancelled) setLikesInfoState({ childId, data: construireLikesInfo(likes, userId, names) });
       })
       .catch(() => {
         // Profils illisibles : on garde les noms stockés dans les likes.
-        if (!cancelled) setLikesInfo(construireLikesInfo(likes, userId, new Map()));
+        if (!cancelled) setLikesInfoState({ childId, data: construireLikesInfo(likes, userId, new Map()) });
       });
     return () => {
       cancelled = true;
     };
-  }, [likes, userId]);
+  }, [likes, userId, childId]);
 
   const commentCounts = useMemo(
     () => (comments.length === 0 ? EMPTY_COUNTS : compterCommentaires(comments)),

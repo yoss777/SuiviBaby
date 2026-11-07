@@ -8,12 +8,16 @@ import { SheetProvider, useSheetActions } from "@/contexts/SheetContext";
 
 const mockMounts = jest.fn();
 let mockShouldCrash = false;
+let mockSheetCrash = false;
 
 jest.mock("@/hooks/use-color-scheme", () => ({ useColorScheme: () => "light" }));
 jest.mock("@/components/ui/FormBottomSheet", () => {
   const R = require("react");
   return {
-    FormBottomSheet: R.forwardRef(({ children }: any, _ref: any) => children),
+    FormBottomSheet: R.forwardRef(({ children }: any, _ref: any) => {
+      if (mockSheetCrash) throw new Error("sheet crash");
+      return children;
+    }),
   };
 });
 jest.mock("@/components/forms/SoinsForm", () => {
@@ -69,12 +73,20 @@ describe("getSheetKey", () => {
     expect(getSheetKey(soins("a", "vaccin") as any)).not.toBe(getSheetKey(soins("a") as any));
     expect(getSheetKey(soins("a") as any)).toBe(getSheetKey(soins("a") as any));
   });
+
+  it("dépend de sleepMode et promenadeEnCours (lus dans l'état initial)", () => {
+    const routine = (sleepMode: any) => ({ ownerId: "c1", formType: "routines", routineType: "sommeil", sleepMode });
+    expect(getSheetKey(routine("nap") as any)).not.toBe(getSheetKey(routine("night") as any));
+    const act_ = (p: any) => ({ ownerId: "c1", formType: "activities", activiteType: "promenade", promenadeEnCours: p });
+    expect(getSheetKey(act_({ id: "x" }) as any)).not.toBe(getSheetKey(act_(null) as any));
+  });
 });
 
 describe("GlobalSheetManager", () => {
   beforeEach(() => {
     mockMounts.mockClear();
     mockShouldCrash = false;
+    mockSheetCrash = false;
   });
 
   it("monte le formulaire une seule fois à l'ouverture (pas de double montage)", () => {
@@ -102,6 +114,18 @@ describe("GlobalSheetManager", () => {
     act(() => actions.openSheet(soins("a")));
     expect(screen.getByText("Ce formulaire n'a pas pu s'afficher")).toBeTruthy();
     expect(require("@sentry/react-native").captureException).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("un crash hors FormBoundary réarme le gestionnaire : l'ouverture suivante rend le formulaire", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockSheetCrash = true;
+    setup();
+    act(() => actions.openSheet(soins("a")));
+    expect(screen.queryByText("soins:a")).toBeNull();
+    mockSheetCrash = false;
+    act(() => actions.openSheet(soins("b")));
+    expect(screen.getByText("soins:b")).toBeTruthy();
     spy.mockRestore();
   });
 });

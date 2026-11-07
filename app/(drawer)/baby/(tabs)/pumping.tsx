@@ -20,6 +20,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
@@ -314,6 +315,8 @@ export default function PumpingScreen() {
 
   // Menu items pour le header
   // Filtrage et regroupement par jour (dérivé : calculé au rendu, pas en effet)
+  // Jour calendaire : le filtre « aujourd'hui » suit le passage de minuit.
+  const calendarDay = useCalendarDay();
   const groupedPompages = useMemo<PompageGroup[]>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -344,7 +347,7 @@ export default function PumpingScreen() {
     });
 
     return groupPompagesByDay(filtered);
-  }, [pompages, selectedFilter, selectedDate, softDeletedIds]);
+  }, [pompages, selectedFilter, selectedDate, softDeletedIds, calendarDay]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: openAddModal },

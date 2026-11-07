@@ -61,9 +61,12 @@ async function generateThumbnail(event) {
 async function deleteThumbnail(event) {
   const thumbPath = thumbnailPathFor(event.data.name);
   if (!thumbPath) return null;
-  await admin
-    .storage()
-    .bucket(event.data.bucket)
+  const bucket = admin.storage().bucket(event.data.bucket);
+  // Écrasement d'un objet = événements « supprimé » + « finalisé » : si l'original
+  // existe de nouveau, la miniature vient d'être régénérée, on la garde.
+  const [originalExists] = await bucket.file(event.data.name).exists();
+  if (originalExists) return null;
+  await bucket
     .file(thumbPath)
     .delete({ ignoreNotFound: true });
   return thumbPath;

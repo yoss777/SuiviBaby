@@ -8,18 +8,21 @@ jest.mock("@/config/firebase", () => ({ db: {} }));
 type Cb = (snap: { exists: () => boolean; data: () => unknown }) => void;
 const mockUnsubscribe = jest.fn();
 const mockSnapshotCallbacks: Cb[] = [];
-const mockOnSnapshot = jest.fn((_ref: unknown, cb: Cb) => {
+const mockErrorCallbacks: ((e: Error) => void)[] = [];
+const mockOnSnapshot = jest.fn((_ref: unknown, cb: Cb, errCb?: (e: Error) => void) => {
   mockSnapshotCallbacks.push(cb);
+  mockErrorCallbacks.push(errCb ?? (() => {}));
   return mockUnsubscribe;
 });
 jest.mock("firebase/firestore", () => ({
   collection: jest.fn((_db: unknown, ...path: string[]) => ({ path: path.join("/") })),
   doc: jest.fn((_db: unknown, ...path: string[]) => ({ path: path.join("/") })),
-  onSnapshot: (...a: [unknown, Cb]) => mockOnSnapshot(...a),
+  onSnapshot: (...a: [unknown, Cb, ((e: Error) => void)?]) => mockOnSnapshot(...a),
 }));
 
 import { act, renderHook } from "@testing-library/react-native";
 import {
+  ACCESS_ERROR_RETRY_MS,
   ACCESS_LISTENER_LINGER_MS,
   getOpenAccessListenerCount,
   resetChildPermissionsStore,
@@ -36,6 +39,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockSnapshotCallbacks.length = 0;
+  mockErrorCallbacks.length = 0;
   resetChildPermissionsStore();
   jest.clearAllMocks();
 });
@@ -110,5 +114,56 @@ describe("useChildRoles", () => {
     renderHook(() => useChildPermissions("c1", "u1"));
     renderHook(() => useChildRoles(["c1", "c2"], "u1"));
     expect(mockOnSnapshot).toHaveBeenCalledTimes(2); // c1 partagé + c2
+  });
+});
+
+describe("erreur de l'écouteur d'accès", () => {
+  it("publie des permissions sans accès + l'erreur (pas de droits périmés) et ferme l'écouteur", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = renderHook(() => useChildPermissions("c1", "u1"));
+    act(() => mockSnapshotCallbacks[0](accessSnap("owner")));
+    expect(result.current.canWriteEvents).toBe(true);
+    const err = new Error("permission-denied");
+    act(() => mockErrorCallbacks[0](err));
+    expect(result.current).toMatchObject({
+      hasAccess: false, canWriteEvents: false, canManageAccess: false, loading: false, error: err,
+    });
+    expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("un nouveau consommateur relance un écouteur frais, les consommateurs en place sont notifiés", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const first = renderHook(() => useChildPermissions("c1", "u1"));
+    act(() => mockErrorCallbacks[0](new Error("boom")));
+    const second = renderHook(() => useChildPermissions("c1", "u1"));
+    expect(mockOnSnapshot).toHaveBeenCalledTimes(2);
+    act(() => mockSnapshotCallbacks[1](accessSnap("viewer")));
+    expect(second.result.current).toMatchObject({ role: "viewer", loading: false });
+    expect(first.result.current).toMatchObject({ role: "viewer", loading: false });
+    expect(first.result.current.error).toBeUndefined();
+    spy.mockRestore();
+  });
+
+  it("retente seule tant qu'un consommateur est monté", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = renderHook(() => useChildPermissions("c1", "u1"));
+    act(() => mockErrorCallbacks[0](new Error("boom")));
+    act(() => jest.advanceTimersByTime(ACCESS_ERROR_RETRY_MS + 1));
+    expect(mockOnSnapshot).toHaveBeenCalledTimes(2);
+    act(() => mockSnapshotCallbacks[1](accessSnap("admin")));
+    expect(result.current.role).toBe("admin");
+    spy.mockRestore();
+  });
+});
+
+describe("resetChildPermissionsStore", () => {
+  it("ferme les écouteurs et notifie les consommateurs montés (pas de chargement infini)", () => {
+    const { result } = renderHook(() => useChildPermissions("c1", "u1"));
+    expect(result.current.loading).toBe(true);
+    act(() => resetChildPermissionsStore());
+    expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatchObject({ hasAccess: false, loading: false });
+    expect(getOpenAccessListenerCount()).toBe(0);
   });
 });

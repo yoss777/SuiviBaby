@@ -3,7 +3,8 @@
 const mockSave = jest.fn(() => Promise.resolve());
 const mockDownload = jest.fn(() => Promise.resolve([Buffer.from("original")]));
 const mockDelete = jest.fn(() => Promise.resolve());
-const mockFile = jest.fn(() => ({ download: mockDownload, save: mockSave, delete: mockDelete }));
+const mockExists = jest.fn(() => Promise.resolve([false]));
+const mockFile = jest.fn(() => ({ download: mockDownload, save: mockSave, delete: mockDelete, exists: mockExists }));
 const mockBucket = jest.fn(() => ({ file: mockFile }));
 jest.mock("firebase-admin", () => ({ storage: () => ({ bucket: mockBucket }) }));
 
@@ -65,6 +66,13 @@ describe("deleteThumbnailHandler", () => {
     await thumbs.deleteThumbnailHandler(evt("children/c1/jalons/a.jpg"));
     expect(mockFile).toHaveBeenCalledWith("children/c1/thumbs/a.jpg");
     expect(mockDelete).toHaveBeenCalledWith({ ignoreNotFound: true });
+  });
+  it("keeps the fresh thumbnail when the original was overwritten (delete + finalize events)", async () => {
+    mockExists.mockResolvedValueOnce([true]);
+    const result = await thumbs.deleteThumbnailHandler(evt("children/c1/jalons/a.jpg"));
+    expect(result).toBeNull();
+    expect(mockFile).toHaveBeenCalledWith("children/c1/jalons/a.jpg");
+    expect(mockDelete).not.toHaveBeenCalled();
   });
   it("ignores other deletions", async () => {
     expect(await thumbs.deleteThumbnailHandler(evt("children/c1/thumbs/a.jpg"))).toBeNull();

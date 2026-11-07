@@ -17,7 +17,7 @@ import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
-import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useCalendarDay, useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useStopTimedEventWithUndo } from "@/hooks/useStopTimedEventWithUndo";
@@ -416,6 +416,8 @@ export default function RoutinesScreen() {
     openAddModal("sommeil", "nap");
   }, [openAddModal]);
 
+  // Jour calendaire : le filtre « aujourd'hui » suit le passage de minuit.
+  const calendarDay = useCalendarDay();
   const groupedEvents = useMemo<RoutineGroup[]>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -469,7 +471,7 @@ export default function RoutinesScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     return grouped;
-  }, [events, selectedFilter, selectedDate, softDeletedIds]);
+  }, [events, selectedFilter, selectedDate, softDeletedIds, calendarDay]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: handleAddPress },

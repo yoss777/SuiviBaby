@@ -677,7 +677,7 @@ User stories :
 
 **Revue ECC (S5 + S6)** : `healthcare-reviewer`, `silent-failure-hunter`.
 
-## S7 — Performance de l'app · app (+ serveur) · ✅ (code, en attente de revue ECC et de mesures sur appareil)
+## S7 — Performance de l'app · app (+ serveur) · ✅ (revue ECC faite ; mesures sur appareil à faire)
 
 But : appliquer à toute l'app ce qui a été fait pour les statistiques.
 Mesure de référence d'abord (même méthode que `STATS_PERF_REFONTE.md`).
@@ -737,7 +737,7 @@ Décision 7.9 : pas de `minInstances` sur `validateAndCreateEvent` (~7,5 €/moi
 
 À faire hors code : déployer `storage.rules` à la main après fusion (chemin `thumbs/`) ; miniatures des photos existantes non générées (repli sur l'original) ; vérifications sur appareil listées dans la PR.
 
-## S8 — Robustesse React · app · ✅ (code, en attente de revue ECC)
+## S8 — Robustesse React · app · ✅
 
 - [x] **8.1** `ModalContext`, `ToastContext`, `SheetContext`,
   `SuccessAnimationContext` : fonctions en `useCallback`, valeurs en
@@ -762,6 +762,11 @@ réinitialisation retirés (pas 10) ; `useVoiceEventCreator` devenu
 `services/voiceEventCreator.ts` ; 60 `console.log` passés sous `__DEV__`.
 
 **Revue ECC (S7 + S8)** : `performance-optimizer`, `react-reviewer`.
+Faite le 2026-11-07 : aucun CRITICAL ; 1 HIGH (feuille bloquée après un crash
+hors formulaire) et 9 MEDIUM/LOW (galerie bloquée sur un jalon supprimé, droits
+figés après une erreur, caches non vidés à la déconnexion, image de l'enfant
+précédent après un changement d'enfant, filtres « aujourd'hui » figés après
+minuit…) corrigés avec tests (1182 tests app, 439 fonctions, 219 règles).
 
 ## S9 — Accessibilité · app + site · ⏳
 

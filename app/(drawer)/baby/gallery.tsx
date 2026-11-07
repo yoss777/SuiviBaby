@@ -1007,7 +1007,13 @@ export default function GalleryScreen() {
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.6}
             ListFooterComponent={
-              loadingMore ? <ActivityIndicator style={styles.footerLoader} color={nc.textMuted} /> : null
+              loadingMore ? (
+                <ActivityIndicator
+                  style={styles.footerLoader}
+                  color={nc.textMuted}
+                  accessibilityLabel="Chargement des photos suivantes"
+                />
+              ) : null
             }
             refreshControl={
               <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />

@@ -60,7 +60,17 @@ function subscribe(listener: () => void) {
 }
 
 const noopSubscribe = () => () => {};
-const getNow = () => now;
+// Sans abonné, `now` n'est plus tenu à jour (aucun minuteur) : au premier rendu
+// après une longue pause il serait périmé. On le rafraîchit s'il a plus d'une
+// seconde (valeur stable le temps d'un rendu, comme l'exige useSyncExternalStore).
+const STALE_NOW_MS = 1000;
+const getNow = () => {
+  if (listeners.size === 0) {
+    const current = Date.now();
+    if (current - now > STALE_NOW_MS) now = current;
+  }
+  return now;
+};
 const getZero = () => 0;
 
 /** Nombre d'abonnés actifs (tests). */

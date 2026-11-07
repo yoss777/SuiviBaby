@@ -22,6 +22,7 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ecouterEvenements,
@@ -466,6 +467,8 @@ export default function MilestonesScreen() {
     openAddModal("dent");
   }, [openAddModal]);
 
+  // Jour calendaire : le filtre « aujourd'hui » suit le passage de minuit.
+  const calendarDay = useCalendarDay();
   const filteredEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -481,7 +484,7 @@ export default function MilestonesScreen() {
       if (selectedFilter === "past") return time < todayTime;
       return true;
     });
-  }, [events, selectedFilter, selectedDate, softDeletedIds]);
+  }, [events, selectedFilter, selectedDate, softDeletedIds, calendarDay]);
 
 
   const groupedEvents = useMemo<MilestoneGroup[]>(() => {

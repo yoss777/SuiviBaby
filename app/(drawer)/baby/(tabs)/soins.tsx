@@ -20,6 +20,7 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
@@ -463,6 +464,8 @@ export default function SoinsScreen() {
     applyTodayFilter();
   }, [applyTodayFilter]);
 
+  // Jour calendaire : le filtre « aujourd'hui » suit le passage de minuit.
+  const calendarDay = useCalendarDay();
   const groupedEvents = useMemo<HealthGroup[]>(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -519,7 +522,7 @@ export default function SoinsScreen() {
       .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     return grouped;
-  }, [events, selectedFilter, selectedDate, softDeletedIds]);
+  }, [events, selectedFilter, selectedDate, softDeletedIds, calendarDay]);
 
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: () => openAddModal("temperature") },
