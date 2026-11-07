@@ -46,7 +46,10 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { announceError } from "@/utils/a11yAnnounce";
+import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consentMessage";
 import { auth } from "../../config/firebase";
+import { configureLayoutAnimation } from "@/utils/motion";
 
 const LAST_EMAIL_KEY = "@suivibaby_last_email";
 const LEGACY_EMAIL_KEY = "@samaye_last_email";
@@ -97,6 +100,9 @@ export default function LoginScreen() {
   const [hasConsented, setHasConsented] = useState(false);
   const [hasHealthConsent, setHasHealthConsent] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
+  const [consentErrorMessage, setConsentErrorMessage] = useState<string | null>(
+    null,
+  );
   const navigationLocked = useRef(false);
   // Consentement santé vérifié pour ce uid (null = pas encore lu). Sans ce
   // contrôle, une connexion Google/Apple ou e-mail allait droit à l'accueil
@@ -143,6 +149,7 @@ export default function LoginScreen() {
     setUserName("");
     setHasConsented(false);
     setHasHealthConsent(false);
+    setConsentErrorMessage(null);
     resetPasswordFields();
   }, [resetPasswordFields]);
 
@@ -320,6 +327,18 @@ export default function LoginScreen() {
 
     if (!isLogin && (!hasConsented || !hasHealthConsent)) {
       setShowConsentError(true);
+      // Message textuel persistant (le rouge seul disparaît après 2 s et ne
+      // dit rien aux lecteurs d'écran) ; recalculé à chaque case cochée.
+      const message = getConsentErrorMessage(hasConsented, hasHealthConsent) ?? "";
+      if (Platform.OS === "android" && consentErrorMessage === message) {
+        // Même texte qu'avant : la zone live Android ne relit pas un contenu
+        // inchangé. On vide puis on remet le texte au tick suivant.
+        setConsentErrorMessage("");
+        setTimeout(() => setConsentErrorMessage(message), 50);
+      } else {
+        setConsentErrorMessage(message);
+      }
+      announceError(message);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setTimeout(() => setShowConsentError(false), 2000);
       return;
@@ -466,7 +485,7 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isLogin, hasConsented, hasHealthConsent, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
+  }, [isLogin, hasConsented, hasHealthConsent, consentErrorMessage, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
 
 
   const handleEmailChange = useCallback((text: string) => {
@@ -483,7 +502,7 @@ export default function LoginScreen() {
 
   const handleToggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext({
+    configureLayoutAnimation({
       duration: 350,
       create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
       update: { type: LayoutAnimation.Types.easeInEaseOut },
@@ -509,13 +528,19 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasConsented(!hasConsented);
     setShowConsentError(false);
-  }, [hasConsented]);
+    setConsentErrorMessage((prev) =>
+      nextConsentErrorMessage(prev, !hasConsented, hasHealthConsent),
+    );
+  }, [hasConsented, hasHealthConsent]);
 
   const handleToggleHealthConsent = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHasHealthConsent(!hasHealthConsent);
     setShowConsentError(false);
-  }, [hasHealthConsent]);
+    setConsentErrorMessage((prev) =>
+      nextConsentErrorMessage(prev, hasConsented, !hasHealthConsent),
+    );
+  }, [hasConsented, hasHealthConsent]);
 
   return (
     <KeyboardAvoidingView
@@ -544,7 +569,7 @@ export default function LoginScreen() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {isLogin ? "Bienvenue" : "Créer un compte"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {isLogin
               ? "Connectez-vous pour suivre le quotidien de votre bébé"
               : "Commencez à suivre le quotidien de votre bébé"}
@@ -584,7 +609,7 @@ export default function LoginScreen() {
               )}
             </View>
             {emailTouched && email.trim().length > 0 && !emailValid && (
-              <Text style={[styles.inlineHint, { color: nc.error }]}>
+              <Text style={[styles.inlineHint, { color: nc.errorText }]}>
                 Format d&apos;email invalide
               </Text>
             )}
@@ -683,7 +708,7 @@ export default function LoginScreen() {
                   ]}
                 />
               </View>
-              <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.strengthLabel, { color: nc.textLight }]}>
                 Force: {strengthLabel}
               </Text>
             </View>
@@ -761,7 +786,7 @@ export default function LoginScreen() {
           {/* Séparateur social */}
           <View style={styles.dividerRow}>
             <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
-            <Text style={[styles.dividerText, { color: nc.textMuted }]}>ou</Text>
+            <Text style={[styles.dividerText, { color: nc.textLight }]}>ou</Text>
             <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
           </View>
 
@@ -837,8 +862,8 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted },
-                  showConsentError && { color: nc.error, fontWeight: "bold" },
+                  { color: nc.textLight },
+                  showConsentError && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 J&apos;accepte{" "}
@@ -853,7 +878,7 @@ export default function LoginScreen() {
                     styles.legalLink,
                     { color: nc.todayAccent },
                     showConsentError && {
-                      color: nc.error,
+                      color: nc.errorText,
                       fontWeight: "bold",
                     },
                   ]}
@@ -864,8 +889,8 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted },
-                  showConsentError && { color: nc.error, fontWeight: "bold" },
+                  { color: nc.textLight },
+                  showConsentError && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 {" "}
@@ -882,7 +907,7 @@ export default function LoginScreen() {
                     styles.legalLink,
                     { color: nc.todayAccent },
                     showConsentError && {
-                      color: nc.error,
+                      color: nc.errorText,
                       fontWeight: "bold",
                     },
                   ]}
@@ -890,7 +915,7 @@ export default function LoginScreen() {
                   la politique de confidentialité
                 </Text>
               </TouchableOpacity>
-              <Text style={[styles.legalText, { color: nc.textMuted }]}>.</Text>
+              <Text style={[styles.legalText, { color: nc.textLight }]}>.</Text>
             </View>
           )}
 
@@ -923,8 +948,8 @@ export default function LoginScreen() {
               <Text
                 style={[
                   styles.legalText,
-                  { color: nc.textMuted, flex: 1 },
-                  showConsentError && !hasHealthConsent && { color: nc.error, fontWeight: "bold" },
+                  { color: nc.textLight, flex: 1 },
+                  showConsentError && !hasHealthConsent && { color: nc.errorText, fontWeight: "bold" },
                 ]}
               >
                 J&apos;autorise le traitement des{" "}
@@ -943,9 +968,22 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Erreur de consentement : texte persistant, annoncé */}
+          {/* Reste monté quand le texte est vidé ("") pour forcer la relecture Android */}
+          {!isLogin && consentErrorMessage !== null && (
+            <Text
+              testID="consent-error"
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              style={[styles.consentErrorText, { color: nc.errorText }]}
+            >
+              {consentErrorMessage}
+            </Text>
+          )}
+
           {/* Lien pour basculer entre connexion et inscription */}
           <View style={styles.switchContainer}>
-            <Text style={[styles.switchText, { color: nc.textMuted }]}>
+            <Text style={[styles.switchText, { color: nc.textLight }]}>
               {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}
             </Text>
             <TouchableOpacity
@@ -964,7 +1002,7 @@ export default function LoginScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+          <Text style={[styles.footerText, { color: nc.textLight }]}>
             Vos données sont sécurisées et privées
           </Text>
         </View>
@@ -1113,8 +1151,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   consentCheckbox: {
-    marginRight: 8,
+    marginRight: 4,
     padding: 4,
+    // Cible tactile réelle ≥ 44 pt
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  consentErrorText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 8,
+    paddingHorizontal: 12,
   },
   forgotPasswordContainer: {
     alignSelf: "flex-end",
@@ -1169,7 +1218,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   socialLegalText: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
     lineHeight: 16,
   },

@@ -703,7 +703,7 @@ function RecentEventsListComponent({
       </View>
 
       {showHint && events.length > 0 && (
-        <Text style={[styles.recentHint, { color: nc.textMuted }]}>
+        <Text style={[styles.recentHint, { color: nc.textLight }]}>
           Appuyez sur un événement pour le modifier
         </Text>
       )}
@@ -716,7 +716,7 @@ function RecentEventsListComponent({
           </Text>
         </View>
       ) : events.length === 0 ? (
-        <EmptyState titleColor={nc.textStrong} subtitleColor={nc.textMuted} />
+        <EmptyState titleColor={nc.textStrong} subtitleColor={nc.textLight} />
       ) : (
         events.map((event, index) => (
           <EventRow
@@ -825,16 +825,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   recentTimeArrow: {
-    fontSize: 10,
-    lineHeight: 10,
+    fontSize: 12,
+    lineHeight: 14,
     fontWeight: "600",
   },
   recentTimeTextSecondary: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   recentTimeOngoing: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   recentCard: {
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "white",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

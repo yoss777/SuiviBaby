@@ -336,7 +336,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
       {!isOngoing && showDuration && computedDuration != null && (
         <View style={styles.durationRow}>
           <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
-          <Text style={[styles.durationText, { color: nc.textMuted }]}>
+          <Text style={[styles.durationText, { color: nc.textLight }]}>
             {`Durée : ${formatDuration(computedDuration)}`}
           </Text>
         </View>

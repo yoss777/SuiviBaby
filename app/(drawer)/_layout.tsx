@@ -1,4 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
+import { DrawerToggleButton } from "@react-navigation/drawer";
 import { Drawer } from "expo-router/drawer";
 import {
   createContext,
@@ -103,6 +104,13 @@ function BabyHeaderTitle() {
         onClose={() => setShowSwitcher(false)}
       />
     </>
+  );
+}
+
+/** Bouton d'ouverture du menu avec un libellé français (défaut anglais « Show navigation menu »). */
+function renderDrawerToggle(props: { tintColor?: string }) {
+  return (
+    <DrawerToggleButton tintColor={props.tintColor} accessibilityLabel="Ouvrir le menu" />
   );
 }
 
@@ -311,6 +319,8 @@ export default function DrawerLayout() {
             drawerContent={(props) => <CustomDrawerContent {...props} />}
             screenOptions={{
               drawerActiveTintColor: Colors[colorScheme].tint,
+              overlayAccessibilityLabel: "Fermer le menu",
+              headerLeft: renderDrawerToggle,
               headerTintColor: Colors[colorScheme].text,
               headerStyle: {
                 backgroundColor: Colors[colorScheme].background,
@@ -340,7 +350,7 @@ export default function DrawerLayout() {
                   : undefined,
                 headerLeft: headerLeftState.component
                   ? () => headerLeftState.component
-                  : undefined,
+                  : renderDrawerToggle,
               }}
             />
             <Drawer.Screen
@@ -357,7 +367,7 @@ export default function DrawerLayout() {
                 drawerItemStyle: { display: "none" },
                 headerLeft: headerLeftState.component
                   ? () => headerLeftState.component
-                  : undefined,
+                  : renderDrawerToggle,
               }}
             />
           </Drawer>

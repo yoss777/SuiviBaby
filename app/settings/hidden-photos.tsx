@@ -197,7 +197,7 @@ export default function HiddenPhotosScreen() {
               {item.childName}
             </Text>
             {item.date ? (
-              <Text style={[styles.date, { color: nc.textMuted }]}>{item.date}</Text>
+              <Text style={[styles.date, { color: nc.textLight }]}>{item.date}</Text>
             ) : null}
           </View>
         </View>
@@ -262,7 +262,7 @@ export default function HiddenPhotosScreen() {
             <Text style={[styles.emptyTitle, { color: nc.textStrong }]}>
               Aucune photo masquée
             </Text>
-            <Text style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+            <Text style={[styles.emptySubtitle, { color: nc.textLight }]}>
               Les photos que vous masquez dans la galerie apparaîtront ici.
             </Text>
           </View>

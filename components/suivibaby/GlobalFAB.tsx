@@ -14,6 +14,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
@@ -158,6 +159,10 @@ const ActionButton = ({
     <Animated.View
       style={[styles.actionButtonWrapper, animatedStyle]}
       pointerEvents={isOpen ? "auto" : "none"}
+      // Fermé : les actions sortent de l'arbre d'accessibilité (sinon
+      // VoiceOver/TalkBack les lisent alors qu'elles sont invisibles).
+      accessibilityElementsHidden={!isOpen}
+      importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
     >
       <Pressable
         onPress={onPress}
@@ -305,7 +310,8 @@ export const GlobalFAB = ({
           {QUICK_ADD_CATEGORIES.map((category) => (
             <View key={category.key}>
               <Text
-                style={[styles.quickSheetCategoryLabel, { color: colors.text }]}
+                style={[styles.quickSheetCategoryLabel, { color: nc.textLight }]}
+                accessibilityRole="header"
               >
                 {category.label}
               </Text>
@@ -394,6 +400,18 @@ export const GlobalFAB = ({
     [handleQuickAddPress, isNightMode, openMoreSheet, setIsOpen],
   );
 
+  // Menu ouvert : le bouton retour Android le referme au lieu de quitter l'écran
+  useEffect(() => {
+    if (!isOpen) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setIsOpen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [isOpen, setIsOpen]);
+
+  const closeMenu = useCallback(() => setIsOpen(false), [setIsOpen]);
+
   const handleMainPress = useCallback(() => {
     Haptics.impactAsync(
       isNightMode
@@ -409,15 +427,24 @@ export const GlobalFAB = ({
       <Animated.View
         style={[styles.backdrop, backdropStyle]}
         pointerEvents={isOpen ? "auto" : "none"}
+        accessibilityElementsHidden={!isOpen}
+        importantForAccessibility={isOpen ? "auto" : "no-hide-descendants"}
       >
         <Pressable
           style={styles.backdropPress}
-          onPress={() => setIsOpen(false)}
+          onPress={closeMenu}
+          onAccessibilityEscape={closeMenu}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer le menu"
         />
       </Animated.View>
 
       {/* FAB Container */}
-      <View style={[styles.fabContainer, { bottom: fabBottom }]}>
+      <View
+        style={[styles.fabContainer, { bottom: fabBottom }]}
+        // Geste « échappement » VoiceOver (Z à deux doigts) : referme le menu
+        onAccessibilityEscape={isOpen ? closeMenu : undefined}
+      >
         {/* Action buttons */}
         {ACTIONS.map((action, index) => {
           const actionColors = getFabActionColors(action);
@@ -577,7 +604,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    opacity: 0.5,
     marginTop: 12,
     marginBottom: 4,
     marginLeft: 4,

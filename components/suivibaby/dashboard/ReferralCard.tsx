@@ -118,7 +118,7 @@ export const ReferralCard = memo(function ReferralCard({
               ]}
             />
           </View>
-          <Text style={[styles.progressText, { color: nc.textMuted }]}>
+          <Text style={[styles.progressText, { color: nc.textLight }]}>
             {referralCount}/{nextTier.minReferrals} {nextTier.label}
           </Text>
         </View>
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tierText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   description: {
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   progressText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
     minWidth: 80,
   },

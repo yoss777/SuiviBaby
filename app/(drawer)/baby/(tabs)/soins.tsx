@@ -54,6 +54,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -113,7 +114,7 @@ const SoinsSkeleton = React.memo(function SoinsSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1090,7 +1091,7 @@ export default function SoinsScreen() {
 
   const toggleExpand = useCallback((date: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -1263,7 +1264,7 @@ export default function SoinsScreen() {
             </Pressable>
           )}
           <View style={styles.sessionTime}>
-            <Text style={[styles.sessionTimeText, { color: nc.textMuted }]}>
+            <Text style={[styles.sessionTimeText, { color: nc.textLight }]}>
               {formatTime(time)}
             </Text>
           </View>
@@ -1277,7 +1278,7 @@ export default function SoinsScreen() {
           </View>
           <View style={styles.sessionDetails}>
             <Text style={[styles.sessionType, { color: nc.textStrong }]}>{config.label}</Text>
-            <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>{buildDetails(event)}</Text>
+            <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>{buildDetails(event)}</Text>
           </View>
           <Ionicons name="create-outline" size={18} color={nc.textMuted} />
         </Pressable>
@@ -1311,7 +1312,7 @@ export default function SoinsScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 évènement{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1330,7 +1331,7 @@ export default function SoinsScreen() {
                     { backgroundColor: TYPE_CONFIG[type].color },
                   ]}
                 />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                   {TYPE_CONFIG[type].label}
                   {count > 1 ? "s" : ""}
                 </Text>
@@ -1493,7 +1494,7 @@ export default function SoinsScreen() {
                     ? "Aucun soin enregistré"
                     : "Aucun soin pour ce filtre"}
                 </ThemedText>
-                <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+                <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                   Suivez les soins et traitements
                 </ThemedText>
                 {events.length === 0 && (
@@ -1646,7 +1647,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1796,7 +1797,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

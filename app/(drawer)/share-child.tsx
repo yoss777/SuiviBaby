@@ -382,7 +382,7 @@ export default function ShareChildScreen() {
       } else if (error?.code === "sharing-limit") {
         showAlert(
           "Limite de partage atteinte",
-          "Le plan gratuit permet 2 co-parents maximum. Passez à Famille pour inviter plus de personnes.",
+          "Le plan gratuit permet 2 co-parents maximum. Passez à Premium pour un partage illimité.",
           [
             { text: "Plus tard", style: "cancel" },
             { text: "Voir Premium", onPress: () => router.push("/settings/premium") },

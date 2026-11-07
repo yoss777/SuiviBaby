@@ -1,5 +1,9 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { DrawerContentComponentProps, DrawerContentScrollView } from "@react-navigation/drawer";
+import {
+  DrawerContentComponentProps,
+  DrawerContentScrollView,
+  getDrawerStatusFromState,
+} from "@react-navigation/drawer";
 import * as Haptics from "expo-haptics";
 import { usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -188,10 +192,16 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     unhideChildOptimistically,
   ]);
 
+  // Menu fermé : son contenu reste monté hors écran ; on le retire de l'arbre
+  // d'accessibilité pour que VoiceOver/TalkBack ne puissent pas y naviguer.
+  const isDrawerClosed = getDrawerStatusFromState(props.state) === "closed";
+
   return (
     <DrawerContentScrollView
       {...props}
       style={{ backgroundColor: Colors[colorScheme].background }}
+      accessibilityElementsHidden={isDrawerClosed}
+      importantForAccessibility={isDrawerClosed ? "no-hide-descendants" : "auto"}
     >
       {/* Section: Informations utilisateur */}
       {user && (
@@ -215,6 +225,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
       {/* Section: Suivi Enfant */}
       <View style={styles.section}>
         <Text
+          accessibilityRole="header"
           style={[
             styles.sectionHeader,
             { color: Colors[colorScheme].tabIconDefault },
@@ -267,7 +278,8 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                   <Text
                     style={[
                       styles.childBirthDate,
-                      { color: itemColor, opacity: 0.7 },
+                      // Pas d'opacité sur la teinte (≈ 2.5:1) : textLight garantit ≥ 4.5:1
+                      { color: nc.textLight },
                     ]}
                   >
                     {ageText} • {formatBirthDate(child.birthDate)}
@@ -399,11 +411,11 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           style={[styles.signOutButton, { borderColor: nc.error, backgroundColor: getBackgroundTint(nc.error, 0.08) }]}
           onPress={handleSignOut}
           accessibilityRole="button"
-          accessibilityLabel="Se déconnecter"
+          accessibilityLabel="Déconnexion"
         >
           <View style={styles.buttonContent}>
             <FontAwesome name="sign-out-alt" size={14} color={nc.error} />
-            <Text style={[styles.signOutText, { color: nc.error }]}>
+            <Text style={[styles.signOutText, { color: nc.errorText }]}>
               Déconnexion
             </Text>
           </View>
@@ -420,6 +432,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowHideModal(false)}
+          accessible={false}
         >
           <Pressable
             style={[
@@ -629,6 +642,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+    // Cible tactile réelle ≥ 44 pt
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalOverlay: {
     flex: 1,

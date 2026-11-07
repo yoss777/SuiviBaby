@@ -71,7 +71,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.viewAll, { color: nc.textMuted }]}>
+          <Text style={[styles.viewAll, { color: nc.textLight }]}>
             Voir tout
           </Text>
           <FontAwesome name="chevron-right" size={10} color={nc.textMuted} />
@@ -121,7 +121,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
                   >
                     {m.title}
                   </Text>
-                  <Text style={[styles.milestoneAge, { color: nc.textMuted }]}>
+                  <Text style={[styles.milestoneAge, { color: nc.textLight }]}>
                     {weeksToLabel(m.ageTypicalWeeks)}
                   </Text>
                 </View>
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   milestoneAge: {
-    fontSize: 10,
+    fontSize: 12,
   },
   miniProgress: {
     width: 40,

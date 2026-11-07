@@ -62,6 +62,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -551,7 +552,7 @@ const styles = StyleSheet.create({
   },
   filterChipBadge: {
     minWidth: 18,
-    height: 18,
+    minHeight: 18,
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
@@ -559,7 +560,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   filterChipBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -682,16 +683,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   cardTimeArrow: {
-    fontSize: 10,
-    lineHeight: 10,
+    fontSize: 12,
+    lineHeight: 12,
     fontWeight: "600",
   },
   cardTimeTextSecondary: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   cardTimeOngoing: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   cardDetails: {
@@ -748,7 +749,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   // P4: Calendar & date chip styles
@@ -1461,7 +1462,7 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1972,7 +1973,7 @@ export default function ChronoScreen() {
   const handleRangeChange = useCallback(
     (value: RangeOption) => {
       // P2: Animate section transitions
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
       if (value > maxRange) {
         setMaxRange(value);
         setIsRefreshing(true);
@@ -2007,13 +2008,13 @@ export default function ChronoScreen() {
 
   const handleToggleAll = useCallback(() => {
     // P2: Animate section transitions
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes(allSelected ? [] : [...ALL_FILTERS]);
   }, [allSelected]);
 
   const handleFilterToggle = useCallback((type: FilterType) => {
     // P2: Animate section transitions
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedTypes((prev) =>
       prev.includes(type)
         ? prev.filter((value) => value !== type)
@@ -2066,13 +2067,13 @@ export default function ChronoScreen() {
   );
 
   const handleDateSelect = useCallback((dateString: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedDate(dateString);
     setShowCalendar(false);
   }, []);
 
   const handleClearDate = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setSelectedDate(null);
     setShowCalendar(false);
   }, []);
@@ -2656,7 +2657,7 @@ export default function ChronoScreen() {
                               {
                                 color: allSelected
                                   ? colors.tint
-                                  : colors.secondary,
+                                  : colors.secondaryText,
                               },
                             ]}
                           >
@@ -2698,7 +2699,7 @@ export default function ChronoScreen() {
                         color={colors.secondary}
                       />
                       <Text
-                        style={[styles.emptyText, { color: colors.secondary }]}
+                        style={[styles.emptyText, { color: colors.secondaryText }]}
                       >
                         {selectedTypes.length === 0
                           ? "Sélectionnez au moins un type pour afficher la timeline."

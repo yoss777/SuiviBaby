@@ -59,6 +59,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -207,7 +208,7 @@ const MilestoneSkeleton = React.memo(function MilestoneSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1095,7 +1096,7 @@ export default function MilestonesScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                { color: nc.textMuted },
+                { color: nc.textLight },
                 isLast && [styles.sessionTimeTextLast, { color: nc.textStrong }],
               ]}
             >
@@ -1120,7 +1121,7 @@ export default function MilestonesScreen() {
                 <Text style={[styles.sessionType, { color: nc.textStrong }]}>{titleText}</Text>
               ) : null}
               {event.description ? (
-                <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>{event.description}</Text>
+                <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>{event.description}</Text>
               ) : null}
               {event.typeJalon === "humeur" && moodEmoji ? (
                 <Text style={styles.sessionMood}>{moodEmoji}</Text>
@@ -1142,7 +1143,7 @@ export default function MilestonesScreen() {
 
   const toggleExpand = useCallback((dateKey: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(dateKey)) {
@@ -1283,7 +1284,7 @@ export default function MilestonesScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 jalon{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1301,7 +1302,7 @@ export default function MilestonesScreen() {
                     { backgroundColor: TYPE_CONFIG[type].color },
                   ]}
                 />
-                <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+                <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                   {TYPE_CONFIG[type].label}
                   {item.counts[type] > 1 ? "s" : ""}
                 </Text>
@@ -1436,7 +1437,7 @@ export default function MilestonesScreen() {
                   ? "Aucun jalon enregistré"
                   : "Aucun jalon pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 Capturez les premiers pas, sourires et moments importants
               </ThemedText>
               {events.length === 0 && (
@@ -1627,7 +1628,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1737,7 +1738,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   skeletonContainer: {

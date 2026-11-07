@@ -123,7 +123,7 @@ export default function VerifyEmailScreen() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             Vérifiez votre email
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             Un email de vérification a été envoyé à {email}. Vérifiez votre boîte de réception et vos spams.
           </Text>
         </View>
@@ -149,7 +149,7 @@ export default function VerifyEmailScreen() {
           {/* Error message */}
           {!!error && (
             <Text
-              style={[styles.errorText, { color: nc.error }]}
+              style={[styles.errorText, { color: nc.errorText }]}
               accessibilityRole="alert"
               accessibilityLabel={error}
             >
@@ -221,7 +221,7 @@ export default function VerifyEmailScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+          <Text style={[styles.footerText, { color: nc.textLight }]}>
             Vos données sont sécurisées et privées
           </Text>
         </View>

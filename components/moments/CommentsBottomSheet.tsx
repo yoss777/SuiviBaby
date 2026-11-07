@@ -151,7 +151,7 @@ const CommentItem = ({
           style={[
             styles.commentAvatarText,
             isReply && styles.replyAvatarText,
-            { color: nc.textMuted },
+            { color: nc.textLight },
           ]}
         >
           {avatarLetter}
@@ -162,7 +162,7 @@ const CommentItem = ({
           <Text style={[styles.commentUserName, { color: nc.textStrong }]}>
             {isOwnComment ? "Moi" : comment.userName}
           </Text>
-          <Text style={[styles.commentTime, { color: nc.textMuted }]}>
+          <Text style={[styles.commentTime, { color: nc.textLight }]}>
             {formatCommentDate(comment.createdAt)}
           </Text>
         </View>
@@ -176,7 +176,7 @@ const CommentItem = ({
           >
             <FontAwesome6 name="reply" size={9} color={nc.textMuted} />
             <Text
-              style={[styles.replyCitationText, { color: nc.textMuted }]}
+              style={[styles.replyCitationText, { color: nc.textLight }]}
               numberOfLines={1}
             >
               {comment.replyToUserName}
@@ -194,7 +194,7 @@ const CommentItem = ({
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           style={styles.replyButton}
         >
-          <Text style={[styles.replyButtonText, { color: nc.textMuted }]}>
+          <Text style={[styles.replyButtonText, { color: nc.textLight }]}>
             Répondre
           </Text>
         </Pressable>
@@ -273,7 +273,7 @@ const MentionPickerItem = ({
 }) => (
   <Pressable style={styles.mentionItem} onPress={() => onSelect(user)}>
     <View style={[styles.mentionAvatar, { backgroundColor: nc.borderLight }]}>
-      <Text style={[styles.mentionAvatarText, { color: nc.textMuted }]}>
+      <Text style={[styles.mentionAvatarText, { color: nc.textLight }]}>
         {user.userName.charAt(0).toUpperCase()}
       </Text>
     </View>
@@ -591,7 +591,7 @@ export const CommentsBottomSheet = ({
     return (
       <View style={styles.emptyContainer}>
         <FontAwesome6 name="comment" size={40} color={nc.borderLight} />
-        <Text style={[styles.emptyText, { color: nc.textMuted }]}>
+        <Text style={[styles.emptyText, { color: nc.textLight }]}>
           Aucun commentaire
         </Text>
         <Text style={[styles.emptySubtext, { color: nc.textLight }]}>
@@ -640,7 +640,7 @@ export const CommentsBottomSheet = ({
             <Text style={[styles.headerTitle, { color: nc.textStrong }]}>
               Commentaires
               {commentInfo.count > 0 && (
-                <Text style={[styles.headerCount, { color: nc.textMuted }]}>
+                <Text style={[styles.headerCount, { color: nc.textLight }]}>
                   {" "}
                   ({commentInfo.count})
                 </Text>
@@ -709,7 +709,7 @@ export const CommentsBottomSheet = ({
             >
               <FontAwesome6 name="reply" size={12} color={MENTION_COLOR} />
               <Text
-                style={[styles.replyBannerText, { color: nc.textMuted }]}
+                style={[styles.replyBannerText, { color: nc.textLight }]}
                 numberOfLines={1}
               >
                 Réponse à{" "}
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   replyAvatarText: {
-    fontSize: 11,
+    fontSize: 12,
   },
   commentContent: {
     flex: 1,
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   replyCitationText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   replyButton: {
@@ -951,7 +951,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   mentionAvatarText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   mentionName: {

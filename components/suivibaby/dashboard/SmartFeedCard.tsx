@@ -94,7 +94,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
                 {catLabel}
               </Text>
               <Text
-                style={[styles.readTime, { color: nc.textMuted }]}
+                style={[styles.readTime, { color: nc.textLight }]}
               >
                 {tip.readTimeMinutes} min de lecture
               </Text>
@@ -150,7 +150,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
         <View style={styles.footer}>
           {tip.source && (
             <Text
-              style={[styles.source, { color: nc.textMuted }]}
+              style={[styles.source, { color: nc.textLight }]}
               numberOfLines={1}
             >
               Source : {tip.source}
@@ -217,13 +217,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   category: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   readTime: {
-    fontSize: 10,
+    fontSize: 12,
   },
   actions: {
     flexDirection: "row",
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
   source: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 12,
     fontStyle: "italic",
     marginRight: 8,
   },

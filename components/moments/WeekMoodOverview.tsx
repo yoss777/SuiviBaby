@@ -98,7 +98,7 @@ const DayCircle = ({
       <Text
         style={[
           styles.dayName,
-          { color: nc.textMuted },
+          { color: nc.textLight },
           isToday && { color: nc.todayAccent, fontWeight: "700" },
         ]}
       >
@@ -134,7 +134,7 @@ const DayCircle = ({
       <Text
         style={[
           styles.dayDate,
-          { color: nc.textMuted },
+          { color: nc.textLight },
           isToday && { color: nc.todayAccent, fontWeight: "600" },
         ]}
       >
@@ -250,7 +250,7 @@ export const WeekMoodOverview = ({
       </View>
 
       {!weekStats && (
-        <Text style={[styles.emptyHint, { color: nc.textMuted }]}>
+        <Text style={[styles.emptyHint, { color: nc.textLight }]}>
           Enregistrez des humeurs pour voir le récap
         </Text>
       )}
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dayName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     marginBottom: 8,
     textTransform: "uppercase",
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   dayDate: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 6,
   },
   emptyHint: {

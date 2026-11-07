@@ -23,6 +23,9 @@ export function TabBarBadge({
       {children}
       {visible && (
         <View
+          // Décoratif : le nombre est annoncé par le libellé d'accessibilité de l'onglet
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
           style={[
             styles.badge,
             type === 'dot' ? styles.dot : styles.countBadge,
@@ -57,16 +60,16 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   countBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 20,
+    minHeight: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
   countText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
 });

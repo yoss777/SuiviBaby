@@ -25,7 +25,8 @@ import {
 export interface AccountDeletionColors {
   backgroundCard: string;
   textStrong: string;
-  textMuted: string;
+  /** Texte secondaire lisible (textLight). */
+  textLight: string;
   borderLight: string;
   error: string;
   white: string;
@@ -172,7 +173,7 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
         choices={choices}
         backgroundColor={colors.backgroundCard}
         textColor={colors.textStrong}
-        mutedColor={colors.textMuted}
+        mutedColor={colors.textLight}
         borderColor={colors.borderLight}
         accentColor={colors.accent}
         onSelect={(childId, uid) => setChoices((prev) => ({ ...prev, [childId]: uid }))}

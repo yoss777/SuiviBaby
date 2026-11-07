@@ -323,9 +323,9 @@ export default function DeletionRequestsScreen() {
       case "refused":
         return nc.error;
       case "expired":
-        return nc.textMuted;
+        return nc.textLight;
       default:
-        return nc.textMuted;
+        return nc.textLight;
     }
   };
 
@@ -366,7 +366,7 @@ export default function DeletionRequestsScreen() {
               <Text style={[styles.emptyTitle, { color: nc.textStrong }]}>
                 Aucune demande
               </Text>
-              <Text style={[styles.emptyText, { color: nc.textMuted }]}>
+              <Text style={[styles.emptyText, { color: nc.textLight }]}>
                 Pas de demande de suppression en cours.
               </Text>
             </View>
@@ -427,10 +427,10 @@ export default function DeletionRequestsScreen() {
                     </View>
 
                     {/* Meta */}
-                    <Text style={[styles.requestMeta, { color: nc.textMuted }]}>
+                    <Text style={[styles.requestMeta, { color: nc.textLight }]}>
                       Demandée le {formatDate(req.requestedAt)}
                     </Text>
-                    <Text style={[styles.requestMeta, { color: nc.textMuted }]}>
+                    <Text style={[styles.requestMeta, { color: nc.textLight }]}>
                       par {requesterName}
                     </Text>
 
@@ -471,7 +471,7 @@ export default function DeletionRequestsScreen() {
                                 { color: nc.textStrong },
                                 vote.vote === "pending" &&
                                   req.status === "refused" && {
-                                    color: nc.textMuted,
+                                    color: nc.textLight,
                                   },
                               ]}
                             >
@@ -498,7 +498,7 @@ export default function DeletionRequestsScreen() {
                         >
                           <Ionicons name="close" size={18} color={nc.error} />
                           <Text
-                            style={[styles.voteButtonText, { color: nc.error }]}
+                            style={[styles.voteButtonText, { color: nc.errorText }]}
                           >
                             Refuser
                           </Text>
@@ -547,7 +547,7 @@ export default function DeletionRequestsScreen() {
                         <Text
                           style={[
                             styles.countdownText,
-                            { color: nc.textMuted },
+                            { color: nc.textLight },
                           ]}
                           accessibilityRole="text"
                         >

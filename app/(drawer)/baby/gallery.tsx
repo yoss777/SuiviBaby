@@ -42,6 +42,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../_layout";
+import { startLoop } from "@/utils/motion";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = 2;
@@ -226,7 +227,7 @@ const styles = StyleSheet.create({
   },
   likeOverlayText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   // Empty / error states
@@ -309,7 +310,7 @@ function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
         useNativeDriver: true,
       }),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [shimmerAnim]);
 
@@ -385,7 +386,7 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
         RNAnimated.timing(badgePulse, { toValue: 1, duration: 800, useNativeDriver: true }),
       ]),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [notificationType, badgePulse]);
 

@@ -1,6 +1,7 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useEffect, useRef } from "react";
 import { Animated, Dimensions, StyleSheet, View } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const POLAROID_WIDTH = (SCREEN_WIDTH - 48 - 12) / 2;
@@ -23,7 +24,7 @@ export const MomentsSkeletonLoader = ({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 

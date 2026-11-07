@@ -521,7 +521,7 @@ const dynamicStyles = (
     },
     emptyText: {
       fontSize: 16,
-      color: nc.textMuted,
+      color: nc.textLight,
       marginTop: 16,
     },
     roleChoiceList: {

@@ -9,6 +9,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import LogoAnimation from './LogoAnimation';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,8 +21,16 @@ interface AnimatedSplashProps {
 export default function AnimatedSplash({ onComplete, children }: AnimatedSplashProps) {
   const [animationComplete, setAnimationComplete] = useState(false);
   const splashOpacity = useSharedValue(1);
+  const reduceMotion = useReduceMotion();
 
   const handleAnimationComplete = () => {
+    // « Réduire les animations » : disparition instantanée du splash
+    if (reduceMotion) {
+      splashOpacity.value = 0;
+      onComplete?.();
+      setAnimationComplete(true);
+      return;
+    }
     // Fade out splash after logo animation completes
     splashOpacity.value = withDelay(
       300,

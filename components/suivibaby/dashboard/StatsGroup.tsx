@@ -15,6 +15,7 @@ import {
   UIManager,
   View,
 } from "react-native";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -152,7 +153,7 @@ export const StatsGroup = memo(function StatsGroup({
 
   const toggleExpanded = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((prev) => !prev);
   }, []);
 
@@ -194,7 +195,7 @@ export const StatsGroup = memo(function StatsGroup({
           useNativeDriver: true,
         }),
       );
-      shimmer.start();
+      startLoop(shimmer);
       return () => shimmer.stop();
     }
   }, [isLoading, shimmerAnim]);
@@ -270,7 +271,7 @@ export const StatsGroup = memo(function StatsGroup({
               style={[
                 styles.summary,
                 { color: nc.textStrong },
-                isWarning && { color: nc.error },
+                isWarning && { color: nc.errorText },
               ]}
             >
               {summary}
@@ -286,8 +287,8 @@ export const StatsGroup = memo(function StatsGroup({
                 <Text
                   style={[
                     styles.timeSince,
-                    { color: nc.textMuted },
-                    isWarning && { color: nc.error },
+                    { color: nc.textLight },
+                    isWarning && { color: nc.errorText },
                   ]}
                 >
                   {timeSinceLabel
@@ -364,7 +365,7 @@ export const StatsGroup = memo(function StatsGroup({
                     {item.label}
                   </Text>
                   {itemTimeSince && (
-                    <Text style={[styles.itemTimeSince, { color: nc.textMuted }]}>
+                    <Text style={[styles.itemTimeSince, { color: nc.textLight }]}>
                       {itemTimeSince}
                     </Text>
                   )}
@@ -374,7 +375,7 @@ export const StatsGroup = memo(function StatsGroup({
                     {item.value}
                   </Text>
                   {item.unit && (
-                    <Text style={[styles.itemUnit, { color: nc.textMuted }]}>
+                    <Text style={[styles.itemUnit, { color: nc.textLight }]}>
                       {item.unit}
                     </Text>
                   )}

@@ -28,7 +28,6 @@ describe("premiumGatingService", () => {
         "pdf_export_limit",
         "history_limit",
         "sharing_limit",
-        "advanced_stats",
         "ai_insights",
       ] as const;
 
@@ -39,13 +38,31 @@ describe("premiumGatingService", () => {
         expect(PAYWALL_MESSAGES[trigger].ctaText).toBeTruthy();
       }
     });
+
+    // Décision Q7 (2026-11-07) : Famille n'est plus proposée, statistiques
+    // avancées et courbes OMS sont gratuites.
+    it("never promotes the Famille offer, advanced stats or OMS curves", () => {
+      expect(Object.keys(PAYWALL_MESSAGES)).not.toContain("advanced_stats");
+      for (const msg of Object.values(PAYWALL_MESSAGES)) {
+        const text = `${msg.title} ${msg.description} ${msg.ctaText}`;
+        expect(text).not.toMatch(/famille/i);
+        expect(text).not.toMatch(/OMS/);
+        expect(text).not.toMatch(/statistiques avancées/i);
+      }
+    });
+
+    it("sharing_limit points to Premium unlimited sharing", () => {
+      const m = PAYWALL_MESSAGES.sharing_limit;
+      expect(m.description).toContain("2");
+      expect(m.description).toContain("Premium");
+    });
   });
 
   describe("pdf_export_limit message", () => {
-    it("states the PDF is Premium/Famille and never limits the JSON export", () => {
+    it("states the PDF is Premium and never limits the JSON export", () => {
       const m = PAYWALL_MESSAGES.pdf_export_limit;
       expect(m.title).toBe("Export PDF utilisé");
-      expect(m.description).toContain("Premium et Famille");
+      expect(m.description).toContain("Premium");
       expect(m.description).toContain("JSON");
       expect(m.description).toContain("gratuit");
       for (const msg of Object.values(PAYWALL_MESSAGES)) {

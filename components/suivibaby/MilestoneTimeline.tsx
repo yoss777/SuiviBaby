@@ -151,7 +151,7 @@ const StatusSelector = memo(function StatusSelector({
             <Text
               style={[
                 styles.statusText,
-                { color: isActive ? color : nc.textMuted },
+                { color: isActive ? color : nc.textLight },
                 isActive && styles.statusTextActive,
               ]}
             >
@@ -314,7 +314,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
     return (
       <View style={[styles.emptyContainer, { backgroundColor: nc.backgroundCard }]}>
         <FontAwesome name="baby" size={32} color={nc.textMuted} />
-        <Text style={[styles.emptyText, { color: nc.textMuted }]}>
+        <Text style={[styles.emptyText, { color: nc.textLight }]}>
           {"Pas de jalons disponibles"}
         </Text>
       </View>
@@ -355,7 +355,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
               <Text
                 style={[
                   styles.filterText,
-                  { color: isActive ? color : nc.textMuted },
+                  { color: isActive ? color : nc.textLight },
                   isActive && styles.filterTextActive,
                 ]}
               >
@@ -370,7 +370,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                 <Text
                   style={[
                     styles.filterBadgeText,
-                    { color: isActive ? color : nc.textMuted },
+                    { color: isActive ? color : nc.textLight },
                   ]}
                 >
                   {counts[opt.key]}
@@ -464,7 +464,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                       ]}
                     />
                   </View>
-                  <Text style={[styles.groupCount, { color: nc.textMuted }]}>
+                  <Text style={[styles.groupCount, { color: nc.textLight }]}>
                     {doneCount}/{totalCount}
                   </Text>
                 </View>
@@ -475,7 +475,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                 <View style={styles.groupItems}>
                   {items.length === 0 && (
                     <Text
-                      style={[styles.groupEmptyText, { color: nc.textMuted }]}
+                      style={[styles.groupEmptyText, { color: nc.textLight }]}
                     >
                       {"Aucun jalon dans ce filtre"}
                     </Text>
@@ -586,7 +586,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                               </Text>
                             </View>
                             <Text
-                              style={[styles.ageRange, { color: nc.textMuted }]}
+                              style={[styles.ageRange, { color: nc.textLight }]}
                             >
                               {weeksToLabel(milestone.ageMinWeeks)} -{" "}
                               {weeksToLabel(milestone.ageMaxWeeks)}
@@ -636,7 +636,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                               <Text
                                 style={[
                                   styles.progressText,
-                                  { color: nc.textMuted },
+                                  { color: nc.textLight },
                                 ]}
                               >
                                 {isDone
@@ -700,7 +700,7 @@ export const MilestoneTimeline = memo(function MilestoneTimeline({
                           {/* Source */}
                           {milestone.source && (
                             <Text
-                              style={[styles.source, { color: nc.textMuted }]}
+                              style={[styles.source, { color: nc.textLight }]}
                             >
                               Source : {milestone.source}
                             </Text>
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   filterText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
   },
   filterTextActive: {
@@ -752,14 +752,14 @@ const styles = StyleSheet.create({
   },
   filterBadge: {
     minWidth: 18,
-    height: 18,
+    minHeight: 18,
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
   },
   filterBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "700",
   },
   scrollContent: {
@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   currentBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: "700",
   },
   groupHeaderRight: {
@@ -826,7 +826,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   groupCount: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     minWidth: 24,
     textAlign: "right",
@@ -893,11 +893,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   categoryText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   ageRange: {
-    fontSize: 10,
+    fontSize: 12,
   },
   title: {
     fontSize: 14,
@@ -930,9 +930,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   progressText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
-    width: 30,
+    minWidth: 34,
     textAlign: "right",
   },
   tipsBox: {
@@ -964,13 +964,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 12,
   },
   statusTextActive: {
     fontWeight: "700",
   },
   source: {
-    fontSize: 9,
+    fontSize: 12,
     fontStyle: "italic",
   },
 });

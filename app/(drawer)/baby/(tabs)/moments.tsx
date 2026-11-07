@@ -218,7 +218,7 @@ export default function MomentsScreen() {
                   size={14}
                   color={nc.error}
                 />
-                <Text style={[styles.errorText, { color: nc.error }]}>
+                <Text style={[styles.errorText, { color: nc.errorText }]}>
                   Impossible de charger les données. Appuyez pour réessayer.
                 </Text>
               </Pressable>

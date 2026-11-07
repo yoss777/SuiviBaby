@@ -89,15 +89,23 @@ const PREMIUM_FEATURES: Set<PremiumFeature> = new Set([
   "pdf_export",
   "unlimited_voice",
   "unlimited_sharing",
-  "advanced_stats",
-  "oms_curves",
   "ai_insights",
   "widgets",
   "pediatre_report",
   "milestones_capsule",
 ]);
 
-// Features réservées au tier Family
+// Fonctionnalités gratuites pour tous (décision Q7, 2026-11-07) : gardées dans
+// le type PremiumFeature pour ne rien casser, mais jamais bloquées.
+const FREE_FEATURES: ReadonlySet<PremiumFeature> = new Set<PremiumFeature>(["advanced_stats", "oms_curves"]);
+
+/** Vrai si la fonctionnalité est accessible à tous, quel que soit l'abonnement. */
+export function isAlwaysFreeFeature(feature: PremiumFeature): boolean {
+  return FREE_FEATURES.has(feature);
+}
+
+// Features réservées au tier Family (offre Famille plus proposée à la vente,
+// produits conservés dans les stores pour les abonnés existants)
 const FAMILY_ONLY_FEATURES: Set<PremiumFeature> = new Set([
   // Pour l'instant, family = premium + 5 comptes liés.
   // Les features family-only seront ajoutées ici.
@@ -285,6 +293,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
   const checkFeatureAccess = useCallback(
     (feature: PremiumFeature): boolean => {
+      if (isAlwaysFreeFeature(feature)) return true;
+
       // Grandfathered users keep existing features but not new Premium ones
       if (grandfathered && !devOverride) {
         // Grandfathered = accès historique illimité + partage illimité + export PDF

@@ -75,7 +75,7 @@ export function MilestoneCelebrationModal({ milestone, onDismiss }: Props) {
         >
           <Text style={styles.emoji}>{milestone.emoji}</Text>
           <Text style={[styles.title, { color: nc.textStrong }]}>{milestone.title}</Text>
-          <Text style={[styles.message, { color: nc.textMuted }]}>{milestone.message}</Text>
+          <Text style={[styles.message, { color: nc.textLight }]}>{milestone.message}</Text>
 
           <View style={styles.actions}>
             <TouchableOpacity

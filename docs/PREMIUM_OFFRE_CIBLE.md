@@ -71,6 +71,12 @@ Règle : une ligne ne revient dans le paywall, sur le site (`public/index.html#t
 
 ## Incohérences de l'offre à trancher
 
+> **Mise à jour 2026-11-07 (décision Q7, S10.1)** : points 1 et 2 tranchés.
+> L'offre Famille n'est plus proposée (Premium seule offre payante) ;
+> statistiques avancées et courbes OMS sont gratuites et retirées des
+> avantages Premium. Les sections 4 et 5 ci-dessus (Famille) sont caduques
+> tant qu'aucune nouvelle offre n'est décidée.
+
 1. **Famille vs Premium.** Premium affiche « Partage illimité » et Famille « 5 comptes liés ». Dans le code, Famille donne exactement les mêmes droits que Premium : seule la limite gratuite de 2 co-parents est appliquée (`FREE_MAX_SHARED_USERS` dans `functions/index.js`), et rien n'impose 5. Deux options :
    - limiter le partage Premium (par exemple 3 personnes) et réserver 5 comptes à Famille, avec application côté serveur ;
    - ou fusionner Famille dans Premium (option prévue dans `todo_monetisation.md` si la conversion Famille reste < 1 %).

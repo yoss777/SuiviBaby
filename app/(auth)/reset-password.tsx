@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import { auth } from "@/config/firebase";
 import { isValidOobCode } from "@/utils/passwordResetLink";
+import { startLoop } from "@/utils/motion";
 
 const PASSWORD_RULES = [
   {
@@ -153,7 +154,7 @@ export default function ResetPasswordScreen() {
         useNativeDriver: true,
       }),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [verifying, shimmerAnim]);
 
@@ -185,7 +186,7 @@ export default function ResetPasswordScreen() {
             style={[styles.skeletonButton, { backgroundColor: nc.borderLight, opacity: shimmerOpacity }]}
           />
         </View>
-        <Text style={[styles.verifyingText, { color: nc.textMuted }]}>
+        <Text style={[styles.verifyingText, { color: nc.textLight }]}>
           Vérification du lien...
         </Text>
       </View>
@@ -210,7 +211,7 @@ export default function ResetPasswordScreen() {
             <Text style={[styles.title, { color: nc.textStrong }]}>
               Lien invalide
             </Text>
-            <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+            <Text style={[styles.subtitle, { color: nc.textLight }]}>
               Ce lien de réinitialisation est invalide ou a expiré. Veuillez refaire une demande depuis l&apos;écran de connexion.
             </Text>
           </View>
@@ -230,7 +231,7 @@ export default function ResetPasswordScreen() {
 
           <View style={styles.footer}>
             <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-            <Text style={[styles.footerText, { color: nc.textMuted }]}>
+            <Text style={[styles.footerText, { color: nc.textLight }]}>
               Vos données sont sécurisées et privées
             </Text>
           </View>
@@ -261,7 +262,7 @@ export default function ResetPasswordScreen() {
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {success ? "Mot de passe modifié" : "Nouveau mot de passe"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {success
               ? "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter."
               : `Choisissez un nouveau mot de passe pour ${email}`}
@@ -339,7 +340,7 @@ export default function ResetPasswordScreen() {
                       ]}
                     />
                   </View>
-                  <Text style={[styles.strengthLabel, { color: nc.textMuted }]}>
+                  <Text style={[styles.strengthLabel, { color: nc.textLight }]}>
                     Force: {strengthLabel}
                   </Text>
                 </View>
@@ -391,7 +392,7 @@ export default function ResetPasswordScreen() {
           {/* Error message */}
           {!!error && (
             <Text
-              style={[styles.errorText, { color: nc.error }]}
+              style={[styles.errorText, { color: nc.errorText }]}
               accessibilityRole="alert"
               accessibilityLabel={error}
             >
@@ -443,7 +444,7 @@ export default function ResetPasswordScreen() {
         {/* Footer — same as forgot-password */}
         <View style={styles.footer}>
           <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+          <Text style={[styles.footerText, { color: nc.textLight }]}>
             Vos données sont sécurisées et privées
           </Text>
         </View>

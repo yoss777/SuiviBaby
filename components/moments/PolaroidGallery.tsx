@@ -257,7 +257,7 @@ const EmptyPolaroid = ({
         ]}
       >
         <FontAwesome6 name="camera" size={32} color={nc.textMuted} />
-        <Text style={[styles.emptyImageText, { color: nc.textMuted }]}>
+        <Text style={[styles.emptyImageText, { color: nc.textLight }]}>
           Ajouter
         </Text>
       </View>
@@ -339,7 +339,7 @@ export const PolaroidGallery = ({
                   </View>
                   <View style={styles.polaroidCaption}>
                     <Text
-                      style={[styles.polaroidDate, { color: nc.textMuted }]}
+                      style={[styles.polaroidDate, { color: nc.textLight }]}
                     >
                       En attente...
                     </Text>
@@ -372,7 +372,7 @@ export const PolaroidGallery = ({
                   />
                 </View>
                 <View style={styles.polaroidCaption}>
-                  <Text style={[styles.polaroidDate, { color: nc.textMuted }]}>
+                  <Text style={[styles.polaroidDate, { color: nc.textLight }]}>
                     Pas encore de souvenirs
                   </Text>
                 </View>
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   socialOverlayText: {
     color: "#fff",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     marginRight: 2,
   },
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   polaroidDate: {
-    fontSize: 11,
+    fontSize: 12,
     fontStyle: "italic",
   },
   polaroidTitle: {

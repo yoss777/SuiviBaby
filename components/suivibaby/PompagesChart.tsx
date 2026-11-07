@@ -9,6 +9,8 @@ import {
   selectDailyPompages,
 } from "@/utils/statsAggregations";
 import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
+import { buildDayEntries, getWeekDayLabels } from "@/utils/chartA11y";
+import { ChartA11ySummary } from "./ChartA11ySummary";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import {
   Canvas,
@@ -337,6 +339,16 @@ function PompagesChart({
   const weeklyChartHeight =
     CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
+  // Résumé textuel par jour pour les lecteurs d'écran (canevas Skia muet).
+  const weeklyA11yEntries = useMemo(
+    () =>
+      buildDayEntries(
+        getWeekDayLabels(weekStartMs),
+        weeklyValues.map((v) => (v > 0 ? `${v} ml pompés` : "aucun pompage")),
+      ),
+    [weeklyValues, weekStartMs],
+  );
+
   // Week-over-week trend
   const weekTrend = useMemo(() => {
     if (prevWeekTotal === 0) return null;
@@ -598,7 +610,7 @@ function PompagesChart({
                   <GestureDetector gesture={pointGesture}>
                     <Canvas
                       style={[styles.canvas, { width: SCREEN_WIDTH + 20 }]}
-                      accessibilityLabel="Graphique des pompages du jour. Touchez ou glissez pour voir les détails."
+                      accessibilityLabel="Graphique des pompages du jour. Les séances et leurs quantités sont détaillées dans les totaux au-dessus."
                     >
                       <RoundedRect
                         x={CHART_PADDING.left}
@@ -937,7 +949,8 @@ function PompagesChart({
               <GestureDetector gesture={weeklyTapGesture}>
                 <Canvas
                   style={styles.canvas}
-                  accessibilityLabel="Graphique hebdomadaire des pompages. Appuyez sur une barre pour voir les détails."
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
                 >
                   <RoundedRect
                     x={CHART_PADDING.left}
@@ -1009,6 +1022,13 @@ function PompagesChart({
                   ))}
                 </Canvas>
               </GestureDetector>
+
+              <ChartA11ySummary
+                title="Graphique des pompages de la semaine"
+                entries={weeklyA11yEntries}
+
+                periodKey={weekStartMs}
+              />
 
               {selectedBarIndex !== null && (
                 <Animated.View
@@ -1193,7 +1213,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   metricLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -1287,7 +1307,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tooltipTime: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   tooltipValue: {

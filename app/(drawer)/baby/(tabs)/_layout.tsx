@@ -8,7 +8,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
-import { Keyboard, View } from "react-native";
+import { Keyboard, Text, View } from "react-native";
+
+/** Plafond d'agrandissement des libellés d'onglets (Dynamic Type) */
+const TAB_LABEL_MAX_FONT_SCALE = 1.3;
 
 /** Tabs where parents consult the tracking and may want to add an event. */
 const VOICE_DOCK_ROUTES = new Set(["home", "chrono", "croissance", "moments"]);
@@ -56,7 +59,7 @@ const hiddenTabOptions = {
 
 export default function BabyTabLayout() {
   const colorScheme = useColorScheme() ?? "light";
-  const { hasNewMoments } = useMomentsNotification();
+  const { hasNewMoments, newMomentsCount } = useMomentsNotification();
   const canManageContent = useCanManageContent();
   const [currentRoute, setCurrentRoute] = useState("");
   const keyboardVisible = useKeyboardVisible();
@@ -66,6 +69,19 @@ export default function BabyTabLayout() {
 
   const showPlusTab = canManageContent;
   const showStatsTab = !canManageContent;
+
+  // Onglets visibles, dans l'ordre : Accueil, Croissance, Moments, Journal,
+  // puis Plus (gestionnaires) ou Stats (lecture seule). Le libellé annonce la
+  // position (« Accueil, onglet 1 sur 5 ») ; iOS ne la donne pas toujours.
+  const visibleTabs = [
+    "home",
+    "croissance",
+    "moments",
+    "chrono",
+    showPlusTab ? "plus" : "stats",
+  ];
+  const tabA11yLabel = (name: string, label: string) =>
+    `${label}, onglet ${visibleTabs.indexOf(name) + 1} sur ${visibleTabs.length}`;
 
   return (
     <View style={{ flex: 1 }}>
@@ -78,12 +94,23 @@ export default function BabyTabLayout() {
           tabBarInactiveTintColor: Colors[colorScheme].tabIconDefault,
           headerShown: false,
           tabBarStyle: {},
+          // Dynamic Type : la barre a une hauteur contrainte, on plafonne le texte
+          tabBarLabel: ({ color, children }) => (
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={TAB_LABEL_MAX_FONT_SCALE}
+              style={{ color, fontSize: 12, textAlign: "center" }}
+            >
+              {children}
+            </Text>
+          ),
         }}
       >
         <Tabs.Screen
           name="home"
           options={{
             title: "Accueil",
+            tabBarAccessibilityLabel: tabA11yLabel("home", "Accueil"),
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="home" color={color} />
             ),
@@ -94,6 +121,7 @@ export default function BabyTabLayout() {
           name="croissance"
           options={{
             title: "Croissance",
+            tabBarAccessibilityLabel: tabA11yLabel("croissance", "Croissance"),
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="seedling" color={color} />
             ),
@@ -104,6 +132,11 @@ export default function BabyTabLayout() {
           name="moments"
           options={{
             title: "Moments",
+            // Le point de notification est visuel : on annonce le nombre dans le libellé
+            tabBarAccessibilityLabel:
+              newMomentsCount > 0
+                ? `${tabA11yLabel("moments", "Moments")}, ${newMomentsCount} ${newMomentsCount > 1 ? "nouveautés" : "nouveauté"}`
+                : tabA11yLabel("moments", "Moments"),
             tabBarIcon: ({ focused, color }) => (
               <TabBarBadge visible={hasNewMoments} type="dot" color="#E8A85A">
                 <FontAwesome
@@ -121,6 +154,7 @@ export default function BabyTabLayout() {
           name="chrono"
           options={{
             title: "Journal",
+            tabBarAccessibilityLabel: tabA11yLabel("chrono", "Journal"),
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="clock" color={color} />
             ),
@@ -131,6 +165,7 @@ export default function BabyTabLayout() {
           name="plus"
           options={{
             title: "Plus",
+            tabBarAccessibilityLabel: tabA11yLabel("plus", "Plus"),
             href: showPlusTab ? undefined : null,
             tabBarItemStyle: showPlusTab ? undefined : { display: "none" },
             tabBarIcon: ({ color }) => (
@@ -164,6 +199,7 @@ export default function BabyTabLayout() {
           name="stats"
           options={{
             title: "Stats",
+            tabBarAccessibilityLabel: tabA11yLabel("stats", "Stats"),
             href: showStatsTab ? undefined : null,
             tabBarItemStyle: showStatsTab ? undefined : { display: "none" },
             tabBarIcon: ({ color }) => (

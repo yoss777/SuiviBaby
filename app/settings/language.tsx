@@ -154,7 +154,7 @@ export default function LanguageScreen() {
             <Text
               style={[
                 styles.languageEnglishName,
-                { color: nc.textMuted },
+                { color: nc.textLight },
               ]}
             >
               {language.name}
