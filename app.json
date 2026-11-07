@@ -18,7 +18,7 @@
         "NSSpeechRecognitionUsageDescription": "Autoriser $(PRODUCT_NAME) à utiliser la reconnaissance vocale pour les commandes vocales."
       },
       "bundleIdentifier": "com.tesfa.suivibaby",
-      "buildNumber": "30",
+      "buildNumber": "31",
       "associatedDomains": [
         "applinks:samaye-53723.firebaseapp.com",
         "applinks:samaye-53723.web.app"
@@ -44,13 +44,24 @@
           "action": "VIEW",
           "autoVerify": true,
           "data": [
-            { "scheme": "https", "host": "samaye-53723.firebaseapp.com", "pathPrefix": "/reset-password" },
-            { "scheme": "https", "host": "samaye-53723.web.app", "pathPrefix": "/reset-password" }
+            {
+              "scheme": "https",
+              "host": "samaye-53723.firebaseapp.com",
+              "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "samaye-53723.web.app",
+              "pathPrefix": "/reset-password"
+            }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
-      "versionCode": 11
+      "versionCode": 12
     },
     "web": {
       "bundler": "metro",
