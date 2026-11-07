@@ -1,5 +1,7 @@
 import { act, renderHook } from "@testing-library/react-native";
+import React from "react";
 import { AppState } from "react-native";
+import { NavigationContext } from "@react-navigation/native";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 
 type AppStateHandler = (state: string) => void;
@@ -85,5 +87,75 @@ describe("useForegroundServerRefresh", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith(["second"]);
+  });
+  it("skips the server re-read when the screen is not focused (S7.1)", async () => {
+    const refresh = jest.fn().mockResolvedValue(["fresh"]);
+    const apply = jest.fn();
+    let focused = false;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <NavigationContext.Provider value={{ isFocused: () => focused } as any}>
+        {children}
+      </NavigationContext.Provider>
+    );
+
+    renderHook(() => useForegroundServerRefresh({ refresh, apply }), { wrapper });
+
+    nowSpy.mockReturnValue(1_000);
+    act(() => handler?.("background"));
+    nowSpy.mockReturnValue(40_000);
+    act(() => handler?.("active"));
+    await flushPromises();
+    expect(refresh).not.toHaveBeenCalled();
+
+    focused = true;
+    nowSpy.mockReturnValue(50_000);
+    act(() => handler?.("background"));
+    nowSpy.mockReturnValue(90_000);
+    act(() => handler?.("active"));
+    await flushPromises();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith(["fresh"]);
+  });
+
+  it("never applies a re-read started for child A after switching to child B (S7.1)", async () => {
+    const pending = deferred<string[]>();
+    const refresh = jest.fn().mockReturnValue(pending.promise);
+    const apply = jest.fn();
+
+    const { rerender } = renderHook(
+      ({ childId }: { childId: string }) =>
+        useForegroundServerRefresh({ childId, refresh, apply }),
+      { initialProps: { childId: "A" } },
+    );
+
+    nowSpy.mockReturnValue(1_000);
+    act(() => handler?.("background"));
+    nowSpy.mockReturnValue(40_000);
+    act(() => handler?.("active"));
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    rerender({ childId: "B" });
+    pending.resolve(["data-of-A"]);
+    await flushPromises();
+    await flushPromises();
+
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("still applies the result when the child does not change", async () => {
+    const refresh = jest.fn().mockResolvedValue(["ok"]);
+    const apply = jest.fn();
+    const { rerender } = renderHook(
+      ({ childId }: { childId: string }) =>
+        useForegroundServerRefresh({ childId, refresh, apply }),
+      { initialProps: { childId: "A" } },
+    );
+    rerender({ childId: "A" });
+    nowSpy.mockReturnValue(1_000);
+    act(() => handler?.("background"));
+    nowSpy.mockReturnValue(40_000);
+    act(() => handler?.("active"));
+    await flushPromises();
+    expect(apply).toHaveBeenCalledWith(["ok"]);
   });
 });

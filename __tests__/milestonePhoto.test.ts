@@ -4,8 +4,10 @@
 // modification (une fois le serveur d'accord).
 
 const mockUploadAsync = jest.fn();
+const mockDeleteAsync = jest.fn(() => Promise.resolve());
 jest.mock("expo-file-system", () => ({
   uploadAsync: (...args: unknown[]) => mockUploadAsync(...args),
+  deleteAsync: (...args: unknown[]) => (mockDeleteAsync as any)(...args),
   FileSystemUploadType: { BINARY_CONTENT: 0 },
 }));
 jest.mock("@/config/firebase", () => ({
@@ -16,6 +18,11 @@ jest.mock("@/config/firebase", () => ({
 jest.mock("@/utils/errorReporting", () => ({
   addBreadcrumb: jest.fn(),
   captureServiceError: jest.fn(),
+}));
+
+const mockResize = jest.fn((uri: string) => Promise.resolve({ uri, temporary: false }));
+jest.mock("@/utils/photoResize", () => ({
+  resizePhotoForUpload: (...a: unknown[]) => (mockResize as any)(...a),
 }));
 
 const mockAdd = jest.fn();
@@ -59,6 +66,19 @@ describe("uploadMilestonePhoto", () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer tok" }) }),
     );
     expect(progress).toHaveBeenLastCalledWith(100);
+  });
+
+  it("sends the resized photo (1600 px) and removes the temporary file afterwards", async () => {
+    mockResize.mockResolvedValueOnce({ uri: "file:///cache/resized.jpg", temporary: true });
+    await uploadMilestonePhoto("c1", "file:///big.heic");
+    expect(mockResize).toHaveBeenCalledWith("file:///big.heic");
+    expect(mockUploadAsync).toHaveBeenCalledWith(
+      expect.any(String),
+      "file:///cache/resized.jpg",
+      expect.any(Object),
+    );
+    await Promise.resolve();
+    expect(mockDeleteAsync).toHaveBeenCalledWith("file:///cache/resized.jpg", { idempotent: true });
   });
 
   it("gives up after the maximum delay with a 'timeout' error", async () => {

@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
-import {
-  ecouterInteractionsSociales,
-  getUserNames,
-} from "@/services/socialService";
+import { getUserNames } from "@/services/socialService";
+import { useSocialInteractions } from "@/contexts/SocialInteractionsContext";
 import { JalonEvent } from "@/services/eventsService";
-import { LikeInfo } from "@/types/social";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 
@@ -70,11 +67,8 @@ export function useMomentsData(
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Social interactions state
-  const [likesInfo, setLikesInfo] = useState<Record<string, LikeInfo>>({});
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>(
-    {},
-  );
+  // Likes / commentaires : écouteurs partagés par enfant (S7.2), pas d'écouteur propre.
+  const { likesInfo, commentCounts } = useSocialInteractions();
   const [authorNames, setAuthorNames] = useState<Record<string, string>>({});
 
   // Track whether data has arrived after a refresh
@@ -161,6 +155,7 @@ export function useMomentsData(
 
   useForegroundServerRefresh({
     enabled: !!childId,
+    childId,
     refresh: async () => {
       if (!childId) return [];
       return obtenirEvenements(childId, {
@@ -273,27 +268,6 @@ export function useMomentsData(
       setAuthorNames(names);
     });
   }, [otherUserIdsKey]);
-
-  // Stable key of photo IDs for social listener
-  const photoIdsKey = useMemo(() => {
-    return allPhotoMilestones.map((p) => p.id).join(",");
-  }, [allPhotoMilestones]);
-
-  // Social interactions listener
-  useEffect(() => {
-    if (!childId || !photoIdsKey) return;
-
-    const eventIds = photoIdsKey.split(",");
-
-    const unsubscribe = ecouterInteractionsSociales(
-      childId,
-      eventIds,
-      (newLikesInfo) => setLikesInfo(newLikesInfo),
-      (newCommentCounts) => setCommentCounts(newCommentCounts),
-    );
-
-    return () => unsubscribe();
-  }, [childId, photoIdsKey]);
 
   return {
     events,

@@ -677,7 +677,7 @@ User stories :
 
 **Revue ECC (S5 + S6)** : `healthcare-reviewer`, `silent-failure-hunter`.
 
-## S7 — Performance de l'app · app (+ serveur) · ⏳
+## S7 — Performance de l'app · app (+ serveur) · ✅ (code, en attente de revue ECC et de mesures sur appareil)
 
 But : appliquer à toute l'app ce qui a été fait pour les statistiques.
 Mesure de référence d'abord (même méthode que `STATS_PERF_REFONTE.md`).
@@ -687,34 +687,55 @@ User stories :
   sans se figer.
 - En tant que parent, je veux une galerie qui défile sans saccade.
 
-- [ ] **7.0** Mesures de référence : lectures Firestore à l'ouverture et au
+- [x] **7.0** Mesures de référence : lectures Firestore à l'ouverture et au
   retour de l'arrière-plan, rendus de l'accueil et du journal, temps de
   démarrage.
-- [ ] **7.1** Relecture au retour de l'arrière-plan réservée à l'écran
+- [x] **7.1** (focus et garde d'enfant ; la variante « pas de relecture si un écouteur est actif » n'est pas faite) Relecture au retour de l'arrière-plan réservée à l'écran
   affiché (`useIsFocused`) ou supprimée quand un écouteur est actif ; garde
   d'enfant (pas d'écriture dans le mauvais enfant).
   (`hooks/useForegroundServerRefresh.ts`)
-- [ ] **7.2** Likes et commentaires : un seul écouteur par enfant dans un
+- [x] **7.2** Likes et commentaires : un seul écouteur par enfant dans un
   provider partagé (notifications, Moments, Galerie), borné par date pour le
   badge. (`contexts/MomentsNotificationContext.tsx`, `services/socialService.ts`)
-- [ ] **7.3** Photos : redimensionnement à l'upload (`expo-image-manipulator`,
+- [x] **7.3** Photos : redimensionnement à l'upload (`expo-image-manipulator`,
   1600 px), miniatures 400 px générées par une fonction Storage, miniatures
   dans les grilles, `priority` normale, `recyclingKey`.
-- [ ] **7.4** Galerie paginée (60 par page), pas tout l'historique des jalons.
-- [ ] **7.5** Démarrage : préchargement en parallèle du délai minimal, une
+- [x] **7.4** Galerie paginée (60 par page), pas tout l'historique des jalons.
+- [x] **7.5** Démarrage : préchargement en parallèle du délai minimal, une
   seule lecture du jour (mutualisée avec `BabyContext`).
-- [ ] **7.6** Accueil : lecture de 7 jours différée, filtrée par type, mise en
+- [x] **7.6** Accueil : lecture de 7 jours différée, filtrée par type, mise en
   cache par jour ; minute isolée dans les widgets qui l'affichent.
-- [ ] **7.7** Journal : `currentTime` passé seulement aux événements en cours ;
+- [x] **7.7** Journal : `currentTime` passé seulement aux événements en cours ;
   formateurs de date mis en cache ; fenêtre élargie par tranche au lieu de
   tout relire.
-- [ ] **7.8** `useChildPermissions` partagé (un seul écouteur) ; menu latéral
+- [x] **7.8** `useChildPermissions` partagé (un seul écouteur) ; menu latéral
   sans relectures à chaque ouverture.
-- [ ] **7.9** Fonctions d'écriture d'événements : SDK lourds chargés à la
+- [x] **7.9** Fonctions d'écriture d'événements : SDK lourds chargés à la
   demande ; décision `minInstances` sur `validateAndCreateEvent` (coût vs
   démarrage à froid).
 
 Contrôle : mesures avant/après dans ce document.
+
+**Mesures (2026-11-07, analyse du code et tests jest, sans appareil) :**
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Lectures « événements du jour » au démarrage | 2 (boot + BabyContext) | 1 (`loadTodayEventsOnce`) |
+| Préchargement au démarrage | après le délai minimal (0,5–1,2 s) | en parallèle |
+| Lecture 7 jours de l'accueil | immédiate, tous types, à chaque montage | après le premier rendu, 11 types, cache 15 min ; le jour courant vient de l'écouteur temps réel (alerte fièvre à jour) |
+| Rendus de l'accueil dus à la minute | 60/h | 0 (seuls les widgets à durée) |
+| Relectures au retour de l'arrière-plan | une par onglet monté | celle de l'écran affiché |
+| Journal : rendus de lignes par minute (50 lignes) | 50 | 1 (ligne en cours) |
+| Journal : élargir 14 → 30 jours | relecture 30 j (44 jours-unités) | tranche de 16 j (30) |
+| Écouteurs likes/commentaires (badge + Moments + Galerie) | 6, jusqu'à 3000 docs | 2, au plus 1000 |
+| Galerie à l'ouverture | tout l'historique des jalons | 60 jalons, pages suivantes au défilement |
+| Écouteurs de droits par enfant | un par écran (8+) + `getDoc` dans le menu | 1 |
+| Photo envoyée / affichée en grille | brute 2–5 Mo / originale | 1600 px ~300–500 Ko / miniature 400 px ~20–40 Ko (estimations) |
+| `require` de `functions/index.js` (Mac, Node 22) | ~480 ms | ~250 ms (SDK Expo, Resend, Anthropic chargés à la demande) |
+
+Décision 7.9 : pas de `minInstances` sur `validateAndCreateEvent` (~7,5 €/mois pour ~1 s évitée après inactivité, invisible grâce aux écritures optimistes ; tarifs à reconfirmer). Réévaluer avec la latence p95 dans les logs.
+
+À faire hors code : déployer `storage.rules` à la main après fusion (chemin `thumbs/`) ; miniatures des photos existantes non générées (repli sur l'original) ; vérifications sur appareil listées dans la PR.
 
 ## S8 — Robustesse React · app · ⏳
 

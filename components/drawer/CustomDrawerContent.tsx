@@ -13,7 +13,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { doc, getDoc } from "firebase/firestore";
 
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -23,15 +22,16 @@ import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
-import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { useChildPermissions, useChildRoles } from "@/hooks/useChildPermissions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { masquerEnfant, obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getUserPromoState, fetchActivePromos, trackClick, dismissPromo as dismissPromoService } from "@/services/promoService";
 import { ReferralCard } from "@/components/suivibaby/dashboard/ReferralCard";
 import { PromoBanner } from "@/components/suivibaby/dashboard/PromoBanner";
 import { formatBirthDate, getAgeInMonths, getAgeLabel } from "@/utils/ageUtils";
-import { db } from "@/config/firebase";
-import type { ChildRole } from "@/types/permissions";
+
+/** Le menu ne relit promo/préférences que si la dernière lecture date de plus de 2 min. */
+const DRAWER_REFRESH_TTL_MS = 2 * 60 * 1000;
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
@@ -51,6 +51,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { signOut, user, userName, email, firebaseUser } = useAuth();
   const { showToast } = useToast();
   const isMountedRef = useRef(true);
+  const lastDrawerLoadRef = useRef<{ key: string; at: number } | null>(null);
   const [showHideModal, setShowHideModal] = useState(false);
   const [childToHide, setChildToHide] = useState<{
     id: string;
@@ -59,7 +60,6 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const [showAddChildModal, setShowAddChildModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ visible: false, message: "" });
-  const [childRoles, setChildRoles] = useState<Record<string, ChildRole | null>>({});
   const [referralCode, setReferralCode] = useState("");
   const [referralCount, setReferralCount] = useState(0);
   const [marketingEnabled, setMarketingEnabled] = useState(false);
@@ -77,10 +77,20 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
   useFocusEffect(
     useCallback(() => {
       if (!firebaseUser) return;
+      // Pas de relecture si le menu a été chargé il y a moins de 2 minutes
+      // pour le même compte et le même enfant (ouvertures successives).
+      const cacheKey = `${firebaseUser.uid}|${activeChild?.birthDate ?? ""}`;
+      if (
+        lastDrawerLoadRef.current?.key === cacheKey &&
+        Date.now() - lastDrawerLoadRef.current.at < DRAWER_REFRESH_TTL_MS
+      ) {
+        return;
+      }
       let mounted = true;
       Promise.all([getUserPromoState(), obtenirPreferencesNotifications()])
         .then(async ([promoState, prefs]) => {
           if (!mounted) return;
+          lastDrawerLoadRef.current = { key: cacheKey, at: Date.now() };
           setReferralCode(promoState.referralCode ?? "");
           setReferralCount(promoState.referralCount);
           setMarketingEnabled(prefs.marketing);
@@ -101,38 +111,12 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
     }, [firebaseUser, activeChild?.birthDate]),
   );
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadRoles = async () => {
-      if (!firebaseUser?.uid || children.length === 0) {
-        if (isMounted) setChildRoles({});
-        return;
-      }
-      try {
-        const entries = await Promise.all(
-          children.map(async (child) => {
-            const accessSnap = await getDoc(
-              doc(db, "children", child.id, "access", firebaseUser.uid)
-            );
-            const role = accessSnap.exists()
-              ? ((accessSnap.data()?.role ?? null) as ChildRole | null)
-              : null;
-            return [child.id, role] as const;
-          })
-        );
-        if (isMounted) {
-          setChildRoles(Object.fromEntries(entries));
-        }
-      } catch (error) {
-        console.error("[CustomDrawer] Erreur chargement roles:", error);
-      }
-    };
-
-    loadRoles();
-    return () => {
-      isMounted = false;
-    };
-  }, [children, firebaseUser?.uid]);
+  // Rôles par enfant : écouteurs partagés (hooks/useChildPermissions), plus de
+  // lecture ponctuelle à chaque changement de la liste d'enfants.
+  const childRoles = useChildRoles(
+    useMemo(() => children.map((child) => child.id), [children]),
+    firebaseUser?.uid,
+  );
 
   // Rediriger vers explore si tous les enfants sont masqués
   useEffect(() => {

@@ -625,6 +625,7 @@ export default function MilestonesScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -1126,6 +1127,7 @@ export default function MilestonesScreen() {
             {event.photos?.[0] ? (
               <PhotoImage
                 photoRef={event.photos[0]}
+                thumbnail
                 style={[styles.sessionPhoto, { backgroundColor: nc.backgroundPressed }]}
               />
             ) : null}

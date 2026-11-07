@@ -8,6 +8,7 @@ import {
   TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { ReminderWarningWatcher } from "@/components/suivibaby/dashboard/ReminderWarningWatcher";
 import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
@@ -25,7 +26,8 @@ import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
-import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
+import { useWeeklyInsightEvents, withLiveToday } from "@/hooks/useWeeklyInsightEvents";
 import { useReminderScheduler } from "@/hooks/useReminderScheduler";
 import { useSmartContent } from "@/hooks/useSmartContent";
 import { getOptimisticEntries, subscribe as subscribeOptimistic } from "@/services/optimisticEventsStore";
@@ -180,12 +182,6 @@ export default function HomeDashboard() {
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast } = useToast();
   const scheduleDelete = useDeleteWithUndo();
-  const warningStateRef = useRef<
-    Record<
-      string,
-      { change?: number; repas?: number; pompage?: number }
-    >
-  >({});
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
   const reminderThresholds = reminderPreferences.thresholds;
@@ -260,9 +256,9 @@ export default function HomeDashboard() {
     vaccins: { count: 0 },
   });
 
-  // Minute-by-minute wall clock + day rollover detection. Foreground
-  // transitions snap back to real time. See hooks/useMinuteTick.ts.
-  const { currentTime, currentDay } = useMinuteTick();
+  // S7.6 : l'accueil ne porte plus le tick à la minute (chaque widget qui
+  // affiche l'heure a le sien) ; il ne suit que le changement de jour.
+  const currentDay = useCalendarDay();
   const hasInitialCache = !!initialCache;
   const [loading, setLoading] = useState({
     tetees: !hasInitialCache,
@@ -320,6 +316,7 @@ export default function HomeDashboard() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const depuis = new Date();
@@ -478,9 +475,8 @@ export default function HomeDashboard() {
   }, []);
 
   const recentEvents = useMemo(() => {
-    const cutoff = new Date(
-      currentTime.getTime() - RECENT_EVENTS_CUTOFF_HOURS * 60 * 60 * 1000,
-    );
+    // Candidats triés du plus récent au plus ancien : la fenêtre des 24 h et la
+    // limite sont appliquées par RecentEventsList (tick à la minute interne).
     const merged = [
       ...data.tetees,
       ...data.biberons,
@@ -506,12 +502,8 @@ export default function HomeDashboard() {
     }));
 
     const filtered = merged
-      .filter(
-        (event) =>
-          toDate(event.date) >= cutoff && !softDeletedIds.has(event.id),
-      )
-      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())
-      .slice(0, RECENT_EVENTS_MAX);
+      .filter((event) => !softDeletedIds.has(event.id))
+      .sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime());
     return filtered;
   }, [
     data.biberons,
@@ -531,7 +523,6 @@ export default function HomeDashboard() {
     data.activites,
     data.jalons,
     data.nettoyagesNez,
-    currentTime,
     toDate,
     softDeletedIds,
   ]);
@@ -590,65 +581,10 @@ export default function HomeDashboard() {
     });
   }, []);
 
-  // Smart Content: load last 7 days of events for insight engine
-  const [weeklyEvents, setWeeklyEvents] = useState<{
-    id: string;
-    type: string;
-    date: Date;
-    quality?: string;
-    location?: string;
-    isNap?: boolean;
-    duree?: number;
-    heureDebut?: Date;
-    heureFin?: Date;
-    typeSolide?: string;
-    nouveauAliment?: boolean;
-    nomNouvelAliment?: string;
-    reaction?: string;
-    quantiteMl?: number;
-    valeur?: number;
-    jalonType?: string;
-    titre?: string;
-    updatedAt?: unknown;
-  }[]>([]);
-
-  useEffect(() => {
-    if (!activeChild?.id) return;
-    let cancelled = false;
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-
-    obtenirEvenements(activeChild.id, { depuis: sevenDaysAgo })
-      .then((events) => {
-        if (cancelled) return;
-        setWeeklyEvents(
-          events.map((e: any) => ({
-            id: e.id ?? "",
-            type: e.type,
-            date: toDate(e.date),
-            quality: e.quality,
-            location: e.location,
-            isNap: e.isNap,
-            duree: e.duree,
-            heureDebut: e.heureDebut ? toDate(e.heureDebut) : undefined,
-            heureFin: e.heureFin ? toDate(e.heureFin) : undefined,
-            typeSolide: e.typeSolide,
-            nouveauAliment: e.nouveauAliment,
-            nomNouvelAliment: e.nomNouvelAliment,
-            reaction: e.reaction,
-            quantiteMl: e.quantiteMl,
-            valeur: e.valeur,
-            jalonType: e.typeJalon ?? e.jalonType,
-            titre: e.titre,
-            updatedAt: e.updatedAt,
-          })),
-        );
-      })
-      .catch(console.warn);
-
-    return () => { cancelled = true; };
-  }, [activeChild?.id, refreshTick, toDate]);
+  // Smart Content : 7 derniers jours pour le moteur d'insights. Lecture
+  // différée après le premier rendu, filtrée par type, en cache par jour
+  // (voir hooks/useWeeklyInsightEvents.ts).
+  const weeklyEvents = useWeeklyInsightEvents(activeChild?.id, refreshTick);
 
   // Températures optimistes ou en file hors ligne : elles comptent pour l'alerte
   // santé dès la saisie (lecture seule de l'API publique du store optimiste).
@@ -657,11 +593,15 @@ export default function HomeDashboard() {
   const allEventsForInsights = useMemo(
     () =>
       activeChild?.id
-        ? mergeOptimisticTemperatures(weeklyEvents, getOptimisticEntries(activeChild.id), toDate)
+        ? mergeOptimisticTemperatures(
+            withLiveToday(weeklyEvents, mergedTodayEvents as any[]),
+            getOptimisticEntries(activeChild.id),
+            toDate,
+          )
         : weeklyEvents,
     // optimisticTick : le store n'est pas réactif par lui-même.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [weeklyEvents, activeChild?.id, optimisticTick, toDate],
+    [weeklyEvents, mergedTodayEvents, activeChild?.id, optimisticTick, toDate],
   );
 
   const smartContent = useSmartContent({
@@ -752,25 +692,17 @@ export default function HomeDashboard() {
     [canManageContent, handleEventDelete],
   );
 
-  const elapsedSleepMinutes = useMemo(() => {
-    if (!sommeilEnCours?.heureDebut) return 0;
+  // Début des activités en cours (ms) : les widgets calculent eux-mêmes la durée.
+  const sleepStartTs = useMemo(() => {
+    if (!sommeilEnCours?.heureDebut) return undefined;
     const start = toDate(sommeilEnCours.heureDebut);
-    if (!isValidDate(start)) return 0;
-    return Math.max(
-      0,
-      Math.round((currentTime.getTime() - start.getTime()) / 60000),
-    );
-  }, [sommeilEnCours, currentTime, toDate]);
-
-  const elapsedPromenadeMinutes = useMemo(() => {
-    if (!promenadeEnCours?.heureDebut) return 0;
+    return isValidDate(start) ? start.getTime() : undefined;
+  }, [sommeilEnCours, toDate]);
+  const promenadeStartTs = useMemo(() => {
+    if (!promenadeEnCours?.heureDebut) return undefined;
     const start = toDate(promenadeEnCours.heureDebut);
-    if (!isValidDate(start)) return 0;
-    return Math.max(
-      0,
-      Math.round((currentTime.getTime() - start.getTime()) / 60000),
-    );
-  }, [promenadeEnCours, currentTime, toDate]);
+    return isValidDate(start) ? start.getTime() : undefined;
+  }, [promenadeEnCours, toDate]);
 
   // Shared pulse animation for all active widgets (sleep + promenade sync)
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;
@@ -804,31 +736,13 @@ export default function HomeDashboard() {
   // STATS GROUPS DATA
   // ============================================
 
-  const getTimeSince = useCallback(
-    (timestamp?: number): string | undefined => {
-      if (!timestamp || isNaN(timestamp)) return undefined;
-      const diffMinutes = Math.floor(
-        (currentTime.getTime() - timestamp) / (1000 * 60),
-      );
-      if (diffMinutes < 0) return undefined;
-      if (diffMinutes === 0) return "à l'instant";
-      const diffHours = Math.floor(diffMinutes / 60);
-      const remainingMinutes = diffMinutes % 60;
-      if (diffHours > 0) {
-        return `il y a ${diffHours}h${remainingMinutes > 0 ? `${remainingMinutes}` : ""}`;
-      }
-      return `il y a ${diffMinutes}min`;
-    },
-    [currentTime],
-  );
-
   // Alimentation Group
   const alimentationGroup = useMemo((): {
     summary: React.ReactNode;
-    timeSince?: string;
+    timeSinceTimestamp?: number;
     timeSinceLabel?: string;
     lastTime?: string;
-    isWarning: boolean;
+    warnings: { timestamp?: number; thresholdMs: number | null }[];
     items: StatItem[];
   } => {
     const biberonQty = todayStats.meals.biberons.quantity;
@@ -839,14 +753,9 @@ export default function HomeDashboard() {
       remindersEnabled && reminderThresholds.repas > 0
         ? reminderThresholds.repas * 60 * 60 * 1000
         : null;
-    const now = currentTime.getTime();
     const mealsLastTs =
       todayStats.meals.total.lastTimestamp ??
       todayStats.meals.lastAbsoluteTimestamp;
-    const repasWarning =
-      repasThresholdMs !== null &&
-      !!mealsLastTs &&
-      now - mealsLastTs > repasThresholdMs;
 
     // Check for pompage warning
     const pompagesThresholdMs =
@@ -854,12 +763,11 @@ export default function HomeDashboard() {
         ? reminderThresholds.pompages * 60 * 60 * 1000
         : null;
     const pompageLastTs = todayStats.pompages.lastTimestamp;
-    const pompageWarning =
-      pompagesThresholdMs !== null &&
-      !!pompageLastTs &&
-      now - pompageLastTs > pompagesThresholdMs;
-
-    const isWarning = !!(repasWarning || pompageWarning);
+    // Les dépassements sont évalués par StatsGroup (tick à la minute interne).
+    const warnings = [
+      { timestamp: mealsLastTs, thresholdMs: repasThresholdMs },
+      { timestamp: pompageLastTs, thresholdMs: pompagesThresholdMs },
+    ];
 
     // Count unique meals: events within 30 min = 1 meal
     const MEAL_GROUP_MS = 30 * 60 * 1000;
@@ -911,9 +819,9 @@ export default function HomeDashboard() {
 
     return {
       summary: summaryNode,
-      timeSince: getTimeSince(displayTimestamp),
+      timeSinceTimestamp: displayTimestamp,
       lastTime,
-      isWarning,
+      warnings,
       items: [
         {
           key: "seins",
@@ -976,22 +884,20 @@ export default function HomeDashboard() {
     data.biberons,
     data.solides,
     toDate,
-    getTimeSince,
     formatTime,
     canManageContent,
     remindersEnabled,
     reminderThresholds.repas,
     reminderThresholds.pompages,
-    currentTime,
   ]);
 
   // Santé Group (Couches + Vitamines + Vaccins)
   const santeGroup = useMemo((): {
     summary: string;
-    timeSince?: string;
+    timeSinceTimestamp?: number;
     timeSinceLabel?: string;
     lastTime?: string;
-    isWarning: boolean;
+    warnings: { timestamp?: number; thresholdMs: number | null }[];
     items: StatItem[];
   } => {
     const mictionCount = todayStats.mictions.count;
@@ -1005,15 +911,16 @@ export default function HomeDashboard() {
         ? reminderThresholds.changes * 60 * 60 * 1000
         : null;
 
-    const now = currentTime.getTime();
     const lastChangeTimestamp = Math.max(
       todayStats.mictions.lastTimestamp ?? 0,
       todayStats.selles.lastTimestamp ?? 0,
     );
-    const isWarning =
-      changesThresholdMs !== null &&
-      lastChangeTimestamp > 0 &&
-      now - lastChangeTimestamp > changesThresholdMs;
+    const warnings = [
+      {
+        timestamp: lastChangeTimestamp > 0 ? lastChangeTimestamp : undefined,
+        thresholdMs: changesThresholdMs,
+      },
+    ];
 
     // Use only changes (mictions/selles) timestamp for "il y a" display (not vitamines/vaccins)
     const changesTimestampsToday = [
@@ -1077,9 +984,9 @@ export default function HomeDashboard() {
 
     return {
       summary: summaryParts.join(" · "),
-      timeSince: getTimeSince(displayTimestamp),
+      timeSinceTimestamp: displayTimestamp,
       lastTime,
-      isWarning,
+      warnings,
       items: [
         {
           key: "mictions",
@@ -1138,11 +1045,9 @@ export default function HomeDashboard() {
     data.mictions,
     data.selles,
     toDate,
-    getTimeSince,
     formatTime,
     remindersEnabled,
     reminderThresholds.changes,
-    currentTime,
     canManageContent,
   ]);
 
@@ -1246,101 +1151,6 @@ export default function HomeDashboard() {
   // ============================================
   // EFFECTS
   // ============================================
-
-  useEffect(() => {
-    if (!activeChild?.id) return;
-
-    const childKey = activeChild.id;
-    if (!warningStateRef.current[childKey]) {
-      warningStateRef.current[childKey] = {};
-    }
-    const warningState = warningStateRef.current[childKey];
-    const now = currentTime.getTime();
-    const changesThresholdHours = reminderThresholds.changes || 0;
-    const changesThresholdMs =
-      changesThresholdHours > 0 ? changesThresholdHours * 60 * 60 * 1000 : null;
-
-    const lastChangeTs = Math.max(
-      todayStats.mictions.lastTimestamp ?? 0,
-      todayStats.selles.lastTimestamp ?? 0,
-    );
-    const changeExceeded =
-      remindersEnabled &&
-      changesThresholdMs !== null &&
-      lastChangeTs > 0 &&
-      now - lastChangeTs > changesThresholdMs;
-    const changeNotified = lastChangeTs > 0 && warningState.change === lastChangeTs;
-    const changesHoursLabel = `${changesThresholdHours}h`;
-
-    if (changeExceeded && !changeNotified) {
-      showToast(
-        `⚠️ Attention: plus de ${changesHoursLabel} depuis le dernier change.`,
-        3200,
-        "top",
-      );
-      warningState.change = lastChangeTs;
-    }
-
-    // Repas warning
-    const repasThresholdHours = reminderThresholds.repas || 0;
-    const repasThresholdMs =
-      repasThresholdHours > 0 ? repasThresholdHours * 60 * 60 * 1000 : null;
-    const repasTs =
-      todayStats.meals.total.lastTimestamp ??
-      todayStats.meals.lastAbsoluteTimestamp;
-    const repasExceeded =
-      remindersEnabled &&
-      repasThresholdMs !== null &&
-      !!repasTs &&
-      now - repasTs > repasThresholdMs;
-    const repasNotified = repasTs && warningState.repas === repasTs;
-
-    if (repasExceeded && !repasNotified) {
-      showToast(
-        `⚠️ Attention: plus de ${repasThresholdHours}h depuis le dernier repas.`,
-        3200,
-        "top",
-      );
-      warningState.repas = repasTs;
-    }
-
-    // Pompages warning
-    const pompagesThresholdHours = reminderThresholds.pompages || 0;
-    const pompagesThresholdMs =
-      pompagesThresholdHours > 0
-        ? pompagesThresholdHours * 60 * 60 * 1000
-        : null;
-    const pompageTs = todayStats.pompages.lastTimestamp;
-    const pompageExceeded =
-      remindersEnabled &&
-      pompagesThresholdMs !== null &&
-      !!pompageTs &&
-      now - pompageTs > pompagesThresholdMs;
-    const pompageNotified = pompageTs && warningState.pompage === pompageTs;
-
-    if (pompageExceeded && !pompageNotified) {
-      showToast(
-        `⚠️ Attention: plus de ${pompagesThresholdHours}h depuis le dernier pompage.`,
-        3200,
-        "top",
-      );
-      warningState.pompage = pompageTs;
-    }
-  }, [
-    activeChild?.id,
-    currentTime,
-    remindersEnabled,
-    reminderThresholds.changes,
-    reminderThresholds.repas,
-    reminderThresholds.pompages,
-    todayStats.mictions.lastTimestamp,
-    todayStats.selles.lastTimestamp,
-    todayStats.meals.total.lastTimestamp,
-    todayStats.meals.lastAbsoluteTimestamp,
-    todayStats.pompages.lastTimestamp,
-    showToast,
-  ]);
-
 
   useEffect(() => {
     let cancelled = false;
@@ -1846,6 +1656,19 @@ export default function HomeDashboard() {
 
   return (
     <View style={styles.screen}>
+      <ReminderWarningWatcher
+        childId={activeChild?.id}
+        remindersEnabled={remindersEnabled}
+        thresholds={reminderThresholds}
+        lastMictionTs={todayStats.mictions.lastTimestamp}
+        lastSelleTs={todayStats.selles.lastTimestamp}
+        mealsLastTs={
+          todayStats.meals.total.lastTimestamp ??
+          todayStats.meals.lastAbsoluteTimestamp
+        }
+        lastPompageTs={todayStats.pompages.lastTimestamp}
+        showToast={showToast}
+      />
       <ScrollView
         style={[styles.container, { backgroundColor: nc.background }]}
         contentContainerStyle={styles.scrollContent}
@@ -1940,11 +1763,10 @@ export default function HomeDashboard() {
                 borderColor={cat.alimentation.border}
                 summary={alimentationGroup.summary}
                 lastActivity={alimentationGroup.lastTime}
-                timeSince={alimentationGroup.timeSince}
+                timeSinceTimestamp={alimentationGroup.timeSinceTimestamp}
                 timeSinceLabel={alimentationGroup.timeSinceLabel}
-                isWarning={alimentationGroup.isWarning}
+                warnings={alimentationGroup.warnings}
                 items={alimentationGroup.items}
-                currentTime={currentTime}
                 colorScheme={colorScheme}
               />
             </View>
@@ -1961,11 +1783,10 @@ export default function HomeDashboard() {
                 borderColor={cat.sante.border}
                 summary={santeGroup.summary}
                 lastActivity={santeGroup.lastTime}
-                timeSince={santeGroup.timeSince}
+                timeSinceTimestamp={santeGroup.timeSinceTimestamp}
                 timeSinceLabel={santeGroup.timeSinceLabel}
-                isWarning={santeGroup.isWarning}
+                warnings={santeGroup.warnings}
                 items={santeGroup.items}
-                currentTime={currentTime}
                 colorScheme={colorScheme}
               />
             </View>
@@ -1978,7 +1799,7 @@ export default function HomeDashboard() {
                 <SleepWidget
                   isActive={!!sommeilEnCours}
                   isNap={sommeilEnCours?.isNap}
-                  elapsedMinutes={elapsedSleepMinutes}
+                  startTimestamp={sleepStartTs}
                   startTime={
                     sommeilEnCours?.heureDebut
                       ? formatTime(toDate(sommeilEnCours.heureDebut))
@@ -2001,7 +1822,7 @@ export default function HomeDashboard() {
               <View style={styles.statsGroupContainer}>
                 <PromenadeWidget
                   isActive={!!promenadeEnCours}
-                  elapsedMinutes={elapsedPromenadeMinutes}
+                  startTimestamp={promenadeStartTs}
                   startTime={
                     promenadeEnCours?.heureDebut
                       ? formatTime(toDate(promenadeEnCours.heureDebut))
@@ -2096,7 +1917,8 @@ export default function HomeDashboard() {
             loading={!isDataLoaded}
             showHint={showRecentHint && canManageContent}
             colorScheme={colorScheme}
-            currentTime={currentTime}
+            cutoffHours={RECENT_EVENTS_CUTOFF_HOURS}
+            maxEvents={RECENT_EVENTS_MAX}
             onEventPress={stableOnEventPress}
             onEventDelete={stableOnEventDelete}
             onViewAllPress={handleViewAllPress}

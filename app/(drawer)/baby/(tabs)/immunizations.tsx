@@ -581,6 +581,7 @@ export default function ImmunizationsScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();

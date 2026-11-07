@@ -25,6 +25,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
+import { useOngoingClock } from "@/hooks/useOngoingClock";
+import { olderSliceBounds, windowStart } from "@/utils/chronoWindow";
 import { ecouterEvenements, obtenirEvenements, supprimerEvenement, type Event, type EventType } from "@/services/eventsService";
 import { MODERN_UI_DIAPER_EVENT_TYPES, MODERN_UI_EVENT_TYPES } from "@/services/eventTypeSupport";
 import { isValidDate, toDate } from "@/utils/date";
@@ -69,11 +71,33 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// S7.7 : formateurs créés une fois (module) au lieu d'un `toLocale*String` par
+// ligne et par rendu — chaque appel recréait un Intl.DateTimeFormat. Mêmes
+// options qu'avant, donc mêmes libellés.
+const SELECTED_DATE_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  day: "numeric",
+  month: "short",
+});
+const TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const DAY_LABEL_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "long",
+});
+const CALENDAR_DAY_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+
 // P10: Format selected date label for date chip
 const formatSelectedDateLabel = (dateString: string) => {
   const [year, month, day] = dateString.split("-").map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  return SELECTED_DATE_FORMAT.format(date);
 };
 
 // ============================================
@@ -194,10 +218,7 @@ function dayKey(date: Date) {
 
 function formatTime(date: Date) {
   if (!isValidDate(date)) return "--:--";
-  return date.toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return TIME_FORMAT.format(date);
 }
 
 function formatDayLabel(date: Date) {
@@ -207,11 +228,7 @@ function formatDayLabel(date: Date) {
   const dayMs = 24 * 60 * 60 * 1000;
   if (target === today) return "Aujourd'hui";
   if (target === today - dayMs) return "Hier";
-  return date.toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
+  return DAY_LABEL_FORMAT.format(date);
 }
 
 function buildSections(events: Event[]): TimelineSection[] {
@@ -1017,7 +1034,20 @@ interface TimelineCardProps {
   secondaryTextColor: string;
   isLastInSection: boolean;
   onPress?: () => void;
-  currentTime: Date;
+}
+
+/**
+ * Sieste ou promenade en cours (sans heure de fin) : seules ces lignes ont
+ * besoin de l'horloge à la minute.
+ */
+function isOngoingEvent(event: Event): boolean {
+  const e = event as any;
+  if (e.heureFin || !e.heureDebut) return false;
+  if (!isValidDate(toDate(e.heureDebut))) return false;
+  return (
+    event.type === "sommeil" ||
+    (event.type === "activite" && (event as any).typeActivite === "promenade")
+  );
 }
 
 const TimelineCard = React.memo(
@@ -1029,8 +1059,10 @@ const TimelineCard = React.memo(
     secondaryTextColor,
     isLastInSection,
     onPress,
-    currentTime,
   }: TimelineCardProps) => {
+    // S7.7 : abonnement à l'horloge seulement pour les événements en cours ;
+    // un tick de minute ne re-rend plus les autres lignes.
+    const nowMs = useOngoingClock(isOngoingEvent(event));
     const date = toDate(event.date);
     const config = EVENT_CONFIG[event.type];
     if (!config) return null;
@@ -1155,7 +1187,7 @@ const TimelineCard = React.memo(
       ? Math.max(
           0,
           Math.round(
-            (currentTime.getTime() - startDate.getTime()) /
+            (nowMs - startDate.getTime()) /
               60000,
           ),
         )
@@ -1361,7 +1393,6 @@ interface ChronoEventRowProps {
   textColor: string;
   secondaryTextColor: string;
   colorScheme: "light" | "dark";
-  currentTime: Date;
   onEdit?: (event: Event) => void;
   onDelete?: (event: Event) => void;
 }
@@ -1375,7 +1406,6 @@ const ChronoEventRow = React.memo(function ChronoEventRow({
   textColor,
   secondaryTextColor,
   colorScheme,
-  currentTime,
   onEdit,
   onDelete,
 }: ChronoEventRowProps) {
@@ -1410,7 +1440,6 @@ const ChronoEventRow = React.memo(function ChronoEventRow({
         secondaryTextColor={secondaryTextColor}
         isLastInSection={isLastInSection}
         onPress={canManageContent ? handlePress : undefined}
-        currentTime={currentTime}
       />
     </ReanimatedSwipeable>
   );
@@ -1604,6 +1633,11 @@ export default function ChronoScreen() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [range, setRange] = useState<RangeOption>(14);
   const [maxRange, setMaxRange] = useState<RangeOption>(14);
+  // S7.7 : fenêtre de l'écouteur principal. `maxRange` peut grandir au-delà
+  // (tranche plus ancienne lue par un second écouteur) sans refaire le premier.
+  const [liveRange, setLiveRange] = useState<RangeOption>(14);
+  const recentEventsRef = useRef<Event[]>([]);
+  const olderEventsRef = useRef<Event[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<FilterType[]>(ALL_FILTERS);
   const sortMergedEvents = useCallback(
     (merged: any[]) =>
@@ -1639,7 +1673,6 @@ export default function ChronoScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [emptyDelayDone, setEmptyDelayDone] = useState(false);
   const [currentDay, setCurrentDay] = useState(() => dayKey(new Date()));
-  const [currentTime, setCurrentTime] = useState(new Date());
   const hasLoadedPrefs = useRef(false);
   const hasInitialLoad = useRef(false);
   const hasPrefetchedMore = useRef(false);
@@ -1697,7 +1730,6 @@ export default function ChronoScreen() {
     const now = new Date();
     const next = dayKey(now);
     setCurrentDay((prev) => (prev === next ? prev : next));
-    setCurrentTime(now);
   }, []);
 
   useEffect(() => {
@@ -1733,14 +1765,18 @@ export default function ChronoScreen() {
       fadeAnim.setValue(0);
     }
 
-    const since = startOfDay(new Date());
-    since.setDate(since.getDate() - (maxRange - 1));
+    const since = windowStart(liveRange);
     let loadingSet = false;
 
     const unsubscribe = ecouterEvenements(
       activeChild.id,
       (data) => {
-        setFirestoreEvents(data);
+        recentEventsRef.current = data;
+        setFirestoreEvents(
+          olderEventsRef.current.length > 0
+            ? [...data, ...olderEventsRef.current]
+            : data,
+        );
         if (!loadingSet) {
           loadingSet = true;
           hasInitialLoad.current = true;
@@ -1764,15 +1800,47 @@ export default function ChronoScreen() {
 
     return () => {
       unsubscribe();
+      // Fenêtre principale recréée (enfant, jour, rafraîchissement) : la
+      // tranche ancienne est relue elle aussi par l'effet ci-dessous.
+      recentEventsRef.current = [];
+      olderEventsRef.current = [];
     };
-  }, [activeChild?.id, maxRange, currentDay, refreshTick, setFirestoreEvents]);
+  }, [activeChild?.id, liveRange, currentDay, refreshTick, setFirestoreEvents]);
+
+  // S7.7 : élargir la fenêtre (14 -> 30 jours) ne relit que la tranche plus
+  // ancienne (jours 15 à 30), pas les 14 jours déjà écoutés.
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    const bounds = olderSliceBounds(liveRange, maxRange);
+    if (!bounds) {
+      olderEventsRef.current = [];
+      return;
+    }
+    const unsubscribe = ecouterEvenements(
+      activeChild.id,
+      (data) => {
+        olderEventsRef.current = data;
+        setFirestoreEvents([...recentEventsRef.current, ...data]);
+        setIsRefreshing(false);
+      },
+      {
+        type: ALL_EVENT_TYPES,
+        depuis: bounds.depuis,
+        jusqu: bounds.jusqu,
+      },
+      () => setIsRefreshing(false),
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [activeChild?.id, liveRange, maxRange, currentDay, refreshTick, setFirestoreEvents]);
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
-      const since = startOfDay(new Date());
-      since.setDate(since.getDate() - (maxRange - 1));
+      const since = windowStart(maxRange);
       return obtenirEvenements(activeChild.id, {
         type: ALL_EVENT_TYPES,
         depuis: since,
@@ -1810,6 +1878,7 @@ export default function ChronoScreen() {
     setIsRefreshing(false);
     setRange(14);
     setMaxRange(14);
+    setLiveRange(14);
     hasInitialLoad.current = false;
     hasPrefetchedMore.current = false;
     setSoftDeletedIds(new Set());
@@ -1840,6 +1909,7 @@ export default function ChronoScreen() {
         ) {
           setRange(storedRange);
           setMaxRange(storedRange);
+          setLiveRange(storedRange);
         }
         if (Array.isArray(parsed?.selectedTypes)) {
           setSelectedTypes(parsed.selectedTypes);
@@ -2402,7 +2472,6 @@ export default function ChronoScreen() {
         textColor={colors.text}
         secondaryTextColor={colors.secondaryText}
         colorScheme={colorScheme}
-        currentTime={currentTime}
         onEdit={canManageContent ? handleEdit : undefined}
         onDelete={canManageContent ? handleEventDelete : undefined}
       />
@@ -2415,7 +2484,6 @@ export default function ChronoScreen() {
       colors.text,
       handleEdit,
       handleEventDelete,
-      currentTime,
       colorScheme,
     ],
   );
@@ -2525,14 +2593,7 @@ export default function ChronoScreen() {
                                   .map(Number);
                                 const date = new Date(y, m - 1, d);
                                 const isSelected = selectedDate === dateKey;
-                                const dayLabel = date.toLocaleDateString(
-                                  "fr-FR",
-                                  {
-                                    weekday: "short",
-                                    day: "numeric",
-                                    month: "short",
-                                  },
-                                );
+                                const dayLabel = CALENDAR_DAY_FORMAT.format(date);
                                 return (
                                   <Pressable
                                     key={dateKey}

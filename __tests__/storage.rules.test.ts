@@ -215,4 +215,36 @@ describe("storage.rules", () => {
       ),
     );
   });
+
+  // S7.3 : miniatures générées par le serveur (functions/thumbnails.js)
+  describe("thumbnails", () => {
+    const THUMB_PATH = `children/${CHILD_ID}/thumbs/test-photo.jpg`;
+
+    test("the same people who read the original can read the thumbnail", async () => {
+      await seedPhoto(THUMB_PATH);
+
+      await assertSucceeds(authedStorage(ALICE_UID).ref(THUMB_PATH).getMetadata());
+      await assertSucceeds(authedStorage(BOB_UID).ref(THUMB_PATH).getMetadata());
+    });
+
+    test("unauthenticated and no-access users cannot read a thumbnail", async () => {
+      await seedPhoto(THUMB_PATH);
+
+      await assertFails(unauthStorage().ref(THUMB_PATH).getMetadata());
+      await assertFails(authedStorage(DANA_UID).ref(THUMB_PATH).getMetadata());
+    });
+
+    test("no client can write or delete a thumbnail, not even the owner", async () => {
+      await seedPhoto(THUMB_PATH);
+
+      await assertFails(
+        asPromise(
+          authedStorage(ALICE_UID).ref(THUMB_PATH).putString("jpeg-data", "raw", {
+            contentType: "image/jpeg",
+          }),
+        ),
+      );
+      await assertFails(authedStorage(ALICE_UID).ref(THUMB_PATH).delete());
+    });
+  });
 });
