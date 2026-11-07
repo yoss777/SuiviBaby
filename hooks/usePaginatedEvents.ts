@@ -156,7 +156,7 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
 
         // Si c'est le premier chargement, utiliser les données du listener
         if (!initialLoadDoneRef.current) {
-          console.log(`[usePaginatedEvents] Premier chargement pour type "${eventType}": ${realtimeData.length} items`);
+          if (__DEV__) console.log(`[usePaginatedEvents] Premier chargement pour type "${eventType}": ${realtimeData.length} items`);
           setData(realtimeData);
           initialLoadDoneRef.current = true;
 
@@ -167,7 +167,7 @@ export function usePaginatedEvents<T extends { id: string; date?: { seconds: num
 
           // Déterminer s'il y a plus de données à charger
           const hasMore = snapshot.docs.length === pageSize;
-          console.log(`[usePaginatedEvents] hasMore pour "${eventType}": ${hasMore} (chargé: ${snapshot.docs.length}, pageSize: ${pageSize})`);
+          if (__DEV__) console.log(`[usePaginatedEvents] hasMore pour "${eventType}": ${hasMore} (chargé: ${snapshot.docs.length}, pageSize: ${pageSize})`);
 
           setPagination((prev) => ({
             ...prev,

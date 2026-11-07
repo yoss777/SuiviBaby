@@ -239,7 +239,6 @@ export default function ImmunizationsScreen() {
   const isSheetActive = viewProps?.ownerId === sheetOwnerId;
 
   // États des données
-  const [groupedImmunos, setGroupedImmunos] = useState<ImmunoGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [vitaminesLoaded, setVitaminesLoaded] = useState(false);
   const [vaccinsLoaded, setVaccinsLoaded] = useState(false);
@@ -581,6 +580,7 @@ export default function ImmunizationsScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -608,7 +608,6 @@ export default function ImmunizationsScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedImmunos([]);
     setVitaminesLoaded(false);
     setVaccinsLoaded(false);
     setEmptyDelayDone(false);
@@ -650,6 +649,45 @@ export default function ImmunizationsScreen() {
       cancelled = true;
     };
   }, [activeChild?.id, selectedType]);
+
+  // Filtrage et regroupement par jour (dérivé : calculé au rendu, pas en effet)
+  const groupedImmunos = useMemo<ImmunoGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    // Filtrer par type sélectionné
+    const filteredByType = immunos.filter(
+      (immuno) => immuno.type === selectedType,
+    );
+
+    // Filtrer par date
+    const filtered = filteredByType.filter((immuno) => {
+      const immunoDate = toDate(immuno.date);
+      immunoDate.setHours(0, 0, 0, 0);
+      const immunoTime = immunoDate.getTime();
+
+      if (selectedDate) {
+        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
+        const calDate = new Date(calYear, calMonth - 1, calDay);
+        calDate.setHours(0, 0, 0, 0);
+        return immunoTime === calDate.getTime();
+      }
+
+      switch (selectedFilter) {
+        case "today":
+          return immunoTime === todayTime;
+        case "past":
+          return immunoTime < todayTime;
+        case null:
+        default:
+          return true;
+      }
+    });
+
+    const grouped = groupImmunosByDay(filtered);
+    return grouped;
+  }, [immunos, selectedFilter, selectedDate, selectedType]);
 
   useEffect(() => {
     if (isImmunosLoading) {
@@ -790,45 +828,6 @@ export default function ImmunizationsScreen() {
       cancelled = true;
     };
   }, [activeChild?.id, daysWindow, selectedType, rangeEndDate]);
-
-  // Filtrage et regroupement par jour
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    // Filtrer par type sélectionné
-    const filteredByType = immunos.filter(
-      (immuno) => immuno.type === selectedType,
-    );
-
-    // Filtrer par date
-    const filtered = filteredByType.filter((immuno) => {
-      const immunoDate = toDate(immuno.date);
-      immunoDate.setHours(0, 0, 0, 0);
-      const immunoTime = immunoDate.getTime();
-
-      if (selectedDate) {
-        const [calYear, calMonth, calDay] = selectedDate.split("-").map(Number);
-        const calDate = new Date(calYear, calMonth - 1, calDay);
-        calDate.setHours(0, 0, 0, 0);
-        return immunoTime === calDate.getTime();
-      }
-
-      switch (selectedFilter) {
-        case "today":
-          return immunoTime === todayTime;
-        case "past":
-          return immunoTime < todayTime;
-        case null:
-        default:
-          return true;
-      }
-    });
-
-    const grouped = groupImmunosByDay(filtered);
-    setGroupedImmunos(grouped);
-  }, [immunos, selectedFilter, selectedDate, selectedType]);
 
   // ============================================
   // HELPERS - CALENDAR

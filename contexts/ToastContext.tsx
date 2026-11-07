@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
@@ -39,6 +39,9 @@ const ToastContext = createContext<ToastContextValue>({
 export function useToast() {
   return useContext(ToastContext);
 }
+
+// Alias explicite : toutes les fonctions sont stables, le contexte ne porte pas d'état.
+export const useToastActions = useToast;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
@@ -149,8 +152,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }, durationMs);
   }, [clearTimer, flushPendingUndo]);
 
+  // Valeur stable : le message affiché reste en état local du provider, les
+  // consommateurs (qui n'appellent que des fonctions) ne se re-rendent pas.
+  const value = useMemo(
+    () => ({ showToast, showUndoToast, showActionToast, dismissToast: dismiss }),
+    [showToast, showUndoToast, showActionToast, dismiss],
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast, showUndoToast, showActionToast, dismissToast: dismiss }}>
+    <ToastContext.Provider value={value}>
       {children}
       {message && (
         <Portal>

@@ -10,6 +10,7 @@ import * as FileSystem from "expo-file-system";
 import { auth } from "@/config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import { FIREBASE_STORAGE_BUCKET, isLocalPhotoUri } from "@/utils/photoStorage";
+import { resizePhotoForUpload } from "@/utils/photoResize";
 import { deletePhotoFromStorage } from "@/services/events/photoCleanup";
 import {
   ajouterEvenementOptimistic,
@@ -87,11 +88,20 @@ export async function uploadMilestonePhoto(
   }
   onProgress?.(20);
 
+  // S7.3 : 1600 px max / JPEG avant l'envoi (repli sur l'original si échec).
+  const prepared = await resizePhotoForUpload(uri);
+  const sourceUri = prepared.uri;
+  const dropTemporary = () => {
+    if (prepared.temporary) {
+      void FileSystem.deleteAsync?.(sourceUri, { idempotent: true })?.catch?.(() => {});
+    }
+  };
+
   const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name=${encodeURIComponent(filePath)}`;
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const upload = FileSystem.uploadAsync(uploadUrl, uri, {
+  const upload = FileSystem.uploadAsync(uploadUrl, sourceUri, {
     httpMethod: "POST",
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "image/jpeg" },
@@ -99,8 +109,8 @@ export async function uploadMilestonePhoto(
   // Si le délai est dépassé mais que le fichier arrive quand même, on le
   // supprime : personne ne l'attend plus.
   void upload.then(
-    () => { if (timedOut) cleanupPhoto(filePath); },
-    () => {},
+    () => { dropTemporary(); if (timedOut) cleanupPhoto(filePath); },
+    () => { dropTemporary(); },
   );
 
   let response: { status: number; body: string };

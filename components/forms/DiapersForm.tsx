@@ -16,7 +16,7 @@ import {
 } from "@/services/eventsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
@@ -137,13 +137,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     setDateHeure(nextDate);
     setDateHeureDirty(true);
   }, []);
-
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(toDate(editData.date));
-    setDateHeureDirty(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;

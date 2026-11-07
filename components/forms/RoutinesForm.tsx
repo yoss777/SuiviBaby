@@ -22,7 +22,7 @@ import {
 } from "@/services/eventsService";
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -312,32 +312,6 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
   }, []);
-
-  // Reset uniquement au changement d'event (editData.id), pas à chaque render.
-  // Si on dépendait des valeurs date/heureDebut/heureFin, chaque re-render
-  // avec un nouvel objet Date écraserait le choix utilisateur dans le picker.
-  useEffect(() => {
-    if (!editData?.id) return;
-    if (editData.type === "bain") {
-      setDateHeure(toDate(editData.date));
-      setDateHeureDirty(false);
-    }
-    if (editData.type === "nettoyage_nez") {
-      setDateNez(toDate(editData.date));
-      setDateNezDirty(false);
-    }
-    if (editData.type === "sommeil") {
-      setHeureDebut(
-        editData.heureDebut
-          ? toDate(editData.heureDebut)
-          : toDate(editData.date),
-      );
-      setHeureFin(editData.heureFin ? toDate(editData.heureFin) : null);
-      setIsOngoing(!editData.heureFin);
-      setChronoDirty(shouldForceChronoDirty(editData, sommeilEnCours));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   // ============================================
   // TYPE SELECTION

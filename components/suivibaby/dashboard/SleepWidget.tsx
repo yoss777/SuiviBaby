@@ -2,6 +2,7 @@ import {
   getCategoryColors,
   getNeutralColors,
 } from "@/constants/dashboardColors";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef } from "react";
@@ -17,7 +18,10 @@ import {
 export interface SleepWidgetProps {
   isActive: boolean;
   isNap?: boolean;
-  elapsedMinutes: number;
+  /** Durée écoulée figée (rétrocompatibilité). Ignorée si `startTimestamp` est fourni. */
+  elapsedMinutes?: number;
+  /** Début de l'activité en cours (ms) : le widget porte son propre tick à la minute. */
+  startTimestamp?: number;
   startTime?: string;
   onStartSleep: (isNap: boolean) => void;
   onStopSleep: () => void;
@@ -39,7 +43,8 @@ const formatDuration = (minutes?: number): string => {
 export const SleepWidget = memo(function SleepWidget({
   isActive,
   isNap,
-  elapsedMinutes,
+  elapsedMinutes: elapsedMinutesProp = 0,
+  startTimestamp,
   startTime,
   onStartSleep,
   onStopSleep,
@@ -48,6 +53,12 @@ export const SleepWidget = memo(function SleepWidget({
   colorScheme = "light",
   sharedPulseAnim,
 }: SleepWidgetProps) {
+  // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
+  const elapsedMinutes =
+    startTimestamp !== undefined
+      ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
+      : elapsedMinutesProp;
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
 

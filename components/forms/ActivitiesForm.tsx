@@ -23,7 +23,7 @@ import {
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -272,26 +272,6 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
   }, []);
-
-  // Reset uniquement au changement d'event (editData.id), pas à chaque render.
-  // Si on dépendait des valeurs date/heureDebut/heureFin, chaque re-render
-  // avec un nouvel objet Date écraserait le choix utilisateur dans le picker.
-  useEffect(() => {
-    if (!editData?.id) return;
-    setDateHeure(toDate(editData.date));
-    setDateHeureDirty(false);
-    setHeureDebut(
-      editData.heureDebut ? toDate(editData.heureDebut) : toDate(editData.date),
-    );
-    setHeureFin(editData.heureFin ? toDate(editData.heureFin) : null);
-    setIsOngoing(
-      editData.typeActivite === "promenade" &&
-        !!editData.heureDebut &&
-        !editData.heureFin,
-    );
-    setChronoDirty(shouldForceChronoDirty(editData, promenadeEnCours));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editData?.id]);
 
   // ============================================
   // HANDLERS

@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -66,6 +67,9 @@ type ModalContextType = {
   hide: () => void;
 };
 
+const isErrorTitle = (value: string) =>
+  /erreur|error|echec|failed|❌/i.test(value);
+
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
@@ -79,7 +83,12 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const queueRef = useRef<QueuedModal[]>([]);
   const currentRef = useRef<ModalContent | null>(null);
 
-  const present = (content: ModalContent, protectedModal: boolean) => {
+  // Couleurs lues par ref : les fonctions du contexte restent stables même si
+  // le thème change (les consommateurs « actions » ne se re-rendent pas).
+  const colorsRef = useRef(colors);
+  colorsRef.current = colors;
+
+  const present = useCallback((content: ModalContent, protectedModal: boolean) => {
     if (currentProtectedRef.current) {
       queueRef.current.push({ content, protectedModal });
       return;
@@ -87,32 +96,32 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     currentProtectedRef.current = protectedModal;
     currentRef.current = content;
     setModalState(content);
-  };
+  }, []);
 
   // Ferme la modale en cours puis affiche la suivante de la file, s'il y en a une.
   // `expected` : ne ferme que cette modale (un bouton appelé après qu'un
   // callback a déjà affiché autre chose ne doit pas fermer la nouvelle).
-  const closeCurrent = (expected?: ModalContent) => {
+  const closeCurrent = useCallback((expected?: ModalContent) => {
     if (expected && currentRef.current !== expected) return;
     const next = queueRef.current.shift();
     currentProtectedRef.current = next?.protectedModal ?? false;
     currentRef.current = next?.content ?? null;
     setModalState(next?.content ?? null);
-  };
+  }, []);
 
   const backgroundColor = colors.background;
   const textColor = colors.text;
   const tintTextColor =
     colors.tint === "#fff" ? "#1b1b1b" : "#fff";
-  const isErrorTitle = (value: string) =>
-    /erreur|error|echec|failed|❌/i.test(value);
 
-  const showAlert = (
+  const showAlert = useCallback((
     title: string,
     message: React.ReactNode = "",
     buttons: AlertButton[] = [],
     options: AlertOptions = {},
   ) => {
+    const colors = colorsRef.current;
+    const tintTextColor = colors.tint === "#fff" ? "#1b1b1b" : "#fff";
     const isProtected = options.dismissible === false || options.callEmergency === true;
     if (buttons.length <= 1) {
       const onlyButton = buttons[0];
@@ -151,16 +160,16 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
       },
       isProtected,
     );
-  };
+  }, [present]);
 
   // hide() public : ne ferme jamais une alerte protégée (seuls ses boutons le font).
-  const hide = () => {
+  const hide = useCallback(() => {
     if (currentProtectedRef.current) return;
     currentRef.current = null;
     setModalState(null);
-  };
+  }, []);
 
-  const showConfirm = (title: string, message: React.ReactNode, onConfirm: () => void) => {
+  const showConfirm = useCallback((title: string, message: React.ReactNode, onConfirm: () => void) => {
     present(
       {
         type: "confirm",
@@ -174,7 +183,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
       },
       false,
     );
-  };
+  }, [present]);
 
   useEffect(() => {
     if (!modalState || modalState.type !== "info") return;
@@ -194,15 +203,16 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
         autoDismissRef.current = null;
       }
     };
-  }, [modalState]);
+  }, [modalState, closeCurrent]);
 
+  // Valeur stable : ne contient que des actions (l'état de la modale reste local).
   const value = useMemo(
     () => ({
       showAlert,
       showConfirm,
       hide,
     }),
-    [showAlert, showConfirm],
+    [showAlert, showConfirm, hide],
   );
 
   return (
@@ -250,6 +260,11 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     </ModalContext.Provider>
   );
 };
+
+// Même valeur que useModal : toutes les fonctions sont stables (le contexte ne
+// porte aucun état), un consommateur qui n'appelle que des actions ne se
+// re-rend donc pas quand une modale s'ouvre ou se ferme.
+export const useModalActions = () => useModal();
 
 export const useModal = () => {
   const context = useContext(ModalContext);

@@ -1,3 +1,4 @@
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -62,8 +63,16 @@ export interface StatsGroupProps {
   isWarning?: boolean;
   /** Called when the main header is pressed (optional) */
   onHeaderPress?: () => void;
-  /** Current time for "time since" calculations */
+  /** Current time for "time since" calculations (sinon tick interne à la minute) */
   currentTime?: Date;
+  /**
+   * Dernière activité (ms) : le « il y a X » est calculé ici, avec le tick à la
+   * minute du composant, pour que l'écran parent ne se re-rende pas.
+   * Remplace `timeSince` quand il est fourni.
+   */
+  timeSinceTimestamp?: number;
+  /** Seuils d'alerte évalués ici (un dépassement allume l'état warning). */
+  warnings?: { timestamp?: number; thresholdMs: number | null }[];
   /** Loading state */
   isLoading?: boolean;
   /** Start expanded */
@@ -111,17 +120,34 @@ export const StatsGroup = memo(function StatsGroup({
   borderColor,
   summary,
   lastActivity,
-  timeSince,
+  timeSince: timeSinceProp,
   timeSinceLabel,
   items,
-  isWarning = false,
+  isWarning: isWarningProp = false,
   onHeaderPress,
-  currentTime = new Date(),
+  currentTime: currentTimeProp,
+  timeSinceTimestamp,
+  warnings,
   isLoading = false,
   defaultExpanded = false,
   colorScheme = "light",
 }: StatsGroupProps) {
   const nc = getNeutralColors(colorScheme);
+  const { currentTime: tickTime } = useMinuteTick(currentTimeProp === undefined);
+  const currentTime = currentTimeProp ?? tickTime;
+  const nowMs = currentTime.getTime();
+  const timeSince =
+    timeSinceTimestamp !== undefined
+      ? (getTimeSinceLastActivity(timeSinceTimestamp, currentTime) ?? undefined)
+      : timeSinceProp;
+  const isWarning =
+    isWarningProp ||
+    !!warnings?.some(
+      (w) =>
+        w.thresholdMs !== null &&
+        !!w.timestamp &&
+        nowMs - w.timestamp > w.thresholdMs,
+    );
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const toggleExpanded = useCallback(() => {

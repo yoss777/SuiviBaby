@@ -32,7 +32,7 @@ export async function transcribeAudio(audioUri: string): Promise<TranscribeResul
     }
 
     const transcribedText = await VoiceCommandService.transcribeAudio(audioUri);
-    console.log("📝 Transcription:", transcribedText);
+    if (__DEV__) console.log("📝 Transcription:", transcribedText);
 
     if (transcribedText && transcribedText.trim()) {
       return { text: transcribedText.trim(), error: null };

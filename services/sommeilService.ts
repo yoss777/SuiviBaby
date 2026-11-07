@@ -32,7 +32,7 @@ export async function ajouterSommeil(childId: string, data: Record<string, unkno
       userId,
       createdAt: new Date(),
     });
-    console.log("Sommeil ajouté avec l'ID :", ref.id);
+    if (__DEV__) console.log("Sommeil ajouté avec l'ID :", ref.id);
     return ref;
   } catch (e) {
     console.error("Erreur lors de l'ajout :", e);
@@ -49,7 +49,7 @@ export async function obtenirSommeil(childId: string, id: string) {
     if (docSnap.exists() && docSnap.data().childId === childId) {
       return { id: docSnap.id, ...docSnap.data() };
     }
-    console.log("Aucun sommeil trouvé avec cet ID ou accès refusé");
+    if (__DEV__) console.log("Aucun sommeil trouvé avec cet ID ou accès refusé");
     return null;
   } catch (e) {
     console.error("Erreur lors de la récupération :", e);
@@ -152,7 +152,7 @@ export async function modifierSommeil(
     // our Record<string, unknown> is structurally identical but TS treats
     // them as incompatible. Cast at the call site only.
     await updateDoc(docRef, updateData as Record<string, never>);
-    console.log("Sommeil modifié avec succès");
+    if (__DEV__) console.log("Sommeil modifié avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la modification :", e);
@@ -171,7 +171,7 @@ export async function supprimerSommeil(childId: string, id: string) {
     }
 
     await deleteDoc(docRef);
-    console.log("Sommeil supprimé avec succès");
+    if (__DEV__) console.log("Sommeil supprimé avec succès");
     return true;
   } catch (e) {
     console.error("Erreur lors de la suppression :", e);

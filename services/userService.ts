@@ -268,30 +268,30 @@ export async function approveProfessionalProfile(
   adminUid: string,
   notes?: string
 ): Promise<void> {
-  console.log('📝 approveProfessionalProfile - Start', { requestId, adminUid, notes });
+  if (__DEV__) console.log('📝 approveProfessionalProfile - Start', { requestId, adminUid, notes });
 
   const requestDoc = await getDoc(doc(db, 'professional-validation-requests', requestId));
-  console.log('📄 Request doc exists:', requestDoc.exists());
+  if (__DEV__) console.log('📄 Request doc exists:', requestDoc.exists());
 
   if (!requestDoc.exists()) {
     throw new Error('Demande de validation non trouvée');
   }
 
   const request = requestDoc.data() as ProfessionalValidationRequest;
-  console.log('📋 Request data:', request);
+  if (__DEV__) console.log('📋 Request data:', request);
 
   // Mettre à jour la demande
-  console.log('🔄 Updating request document...');
+  if (__DEV__) console.log('🔄 Updating request document...');
   await updateDoc(doc(db, 'professional-validation-requests', requestId), {
     status: 'approved',
     reviewedAt: serverTimestamp(),
     reviewedBy: adminUid,
     adminNotes: notes || '',
   });
-  console.log('✔️ Request document updated');
+  if (__DEV__) console.log('✔️ Request document updated');
 
   // Mettre à jour le profil utilisateur
-  console.log('🔄 Updating user profile for userId:', request.userId);
+  if (__DEV__) console.log('🔄 Updating user profile for userId:', request.userId);
   await updateDoc(doc(db, 'users', request.userId), {
     'professionalProfile.validationStatus': 'approved',
     'professionalProfile.validationDate': serverTimestamp(),
@@ -299,7 +299,7 @@ export async function approveProfessionalProfile(
     'professionalProfile.isVisibleOnMap': true,
     'professionalProfile.acceptsNewPatients': true,
   });
-  console.log('✔️ User profile updated');
+  if (__DEV__) console.log('✔️ User profile updated');
 }
 
 /**
@@ -380,7 +380,7 @@ export function subscribeToPendingValidationRequests(
 export async function migrateUserToNewStructure(uid: string): Promise<void> {
   const userDoc = await getDoc(doc(db, 'users', uid));
   if (!userDoc.exists()) {
-    console.log(`User ${uid} not found`);
+    if (__DEV__) console.log(`User ${uid} not found`);
     return;
   }
 
@@ -388,7 +388,7 @@ export async function migrateUserToNewStructure(uid: string): Promise<void> {
 
   // Si userType existe déjà, pas besoin de migrer
   if (data.userType) {
-    console.log(`User ${uid} already migrated`);
+    if (__DEV__) console.log(`User ${uid} already migrated`);
     return;
   }
 
@@ -404,5 +404,5 @@ export async function migrateUserToNewStructure(uid: string): Promise<void> {
     },
   });
 
-  console.log(`✅ User ${uid} migrated to new structure as patient`);
+  if (__DEV__) console.log(`✅ User ${uid} migrated to new structure as patient`);
 }

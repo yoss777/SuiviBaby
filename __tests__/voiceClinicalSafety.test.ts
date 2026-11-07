@@ -16,7 +16,7 @@ jest.mock("@/services/voiceCommandService", () => ({
 
 import { ajouterEvenementOptimistic, modifierEvenementOptimistic } from "@/services/eventsService";
 import type { ParsedCommandResult } from "@/services/voiceCommandService";
-import { executeCommand, executeMultipleCommands } from "@/hooks/useVoiceEventCreator";
+import { executeCommand, executeMultipleCommands } from "@/services/voiceEventCreator";
 
 const birth = new Date(2026, 0, 15);
 const feedback = { showInfo: jest.fn() };

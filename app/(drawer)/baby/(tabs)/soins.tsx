@@ -20,6 +20,7 @@ import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
 import { useSwipeHint } from "@/hooks/useSwipeHint";
+import { useCalendarDay } from "@/hooks/useMinuteTick";
 import {
   ecouterEvenements,
   getNextEventDateBefore,
@@ -304,7 +305,6 @@ export default function SoinsScreen() {
   const [pendingEditData, setPendingEditData] = useState<SoinsEditData | null>(null);
   const [pendingSoinsType, setPendingSoinsType] = useState<SoinsType>("temperature");
 
-  const [groupedEvents, setGroupedEvents] = useState<HealthGroup[]>([]);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState({
     temperature: false,
@@ -464,6 +464,66 @@ export default function SoinsScreen() {
     applyTodayFilter();
   }, [applyTodayFilter]);
 
+  // Jour calendaire : le filtre « aujourd'hui » suit le passage de minuit.
+  const calendarDay = useCalendarDay();
+  const groupedEvents = useMemo<HealthGroup[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTime = today.getTime();
+
+    const filtered = events.filter((item) => {
+      if (softDeletedIds.has(item.id)) return false;
+      const date = toDate(item.date);
+      date.setHours(0, 0, 0, 0);
+      const time = date.getTime();
+
+      if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number);
+        const selected = new Date(year, month - 1, day);
+        selected.setHours(0, 0, 0, 0);
+        return time === selected.getTime();
+      }
+
+      if (selectedFilter === "today") return time === todayTime;
+      if (selectedFilter === "past") return time < todayTime;
+      return true;
+    });
+
+    const groups: Record<string, HealthEvent[]> = {};
+    filtered.forEach((item) => {
+      const date = toDate(item.date);
+      const key = formatDateKey(date);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    const grouped = Object.entries(groups)
+      .map(([date, items]) => {
+        const sorted = items.sort(
+          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
+        );
+        const counts = {
+          temperature: 0,
+          medicament: 0,
+          symptome: 0,
+          vaccin: 0,
+          vitamine: 0,
+        } as Record<HealthType, number>;
+        sorted.forEach((item) => {
+          counts[item.type] += 1;
+        });
+        return {
+          date,
+          events: sorted,
+          counts,
+          lastEvent: sorted[0],
+        };
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    return grouped;
+  }, [events, selectedFilter, selectedDate, softDeletedIds, calendarDay]);
+
   const menuItems: HeaderMenuItem[] = useMemo(() => [
     { label: "Ajouter", icon: "add-circle-outline", onPress: () => openAddModal("temperature") },
     ...(groupedEvents.length > 0 || selectionMode ? [{
@@ -576,6 +636,7 @@ export default function SoinsScreen() {
 
   useForegroundServerRefresh({
     enabled: !!activeChild?.id,
+    childId: activeChild?.id,
     refresh: async () => {
       if (!activeChild?.id) return [];
       const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
@@ -721,7 +782,6 @@ export default function SoinsScreen() {
 
   useEffect(() => {
     if (!activeChild?.id) return;
-    setGroupedEvents([]);
     setLoaded({
       temperature: false,
       medicament: false,
@@ -837,64 +897,6 @@ export default function SoinsScreen() {
       }
     }, [applyTodayFilter, selectedDate, selectedFilter]),
   );
-
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTime = today.getTime();
-
-    const filtered = events.filter((item) => {
-      if (softDeletedIds.has(item.id)) return false;
-      const date = toDate(item.date);
-      date.setHours(0, 0, 0, 0);
-      const time = date.getTime();
-
-      if (selectedDate) {
-        const [year, month, day] = selectedDate.split("-").map(Number);
-        const selected = new Date(year, month - 1, day);
-        selected.setHours(0, 0, 0, 0);
-        return time === selected.getTime();
-      }
-
-      if (selectedFilter === "today") return time === todayTime;
-      if (selectedFilter === "past") return time < todayTime;
-      return true;
-    });
-
-    const groups: Record<string, HealthEvent[]> = {};
-    filtered.forEach((item) => {
-      const date = toDate(item.date);
-      const key = formatDateKey(date);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    const grouped = Object.entries(groups)
-      .map(([date, items]) => {
-        const sorted = items.sort(
-          (a, b) => toDate(b.date).getTime() - toDate(a.date).getTime(),
-        );
-        const counts = {
-          temperature: 0,
-          medicament: 0,
-          symptome: 0,
-          vaccin: 0,
-          vitamine: 0,
-        } as Record<HealthType, number>;
-        sorted.forEach((item) => {
-          counts[item.type] += 1;
-        });
-        return {
-          date,
-          events: sorted,
-          counts,
-          lastEvent: sorted[0],
-        };
-      })
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-
-    setGroupedEvents(grouped);
-  }, [events, selectedFilter, selectedDate, showCalendar, softDeletedIds]);
 
   const loadMoreStep = useCallback(
     async (auto = false) => {

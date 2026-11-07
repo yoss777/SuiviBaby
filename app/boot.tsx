@@ -21,9 +21,8 @@ import { obtenirPreferencesNotifications } from "@/services/userPreferencesServi
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
 import { getUserChildAccess } from "@/utils/permissions";
 import {
-  buildTodayEventsData,
   getTodayEventsCache,
-  setTodayEventsCache,
+  loadTodayEventsOnce,
 } from "@/services/todayEventsCache";
 import { router } from "expo-router";
 import { hasCompletedOnboarding } from "./(auth)/onboarding";
@@ -131,8 +130,8 @@ function BootScreenContent() {
   // P17a: Extract prefetch as useCallback
   const prefetchToday = useCallback(async (childId: string) => {
     try {
-      const events = await obtenirEvenementsDuJour(childId);
-      setTodayEventsCache(childId, buildTodayEventsData(events));
+      // S7.5 : lecture partagée avec le préchargement de BabyContext.
+      await loadTodayEventsOnce(childId, obtenirEvenementsDuJour);
     } catch (error) {
       console.warn("[BOOT] Préchargement today échoué:", error);
     }
@@ -177,6 +176,28 @@ function BootScreenContent() {
     },
     [bootRetryKey, prefetchToday],
   );
+
+  // S7.5 : le préchargement démarre dès que l'enfant cible est connu et que
+  // les verrous (consentement, biométrie) sont passés, en parallèle du délai
+  // minimal du splash. `run()` attend ensuite la même promesse (mémoïsée).
+  useEffect(() => {
+    if (!user || !firebaseUser || hasPendingDeletion(user)) return;
+    if (consentCheck !== "granted" || biometricCheck !== "passed") return;
+    if (babyLoading && !bootStalled) return;
+    const targetChild = activeChild ?? children[0];
+    if (!targetChild) return;
+    prefetchBootResources(targetChild.id, firebaseUser.uid).catch(() => {});
+  }, [
+    user,
+    firebaseUser,
+    consentCheck,
+    biometricCheck,
+    babyLoading,
+    bootStalled,
+    activeChild,
+    children,
+    prefetchBootResources,
+  ]);
 
   useEffect(() => {
     let cancelled = false;

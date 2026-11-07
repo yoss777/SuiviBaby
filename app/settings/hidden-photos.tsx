@@ -178,6 +178,7 @@ export default function HiddenPhotosScreen() {
             {item.photoRef ? (
               <PhotoImage
                 photoRef={item.photoRef}
+                thumbnail
                 style={styles.thumbnail}
                 resizeMode="cover"
                 accessible={false}

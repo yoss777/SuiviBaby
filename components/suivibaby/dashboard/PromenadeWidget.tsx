@@ -3,6 +3,7 @@
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
+import { useMinuteTick } from "@/hooks/useMinuteTick";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef } from "react";
@@ -17,7 +18,10 @@ import {
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
-  elapsedMinutes: number;
+  /** Durée écoulée figée (rétrocompatibilité). Ignorée si `startTimestamp` est fourni. */
+  elapsedMinutes?: number;
+  /** Début de l'activité en cours (ms) : le widget porte son propre tick à la minute. */
+  startTimestamp?: number;
   startTime?: string;
   onStart: () => void;
   onStop: () => void;
@@ -38,7 +42,8 @@ const formatDuration = (minutes?: number): string => {
 
 export const PromenadeWidget = memo(function PromenadeWidget({
   isActive,
-  elapsedMinutes,
+  elapsedMinutes: elapsedMinutesProp = 0,
+  startTimestamp,
   startTime,
   onStart,
   onStop,
@@ -47,6 +52,12 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   colorScheme = "light",
   sharedPulseAnim,
 }: PromenadeWidgetProps) {
+  // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
+  const elapsedMinutes =
+    startTimestamp !== undefined
+      ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
+      : elapsedMinutesProp;
   const nc = getNeutralColors(colorScheme);
   const accentColor = eventColors.activite.dark;
   const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46";

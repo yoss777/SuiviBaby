@@ -32,13 +32,13 @@ import {
   executeDelete,
   findEventByIdentifier,
   lookupFailureMessage,
-} from "@/hooks/useVoiceEventCreator";
+} from "@/services/voiceEventCreator";
 
 const feedback = {
   showInfo: jest.fn(),
 };
 
-describe("useVoiceEventCreator", () => {
+describe("voiceEventCreator", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });

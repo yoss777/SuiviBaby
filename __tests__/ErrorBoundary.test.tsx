@@ -1,6 +1,6 @@
 import React from "react";
 import { render, fireEvent } from "@testing-library/react-native";
-import { Text } from "react-native";
+import { DevSettings, Text } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -82,5 +82,43 @@ describe("ErrorBoundary", () => {
     // The key assertion is that the reset button was clickable and the
     // handleReset function executed without errors.
     expect(getByText("Oups ! Une erreur est survenue")).toBeTruthy();
+  });
+
+  it("Relancer recharge le bundle en dev (DevSettings.reload)", () => {
+    const reload = jest.spyOn(DevSettings, "reload").mockImplementation(() => {});
+    const { getByText } = render(
+      <ErrorBoundary>
+        <Bomb shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+    fireEvent.press(getByText("Relancer l'application"));
+    expect(reload).toHaveBeenCalledTimes(1);
+    reload.mockRestore();
+  });
+
+  it("Relancer remonte entièrement l'arbre quand le rechargement n'est pas disponible", () => {
+    const g = globalThis as unknown as { __DEV__: boolean };
+    const previous = g.__DEV__;
+    g.__DEV__ = false;
+    let mounts = 0;
+    let crash = true;
+    function Child() {
+      React.useEffect(() => {
+        mounts += 1;
+      }, []);
+      if (crash) throw new Error("boom");
+      return <Text>recovered</Text>;
+    }
+    const { getByText } = render(
+      <ErrorBoundary>
+        <Child />
+      </ErrorBoundary>,
+    );
+    crash = false;
+    fireEvent.press(getByText("Relancer l'application"));
+    expect(getByText("recovered")).toBeTruthy();
+    expect(mounts).toBe(1);
+    expect(Sentry.captureException).toHaveBeenCalled();
+    g.__DEV__ = previous;
   });
 });

@@ -183,7 +183,7 @@ const PolaroidCard = ({
               <FontAwesome6 name="image" size={24} color={nc.textMuted} />
             </View>
           ) : (
-            <PhotoImage photoRef={photo.photo} style={styles.polaroidImage} onError={handleImageError} />
+            <PhotoImage photoRef={photo.photo} thumbnail style={styles.polaroidImage} onError={handleImageError} />
           )}
 
           {/* Social overlay */}
