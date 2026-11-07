@@ -72,6 +72,12 @@ jobs:
 
       - run: npm ci
 
+      # multiUser.rules.test.ts charge les vraies Cloud Functions
+      # (redeemShareCodeCF, createShareCode, setMemberRole) : il faut leurs
+      # dépendances.
+      - name: Install function dependencies
+        run: cd functions && npm ci
+
       # Every *.rules.test.ts suite (firestore, storage, multiUser), see
       # jest.config.rules.js. The demo- project id needs no credentials; the
       # suites read the project from GCLOUD_PROJECT (set by emulators:exec).
