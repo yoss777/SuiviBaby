@@ -4,6 +4,7 @@ import {
   obtenirPreferences,
   type ReminderPreferences,
 } from '@/services/userPreferencesService';
+import { DEFAULT_QUIET_HOURS, normalizeQuietHours } from '@/utils/quietHours';
 import { listenToUserAccessIndex } from '@/services/accessRepository';
 import { listenToChildDoc } from '@/services/childRepository';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +25,8 @@ export interface Child {
 const DEFAULT_REMINDERS: ReminderPreferences = {
   enabled: false,
   thresholds: { repas: 0, pompages: 0, changes: 0, vitamines: 0 },
+  // Heures calmes par défaut (22:00-07:00) : même règle que le serveur sans réglage.
+  quietHours: DEFAULT_QUIET_HOURS,
 };
 
 interface BabyContextType {
@@ -355,6 +358,7 @@ export function BabyProvider({ children: childrenProp }: { children: ReactNode }
           setReminderPreferences({
             enabled: reminders.enabled ?? DEFAULT_REMINDERS.enabled,
             thresholds: { ...DEFAULT_REMINDERS.thresholds, ...(reminders.thresholds || {}) },
+            quietHours: normalizeQuietHours(reminders.quietHours),
           });
         } else {
           setReminderPreferences(DEFAULT_REMINDERS);

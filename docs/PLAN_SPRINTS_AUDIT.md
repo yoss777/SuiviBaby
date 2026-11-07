@@ -855,7 +855,7 @@ validation dans les règles, export).
   (comparaison faite, voir conversation) ; mentions à compléter dans
   `terms.html` et `mentions-legales.html` ensuite.
 - Montée d'Expo (13.5) : après la prochaine version publiée.
-- Plage de nuit des rappels : réglage par parent, activé par défaut
+- Plage de nuit des rappels (✅ fait, branche `feat/quiet-hours`) : réglage par parent, activé par défaut
   22 h – 7 h, fuseau du téléphone, rappel sauté pendant la plage.
 - `MilestoneCelebrationModal` : décision en attente (rebrancher ou
   supprimer).

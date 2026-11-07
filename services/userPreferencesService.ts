@@ -4,6 +4,14 @@ import type { DocumentData, DocumentSnapshot, FirestoreError, Unsubscribe } from
 import { auth, db } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import type { HealthDataConsent } from "./healthConsentService";
+import {
+  DEFAULT_QUIET_HOURS,
+  getDeviceTimeZone,
+  normalizeQuietHours,
+  type QuietHours,
+} from "@/utils/quietHours";
+
+export type { QuietHours } from "@/utils/quietHours";
 
 // ============================================
 // ACCÈS BRUT À user_preferences/{uid} (utilisé par les contextes et écrans)
@@ -51,6 +59,21 @@ export type ReminderKey = 'repas' | 'pompages' | 'changes' | 'vitamines';
 export interface ReminderPreferences {
   enabled: boolean;
   thresholds: Record<ReminderKey, number>;
+  /**
+   * Heures calmes (pas de rappel la nuit), propres à ce parent et exprimées dans
+   * le fuseau de son téléphone. Absent = activé 22:00-07:00 (défaut serveur aussi).
+   */
+  quietHours?: QuietHours;
+}
+
+/** Heures calmes par défaut, dans le fuseau de l'appareil. */
+function defaultQuietHours(): QuietHours {
+  return { ...DEFAULT_QUIET_HOURS, timeZone: getDeviceTimeZone() };
+}
+
+/** Valeur stockée -> valeur sûre ; sans valeur, défaut dans le fuseau de l'appareil. */
+function resolveQuietHours(stored: unknown): QuietHours {
+  return stored === undefined || stored === null ? defaultQuietHours() : normalizeQuietHours(stored);
 }
 
 interface NotificationPreferences {
@@ -118,6 +141,7 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
               ...defaultNotificationPreferences.reminders?.thresholds,
               ...(data.notifications?.reminders?.thresholds || {}),
             } as Record<ReminderKey, number>,
+            quietHours: resolveQuietHours(data.notifications?.reminders?.quietHours),
           } as ReminderPreferences,
         },
         theme: data.theme ?? defaultThemePreference,
@@ -170,6 +194,9 @@ export async function mettreAJourPreferencesNotifications(
             ...currentReminders?.thresholds,
             ...(updates.reminders?.thresholds || {}),
           },
+          quietHours: updates.reminders.quietHours
+            ? normalizeQuietHours({ ...currentReminders?.quietHours, ...updates.reminders.quietHours })
+            : currentReminders?.quietHours,
         }
       : currentReminders;
 
@@ -190,6 +217,41 @@ export async function mettreAJourPreferencesNotifications(
     console.error("Erreur lors de la mise à jour des notifications:", e);
     captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferencesNotifications" });
     throw e;
+  }
+}
+
+/**
+ * Au démarrage : aligne le fuseau stocké des heures calmes sur celui du
+ * téléphone (déplacement, changement de réglage), et écrit le défaut s'il
+ * n'existe pas encore, pour que le serveur applique la bonne heure locale.
+ * Ne touche qu'à `quietHours` (chemin pointé) et ne lève jamais.
+ * @returns true si une écriture a eu lieu
+ */
+export async function synchroniserFuseauHoraire(): Promise<boolean> {
+  try {
+    const userId = getUserId();
+    const docRef = doc(db, "user_preferences", userId);
+    // Lecture brute : obtenirPreferences() comble déjà le défaut, on ne verrait
+    // pas qu'aucune valeur n'est stockée.
+    const snap = await getDoc(docRef);
+    // Pas de document : obtenirPreferences() le crée à l'ouverture de l'appli.
+    if (!snap.exists()) return false;
+    const rawStored = snap.data()?.notifications?.reminders?.quietHours;
+    const deviceTimeZone = getDeviceTimeZone();
+    if (rawStored && rawStored.timeZone === deviceTimeZone) return false;
+    const next: QuietHours = {
+      ...(rawStored ? normalizeQuietHours(rawStored) : DEFAULT_QUIET_HOURS),
+      timeZone: deviceTimeZone,
+    };
+    await updateDoc(docRef, {
+      "notifications.reminders.quietHours": next,
+    });
+    return true;
+  } catch (e) {
+    // Best effort : un échec (hors ligne) sera retenté au prochain démarrage.
+    console.error("Erreur lors de la synchronisation du fuseau horaire:", e);
+    captureServiceError(e, { service: "userPreferences", operation: "synchroniserFuseauHoraire" });
+    return false;
   }
 }
 

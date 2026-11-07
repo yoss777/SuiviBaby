@@ -1686,6 +1686,23 @@ describe("user_preferences collection", () => {
     );
   });
 
+  // Les règles ne valident pas les préférences champ par champ : les heures
+  // calmes (chemin pointé écrit au démarrage) passent, la validation HH:MM /
+  // fuseau est faite à la lecture (appli et serveur, repli sur les défauts).
+  test("user can write own reminders.quietHours, nobody else can", async () => {
+    const quietHours = { enabled: true, start: "22:00", end: "07:00", timeZone: "Europe/Paris" };
+    await assertSucceeds(
+      updateDoc(doc(authedFirestore(ALICE_UID), "user_preferences", ALICE_UID), {
+        "notifications.reminders.quietHours": quietHours,
+      })
+    );
+    await assertFails(
+      updateDoc(doc(authedFirestore(BOB_UID), "user_preferences", ALICE_UID), {
+        "notifications.reminders.quietHours": quietHours,
+      })
+    );
+  });
+
   test("user cannot add healthDataConsent to existing preferences", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertFails(

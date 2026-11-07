@@ -414,9 +414,11 @@ describe("HC2 consent and pendingDeletion gate reminders and recaps", () => {
   const ts = (ms) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
   beforeEach(() => {
     expoInstance.sendPushNotificationsAsync.mockClear();
+    // Heures calmes par défaut 22:00-07:00 : horloge figée à midi (Paris) pour ne pas dépendre de l'heure d'exécution.
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T10:00:00Z"));
     jest.spyOn(console, "log").mockImplementation(() => {});
   });
-  afterEach(() => console.log.mockRestore());
+  afterEach(() => { console.log.mockRestore(); Date.now.mockRestore(); });
 
   const user = (uid, { consent, pending = false } = {}) => {
     const d = {
@@ -647,10 +649,12 @@ describe("HC6 90-day retention", () => {
       "events/e": { childId: "c", type: "biberon", date: { toMillis: () => Date.now() - 5 * 3600 * 1000 } },
     });
     jest.spyOn(console, "log").mockImplementation(() => {});
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T10:00:00Z")); // hors heures calmes
     await fns.checkAndSendReminders();
     console.log.mockRestore();
     const [k] = keys(docs, "notification_history/");
-    expect(near(docs.get(k).expireAt, 90)).toBe(true);
+    expect(near(docs.get(k).expireAt, 90)).toBe(true); // Date.now encore figé : même référence
+    Date.now.mockRestore();
   });
 
   it("declares a TTL on every 90-day collection", () => {

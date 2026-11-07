@@ -6,6 +6,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { ReminderKey } from "./userPreferencesService";
 import { DIAPER_DOMAIN_EVENT_TYPES } from "./eventTypeSupport";
+import { secondsAfterQuietHours, type QuietHours } from "@/utils/quietHours";
 
 // ============================================
 // CONSTANTS
@@ -99,12 +100,15 @@ function buildNotifId(childId: string, category: ReminderKey): string {
  * @param childName    Prénom de l'enfant (pour le message)
  * @param category     Clé de rappel (repas, pompages, changes, vitamines)
  * @param thresholdHours  Nombre d'heures avant rappel (0 = désactivé)
+ * @param quietHours   Heures calmes : un rappel qui tomberait dedans est décalé
+ *                     à leur fin (même règle que le serveur). Absent = défaut 22:00-07:00.
  */
 export async function scheduleReminder(
   childId: string,
   childName: string,
   category: ReminderKey,
   thresholdHours: number,
+  quietHours?: QuietHours,
 ): Promise<void> {
   const identifier = buildNotifId(childId, category);
 
@@ -114,7 +118,7 @@ export async function scheduleReminder(
   // Si threshold = 0, pas de rappel
   if (thresholdHours <= 0) return;
 
-  const triggerSeconds = thresholdHours * 3600;
+  const triggerSeconds = secondsAfterQuietHours(thresholdHours * 3600, quietHours);
   const label = CATEGORY_LABELS[category];
 
   await Notifications.scheduleNotificationAsync({
@@ -189,12 +193,14 @@ export async function cancelAllReminders(): Promise<void> {
  * @param childName     Prénom
  * @param thresholds    Record<ReminderKey, number> (heures)
  * @param lastEventDates  Map catégorie → date du dernier événement (ou null)
+ * @param quietHours    Heures calmes (rappels décalés à leur fin)
  */
 export async function rescheduleAllReminders(
   childId: string,
   childName: string,
   thresholds: Record<ReminderKey, number>,
   lastEventDates: Partial<Record<ReminderKey, Date | null>>,
+  quietHours?: QuietHours,
 ): Promise<void> {
   const categories: ReminderKey[] = [
     "repas",
@@ -214,7 +220,7 @@ export async function rescheduleAllReminders(
       const lastDate = lastEventDates[cat];
       if (!lastDate) {
         // Pas d'événement récent → planifier dans threshold heures à partir de maintenant
-        await scheduleReminder(childId, childName, cat, threshold);
+        await scheduleReminder(childId, childName, cat, threshold, quietHours);
         return;
       }
 
@@ -239,7 +245,7 @@ export async function rescheduleAllReminders(
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: 60,
+            seconds: secondsAfterQuietHours(60, quietHours),
             repeats: false,
           },
         });
@@ -261,7 +267,7 @@ export async function rescheduleAllReminders(
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-            seconds: remainingSeconds,
+            seconds: secondsAfterQuietHours(remainingSeconds, quietHours),
             repeats: false,
           },
         });

@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const reminderLib = require("../../lib/reminders");
+const { isInQuietHours } = require("../../lib/quietHours");
 const { hasValidHealthConsent } = require("../shared/consent");
 const { JOB_USER_CONCURRENCY, usersWithPendingDeletion } = require("./eligibility");
 const { logExpireAt } = require("../shared/logging");
@@ -23,6 +24,7 @@ const CATEGORY_LABELS = {
  *     (requête sur events seulement si le champ manque : migration)
  *   - Si elapsed > threshold, envoie une notification push
  *   - Anti-spam : pas de re-notification si déjà envoyée il y a < 2h
+ *   - Heures calmes (défaut 22:00-07:00, fuseau de l'utilisateur) : ignoré
  *   - Un ticket DeviceNotRegistered supprime le jeton ; un ticket en erreur
  *     n'écrit pas d'historique (nouvel essai au passage suivant)
  * Les utilisateurs sont traités par lots de JOB_USER_CONCURRENCY.
@@ -49,12 +51,12 @@ const checkAndSendReminders = onSchedule(
     if (prefsSnapshot.empty) {
       console.log("checkAndSendReminders: no users with reminders enabled");
       reminderLib.logJobSummary("checkAndSendReminders", startedAt, {
-        users: 0, sent: 0, skipped: 0, errors: 0, deadTokens: 0, fallbackReads: 0,
+        users: 0, sent: 0, skipped: 0, skippedQuietHours: 0, errors: 0, deadTokens: 0, fallbackReads: 0,
       });
       return;
     }
 
-    const stats = { sent: 0, skipped: 0, errors: 0, deadTokens: 0, fallbackReads: 0 };
+    const stats = { sent: 0, skipped: 0, skippedQuietHours: 0, errors: 0, deadTokens: 0, fallbackReads: 0 };
 
     // No consent, no processing; accounts being deleted get nothing either.
     const consented = prefsSnapshot.docs.filter((d) => hasValidHealthConsent(d.data()));
@@ -68,6 +70,15 @@ const checkAndSendReminders = onSchedule(
 
       // Skip si les notifications push sont désactivées par l'utilisateur
       if (prefs.notifications?.push === false) return;
+
+      // Heures calmes (heure locale du téléphone) : le rappel est simplement
+      // ignoré, sans file d'attente. S'il est toujours dû après la fin, il part
+      // au passage suivant (dédup de 2 h inchangée). Compté une fois par
+      // utilisateur ; une valeur stockée invalide retombe sur 22:00-07:00 Paris.
+      if (isInQuietHours(prefs.notifications?.reminders?.quietHours, nowMs)) {
+        stats.skippedQuietHours++;
+        return;
+      }
 
       // 2. Récupérer les device_tokens actifs de cet utilisateur
       const tokensSnap = await db

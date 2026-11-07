@@ -237,6 +237,8 @@ describe("checkAndSendReminders reads lastEventAt (no event query when present)"
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Heures calmes par défaut 22:00-07:00 : horloge figée à midi (Paris) pour ne pas dépendre de l'heure d'exécution.
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T10:00:00Z"));
     expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
     logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     jest.spyOn(console, "error").mockImplementation(() => {});
@@ -318,6 +320,8 @@ describe("dead push tokens", () => {
   };
   beforeEach(() => {
     jest.clearAllMocks();
+    // Heures calmes par défaut 22:00-07:00 : horloge figée à midi (Paris) pour ne pas dépendre de l'heure d'exécution.
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-15T10:00:00Z"));
     jest.spyOn(console, "log").mockImplementation(() => {});
     jest.spyOn(console, "error").mockImplementation(() => {});
     jest.spyOn(logger, "info").mockImplementation(() => {});

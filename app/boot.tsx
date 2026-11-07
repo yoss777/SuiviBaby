@@ -17,7 +17,10 @@ import {
 } from "@/services/biometricAuthService";
 import { fetchHealthConsentStatus } from "@/services/healthConsentService";
 import { obtenirEvenementsDuJour } from "@/services/eventsService";
-import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
+import {
+  obtenirPreferencesNotifications,
+  synchroniserFuseauHoraire,
+} from "@/services/userPreferencesService";
 import { setPreferencesCache, setPermissionsCache } from "@/services/userPreferencesCache";
 import { getUserChildAccess } from "@/utils/permissions";
 import {
@@ -145,6 +148,10 @@ function BootScreenContent() {
       if (bootResourceKeyRef.current === resourceKey && bootResourcePromiseRef.current) {
         return bootResourcePromiseRef.current;
       }
+
+      // Heures calmes : aligne le fuseau stocké sur celui du téléphone. Hors du
+      // Promise.all : le démarrage n'attend pas cette écriture (elle ne lève jamais).
+      if (uid) void synchroniserFuseauHoraire();
 
       const nextPromise = Promise.all([
         prefetchToday(childId),

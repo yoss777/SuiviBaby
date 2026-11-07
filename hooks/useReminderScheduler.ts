@@ -1,6 +1,6 @@
 // hooks/useReminderScheduler.ts
 // Re-planifie les notifications locales de rappel quand :
-// - les préférences changent (enabled, thresholds)
+// - les préférences changent (enabled, thresholds, heures calmes)
 // - un nouvel événement est créé (todayStats changent)
 // - l'enfant actif change
 
@@ -95,6 +95,7 @@ export function useReminderScheduler(
       childName,
       prefs.thresholds,
       lastDates,
+      prefs.quietHours,
     ).catch(() => {});
   }, [
     childId,
@@ -104,6 +105,11 @@ export function useReminderScheduler(
     prefs.thresholds.pompages,
     prefs.thresholds.changes,
     prefs.thresholds.vitamines,
+    // Heures calmes : tout changement replanifie (décalage des rappels)
+    prefs.quietHours?.enabled,
+    prefs.quietHours?.start,
+    prefs.quietHours?.end,
+    prefs.quietHours?.timeZone,
     // Re-trigger when any lastTimestamp changes
     todayStats?.meals?.biberons?.lastTimestamp,
     todayStats?.meals?.seins?.lastTimestamp,
