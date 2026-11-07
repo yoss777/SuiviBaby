@@ -81,7 +81,9 @@ export const neutralColors = {
   // Textes
   textStrong: "#1f2937", // gray-800
   textNormal: "#4b5563", // gray-600
-  textLight: "#6b7280", // gray-500
+  textLight: "#6b7280", // gray-500 — texte secondaire LISIBLE (4.8:1 sur blanc)
+  // DÉCORATIF UNIQUEMENT (icônes, placeholders, séparateurs) : 2.5:1 sur blanc.
+  // Ne jamais l'utiliser pour du texte à lire : utiliser textLight.
   textMuted: "#9ca3af", // gray-400
 
   // Fonds
@@ -99,7 +101,11 @@ export const neutralColors = {
   error: "#ef4444", // red-500
 
   // Accents
-  todayAccent: "#6366f1", // indigo-500
+  // indigo-600 : ≥ 4.5:1 en texte sur les fonds clairs ET en aplat sous texte blanc
+  // (indigo-500 #6366f1 plafonnait à 4.47:1).
+  todayAccent: "#4f46e5",
+  // Texte/icône posé sur un aplat todayAccent (blanc : 6.3:1).
+  onTodayAccent: "#ffffff",
 
   // UI
   white: "#ffffff",
@@ -114,8 +120,8 @@ export const neutralColors = {
   // Metrics
   successBg: "#dcfce7",
   errorBg: "#fef2f2",
-  successText: "#16a34a",
-  errorText: "#dc2626",
+  successText: "#166534", // green-800 : ≥ 4.5:1 sur blanc et successBg
+  errorText: "#b91c1c", // red-700 : ≥ 4.5:1 sur blanc et errorBg
 
   // Emotional screens (moments, gallery)
   backgroundWarm: "#FDF8F3",
@@ -129,7 +135,7 @@ export const neutralColorsDark = {
   textStrong: "#f9fafb",
   textNormal: "#d1d5db",
   textLight: "#9ca3af",
-  textMuted: "#6b7280",
+  textMuted: "#7b8494", // décoratif uniquement ; relevé (≥ 3:1 sur les fonds sombres)
 
   background: "#111827",
   backgroundCard: "#1f2937",
@@ -142,7 +148,9 @@ export const neutralColorsDark = {
   warning: "#f59e0b",
   error: "#ef4444",
 
-  todayAccent: "#818cf8", // indigo-400 (brighter for dark bg)
+  todayAccent: "#818cf8", // indigo-400 (brighter for dark bg) : ≥ 4.5:1 en texte sur les fonds sombres
+  // Texte/icône posé sur un aplat todayAccent : le blanc n'atteint que 2.98:1 sur indigo-400.
+  onTodayAccent: "#111827",
 
   white: "#ffffff",
   shadow: "#000000",
@@ -184,6 +192,30 @@ export const categoryColorsDark = {
     border: "#3a2c12",
   },
 } as const;
+
+/**
+ * Variantes FONCÉES des couleurs de catégorie, pour le TEXTE et les icônes
+ * posés sur le fond clair (≥ 4.5:1 sur blanc et sur le fond de catégorie).
+ * `primary` reste réservé aux aplats, bordures et pastilles.
+ */
+export const categoryTextColors = {
+  alimentation: "#A83F23",
+  sante: "#2B6A6A",
+  sommeil: "#5B4A85",
+  moments: "#8A5A0F",
+} as const;
+
+/** Mode sombre : les primaires passent déjà, sauf le violet du sommeil. */
+export const categoryTextColorsDark = {
+  alimentation: "#E8785A",
+  sante: "#5BA4A4",
+  sommeil: "#A898D0",
+  moments: "#E8A85A",
+} as const;
+
+export function getCategoryTextColors(scheme: "light" | "dark") {
+  return scheme === "dark" ? categoryTextColorsDark : categoryTextColors;
+}
 
 export function getNeutralColors(scheme: "light" | "dark") {
   return scheme === "dark" ? neutralColorsDark : neutralColors;
@@ -243,7 +275,7 @@ function buildChartColors(scheme: "light" | "dark") {
       tetees: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         blue: "#60a5fa",
         blueDeep: "#93bbfc",
@@ -269,7 +301,7 @@ function buildChartColors(scheme: "light" | "dark") {
       pompages: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         green: "#4ade80",
         greenDeep: "#86efac",
@@ -293,7 +325,7 @@ function buildChartColors(scheme: "light" | "dark") {
       sommeil: {
         surface: "#1f2937",
         ink: "#f9fafb",
-        muted: "#9ca3af",
+        muted: "#b4bcc8", // ≥ 4.5:1 aussi sur metricBg #374151
         border: "#374151",
         purple: "#a78bfa",
         purpleDeep: "#c4b5fd",
@@ -327,7 +359,7 @@ function buildChartColors(scheme: "light" | "dark") {
     tetees: {
       surface: "#ffffff",
       ink: "#1e2a36",
-      muted: "#6a7784",
+      muted: "#5b6672", // ≥ 4.5:1 aussi sur metricBg
       border: "#e5ecf2",
       blue: "#2f80ed",
       blueDeep: "#1b4f9c",
@@ -352,7 +384,7 @@ function buildChartColors(scheme: "light" | "dark") {
     pompages: {
       surface: "#ffffff",
       ink: "#1f2a2e",
-      muted: "#6b7a7f",
+      muted: "#5a686c", // ≥ 4.5:1 aussi sur metricBg
       border: "#e6ecef",
       green: "#2e7d32",
       greenDeep: "#1b5e20",
@@ -376,7 +408,7 @@ function buildChartColors(scheme: "light" | "dark") {
     sommeil: {
       surface: "#ffffff",
       ink: "#1e2a36",
-      muted: "#6a7784",
+      muted: "#5b6672", // ≥ 4.5:1 aussi sur metricBg
       border: "#e5ecf2",
       purple: "#7c3aed",
       purpleDeep: "#5b21b6",

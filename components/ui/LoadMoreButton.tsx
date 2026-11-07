@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   endText: {
     fontSize: 14,
-    color: "#999",
+    color: "#6b7280",
     fontWeight: "500",
   },
 });

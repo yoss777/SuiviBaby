@@ -1,4 +1,5 @@
 import { ThemedView } from '@/components/themed-view';
+import { GenderRadioGroup } from '@/components/forms/GenderRadioGroup';
 import { DateTimePickerRow } from '@/components/ui/DateTimePickerRow';
 import { db } from '@/config/firebase';
 import { getNeutralColors } from '@/constants/dashboardColors';
@@ -23,12 +24,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Semantic accent colors for gender selection
-const GENDER_COLORS = {
-  female: '#FF69B4',
-  male: '#4A90E2',
-} as const;
 
 export default function AddBabyScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -302,7 +297,7 @@ export default function AddBabyScreen() {
             {/* Nom de l'enfant */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Nom complet <Text style={styles.required}>*</Text>
+                Nom complet <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
               <View style={dynamicStyles.inputContainer}>
                 <FontAwesome name="user" size={16} color={nc.textLight} />
@@ -323,7 +318,7 @@ export default function AddBabyScreen() {
             {/* Date de naissance */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Date de naissance <Text style={styles.required}>*</Text>
+                Date de naissance <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
               <DateTimePickerRow
                 label="Né(e) le"
@@ -342,63 +337,14 @@ export default function AddBabyScreen() {
             {/* Sexe de l'enfant */}
             <View style={styles.formGroup}>
               <Text style={dynamicStyles.label}>
-                Sexe <Text style={styles.required}>*</Text>
+                Sexe <Text style={[styles.required, { color: nc.errorText }]}>*</Text>
               </Text>
-              <View style={styles.genderContainer}>
-                <TouchableOpacity
-                  style={[
-                    dynamicStyles.genderButton,
-                    gender === 'female' && { borderColor: GENDER_COLORS.female, backgroundColor: GENDER_COLORS.female },
-                  ]}
-                  onPress={() => handleGenderSelect('female')}
-                  disabled={isLoading}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sélectionner Fille"
-                  accessibilityState={{ selected: gender === 'female' }}
-                >
-                  <FontAwesome
-                    name="venus"
-                    size={24}
-                    color={gender === 'female' ? nc.white : GENDER_COLORS.female}
-                  />
-                  <Text
-                    style={[
-                      dynamicStyles.genderText,
-                      gender === 'female' && { color: nc.white },
-                    ]}
-                  >
-                    Fille
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    dynamicStyles.genderButton,
-                    gender === 'male' && { borderColor: GENDER_COLORS.male, backgroundColor: GENDER_COLORS.male },
-                  ]}
-                  onPress={() => handleGenderSelect('male')}
-                  disabled={isLoading}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sélectionner Garçon"
-                  accessibilityState={{ selected: gender === 'male' }}
-                >
-                  <FontAwesome
-                    name="mars"
-                    size={24}
-                    color={gender === 'male' ? nc.white : GENDER_COLORS.male}
-                  />
-                  <Text
-                    style={[
-                      dynamicStyles.genderText,
-                      gender === 'male' && { color: nc.white },
-                    ]}
-                  >
-                    Garçon
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <GenderRadioGroup
+                value={gender}
+                onChange={handleGenderSelect}
+                colorScheme={colorScheme}
+                disabled={isLoading}
+              />
             </View>
 
             {/* Bouton d'ajout */}
@@ -455,7 +401,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   required: {
-    color: "#ef4444",
+    // couleur appliquée en ligne : nc.errorText (≥ 4.5:1 dans les deux thèmes)
   },
   genderContainer: {
     flexDirection: "row",

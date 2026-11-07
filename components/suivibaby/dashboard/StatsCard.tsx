@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import { startLoop } from "@/utils/motion";
 
 // ============================================
 // TYPES
@@ -146,7 +147,7 @@ export const StatsCardSkeleton = memo(function StatsCardSkeleton() {
         }),
       ])
     );
-    animation.start();
+    startLoop(animation);
     return () => animation.stop();
   }, [opacity]);
 
@@ -207,8 +208,9 @@ const styles = StyleSheet.create({
     color: "#6c757d",
   },
   statsTimeSince: {
-    fontSize: 11,
-    color: "#28a745",
+    fontSize: 12,
+    color: "#1e7e34", // vert foncé : contraste texte >= 4.5:1
+
     fontWeight: "500",
   },
   // Skeleton styles

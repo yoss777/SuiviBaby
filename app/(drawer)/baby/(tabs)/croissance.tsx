@@ -79,6 +79,7 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supprimerEvenement as supprimerCroissance } from "@/services/eventsService";
 import { useHeaderRight } from "../../_layout";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   metricLabel: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
   },
@@ -260,7 +261,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   summaryLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -314,7 +315,7 @@ const styles = StyleSheet.create({
     elevation: 6,
     zIndex: 1000,
     width: 90,
-    height: 54,
+    minHeight: 54,
   },
   tooltipContent: {
     padding: 8,
@@ -322,7 +323,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tooltipTime: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
   },
   tooltipValue: {
@@ -505,7 +506,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   omsLegendTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -532,7 +533,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   omsLegendText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   cardSwipeWrapper: {
@@ -550,7 +551,7 @@ const styles = StyleSheet.create({
   },
   deleteActionText: {
     color: "#fff",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   showMoreButton: {
@@ -748,7 +749,7 @@ const CroissanceSkeleton = React.memo(function CroissanceSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -896,7 +897,7 @@ export default function CroissanceScreen() {
       surface: nc.backgroundCard,
       surfaceAlt: nc.background,
       ink: nc.textStrong,
-      muted: nc.textMuted,
+      muted: nc.textLight, // texte secondaire lisible (textMuted = décoratif)
       border: nc.borderLight,
       tint: nc.todayAccent,
       orange: "#f97316",
@@ -1240,7 +1241,7 @@ export default function CroissanceScreen() {
   const hasMore = visibleCount < filteredEntries.length;
 
   const handleShowMore = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setVisibleCount((prev) => prev + PAGE_SIZE);
   }, []);
 

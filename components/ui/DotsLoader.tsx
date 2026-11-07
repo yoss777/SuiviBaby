@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export function DotsLoader({
   size = 6,
@@ -36,7 +37,8 @@ export function DotsLoader({
         ])
       )
     );
-    animations.forEach(a => a.start());
+    // Animations réduites : points visibles mais statiques
+    animations.forEach((a) => startLoop(a));
     return () => animations.forEach(a => a.stop());
   }, [values]);
 

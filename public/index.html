@@ -9,9 +9,9 @@
   <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0e131c" media="(prefers-color-scheme: dark)">
   <meta name="apple-itunes-app" content="app-id=6773195663">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-  <link rel="apple-touch-icon" href="/icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="SuiviBaby">
@@ -19,7 +19,8 @@
   <meta property="og:url" content="https://suivibaby.com/">
   <meta property="og:title" content="SuiviBaby — le journal de bord de votre bébé">
   <meta property="og:description" content="Repas, sommeil, santé, croissance : notez tout en quelques secondes, même à la voix, et partagez le suivi avec votre co-parent.">
-  <meta property="og:image" content="https://suivibaby.com/assets/img/og-image.png">
+  <meta property="og:image" content="https://suivibaby.com/assets/img/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="L'application SuiviBaby affichant la journée d'un bébé">
@@ -39,8 +40,9 @@
         "name": "TESFA",
         "brand": "SuiviBaby",
         "url": "https://suivibaby.com/",
-        "logo": "https://suivibaby.com/icon.png",
+        "logo": { "@type": "ImageObject", "url": "https://suivibaby.com/icon.png", "width": 720, "height": 720 },
         "email": "contact@suivibaby.com",
+        "sameAs": ["https://apps.apple.com/app/id6773195663", "https://play.google.com/store/apps/details?id=com.tesfa.suivibaby"],
         "address": { "@type": "PostalAddress", "streetAddress": "78 avenue des Champs-Élysées", "postalCode": "75008", "addressLocality": "Paris", "addressCountry": "FR" }
       },
       {
@@ -53,14 +55,41 @@
       },
       {
         "@type": "MobileApplication",
+        "@id": "https://suivibaby.com/#app",
         "name": "SuiviBaby",
+        "url": "https://suivibaby.com/",
         "operatingSystem": "iOS, Android",
         "applicationCategory": "HealthApplication",
         "inLanguage": "fr",
         "description": "Application de suivi bébé : alimentation, sommeil, couches, santé, croissance, jalons. Saisie vocale et partage entre parents.",
         "image": "https://suivibaby.com/icon.png",
         "installUrl": ["https://apps.apple.com/app/id6773195663", "https://play.google.com/store/apps/details?id=com.tesfa.suivibaby"],
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "sameAs": ["https://apps.apple.com/app/id6773195663", "https://play.google.com/store/apps/details?id=com.tesfa.suivibaby"],
+        "screenshot": [
+          "https://suivibaby.com/assets/img/screens/accueil.webp",
+          "https://suivibaby.com/assets/img/screens/timeline.webp",
+          "https://suivibaby.com/assets/img/screens/voix.webp",
+          "https://suivibaby.com/assets/img/screens/croissance.webp",
+          "https://suivibaby.com/assets/img/screens/partage.webp"
+        ],
+        "featureList": [
+          "18 types d'événements : tétée, biberon, repas solide, tire-lait, sommeil, bain, activité, jalon, couche, miction, selle, nettoyage du nez, température, médicament, symptôme, vaccin, vitamine, croissance",
+          "Saisie à la voix en français",
+          "Partage en temps réel entre parents, avec droits par personne",
+          "Statistiques de sommeil et d'alimentation",
+          "Courbes de croissance OMS (poids, taille, périmètre crânien)",
+          "Rapport PDF",
+          "Rappels et récapitulatif hebdomadaire par e-mail",
+          "Mode nuit automatique",
+          "Fonctionne hors connexion",
+          "Verrouillage biométrique",
+          "Export des données au format JSON"
+        ],
+        "offers": [
+          { "@type": "Offer", "name": "Gratuit", "price": "0", "priceCurrency": "EUR" },
+          { "@type": "Offer", "name": "Premium mensuel", "price": "3.99", "priceCurrency": "EUR" },
+          { "@type": "Offer", "name": "Premium annuel", "price": "29.99", "priceCurrency": "EUR" }
+        ],
         "publisher": { "@id": "https://suivibaby.com/#org" }
       }
     ]
@@ -73,14 +102,14 @@
   <header class="header">
     <div class="wrap header__inner">
       <a class="brand" href="/" aria-label="SuiviBaby, accueil">
-        <img src="/icon.png" alt="" width="36" height="36">
+        <img src="/logo-72.png" alt="" width="36" height="36">
         <span>Suivi<b>Baby</b></span>
       </a>
       <nav class="nav" id="site-nav" aria-label="Navigation principale">
         <ul>
           <li><a href="#fonctionnalites">Fonctionnalités</a></li>
           <li><a href="#voix">Voix</a></li>
-          <li><a href="#famille">Famille</a></li>
+          <li><a href="#partage">Partage</a></li>
           <li><a href="#confidentialite">Vos données</a></li>
           <li><a href="#tarifs">Tarifs</a></li>
           <li><a href="#faq">FAQ</a></li>
@@ -92,7 +121,7 @@
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
         </button>
         <a class="btn btn--primary btn--sm header__cta" href="#telecharger" data-store-cta>Télécharger</a>
-        <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Ouvrir le menu">
+        <button class="icon-btn menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Menu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
       </div>
@@ -112,7 +141,7 @@
           </p>
           <div class="stores" id="telecharger">
             <a class="store" data-platform="ios" href="https://apps.apple.com/app/id6773195663" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.72-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.86-.76-1.47.02-2.830.86-3.59 2.17-1.53 2.66-.39 6.59 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.32-3.5zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.08 1.96-.49 2.56-1.21z"/></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.72-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.86-.76-1.47.02-2.83.86-3.59 2.17-1.53 2.66-.39 6.59 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.32-3.5zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.67-.92 2.66.97.08 1.96-.49 2.56-1.21z"/></svg>
               <span><small>Télécharger dans</small><strong>l'App Store</strong></span>
               <span class="sr-only">(nouvelle fenêtre)</span>
             </a>
@@ -131,11 +160,11 @@
 
         <div class="hero__visual">
           <div class="float-card float-card--a" aria-hidden="true">
-            <span class="dot" style="background:var(--violet-soft)">🌙</span>
+            <span class="dot bg-violet">🌙</span>
             <span>Nuit de 9 h 10<small>Record de la semaine</small></span>
           </div>
           <div class="float-card float-card--b" aria-hidden="true">
-            <span class="dot" style="background:var(--teal-soft)">👥</span>
+            <span class="dot bg-teal">👥</span>
             <span>Papa a ajouté un biberon<small>il y a 2 min</small></span>
           </div>
           <figure class="phone" id="live-demo" role="img" aria-label="Démonstration : des événements dictés à la voix s'ajoutent au journal du jour">
@@ -160,8 +189,8 @@
               </div>
             </div>
           </figure>
-          <p style="text-align:center;margin-top:14px">
-            <button class="btn btn--ghost btn--sm" id="demo-toggle" type="button" aria-pressed="false">Mettre la démo en pause</button>
+          <p class="demo-toggle-wrap">
+            <button class="btn btn--ghost btn--sm" id="demo-toggle" type="button">Mettre la démo en pause</button>
           </p>
         </div>
       </div>
@@ -178,37 +207,38 @@
         <div class="tabs types-tabs reveal" role="group" aria-label="Filtrer les types d'événements">
           <button class="tab" type="button" data-filter="all" aria-pressed="true">Tout</button>
           <button class="tab" type="button" data-filter="food" aria-pressed="false">Alimentation</button>
-          <button class="tab" type="button" data-filter="sleep" aria-pressed="false">Sommeil & routines</button>
-          <button class="tab" type="button" data-filter="hygiene" aria-pressed="false">Couches & soins</button>
-          <button class="tab" type="button" data-filter="health" aria-pressed="false">Santé & croissance</button>
+          <button class="tab" type="button" data-filter="sleep" aria-pressed="false">Sommeil &amp; routines</button>
+          <button class="tab" type="button" data-filter="hygiene" aria-pressed="false">Couches &amp; soins</button>
+          <button class="tab" type="button" data-filter="health" aria-pressed="false">Santé &amp; croissance</button>
         </div>
         <p class="sr-only" id="types-status" aria-live="polite"></p>
         <ul class="types reveal" data-delay="1">
-          <li class="type" data-cat="food"><i aria-hidden="true" style="background:var(--coral-soft)">🤱</i>Tétée</li>
-          <li class="type" data-cat="food"><i aria-hidden="true" style="background:var(--coral-soft)">🍼</i>Biberon</li>
-          <li class="type" data-cat="food"><i aria-hidden="true" style="background:var(--coral-soft)">🥣</i>Repas solide</li>
-          <li class="type" data-cat="food"><i aria-hidden="true" style="background:var(--coral-soft)">🧴</i>Tire-lait</li>
-          <li class="type" data-cat="sleep"><i aria-hidden="true" style="background:var(--violet-soft)">🌙</i>Sommeil</li>
-          <li class="type" data-cat="sleep"><i aria-hidden="true" style="background:var(--violet-soft)">🛁</i>Bain</li>
-          <li class="type" data-cat="sleep"><i aria-hidden="true" style="background:var(--violet-soft)">🧸</i>Activité</li>
-          <li class="type" data-cat="sleep"><i aria-hidden="true" style="background:var(--violet-soft)">⭐</i>Jalon</li>
-          <li class="type" data-cat="hygiene"><i aria-hidden="true" style="background:var(--teal-soft)">🧷</i>Couche</li>
-          <li class="type" data-cat="hygiene"><i aria-hidden="true" style="background:var(--teal-soft)">💧</i>Miction</li>
-          <li class="type" data-cat="hygiene"><i aria-hidden="true" style="background:var(--teal-soft)">💩</i>Selle</li>
-          <li class="type" data-cat="hygiene"><i aria-hidden="true" style="background:var(--teal-soft)">👃</i>Nettoyage du nez</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">🌡️</i>Température</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">💊</i>Médicament</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">🤧</i>Symptôme</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">💉</i>Vaccin</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">☀️</i>Vitamine</li>
-          <li class="type" data-cat="health"><i aria-hidden="true" style="background:var(--gold-soft)">📏</i>Croissance</li>
+          <li class="type" data-cat="food"><i aria-hidden="true">🤱</i>Tétée</li>
+          <li class="type" data-cat="food"><i aria-hidden="true">🍼</i>Biberon</li>
+          <li class="type" data-cat="food"><i aria-hidden="true">🥣</i>Repas solide</li>
+          <li class="type" data-cat="food"><i aria-hidden="true">🧴</i>Tire-lait</li>
+          <li class="type" data-cat="sleep"><i aria-hidden="true">🌙</i>Sommeil</li>
+          <li class="type" data-cat="sleep"><i aria-hidden="true">🛁</i>Bain</li>
+          <li class="type" data-cat="sleep"><i aria-hidden="true">🧸</i>Activité</li>
+          <li class="type" data-cat="sleep"><i aria-hidden="true">⭐</i>Jalon</li>
+          <li class="type" data-cat="hygiene"><i aria-hidden="true">🧷</i>Couche</li>
+          <li class="type" data-cat="hygiene"><i aria-hidden="true">💧</i>Miction</li>
+          <li class="type" data-cat="hygiene"><i aria-hidden="true">💩</i>Selle</li>
+          <li class="type" data-cat="hygiene"><i aria-hidden="true">👃</i>Nettoyage du nez</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">🌡️</i>Température</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">💊</i>Médicament</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">🤧</i>Symptôme</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">💉</i>Vaccin</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">☀️</i>Vitamine</li>
+          <li class="type" data-cat="health"><i aria-hidden="true">📏</i>Croissance</li>
         </ul>
       </div>
     </section>
 
     <!-- ================= PILIERS ================= -->
-    <section class="section" aria-label="Fonctionnalités principales">
+    <section class="section" aria-labelledby="features-title">
       <div class="wrap">
+        <h2 class="sr-only" id="features-title">Fonctionnalités principales</h2>
 
         <!-- Quotidien -->
         <article class="feature">
@@ -224,15 +254,15 @@
             </ul>
           </div>
           <div class="feature__visual tint-coral reveal" data-delay="1">
-            <div class="phone-duo" aria-hidden="true">
+            <div class="phone-duo">
               <div class="phone">
                 <div class="phone__screen" data-screen="accueil">
-                  <img src="/assets/img/screens/accueil.webp" width="720" height="1455" alt="" loading="lazy" decoding="async">
+                  <img src="/assets/img/screens/accueil.webp" width="720" height="1455" alt="Écran d'accueil de SuiviBaby : dernier repas, durée de sommeil et dernière couche du jour" loading="lazy" decoding="async">
                 </div>
               </div>
               <div class="phone phone--back">
                 <div class="phone__screen" data-screen="timeline">
-                  <img src="/assets/img/screens/timeline.webp" width="720" height="1455" alt="" loading="lazy" decoding="async">
+                  <img src="/assets/img/screens/timeline.webp" width="720" height="1455" alt="Chronologie de la journée : liste des événements notés, heure par heure" loading="lazy" decoding="async">
                 </div>
               </div>
             </div>
@@ -250,12 +280,12 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Vous validez</b> avant tout enregistrement.</span></li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>L'audio n'est pas conservé</b> : il est supprimé de votre téléphone après la transcription, et la transcription est supprimée chez notre prestataire juste après le traitement.</span></li>
             </ul>
-            <p style="margin-top:18px"><span class="badge">3 commandes / jour en gratuit · illimité en Premium</span></p>
+            <p class="feature__note"><span class="badge">3 commandes / jour en gratuit · illimité en Premium</span></p>
           </div>
           <div class="feature__visual tint-teal reveal" data-delay="1">
-            <div class="phone" aria-hidden="true">
+            <div class="phone">
               <div class="phone__screen" data-screen="voix">
-                <img src="/assets/img/screens/voix.webp" width="720" height="1455" alt="" loading="lazy" decoding="async">
+                <img src="/assets/img/screens/voix.webp" width="720" height="1455" alt="Commande vocale : la phrase dictée est transcrite et l'événement proposé attend votre validation" loading="lazy" decoding="async">
               </div>
             </div>
           </div>
@@ -264,28 +294,28 @@
         <!-- Comprendre -->
         <article class="feature">
           <div class="feature__copy reveal">
-            <span class="eyebrow">Statistiques & croissance</span>
+            <span class="eyebrow">Statistiques &amp; croissance</span>
             <h3>Comprendre ses rythmes, sans tableur</h3>
             <p>Graphiques de sommeil et d'alimentation, tendances sur plusieurs semaines et courbes de croissance comparées aux standards de l'OMS : idéal pour préparer le rendez-vous chez le pédiatre.</p>
             <ul class="checks">
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Courbes OMS</b> de poids, de taille et de périmètre crânien <span class="badge">Premium</span></span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Courbes OMS</b> de poids, de taille et de périmètre crânien, incluses dans l'offre gratuite.</span></li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Conseils adaptés à l'âge</b> et repères pour chaque étape.</span></li>
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Rapport PDF</b> des tendances à montrer à un professionnel.</span></li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Rapport PDF</b> des tendances à montrer à un professionnel (1 rapport en gratuit, illimité en Premium).</span></li>
             </ul>
           </div>
           <div class="feature__visual tint-violet reveal" data-delay="1">
-            <div class="phone" aria-hidden="true">
+            <div class="phone">
               <div class="phone__screen" data-screen="stats">
-                <img src="/assets/img/screens/croissance.webp" width="720" height="1455" alt="" loading="lazy" decoding="async">
+                <img src="/assets/img/screens/croissance.webp" width="720" height="1455" alt="Courbe de croissance du bébé comparée aux standards de l'OMS" loading="lazy" decoding="async">
               </div>
             </div>
           </div>
         </article>
 
-        <!-- Famille -->
-        <article class="feature feature--reverse" id="famille">
+        <!-- Partage -->
+        <article class="feature feature--reverse" id="partage">
           <div class="feature__copy reveal">
-            <span class="eyebrow">À plusieurs</span>
+            <span class="eyebrow">Partage</span>
             <h3>Le même suivi pour toute l'équipe</h3>
             <p>Invitez votre co-parent, une grand-mère ou la nounou : chacun voit les mêmes informations en temps réel et sait ce qui a déjà été fait.</p>
             <ul class="checks">
@@ -293,11 +323,12 @@
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Droits par personne</b> : consultation seule ou ajout d'événements.</span></li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg><span><b>Accès révocable</b> à tout moment, en un geste.</span></li>
             </ul>
+            <p class="feature__note"><span class="badge">2 personnes invitées en gratuit · illimité en Premium</span></p>
           </div>
           <div class="feature__visual tint-gold reveal" data-delay="1">
-            <div class="phone" aria-hidden="true">
+            <div class="phone">
               <div class="phone__screen" data-screen="partage">
-                <img src="/assets/img/screens/partage.webp" width="720" height="1455" alt="" loading="lazy" decoding="async">
+                <img src="/assets/img/screens/partage.webp" width="720" height="1455" alt="Écran de partage : invitation d'un proche par e-mail ou par code et droits de chaque personne" loading="lazy" decoding="async">
               </div>
             </div>
           </div>
@@ -313,12 +344,12 @@
           <h2 id="plus-title">Les petits plus qui changent le quotidien</h2>
         </div>
         <div class="bento">
-          <div class="tile reveal"><div class="tile__icon" style="background:var(--gold-soft)" aria-hidden="true">📸</div><h3>Souvenirs & jalons</h3><p>Premier sourire, premiers pas : gardez les grandes étapes avec leurs photos, dans une galerie privée.</p></div>
-          <div class="tile reveal" data-delay="1"><div class="tile__icon" style="background:var(--brand-soft)" aria-hidden="true">🔔</div><h3>Rappels</h3><p>Prochain biberon, médicament, vaccin : programmez des rappels pour ne rien oublier.</p></div>
-          <div class="tile reveal" data-delay="2"><div class="tile__icon" style="background:var(--coral-soft)" aria-hidden="true">✉️</div><h3>Récap de la semaine</h3><p>Si vous l’activez, un résumé de la semaine écoulée chaque lundi matin dans votre boîte mail.</p></div>
-          <div class="tile reveal"><div class="tile__icon" style="background:var(--violet-soft)" aria-hidden="true">💉</div><h3>Carnet de vaccins</h3><p>Gardez la trace des vaccins réalisés et de leurs dates, au même endroit que le reste du suivi.</p></div>
-          <div class="tile reveal" data-delay="1"><div class="tile__icon" style="background:var(--teal-soft)" aria-hidden="true">🔐</div><h3>Verrouillage biométrique</h3><p>Protégez l'accès à l'application par Face ID, empreinte ou code.</p></div>
-          <div class="tile reveal" data-delay="2"><div class="tile__icon" style="background:var(--gold-soft)" aria-hidden="true">📦</div><h3>Vos données, exportables</h3><p>Récupérez l'intégralité de vos données à tout moment, dans un format ouvert.</p></div>
+          <div class="tile reveal"><div class="tile__icon bg-gold" aria-hidden="true">📸</div><h3>Souvenirs &amp; jalons</h3><p>Premier sourire, premiers pas : gardez les grandes étapes avec leurs photos, dans une galerie privée.</p></div>
+          <div class="tile reveal" data-delay="1"><div class="tile__icon bg-brand" aria-hidden="true">🔔</div><h3>Rappels</h3><p>Prochain biberon, médicament, vaccin : programmez des rappels pour ne rien oublier.</p></div>
+          <div class="tile reveal" data-delay="2"><div class="tile__icon bg-coral" aria-hidden="true">✉️</div><h3>Récap de la semaine</h3><p>Si vous l’activez, un résumé de la semaine écoulée chaque lundi matin dans votre boîte mail.</p></div>
+          <div class="tile reveal"><div class="tile__icon bg-violet" aria-hidden="true">💉</div><h3>Carnet de vaccins</h3><p>Gardez la trace des vaccins réalisés et de leurs dates, au même endroit que le reste du suivi.</p></div>
+          <div class="tile reveal" data-delay="1"><div class="tile__icon bg-teal" aria-hidden="true">🔐</div><h3>Verrouillage biométrique</h3><p>Protégez l'accès à l'application par Face ID, empreinte ou code.</p></div>
+          <div class="tile reveal" data-delay="2"><div class="tile__icon bg-gold" aria-hidden="true">📦</div><h3>Vos données, exportables</h3><p>Récupérez l'intégralité de vos données à tout moment, dans un format ouvert.</p></div>
         </div>
       </div>
     </section>
@@ -393,17 +424,17 @@
         <div class="billing-wrap reveal">
           <div class="billing" role="group" aria-label="Période de facturation">
             <button type="button" data-period="monthly" aria-pressed="false">Mensuel</button>
-            <button type="button" data-period="annual" aria-pressed="true">Annuel <em>jusqu'à −46 %</em></button>
+            <button type="button" data-period="annual" aria-pressed="true">Annuel <em>−37 %</em></button>
           </div>
         </div>
-        <div class="plans" aria-live="polite">
+        <div class="plans">
           <article class="plan reveal">
             <h3>Gratuit</h3>
             <p class="plan__price">0 €</p>
             <p class="plan__sub">Pour toujours</p>
             <ul class="checks">
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Enfants illimités, 18 types d’événements</li>
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Statistiques de base</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Statistiques et courbes de croissance OMS</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>2 co-parents invités</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>3 commandes vocales par jour</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>1 rapport PDF</li>
@@ -413,23 +444,13 @@
           <article class="plan plan--hl reveal" data-delay="1">
             <span class="badge">Le plus choisi</span>
             <h3>Premium</h3>
-            <p class="plan__price"><span data-price-monthly="3,99 €" data-price-annual="29,99 €">29,99 €</span> <small data-unit>/an</small></p>
+            <p class="plan__price" aria-live="polite" aria-atomic="true"><span data-price-monthly="3,99 €" data-price-annual="29,99 €">29,99 €</span> <small data-unit>/an</small></p>
             <p class="plan__sub" data-sub-monthly="Sans engagement" data-sub-annual="soit 2,49 € par mois">soit 2,49 € par mois</p>
             <ul class="checks">
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Tout le plan Gratuit</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Commandes vocales illimitées</li>
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Statistiques avancées et courbes OMS</li>
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Rapports PDF illimités</li>
+                            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Rapports PDF illimités</li>
               <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Partage illimité</li>
-            </ul>
-          </article>
-          <article class="plan reveal" data-delay="2">
-            <h3>Famille</h3>
-            <p class="plan__price"><span data-price-monthly="6,99 €" data-price-annual="44,99 €">44,99 €</span> <small data-unit>/an</small></p>
-            <p class="plan__sub" data-sub-monthly="Sans engagement" data-sub-annual="soit 3,74 € par mois">soit 3,74 € par mois</p>
-            <ul class="checks">
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Tout le plan Premium</li>
-              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12 4.5 4.5L19 7"/></svg>Jusqu'à 5 comptes liés</li>
             </ul>
           </article>
         </div>
@@ -447,7 +468,7 @@
         <div class="faq reveal">
           <details>
             <summary>SuiviBaby est-elle vraiment gratuite ?</summary>
-            <div class="faq__body"><p>Oui. Le suivi complet (18 types d'événements, plusieurs enfants, statistiques, partage avec 2 co-parents) est gratuit et sans publicité. L’abonnement Premium lève les limites de commandes vocales, de rapports PDF et de partage, et ajoute les statistiques avancées et les courbes OMS.</p></div>
+            <div class="faq__body"><p>Oui. Le suivi complet (18 types d'événements, plusieurs enfants, statistiques et courbes de croissance OMS, partage avec 2 co-parents) est gratuit et sans publicité. L’abonnement Premium, seule offre payante, lève les limites : commandes vocales illimitées (3 par jour en gratuit), rapports PDF illimités (1 en gratuit) et partage illimité (2 personnes invitées en gratuit).</p></div>
           </details>
           <details>
             <summary>Fonctionne-t-elle sur iPhone et Android ?</summary>
@@ -509,7 +530,7 @@
     <div class="wrap">
       <div class="footer__grid">
         <div>
-          <a class="brand" href="/"><img src="/icon.png" alt="" width="32" height="32"><span>Suivi<b>Baby</b></span></a>
+          <a class="brand" href="/"><img src="/logo-72.png" alt="" width="32" height="32"><span>Suivi<b>Baby</b></span></a>
           <p class="footer__disclaimer">SuiviBaby est un outil d'organisation et non un dispositif médical. Il ne remplace pas l'avis d'un professionnel de santé. Urgence : 15 ou 112.</p>
         </div>
         <div>

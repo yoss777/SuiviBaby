@@ -158,7 +158,7 @@ export const ArticleReader = memo(function ArticleReader({
             {catLabel}
           </Text>
         </View>
-        <Text style={[styles.readTime, { color: nc.textMuted }]}>
+        <Text style={[styles.readTime, { color: nc.textLight }]}>
           {tip.readTimeMinutes} min de lecture
         </Text>
       </View>
@@ -190,7 +190,7 @@ export const ArticleReader = memo(function ArticleReader({
           accessibilityHint={tip.sourceUrl ? "Ouvre le lien de la source" : undefined}
         >
           <FontAwesome name="book-open" size={12} color={nc.textMuted} />
-          <Text style={[styles.sourceText, { color: nc.textMuted }]}>
+          <Text style={[styles.sourceText, { color: nc.textLight }]}>
             Source : {tip.source}
           </Text>
           {tip.sourceUrl && (
@@ -282,7 +282,7 @@ export const ArticleReader = memo(function ArticleReader({
         <Text
           style={[
             styles.bookmarkText,
-            { color: isBookmarked ? tip.accentColor : nc.textMuted },
+            { color: isBookmarked ? tip.accentColor : nc.textLight },
           ]}
         >
           {isBookmarked ? "Sauvegardé" : "Sauvegarder"}
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   readTime: {
-    fontSize: 11,
+    fontSize: 12,
   },
   title: {
     fontSize: 22,

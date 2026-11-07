@@ -1,5 +1,8 @@
 // app/settings/premium.tsx
-// Page pricing in-app — comparaison Gratuit vs Premium vs Famille
+// Page pricing in-app — comparaison Gratuit vs Premium.
+// Décision Q7 (2026-11-07) : Premium est la seule offre payante. L'offre Famille
+// n'est plus proposée (produits laissés dans les stores, tier "family" conservé
+// pour les éventuels abonnés existants, traités comme Premium).
 
 import { SkeletonBlock, SkeletonList } from "@/components/ui/Skeleton";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -39,6 +42,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { configureLayoutAnimation } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -73,6 +77,7 @@ const PLANS: PlanConfig[] = [
     features: [
       "Suivi multi-bébé illimité",
       "18 types d'événements",
+      "Statistiques et courbes OMS",
       "2 co-parents",
       "3 commandes vocales/jour",
       "1 export PDF",
@@ -93,21 +98,7 @@ const PLANS: PlanConfig[] = [
       "Exports PDF illimités",
       "Commandes vocales illimitées",
       "Partage illimité",
-      "Statistiques avancées",
-      "Courbes OMS",
       "Insights IA",
-    ],
-  },
-  {
-    tier: "family",
-    name: "Famille",
-    monthlyPrice: "6,99€",
-    annualPrice: "44,99€",
-    annualMonthly: "3,74€",
-    savings: "-46%",
-    features: [
-      "Tout le plan Premium",
-      "5 comptes liés",
     ],
   },
 ];
@@ -138,14 +129,18 @@ export default function PremiumScreen() {
     devOverrideBilling,
     isLoading: isPremiumLoading,
   } = usePremium();
-  const [selectedPlan, setSelectedPlan] = useState<
-    "free" | "premium" | "family"
-  >("premium");
+  const [selectedPlan, setSelectedPlan] = useState<"free" | "premium">(
+    "premium",
+  );
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("annual");
   const [tabsWidth, setTabsWidth] = useState(0);
   const tabIndicatorX = useSharedValue(1); // index initial = 1 (Premium)
-  const PLAN_TABS = ["free", "premium", "family"] as const;
-  const tabWidth = tabsWidth > 0 ? (tabsWidth - 10 - 12) / 3 : 0; // 10 = padding*2, 12 = gap*2
+  const PLAN_TABS = ["free", "premium"] as const;
+  // 10 = padding*2, 6 = gap entre deux onglets
+  const tabWidth =
+    tabsWidth > 0
+      ? (tabsWidth - 10 - 6 * (PLAN_TABS.length - 1)) / PLAN_TABS.length
+      : 0;
   const animatedIndicatorStyle = useAnimatedStyle(() => ({
     transform: [
       {
@@ -179,14 +174,6 @@ export default function PremiumScreen() {
             else if (pkg.packageType === "LIFETIME") pkgs["lifetime"] = pkg;
           }
         }
-        if (offerings.family) {
-          for (const pkg of offerings.family.availablePackages) {
-            if (pkg.packageType === "MONTHLY") pkgs["family_monthly"] = pkg;
-            else if (pkg.packageType === "ANNUAL") pkgs["family_annual"] = pkg;
-            else if (pkg.packageType === "LIFETIME")
-              pkgs["family_lifetime"] = pkg;
-          }
-        }
         setRcPackages(pkgs);
       })
       .catch(() => {});
@@ -204,13 +191,6 @@ export default function PremiumScreen() {
             : billingCycle === "monthly"
               ? "premium_monthly"
               : "premium_annual";
-      } else if (plan.tier === "family") {
-        pkgKey =
-          billingCycle === "lifetime"
-            ? "family_lifetime"
-            : billingCycle === "monthly"
-              ? "family_monthly"
-              : "family_annual";
       }
       const pkg = rcPackages[pkgKey];
 
@@ -311,7 +291,7 @@ export default function PremiumScreen() {
               ? "Choisissez votre plan"
               : "Gérez votre abonnement"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {currentTier === "free"
               ? "Sans engagement, résiliable à tout moment."
               : "Changez de plan ou de cycle à tout moment."}
@@ -337,13 +317,14 @@ export default function PremiumScreen() {
           </View>
         )}
 
-        {/* Plan toggle : Gratuit / Premium / Famille (sliding indicator) */}
+        {/* Plan toggle : Gratuit / Premium (sliding indicator) */}
         <View
           style={[
             styles.cycleToggle,
             { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight },
           ]}
           onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width)}
+          accessibilityRole="tablist"
         >
           {tabWidth > 0 && (
             <Animated.View
@@ -358,7 +339,6 @@ export default function PremiumScreen() {
             const labels = {
               free: "Gratuit",
               premium: "Premium",
-              family: "Famille",
             };
             return (
               <TouchableOpacity
@@ -367,7 +347,7 @@ export default function PremiumScreen() {
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   tabIndicatorX.value = index;
-                  LayoutAnimation.configureNext(
+                  configureLayoutAnimation(
                     LayoutAnimation.Presets.easeInEaseOut,
                   );
                   setSelectedPlan(key);
@@ -380,13 +360,14 @@ export default function PremiumScreen() {
                   <Text
                     style={[
                       styles.cycleButtonText,
-                      { color: selectedPlan === key ? nc.white : nc.textMuted },
+                      { color: selectedPlan === key ? nc.onTodayAccent : nc.textLight },
                     ]}
                   >
                     {labels[key]}
                   </Text>
-                  {key === currentTier && (
-                    <View style={[styles.activeTabDot, { backgroundColor: selectedPlan === key ? nc.white : nc.success }]} />
+                  {(key === currentTier ||
+                    (key === "premium" && currentTier === "family")) && (
+                    <View style={[styles.activeTabDot, { backgroundColor: selectedPlan === key ? nc.onTodayAccent : nc.success }]} />
                   )}
                 </View>
               </TouchableOpacity>
@@ -450,7 +431,7 @@ export default function PremiumScreen() {
                     accessibilityHint="Ouvre les paramètres d'abonnement du store pour annuler ou modifier"
                   >
                     <Text
-                      style={[styles.subscribeButtonText, { color: nc.white }]}
+                      style={[styles.subscribeButtonText, { color: nc.onTodayAccent }]}
                     >
                       Gérer mon abonnement
                     </Text>
@@ -460,13 +441,12 @@ export default function PremiumScreen() {
             );
           })()}
 
-        {/* Plan sélectionné (Premium ou Famille, masqué si Gratuit actif) */}
-        {selectedPlan !== "free" &&
+        {/* Plan Premium */}
+        {selectedPlan === "premium" &&
           (() => {
-            const plan = selectedPlan === "premium" ? PLANS[1] : PLANS[2];
+            const plan = PLANS[1];
             const isCurrentPlan = plan.tier === currentTier;
-            const lifetimePrice =
-              selectedPlan === "premium" ? "79,99€" : "119,99€";
+            const lifetimePrice = "79,99€";
             const cardBorderColor = isCurrentPlan ? nc.success : nc.todayAccent;
 
             return (
@@ -487,7 +467,15 @@ export default function PremiumScreen() {
                       { backgroundColor: cardBorderColor },
                     ]}
                   >
-                    <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                    <Text
+                      style={[
+                        styles.planBadgeText,
+                        // Texte sombre sur le vert « actuel » (blanc : 2.3:1)
+                        { color: isCurrentPlan ? "#052e16" : nc.onTodayAccent },
+                      ]}
+                    >
+                      {plan.badge}
+                    </Text>
                   </View>
                 )}
 
@@ -516,13 +504,18 @@ export default function PremiumScreen() {
                 </View>
 
                 {/* Options de facturation */}
-                <View style={styles.billingOptions}>
+                <View
+                  style={styles.billingOptions}
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="Formule de facturation"
+                >
                   {[
                     {
                       key: "monthly" as BillingCycle,
                       label: "Mensuel",
                       price: plan.monthlyPrice,
                       sub: null,
+                      spokenPrice: `${plan.monthlyPrice} par mois`,
                     },
                     {
                       key: "annual" as BillingCycle,
@@ -530,12 +523,14 @@ export default function PremiumScreen() {
                       price: plan.annualPrice,
                       sub: `soit ${plan.annualMonthly}/mois`,
                       badge: "-37%",
+                      spokenPrice: `${plan.annualPrice} par an, soit ${plan.annualMonthly} par mois, moins 37 %`,
                     },
                     {
                       key: "lifetime" as BillingCycle,
                       label: "À vie",
                       price: lifetimePrice,
                       sub: "paiement unique",
+                      spokenPrice: `${lifetimePrice}, paiement unique`,
                     },
                   ].map((opt) => {
                     const isCurrentBilling =
@@ -561,9 +556,10 @@ export default function PremiumScreen() {
                         disabled={isCurrentBilling}
                         activeOpacity={isCurrentBilling ? 1 : 0.7}
                         accessibilityRole="radio"
-                        accessibilityLabel={`${opt.label} ${opt.price}${isCurrentBilling ? ", abonnement actuel" : ""}`}
+                        // Libellé = tout le contenu visible (prix, équivalent mensuel, remise)
+                        accessibilityLabel={`${opt.label}, ${opt.spokenPrice}${isCurrentBilling ? ", abonnement actuel" : ""}`}
                         accessibilityState={{
-                          selected: isSelected,
+                          checked: isSelected,
                           disabled: isCurrentBilling,
                         }}
                       >
@@ -673,8 +669,7 @@ export default function PremiumScreen() {
                   const isExactSamePlan = plan.tier === currentTier;
                   const isExactSameBilling =
                     isExactSamePlan && currentBilling === billingCycle;
-                  const tierLabel =
-                    plan.tier === "family" ? "Famille" : "Premium";
+                  const tierLabel = "Premium";
 
                   let buttonLabel: string;
 
@@ -711,7 +706,7 @@ export default function PremiumScreen() {
                       <Text
                         style={[
                           styles.subscribeButtonText,
-                          { color: nc.white },
+                          { color: nc.onTodayAccent },
                         ]}
                       >
                         {buttonLabel}
@@ -786,7 +781,7 @@ export default function PremiumScreen() {
                 />
               </View>
               {expandedFaq === index && (
-                <Text style={[styles.faqAnswer, { color: nc.textMuted }]}>
+                <Text style={[styles.faqAnswer, { color: nc.textLight }]}>
                   {item.a}
                 </Text>
               )}
@@ -821,7 +816,7 @@ export default function PremiumScreen() {
                       styles.devButtonText,
                       {
                         color:
-                          currentTier === t ? nc.todayAccent : nc.textMuted,
+                          currentTier === t ? nc.todayAccent : nc.textLight,
                       },
                     ]}
                   >
@@ -852,7 +847,7 @@ export default function PremiumScreen() {
                     style={[
                       styles.devButtonText,
                       {
-                        color: currentBilling === b ? nc.success : nc.textMuted,
+                        color: currentBilling === b ? nc.success : nc.textLight,
                       },
                     ]}
                   >
@@ -933,7 +928,8 @@ const styles = StyleSheet.create({
   tabLabelRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   activeTabDot: { width: 6, height: 6, borderRadius: 3 },
   savingsBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  savingsBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  // Texte sombre sur #22c55e : ≥ 4.5:1 (le blanc n'atteint que 2.3:1)
+  savingsBadgeText: { color: "#052e16", fontSize: 12, fontWeight: "700" },
   planCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -949,7 +945,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderBottomLeftRadius: 12,
   },
-  planBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  planBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   planName: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   priceRow: { flexDirection: "row", alignItems: "baseline", marginBottom: 2 },
   price: { fontSize: 32, fontWeight: "800" },
@@ -1030,9 +1026,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   manageButtonText: { fontSize: 14, fontWeight: "500" },
-  linksRow: { alignItems: "center", gap: 16, paddingVertical: 16 },
+  linksRow: { alignItems: "center", gap: 4, paddingVertical: 12 },
   devSection: { marginTop: 20, alignItems: "center" },
-  devLabel: { fontSize: 11, marginBottom: 6 },
+  devLabel: { fontSize: 12, marginBottom: 6 },
   devButtons: { flexDirection: "row", gap: 8 },
   devButton: {
     paddingHorizontal: 14,
@@ -1041,7 +1037,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   devButtonText: { fontSize: 12, fontWeight: "600" },
-  restoreButton: { alignItems: "center", paddingVertical: 4 },
+  // Cible tactile ≥ 44 pt (lien texte de 14 pt)
+  restoreButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   restoreText: { fontSize: 14, fontWeight: "500" },
   faqDivider: { borderTopWidth: 1, marginVertical: 16 },
   faqSection: { marginTop: 4 },

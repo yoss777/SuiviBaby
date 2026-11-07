@@ -18,6 +18,7 @@ import Svg, {
   Path,
   Stop,
 } from "react-native-svg";
+import { useReduceMotion } from "@/hooks/useReduceMotion";
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedG = Animated.createAnimatedComponent(G);
@@ -33,6 +34,8 @@ export default function LogoAnimation({
   loop = false,
   onAnimationComplete,
 }: LogoAnimationProps) {
+  const reduceMotion = useReduceMotion();
+
   // Animation values
   const backgroundScale = useSharedValue(0.02);
   const backgroundOpacity = useSharedValue(0);
@@ -58,6 +61,18 @@ export default function LogoAnimation({
   }, [backgroundScale, lineProgress, leafOpacity, leafScale, plusScale, plusOpacity, backgroundOpacity]);
 
   const startAnimation = useCallback(() => {
+    // « Réduire les animations » : logo affiché directement dans son état final
+    if (reduceMotion) {
+      backgroundOpacity.value = 1;
+      backgroundScale.value = 1;
+      lineProgress.value = 1;
+      leafOpacity.value = 1;
+      leafScale.value = 1;
+      plusOpacity.value = 1;
+      plusScale.value = 1;
+      return;
+    }
+
     // 1. Background white circle grows from center (point to full size)
     backgroundOpacity.value = withTiming(1, { duration: 120 });
     backgroundScale.value = withSequence(
@@ -90,7 +105,7 @@ export default function LogoAnimation({
         withSpring(1, { damping: 8, stiffness: 150 })
       )
     );
-  }, [backgroundScale, lineProgress, leafOpacity, leafScale, plusScale, plusOpacity, backgroundOpacity]);
+  }, [reduceMotion, backgroundScale, lineProgress, leafOpacity, leafScale, plusScale, plusOpacity, backgroundOpacity]);
 
   useEffect(() => {
     startAnimation();
@@ -109,10 +124,10 @@ export default function LogoAnimation({
     if (onAnimationComplete) {
       const timeout = setTimeout(() => {
         onAnimationComplete();
-      }, 2500);
+      }, reduceMotion ? 400 : 2500);
       return () => clearTimeout(timeout);
     }
-  }, [loop, startAnimation, resetAnimation, onAnimationComplete]);
+  }, [loop, reduceMotion, startAnimation, resetAnimation, onAnimationComplete]);
 
   // Animated props for the heartbeat curve
   const lineAnimatedProps = useAnimatedProps(() => ({

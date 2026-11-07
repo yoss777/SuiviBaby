@@ -62,6 +62,7 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
           style={styles.trigger}
           accessibilityRole="button"
           accessibilityLabel="Menu"
+          accessibilityState={{ expanded: visible }}
         >
           <Ionicons
             name="ellipsis-vertical"
@@ -77,7 +78,14 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
         animationType="fade"
         onRequestClose={close}
       >
-        <Pressable style={styles.backdrop} onPress={close}>
+        <Pressable style={styles.backdrop} onPress={close} accessible={false}>
+          {/* Fond fermant, exposé aux lecteurs d'écran (le menu est son frère) */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={close}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer le menu"
+          />
           <View
             style={[
               styles.menu,
@@ -121,8 +129,9 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
                   style={[
                     styles.menuItemText,
                     {
+                      // errorText (≥ 4.5:1) pour le texte ; error reste pour l'icône
                       color: item.destructive
-                        ? nc.error
+                        ? nc.errorText
                         : nc.textStrong,
                     },
                   ]}

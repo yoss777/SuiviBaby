@@ -260,7 +260,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
             Type d&apos;excrétion
           </Text>
-          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.toggleSubtitle, { color: nc.textLight }]}>
             Vous pouvez sélectionner les deux si nécessaire
           </Text>
           <View style={styles.typeRow}>
@@ -300,7 +300,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   { color: nc.textLight },
                   includeMiction && styles.typeTextActive,
                   includeMiction && { color: mictionAccentColors.softText },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 Miction
@@ -343,7 +343,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   { color: nc.textLight },
                   includeSelle && styles.typeTextActive,
                   includeSelle && { color: selleAccentColors.softText },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 Selle
@@ -359,7 +359,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
             Couleur de l&apos;urine
           </Text>
-          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.toggleSubtitle, { color: nc.textLight }]}>
             Optionnel
           </Text>
           <View style={styles.optionsRow}>
@@ -422,7 +422,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
             Consistance
           </Text>
-          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.toggleSubtitle, { color: nc.textLight }]}>
             Optionnel
           </Text>
           <View style={styles.optionsRow}>
@@ -480,7 +480,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           <Text style={[styles.inputLabel, { color: nc.textLight }]}>
             Quantité
           </Text>
-          <Text style={[styles.toggleSubtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.toggleSubtitle, { color: nc.textLight }]}>
             Optionnel
           </Text>
           <View style={styles.optionsRow}>
@@ -593,7 +593,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>
+            <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
           </TouchableOpacity>

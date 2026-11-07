@@ -40,8 +40,9 @@ export type PaywallTrigger =
   | "pdf_export_limit"
   | "history_limit"
   | "sharing_limit"
-  | "advanced_stats"
   | "ai_insights";
+// Pas de déclencheur « statistiques avancées » : statistiques et courbes OMS
+// sont gratuites (décision Q7, 2026-11-07).
 
 interface PaywallMessage {
   title: string;
@@ -57,7 +58,7 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
   },
   pdf_export_limit: {
     title: "Export PDF utilisé",
-    description: "Votre export PDF gratuit a été utilisé. Le rapport PDF est réservé à Premium et Famille. L'export JSON de vos données reste gratuit.",
+    description: "Votre export PDF gratuit a été utilisé. Le rapport PDF est réservé à Premium. L'export JSON de vos données reste gratuit.",
     ctaText: "Passer à Premium",
   },
   history_limit: {
@@ -67,13 +68,8 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
   },
   sharing_limit: {
     title: "Limite de partage atteinte",
-    description: "Le plan gratuit permet 2 co-parents. Passez à Famille pour inviter jusqu'à 5 personnes.",
-    ctaText: "Inviter toute la famille",
-  },
-  advanced_stats: {
-    title: "Statistiques avancées",
-    description: "Découvrez les corrélations, tendances et courbes OMS avec Premium.",
-    ctaText: "Voir les stats avancées",
+    description: "Le plan gratuit permet d'inviter 2 personnes. Passez à Premium pour un partage illimité.",
+    ctaText: "Passer à Premium",
   },
   ai_insights: {
     title: "Insights IA",
@@ -87,7 +83,7 @@ export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
 // ============================================
 
 export type PdfExportDecision =
-  | "allow" // accès Premium/Famille/grandfathered : export illimité
+  | "allow" // accès Premium (ou Famille, ancien produit)/grandfathered : export illimité
   | "allow_trial" // export d'essai gratuit : quota à consommer après succès
   | "paywall" // essai épuisé
   | "error"; // quota illisible : ne rien générer

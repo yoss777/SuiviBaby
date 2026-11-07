@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
@@ -90,7 +91,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           }),
         ]),
       );
-      loop.start();
+      startLoop(loop);
       return () => loop.stop();
     } else {
       ownPulseAnim.setValue(1);

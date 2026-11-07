@@ -23,6 +23,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export const VOICE_BAR_HEIGHT = 56;
 /** How far the finger may drift outside the pill before releasing cancels. */
@@ -83,6 +84,9 @@ interface VoiceBarProps {
   dimmed?: boolean;
 }
 
+// La pilule a une hauteur fixe : on plafonne l'agrandissement du texte (Dynamic Type)
+const VOICE_BAR_MAX_FONT_SCALE = 1.3;
+
 export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps) {
   const { status, elapsedSeconds, isHandsFree, onPressIn, onPressOut, onPress } = input;
   const colorScheme = useColorScheme() ?? "light";
@@ -127,7 +131,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
         Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
       ]),
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [isRecording, animations.decorative, pulse]);
 
@@ -178,7 +182,11 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
       }}
       disabled={isBusy || dimmed}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, commande vocale`}
+      // Pendant l'enregistrement, la durée est portée par accessibilityValue :
+      // on ne la répète pas dans le libellé.
+      accessibilityLabel={
+        isRecording ? "Je vous écoute, commande vocale" : `${title}, commande vocale`
+      }
       accessibilityHint="Touchez deux fois pour démarrer l'enregistrement, puis à nouveau pour l'envoyer."
       accessibilityState={{ busy: isBusy, disabled: isBusy || dimmed }}
       accessibilityValue={isRecording ? { text: formatRecordingDuration(elapsedSeconds) } : undefined}
@@ -215,6 +223,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
         <Text
           style={[styles.title, { fontSize: fontSize.normal }, isRecording && styles.tabular]}
           numberOfLines={1}
+          maxFontSizeMultiplier={VOICE_BAR_MAX_FONT_SCALE}
         >
           {title}
         </Text>
@@ -224,9 +233,11 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
               styles.subtitle,
               { fontSize: fontSize.small },
               isNightMode && styles.subtitleNight,
-              willCancel && { color: nc.errorText },
+              // Fond de barre toujours sombre : rouge clair du thème sombre (contraste)
+              willCancel && { color: getNeutralColors("dark").errorText },
             ]}
             numberOfLines={1}
+            maxFontSizeMultiplier={VOICE_BAR_MAX_FONT_SCALE}
           >
             {subtitle}
           </Text>

@@ -94,7 +94,7 @@ export const UpdateBanner = memo(function UpdateBanner({
           <Text style={[styles.title, { color: nc.textStrong }]}>
             {"Mise à jour disponible"}
           </Text>
-          <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+          <Text style={[styles.subtitle, { color: nc.textLight }]}>
             {`Version ${latestVersion} est disponible`}
           </Text>
         </View>
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: 12,
   },
   actions: {
     flexDirection: "row",

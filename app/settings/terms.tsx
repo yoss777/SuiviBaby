@@ -68,7 +68,7 @@ export default function TermsScreen() {
     {
       title: "9. Offres et abonnements",
       content:
-        "L'offre gratuite donne accès au suivi sans limite de durée, avec des limites d'usage indiquées dans l'application. Les offres Premium et Famille sont proposées en abonnement mensuel ou annuel, ou en achat unique « à vie » ; le prix affiché par l'App Store ou Google Play au moment de l'achat fait foi. Le paiement passe par votre compte Apple ou Google : nous n'avons jamais accès à vos coordonnées bancaires. Les abonnements se renouvellent automatiquement, sauf résiliation au moins 24 heures avant la fin de la période en cours. Si une période d'essai est proposée, elle est indiquée avant l'achat. Vous pouvez résilier à tout moment depuis les réglages d'abonnement de votre store ; l'accès reste actif jusqu'à la fin de la période payée et vos données sont conservées.",
+        "L'offre gratuite donne accès au suivi sans limite de durée, avec des limites d'usage indiquées dans l'application. L'offre Premium est proposée en abonnement mensuel ou annuel, ou en achat unique « à vie » ; le prix affiché par l'App Store ou Google Play au moment de l'achat fait foi. Le paiement passe par votre compte Apple ou Google : nous n'avons jamais accès à vos coordonnées bancaires. Les abonnements se renouvellent automatiquement, sauf résiliation au moins 24 heures avant la fin de la période en cours. Si une période d'essai est proposée, elle est indiquée avant l'achat. Vous pouvez résilier à tout moment depuis les réglages d'abonnement de votre store ; l'accès reste actif jusqu'à la fin de la période payée et vos données sont conservées.",
     },
     {
       title: "10. Droit de rétractation et remboursements",
@@ -146,8 +146,8 @@ export default function TermsScreen() {
             <ThemedText style={styles.headerTitle}>
               Conditions d&apos;utilisation
             </ThemedText>
-            <Text style={[styles.headerDate, { color: nc.textMuted }]}>
-              Dernière mise à jour : 30 octobre 2026
+            <Text style={[styles.headerDate, { color: nc.textLight }]}>
+              Dernière mise à jour : 7 novembre 2026
             </Text>
           </View>
 

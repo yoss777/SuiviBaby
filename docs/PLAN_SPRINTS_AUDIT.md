@@ -32,7 +32,7 @@
 | Q4 | Position « dispositif médical » (MDR) des alertes santé | S5 | Garder des alertes d'orientation (« consultez »), aucune interprétation ; avis juridique si doute |
 | Q5 | Contenu du récap hebdomadaire par e-mail | S3 | Plus de chiffres de santé dans l'e-mail, un lien vers l'app ; owner et admin seulement |
 | Q6 | Accès en lecture des contributeurs aux événements (D11 dit « photos seulement ») | S4 | Aligner les règles sur D11 |
-| Q7 | Offre Famille, courbes OMS, statistiques avancées (déjà 3.2 / 3.3) | S10 | À trancher avant le déploiement du site |
+| Q7 | Offre Famille, courbes OMS, statistiques avancées (déjà 3.2 / 3.3) | S10 | **Tranché 2026-11-07 (Yoss)** : courbes OMS et statistiques avancées gratuites, retirées des avantages Premium ; offre Famille supprimée, Premium seule offre payante (produits Famille laissés dans les stores mais non proposés) |
 | Q8 | Projet Firebase de staging (coût, nom) | S12 | `samaye-staging`, plan Blaze avec budget plafonné |
 | Q9 | Compte de service Google Play pour automatiser l'envoi Android | S12 | Oui, piste Alpha seulement |
 
@@ -768,50 +768,76 @@ figés après une erreur, caches non vidés à la déconnexion, image de l'enfan
 précédent après un changement d'enfant, filtres « aujourd'hui » figés après
 minuit…) corrigés avec tests (1182 tests app, 439 fonctions, 219 règles).
 
-## S9 — Accessibilité · app + site · ⏳
+## S9 — Accessibilité · app + site · ✅ 2026-11-07
 
 User story : en tant que parent malvoyant ou utilisant VoiceOver/TalkBack, je
 veux lire tous les textes, connaître les valeurs des graphiques et des dates,
 et ne pas subir d'animations si je les ai désactivées.
 
-- [ ] **9.1** Palette : `textMuted` réservé au décoratif, `textLight` pour le
+- [x] **9.1** Palette : `textMuted` réservé au décoratif, `textLight` pour le
   texte, `textMuted` sombre relevé ; erreurs en `errorText` ; variantes
   foncées des couleurs de catégorie pour le texte et les icônes ; test
   automatique des contrastes de la palette.
-- [ ] **9.2** `useReduceMotion` branché dans `useNightMode` et les animations
+- [x] **9.2** `useReduceMotion` branché dans `useNightMode` et les animations
   (FAB, barre vocale, confettis, splash).
-- [ ] **9.3** Graphiques : résumé textuel par jour et actions pour parcourir
+- [x] **9.3** Graphiques : résumé textuel par jour et actions pour parcourir
   les jours.
-- [ ] **9.4** FAB et menus : actions cachées hors de l'arbre d'accessibilité
+- [x] **9.4** FAB et menus : actions cachées hors de l'arbre d'accessibilité
   quand fermés, fonds « Fermer le menu », `expanded`, bouton « Fermer » sur
   les feuilles.
-- [ ] **9.5** Formulaires : valeur des dates annoncée, sexe en
+- [x] **9.5** Formulaires : valeur des dates annoncée, sexe en
   `radio`/`radiogroup`, erreurs annoncées et textuelles (cases de
   consentement), cibles ≥ 44 pt réelles.
-- [ ] **9.6** Textes ≥ 12 pt, hauteurs minimales au lieu de fixes,
+- [x] **9.6** Textes ≥ 12 pt, hauteurs minimales au lieu de fixes,
   `maxFontSizeMultiplier` sur la barre d'onglets et la barre vocale ; badge
   Moments annoncé.
-- [ ] **9.7** Site : `h2` dans la section fonctionnalités, bouton de pause
+- [x] **9.7** Site : `h2` dans la section fonctionnalités, bouton de pause
   sans double sens, `aria-live` réduit sur les tarifs, alerte de
   `reset-password` annoncée.
 
-## S10 — Site et stores · site · ⏳
+## S10 — Site et stores · site · ✅ 2026-11-07 (10.2 : 4 mentions à compléter par Yoss ; 10.5 : consoles à mettre à jour ; 10.6 : déploiement après fusion)
 
-- [ ] **10.1** Décisions Q7 appliquées : site aligné sur ce que l'app fait
+- [x] **10.1** Décisions Q7 appliquées : site aligné sur ce que l'app fait
   vraiment (OMS, statistiques avancées, Famille) ; −37 % / −46 % par offre.
-- [ ] **10.2** 2.3 (cases « À compléter »), 2.5 (captures avec texte
+  Fait 2026-11-07 : carte Famille retirée du site et du paywall (onglet
+  masqué, produits et tier `family` conservés), courbes OMS et statistiques
+  sorties des avantages Premium (`isAlwaysFreeFeature`), section « Famille »
+  du site renommée « Partage » (`#partage`), remise annuelle affichée
+  **−37 %** (Premium seul : 29,99 € contre 12 × 3,99 € = 47,88 €), FAQ et
+  JSON-LD alignés, CGU §9 (site 2.1 et app) sans Famille.
+- [~] **10.2** 2.3 (cases « À compléter »), 2.5 (captures avec texte
   alternatif), garde-fou `grep -c 'class="todo"'` avant déploiement.
-- [ ] **10.3** `cleanUrls`, `favicon.ico`, logo 72 px et `apple-touch-icon`
+  Fait : durée des sauvegardes (7 j quotidiennes / 30 j hebdomadaires),
+  `alt` en français sur les 5 captures, `scripts/checkSiteTodos.sh`. Restent
+  4 cases à trancher par Yoss : médiateur (CGU, mentions légales), DPO,
+  non-entraînement AssemblyAI / Anthropic (`privacy.html`).
+  **Contrôle avant déploiement du site** : `bash scripts/checkSiteTodos.sh`
+  doit sortir en 0 avant tout `firebase deploy --only hosting` (pas encore
+  branché dans la CI tant que des cases restent).
+- [x] **10.3** `cleanUrls`, `favicon.ico`, logo 72 px et `apple-touch-icon`
   180 px, og-image en JPEG, JSON-LD enrichi (captures, fonctionnalités,
-  `sameAs`).
-- [ ] **10.4** CSP : styles inline déplacés pour retirer `'unsafe-inline'` ;
-  `connect-src` vérifié pour la page de réinitialisation.
-- [ ] **10.5** Fiches « Confidentialité » (App Store) et « Sécurité des
+  `sameAs`). Réécritures devenues inutiles retirées ; `no-cache` étendu aux
+  URL sans extension.
+- [x] **10.4** CSP : styles inline déplacés pour retirer `'unsafe-inline'` ;
+  `connect-src` vérifié pour la page de réinitialisation (aucun appel
+  réseau : simple redirection vers l'app, `'self'` suffit).
+- [x] **10.5** Fiches « Confidentialité » (App Store) et « Sécurité des
   données » (Google Play) comparées aux flux réels (Sentry, Anthropic,
   AssemblyAI, Resend, RevenueCat) et mises à jour.
 - [ ] **10.6** 2.4 : déploiement du site.
 
 **Revue ECC (S9 + S10)** : `a11y-architect`, `seo-specialist`.
+Faite le 2026-11-07 : a11y 3 HIGH (texte blanc sur le choix du sexe, `error`
+en texte, ligne âge/date du menu) et 14 MEDIUM ; SEO 1 HIGH (lien de
+parrainage `/invite/…` en 404, antérieur au sprint) et 4 MEDIUM ; corrigés
+avec tests (1243 tests). Restent ouverts : boutons à texte blanc sur
+`todayAccent` en mode sombre hors abonnement (à passer en `onTodayAccent`) ;
+aucun écran de l'app ne permet de saisir un code de parrainage
+(`validateReferralCode` existe côté serveur) — `invite.html` renvoie vers le
+support en attendant une décision.
+
+**Backlog (Yoss, 2026-11-07)** : champ « allergies » dans la fiche enfant
+(ajout, modification, règles, export) — la politique les mentionne déjà.
 
 ## S11 — Tests et CI · ⏳
 

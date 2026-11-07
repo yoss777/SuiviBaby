@@ -100,6 +100,8 @@ describe("VoiceBar", () => {
     renderBar(makeInput({ status: "recording", elapsedSeconds: 12 }));
     expect(screen.getByText("Je vous écoute… 0:12")).toBeTruthy();
     expect(screen.getByTestId("voice-bar").props.accessibilityValue).toEqual({ text: "0:12" });
+    // La durée n'est pas dupliquée dans le libellé
+    expect(screen.getByTestId("voice-bar").props.accessibilityLabel).not.toMatch(/0:12/);
   });
 
   it("is marked busy while the command is processed", () => {

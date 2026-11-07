@@ -253,7 +253,7 @@ export default function SettingsScreen() {
     useAccountDeletionFlow({
       backgroundCard: nc.backgroundCard,
       textStrong: nc.textStrong,
-      textMuted: nc.textMuted,
+      textLight: nc.textLight,
       borderLight: nc.borderLight,
       error: nc.error,
       white: nc.white,
@@ -635,7 +635,13 @@ export default function SettingsScreen() {
               <Text
                 style={[
                   styles.settingLabel,
-                  { color: item.color || nc.textStrong },
+                  // Libellé : error (3.8:1) réservé aux icônes → errorText pour le texte
+                  {
+                    color:
+                      item.color === nc.error
+                        ? nc.errorText
+                        : item.color || nc.textStrong,
+                  },
                   isDisabled && { opacity: 0.35 },
                 ]}
               >
@@ -673,7 +679,7 @@ export default function SettingsScreen() {
                   <Text
                     style={[
                       styles.settingValue,
-                      { color: nc.textMuted },
+                      { color: nc.textLight },
                       isDisabled && { opacity: 0.35 },
                     ]}
                     numberOfLines={1}
@@ -714,7 +720,7 @@ export default function SettingsScreen() {
   const renderSection = (title: string, items: SettingItem[], pendingItem = false) => (
     <View style={styles.section}>
       <Text
-        style={[styles.sectionTitle, { color: nc.textMuted }]}
+        style={[styles.sectionTitle, { color: nc.textLight }]}
         accessibilityRole="header"
       >
         {title}
@@ -764,12 +770,12 @@ export default function SettingsScreen() {
           >
             <Ionicons name="warning-outline" size={20} color={nc.error} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={[styles.deletionBannerText, { color: nc.error }]}>
+              <Text style={[styles.deletionBannerText, { color: nc.errorText }]}>
                 Suppression programmée le{" "}
                 {formattedPendingDeletionDate}
               </Text>
               <Text
-                style={[styles.deletionBannerSubtext, { color: nc.textMuted }]}
+                style={[styles.deletionBannerSubtext, { color: nc.textLight }]}
               >
                 Vos données seront définitivement supprimées à cette date.
               </Text>
@@ -806,7 +812,7 @@ export default function SettingsScreen() {
               }}
             >
               <Text
-                style={{ color: nc.error, fontWeight: "600", fontSize: 13 }}
+                style={{ color: nc.errorText, fontWeight: "600", fontSize: 13 }}
               >
                 {isCancellingDeletion ? "..." : "Annuler"}
               </Text>
@@ -817,10 +823,10 @@ export default function SettingsScreen() {
         {renderSection("Zone dangereuse", dangerSettings)}
 
         <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: nc.textMuted }]}>
+          <Text style={[styles.footerText, { color: nc.textLight }]}>
             SuiviBaby © 2026 TESFA
           </Text>
-          <Text style={[styles.footerSubtext, { color: nc.textMuted }]}>
+          <Text style={[styles.footerSubtext, { color: nc.textLight }]}>
             Version {appVersion}
           </Text>
         </View>
@@ -947,7 +953,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
   },

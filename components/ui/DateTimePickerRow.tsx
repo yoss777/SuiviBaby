@@ -154,7 +154,10 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
         disabled={disabled}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={a11yLabel ?? `Modifier ${label.toLowerCase()}`}
+        accessibilityLabel={a11yLabel ?? label}
+        // La valeur formatée est annoncée (« lundi 3 novembre ») et non
+        // seulement l'action : le lecteur d'écran lit libellé, rôle puis valeur.
+        accessibilityValue={{ text: displayValue }}
         accessibilityHint={
           a11yHint ??
           `Ouvre le sélecteur ${mode === "date" ? "de date" : "d'heure"}`
@@ -211,20 +214,22 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
             >
               <View style={[styles.pickerToolbar, { borderColor: nc.border }]}>
                 <TouchableOpacity
+                  style={styles.toolbarTarget}
                   onPress={handleCancelIOS}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
                   accessibilityLabel="Annuler"
                 >
-                  <Text style={[styles.toolbarButton, { color: nc.textMuted }]}>
+                  <Text style={[styles.toolbarButton, { color: nc.textLight }]}>
                     Annuler
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={styles.toolbarTarget}
                   onPress={handleConfirmIOS}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
-                  accessibilityLabel="Valider"
+                  accessibilityLabel="OK" // = libellé visible (WCAG 2.5.3)
                 >
                   <Text
                     style={[
@@ -258,6 +263,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
 
 const styles = StyleSheet.create({
   row: {
+    minHeight: 44,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -307,6 +313,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarTarget: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: "center",
   },
   toolbarButton: {
     fontSize: 16,

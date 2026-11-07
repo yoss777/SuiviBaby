@@ -39,7 +39,7 @@ export default function HealthConsentScreen() {
   const deletion = useAccountDeletionFlow({
     backgroundCard: nc.backgroundCard,
     textStrong: nc.textStrong,
-    textMuted: nc.textMuted,
+    textLight: nc.textLight,
     borderLight: nc.borderLight,
     error: nc.error,
     white: nc.white,
@@ -93,7 +93,7 @@ export default function HealthConsentScreen() {
   const Bullet = ({ children }: { children: React.ReactNode }) => (
     <View style={styles.bulletRow}>
       <Text style={[styles.bulletDot, { color: nc.textMuted }]}>•</Text>
-      <Text style={[styles.body, styles.bulletText, { color: nc.textMuted }]}>
+      <Text style={[styles.body, styles.bulletText, { color: nc.textLight }]}>
         {children}
       </Text>
     </View>
@@ -144,7 +144,7 @@ export default function HealthConsentScreen() {
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
             Ce que nous collectons
           </Text>
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Pour le suivi de votre enfant : {COLLECTED_DATA}. Ce sont des
             données de santé : la loi exige votre consentement explicite pour
             les traiter. En acceptant, vous confirmez agir en tant que
@@ -154,7 +154,7 @@ export default function HealthConsentScreen() {
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
             Pourquoi
           </Text>
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Uniquement pour faire fonctionner l&apos;application : enregistrer
             le suivi, l&apos;afficher, le partager avec les personnes que vous
             invitez et produire vos statistiques.
@@ -184,7 +184,7 @@ export default function HealthConsentScreen() {
             la commande vocale. Anthropic : interprétation du texte dicté pour
             cette même commande.
           </Bullet>
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Certains prestataires sont situés aux États-Unis ; ces transferts
             sont encadrés (EU-US Data Privacy Framework ou clauses
             contractuelles types).
@@ -193,7 +193,7 @@ export default function HealthConsentScreen() {
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
             Retrait du consentement
           </Text>
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Vous pouvez retirer votre consentement à tout moment dans les
             Réglages (Retirer mon consentement aux données de santé) ou en
             supprimant votre compte. La preuve de votre consentement (date,
@@ -280,11 +280,11 @@ export default function HealthConsentScreen() {
           accessibilityHint="Programme la suppression de votre compte et de vos données"
           style={[styles.deleteButton, busy && styles.buttonDisabled]}
         >
-          <Text style={[styles.deleteText, { color: nc.error }]}>
+          <Text style={[styles.deleteText, { color: nc.errorText }]}>
             Supprimer mon compte
           </Text>
         </TouchableOpacity>
-        <Text style={[styles.declineNote, { color: nc.textMuted }]}>
+        <Text style={[styles.declineNote, { color: nc.textLight }]}>
           Si vous refusez, vous serez déconnecté et aucune donnée de santé ne
           sera traitée. Vous pouvez aussi supprimer votre compte ici, ou depuis
           les Réglages (Supprimer le compte).

@@ -229,7 +229,7 @@ export default function PlusScreen() {
         >
           <View style={styles.header}>
             <Text style={[styles.title, { color: nc.textStrong }]}>Plus</Text>
-            <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+            <Text style={[styles.subtitle, { color: nc.textLight }]}>
               Accès aux écrans détaillés
             </Text>
           </View>
@@ -247,7 +247,7 @@ export default function PlusScreen() {
             visibleSections.map((section) => (
               <View key={section.label} style={styles.section}>
                 <Text
-                  style={[styles.sectionLabel, { color: nc.textMuted }]}
+                  style={[styles.sectionLabel, { color: nc.textLight }]}
                   accessibilityRole="header"
                 >
                   {section.label}
@@ -332,7 +332,7 @@ export default function PlusScreen() {
           {activeChild && (
             <View style={styles.section}>
               <Text
-                style={[styles.sectionLabel, { color: nc.textMuted }]}
+                style={[styles.sectionLabel, { color: nc.textLight }]}
                 accessibilityRole="header"
               >
                 Outils

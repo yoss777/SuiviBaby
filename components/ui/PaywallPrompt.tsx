@@ -56,7 +56,7 @@ export function PaywallPrompt({
             <Text style={[styles.bannerTitle, { color: nc.textStrong }]}>
               {message.title}
             </Text>
-            <Text style={[styles.bannerDescription, { color: nc.textMuted }]}>
+            <Text style={[styles.bannerDescription, { color: nc.textLight }]}>
               {message.description}
             </Text>
           </View>

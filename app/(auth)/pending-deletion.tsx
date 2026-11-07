@@ -141,7 +141,7 @@ export default function PendingDeletionScreen() {
             Suppression du compte programmée
           </Text>
 
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Votre compte sera supprimé définitivement le{" "}
             <Text style={[styles.bodyStrong, { color: nc.textStrong }]}>
               {formattedDeletionDate || "prochainement"}
@@ -149,7 +149,7 @@ export default function PendingDeletionScreen() {
             .
           </Text>
 
-          <Text style={[styles.body, { color: nc.textMuted }]}>
+          <Text style={[styles.body, { color: nc.textLight }]}>
             Vous pouvez encore annuler cette demande avant cette date. Après
             l&apos;échéance, la suppression sera définitive.
           </Text>
@@ -160,7 +160,7 @@ export default function PendingDeletionScreen() {
               { backgroundColor: nc.backgroundPressed, borderColor: nc.borderLight },
             ]}
           >
-            <Text style={[styles.noticeText, { color: nc.textMuted }]}>
+            <Text style={[styles.noticeText, { color: nc.textLight }]}>
               Tant que cette demande est active, l&apos;accès à
               l&apos;application est suspendu jusqu&apos;à annulation.
             </Text>

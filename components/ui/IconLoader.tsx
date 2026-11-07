@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import { Animated, Easing } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export function IconLoader({
   name = "baby-bottle",
@@ -20,7 +21,7 @@ export function IconLoader({
         Animated.timing(scale, { toValue: 0.9, duration: 420, easing: Easing.in(Easing.quad), useNativeDriver: true }),
       ])
     );
-    loop.start();
+    startLoop(loop);
     return () => loop.stop();
   }, [scale]);
 

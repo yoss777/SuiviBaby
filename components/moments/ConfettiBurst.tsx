@@ -9,6 +9,7 @@ import Animated, {
   withDelay,
   withTiming,
 } from "react-native-reanimated";
+import { useReduceMotion } from "@/hooks/useReduceMotion";
 
 type ConfettiBurstProps = {
   trigger: number; // Change this value to trigger animation
@@ -94,6 +95,7 @@ const ConfettiPiece = ({ color, trigger, config }: ConfettiPieceProps) => {
 
 export const ConfettiBurst = ({ trigger, onComplete }: ConfettiBurstProps) => {
   const opacity = useSharedValue(1);
+  const reduceMotion = useReduceMotion();
 
   // Pre-generate random configs for each piece when trigger changes
   const confettiConfigs = useMemo(() => {
@@ -108,6 +110,11 @@ export const ConfettiBurst = ({ trigger, onComplete }: ConfettiBurstProps) => {
   }, [trigger]);
 
   useEffect(() => {
+    // « Réduire les animations » : pas de confettis, on termine tout de suite
+    if (trigger > 0 && reduceMotion) {
+      onComplete?.();
+      return;
+    }
     if (trigger > 0) {
       opacity.value = 1;
       opacity.value = withDelay(
@@ -125,7 +132,7 @@ export const ConfettiBurst = ({ trigger, onComplete }: ConfettiBurstProps) => {
     opacity: opacity.value,
   }));
 
-  if (trigger === 0) return null;
+  if (trigger === 0 || reduceMotion) return null;
 
   return (
     <Animated.View style={[styles.container, containerStyle]}>

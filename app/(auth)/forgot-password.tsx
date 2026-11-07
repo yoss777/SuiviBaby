@@ -125,7 +125,7 @@ export default function ForgotPasswordScreen() {
               <Text style={[styles.title, { color: nc.textStrong }]}>
                 {sent ? "Email envoyé" : "Mot de passe oublié ?"}
               </Text>
-              <Text style={[styles.subtitle, { color: nc.textMuted }]}>
+              <Text style={[styles.subtitle, { color: nc.textLight }]}>
                 {sent
                   ? `Un lien de réinitialisation a été envoyé à ${email.trim()}. Vérifiez votre boîte de réception et vos spams.`
                   : "Entrez votre adresse email pour recevoir un lien de réinitialisation."}
@@ -180,7 +180,7 @@ export default function ForgotPasswordScreen() {
               {/* Error message */}
               {!!error && (
                 <Text
-                  style={[styles.errorText, { color: nc.error }]}
+                  style={[styles.errorText, { color: nc.errorText }]}
                   accessibilityRole="alert"
                   accessibilityLabel={error}
                 >
@@ -240,7 +240,7 @@ export default function ForgotPasswordScreen() {
             {/* Footer — same as login */}
             <View style={styles.footer}>
               <FontAwesome name="shield-halved" size={16} color={nc.textMuted} />
-              <Text style={[styles.footerText, { color: nc.textMuted }]}>
+              <Text style={[styles.footerText, { color: nc.textLight }]}>
                 Vos données sont sécurisées et privées
               </Text>
             </View>

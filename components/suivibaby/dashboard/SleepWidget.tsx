@@ -1,5 +1,6 @@
 import {
   getCategoryColors,
+  getCategoryTextColors,
   getNeutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
@@ -14,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { startLoop } from "@/utils/motion";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -64,10 +66,13 @@ export const SleepWidget = memo(function SleepWidget({
 
   const sleepColors = {
     primary: cat.sommeil.primary,
+    // Texte/icône posés sur fond clair : variante foncée (≥ 4.5:1)
+    text: getCategoryTextColors(colorScheme).sommeil,
     background: cat.sommeil.background,
     border: cat.sommeil.border,
     textDark: colorScheme === "dark" ? "#D4C8F0" : "#4A3D6B",
-    textMuted: colorScheme === "dark" ? "#9B8CBF" : "#7A6B9A",
+    // Texte secondaire lisible (≥ 4.5:1 sur le fond lavande)
+    textMuted: colorScheme === "dark" ? "#9B8CBF" : "#6B5C8C",
     buttonSecondaryBg: colorScheme === "dark" ? "#2A2140" : "#EDE9F4",
   };
 
@@ -130,7 +135,7 @@ export const SleepWidget = memo(function SleepWidget({
           }),
         ]),
       );
-      pulse.start();
+      startLoop(pulse);
       return () => pulse.stop();
     } else {
       ownPulseAnim.setValue(1);
@@ -254,7 +259,7 @@ export const SleepWidget = memo(function SleepWidget({
             <Text
               style={[
                 styles.startButtonText,
-                { color: preferNight ? sleepColors.primary : nc.backgroundCard },
+                { color: preferNight ? sleepColors.text : nc.backgroundCard },
               ]}
             >
               Sieste
@@ -281,7 +286,7 @@ export const SleepWidget = memo(function SleepWidget({
             <Text
               style={[
                 styles.startButtonText,
-                { color: preferNight ? nc.backgroundCard : sleepColors.primary },
+                { color: preferNight ? nc.backgroundCard : sleepColors.text },
               ]}
             >
               Nuit

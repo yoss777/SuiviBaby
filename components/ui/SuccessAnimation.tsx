@@ -12,6 +12,7 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import * as Haptics from 'expo-haptics';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 
 interface SuccessAnimationProps {
   visible: boolean;
@@ -33,7 +34,23 @@ export function SuccessAnimation({
   const checkScale = useSharedValue(0);
   const checkRotation = useSharedValue(-45);
   const blurOpacity = useSharedValue(0);
+  // « Réduire les animations » : apparition/disparition instantanées
+  const reduceMotion = useReduceMotion();
   useEffect(() => {
+    if (visible && reduceMotion) {
+      scale.value = 1;
+      opacity.value = 1;
+      checkScale.value = 1;
+      checkRotation.value = 0;
+      blurOpacity.value = 1;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const dismissTimer = setTimeout(() => {
+        blurOpacity.value = 0;
+        opacity.value = 0;
+        onComplete?.();
+      }, 1500);
+      return () => clearTimeout(dismissTimer);
+    }
     if (visible) {
       // Reset state before starting
       scale.value = 0;
@@ -70,7 +87,7 @@ export function SuccessAnimation({
 
       return () => clearTimeout(dismissTimer);
     }
-  }, [visible]);
+  }, [visible, reduceMotion]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

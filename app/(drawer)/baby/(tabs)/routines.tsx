@@ -67,6 +67,7 @@ import {
 } from "@/components/forms/RoutinesForm";
 import { isValidDate, toDate } from "@/utils/date";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
+import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -127,7 +128,7 @@ const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
         useNativeDriver: true,
       }),
     );
-    shimmer.start();
+    startLoop(shimmer);
     return () => shimmer.stop();
   }, [shimmerAnim]);
 
@@ -1265,7 +1266,7 @@ export default function RoutinesScreen() {
 
   const toggleExpand = useCallback((date: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    configureLayoutAnimation(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedDays((prev) => {
       const next = new Set(prev);
       if (next.has(date)) {
@@ -1369,14 +1370,14 @@ export default function RoutinesScreen() {
               <Text
                 style={[
                   styles.sessionTimeText,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   isLast && { color: nc.textStrong, fontWeight: "600" },
                 ]}
               >
                 {formatTime(time)}
               </Text>
               <Text style={[styles.sessionTimeArrow, { color: nc.textMuted }]}>↓</Text>
-              <Text style={[styles.sessionTimeTextSecondary, { color: nc.textMuted }]}>
+              <Text style={[styles.sessionTimeTextSecondary, { color: nc.textLight }]}>
                 {formatTime(sleepEnd)}
               </Text>
             </>
@@ -1385,7 +1386,7 @@ export default function RoutinesScreen() {
               <Text
                 style={[
                   styles.sessionTimeText,
-                  { color: nc.textMuted },
+                  { color: nc.textLight },
                   isLast && { color: nc.textStrong, fontWeight: "600" },
                 ]}
               >
@@ -1400,7 +1401,7 @@ export default function RoutinesScreen() {
             <Text
               style={[
                 styles.sessionTimeText,
-                { color: nc.textMuted },
+                { color: nc.textLight },
                 isLast && { color: nc.textStrong, fontWeight: "600" },
               ]}
             >
@@ -1446,13 +1447,13 @@ export default function RoutinesScreen() {
             {isSleep ? (
               <>
                 {(sleepEnd || sleepIsOngoing) && sleepMeta.length > 0 && (
-                  <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+                  <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                     {sleepMeta.join(" · ")}
                   </Text>
                 )}
               </>
             ) : (
-              <Text style={[styles.sessionDetailText, { color: nc.textMuted }]}>
+              <Text style={[styles.sessionDetailText, { color: nc.textLight }]}>
                 {buildDetails(event)}
               </Text>
             )}
@@ -1505,7 +1506,7 @@ export default function RoutinesScreen() {
           <View style={styles.dayStats}>
             <View style={styles.dayStatItem}>
               <Text style={[styles.dayStatValue, { color: nc.textNormal }]}>{item.events.length}</Text>
-              <Text style={[styles.dayStatLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.dayStatLabel, { color: nc.textLight }]}>
                 routine{item.events.length > 1 ? "s" : ""}
               </Text>
             </View>
@@ -1520,7 +1521,7 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.sommeil.dark },
                 ]}
               />
-              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Sieste{napCount > 1 ? "s" : ""}
               </Text>
               <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{napCount}</Text>
@@ -1534,7 +1535,7 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.sommeil.dark },
                 ]}
               />
-              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Nuit{nightCount > 1 ? "s" : ""}
               </Text>
               <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{nightCount}</Text>
@@ -1548,7 +1549,7 @@ export default function RoutinesScreen() {
                   { backgroundColor: eventColors.bain.dark },
                 ]}
               />
-              <Text style={[styles.statsBreakdownLabel, { color: nc.textMuted }]}>
+              <Text style={[styles.statsBreakdownLabel, { color: nc.textLight }]}>
                 Bain{bainCount > 1 ? "s" : ""}
               </Text>
               <Text style={[styles.statsBreakdownValue, { color: nc.textNormal }]}>{bainCount}</Text>
@@ -1739,7 +1740,7 @@ export default function RoutinesScreen() {
                   ? "Aucune routine enregistrée"
                   : "Aucune routine pour ce filtre"}
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textMuted }]}>
+              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
                 Suivez le sommeil et les bains
               </ThemedText>
               {events.length === 0 && (
@@ -1894,7 +1895,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   dayStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
   },
   statsBreakdown: {
     flexDirection: "row",
@@ -1953,7 +1954,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   sessionTimeOngoing: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   sessionIconWrapper: {
@@ -2077,7 +2078,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteActionText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
 });

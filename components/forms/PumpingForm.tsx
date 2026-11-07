@@ -306,7 +306,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 -
@@ -334,7 +334,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 +
@@ -370,7 +370,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 -
@@ -398,7 +398,7 @@ export function PumpingForm({
                 style={[
                   styles.quantityButtonText,
                   { color: nc.textStrong },
-                  isSubmitting && { color: nc.textMuted },
+                  isSubmitting && { color: nc.textLight },
                 ]}
               >
                 +
@@ -472,7 +472,7 @@ export function PumpingForm({
             accessibilityLabel="Supprimer"
           >
             <FontAwesome5 name="trash" size={14} color={nc.error} />
-            <Text style={[styles.deleteText, { color: nc.error }]}>Supprimer</Text>
+            <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
           </TouchableOpacity>
         )}
       </View>

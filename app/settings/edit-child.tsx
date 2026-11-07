@@ -326,7 +326,7 @@ export default function EditChildScreen() {
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-              <Text style={[styles.loadingText, { color: nc.textMuted }]}>Chargement...</Text>
+              <Text style={[styles.loadingText, { color: nc.textLight }]}>Chargement...</Text>
             </View>
           ) : allChildren.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -335,7 +335,7 @@ export default function EditChildScreen() {
             </View>
           ) : (
             <View style={styles.childrenList}>
-              <Text style={[styles.infoText, { color: nc.textMuted }]}>
+              <Text style={[styles.infoText, { color: nc.textLight }]}>
                 Appuyez sur un enfant pour modifier son nom. Seuls les enfants dont vous êtes propriétaire sont modifiables.
               </Text>
               {allChildren.map((child) => {
@@ -366,6 +366,7 @@ export default function EditChildScreen() {
                             style={[styles.inlineInput, { backgroundColor: nc.backgroundPressed, color: nc.textStrong, borderColor: nc.borderLight }]}
                             value={editName}
                             onChangeText={setEditName}
+                            accessibilityLabel={`Nom de ${child.name}`}
                             placeholder="Nom ou petit nom"
                             placeholderTextColor={nc.textMuted}
                             autoCapitalize="words"
@@ -379,6 +380,7 @@ export default function EditChildScreen() {
                             onPress={handleSave}
                             disabled={isSaveDisabled}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
                             accessibilityLabel="Valider le nom"
                           >
                             <Ionicons name="checkmark" size={20} color={nc.white} />
@@ -395,7 +397,7 @@ export default function EditChildScreen() {
                           accessibilityLabel={child.isOwner ? `Modifier le nom de ${child.name}` : `${child.name}`}
                         >
                           <Text style={[styles.childName, { color: nc.textStrong }]}>{child.name}</Text>
-                          <Text style={[styles.childAge, { color: nc.textMuted }]}>
+                          <Text style={[styles.childAge, { color: nc.textLight }]}>
                             {ageText}{isHidden ? " • masqué" : ""}
                           </Text>
                         </TouchableOpacity>
@@ -406,8 +408,10 @@ export default function EditChildScreen() {
                         <TouchableOpacity
                           onPress={() => isEditing ? cancelEditing() : startEditing(child)}
                           disabled={isSaving || isDeleting}
+                          style={styles.iconTarget}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          accessibilityLabel={isEditing ? "Annuler la modification" : "Modifier le nom"}
+                          accessibilityRole="button"
+                          accessibilityLabel={isEditing ? `Annuler la modification du nom de ${child.name}` : `Modifier le nom de ${child.name}`}
                         >
                           <Ionicons
                             name={isEditing ? "arrow-back" : "create-outline"}
@@ -441,7 +445,7 @@ export default function EditChildScreen() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <FontAwesome name="trash-alt" size={14} color={nc.error} />
-                          <Text style={[styles.dangerButtonText, { color: nc.error }]}>{isDeleting ? "..." : "Supprimer"}</Text>
+                          <Text style={[styles.dangerButtonText, { color: nc.errorText }]}>{isDeleting ? "..." : "Supprimer"}</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -502,7 +506,7 @@ export default function EditChildScreen() {
               {transferModal.loading && transferModal.parents.length === 0 ? (
                 <ActivityIndicator size="small" color={Colors[colorScheme].tint} style={{ marginVertical: 20 }} />
               ) : transferModal.parents.length === 0 ? (
-                <Text style={[styles.noParentsText, { color: nc.textMuted }]}>Aucun autre parent disponible.</Text>
+                <Text style={[styles.noParentsText, { color: nc.textLight }]}>Aucun autre parent disponible.</Text>
               ) : (
                 <View style={styles.parentsList}>
                   {transferModal.parents.map((parent) => {
@@ -517,7 +521,7 @@ export default function EditChildScreen() {
                         <Ionicons name={isSelected ? "radio-button-on" : "radio-button-off"} size={20} color={isSelected ? Colors[colorScheme].tint : nc.textMuted} />
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.parentName, { color: nc.textStrong }]}>{parent.email || parent.userId.slice(0, 8) + "..."}</Text>
-                          <Text style={[styles.parentRole, { color: nc.textMuted }]}>{parent.role}</Text>
+                          <Text style={[styles.parentRole, { color: nc.textLight }]}>{parent.role}</Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -593,9 +597,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   inlineValidateButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Cible tactile réelle ≥ 44 pt pour les boutons-icônes
+  iconTarget: {
+    minWidth: 44,
+    minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -181,7 +181,7 @@ export default function HelpScreen() {
       </View>
       <View style={styles.supportContent}>
         <ThemedText style={styles.supportTitle}>{option.title}</ThemedText>
-        <Text style={[styles.supportDescription, { color: nc.textMuted }]}>
+        <Text style={[styles.supportDescription, { color: nc.textLight }]}>
           {option.description}
         </Text>
       </View>

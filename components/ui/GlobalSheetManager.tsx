@@ -72,7 +72,7 @@ function FormCrashFallback({ onClose, onCrash }: { onClose: () => void; onCrash?
   }, [onCrash]);
   return (
     <View style={fallbackStyles.container} accessibilityRole="alert">
-      <Text style={[fallbackStyles.title, { color: neutral.error }]}>Ce formulaire n&apos;a pas pu s&apos;afficher</Text>
+      <Text style={[fallbackStyles.title, { color: neutral.errorText }]}>Ce formulaire n&apos;a pas pu s&apos;afficher</Text>
       <Text style={[fallbackStyles.message, { color: neutral.textNormal }]}>
         L&apos;équipe a été notifiée. Vous pouvez fermer cette fenêtre et réessayer.
       </Text>

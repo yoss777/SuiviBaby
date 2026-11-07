@@ -107,7 +107,7 @@ export default function BackupScreen() {
     <View style={styles.settingItem}>
       <View style={styles.settingContent}>
         <ThemedText style={styles.settingTitle}>{title}</ThemedText>
-        <Text style={[styles.settingDescription, { color: nc.textMuted }]}>
+        <Text style={[styles.settingDescription, { color: nc.textLight }]}>
           {description}
         </Text>
       </View>
@@ -152,7 +152,7 @@ export default function BackupScreen() {
               <ThemedText style={styles.statusTitle}>
                 Derni\u00e8re sauvegarde
               </ThemedText>
-              <Text style={[styles.statusDate, { color: nc.textMuted }]}>
+              <Text style={[styles.statusDate, { color: nc.textLight }]}>
                 {lastBackup}
               </Text>
             </View>
@@ -164,7 +164,7 @@ export default function BackupScreen() {
                 size={16}
                 color={nc.textMuted}
               />
-              <Text style={[styles.statusInfoText, { color: nc.textMuted }]}>
+              <Text style={[styles.statusInfoText, { color: nc.textLight }]}>
                 {backupSize}
               </Text>
             </View>
@@ -274,7 +274,7 @@ export default function BackupScreen() {
                 26 d\u00e9cembre 2025, 14:30
               </ThemedText>
             </View>
-            <Text style={[styles.historySize, { color: nc.textMuted }]}>
+            <Text style={[styles.historySize, { color: nc.textLight }]}>
               45.2 MB
             </Text>
           </View>
@@ -289,7 +289,7 @@ export default function BackupScreen() {
                 25 d\u00e9cembre 2025, 10:15
               </ThemedText>
             </View>
-            <Text style={[styles.historySize, { color: nc.textMuted }]}>
+            <Text style={[styles.historySize, { color: nc.textLight }]}>
               44.8 MB
             </Text>
           </View>
@@ -304,7 +304,7 @@ export default function BackupScreen() {
                 24 d\u00e9cembre 2025, 08:00
               </ThemedText>
             </View>
-            <Text style={[styles.historySize, { color: nc.textMuted }]}>
+            <Text style={[styles.historySize, { color: nc.textLight }]}>
               43.5 MB
             </Text>
           </View>
