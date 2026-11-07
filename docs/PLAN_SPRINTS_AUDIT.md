@@ -768,30 +768,30 @@ figés après une erreur, caches non vidés à la déconnexion, image de l'enfan
 précédent après un changement d'enfant, filtres « aujourd'hui » figés après
 minuit…) corrigés avec tests (1182 tests app, 439 fonctions, 219 règles).
 
-## S9 — Accessibilité · app + site · ⏳
+## S9 — Accessibilité · app + site · ✅ 2026-11-07 (en attente de revue ECC S9+S10)
 
 User story : en tant que parent malvoyant ou utilisant VoiceOver/TalkBack, je
 veux lire tous les textes, connaître les valeurs des graphiques et des dates,
 et ne pas subir d'animations si je les ai désactivées.
 
-- [ ] **9.1** Palette : `textMuted` réservé au décoratif, `textLight` pour le
+- [x] **9.1** Palette : `textMuted` réservé au décoratif, `textLight` pour le
   texte, `textMuted` sombre relevé ; erreurs en `errorText` ; variantes
   foncées des couleurs de catégorie pour le texte et les icônes ; test
   automatique des contrastes de la palette.
-- [ ] **9.2** `useReduceMotion` branché dans `useNightMode` et les animations
+- [x] **9.2** `useReduceMotion` branché dans `useNightMode` et les animations
   (FAB, barre vocale, confettis, splash).
-- [ ] **9.3** Graphiques : résumé textuel par jour et actions pour parcourir
+- [x] **9.3** Graphiques : résumé textuel par jour et actions pour parcourir
   les jours.
-- [ ] **9.4** FAB et menus : actions cachées hors de l'arbre d'accessibilité
+- [x] **9.4** FAB et menus : actions cachées hors de l'arbre d'accessibilité
   quand fermés, fonds « Fermer le menu », `expanded`, bouton « Fermer » sur
   les feuilles.
-- [ ] **9.5** Formulaires : valeur des dates annoncée, sexe en
+- [x] **9.5** Formulaires : valeur des dates annoncée, sexe en
   `radio`/`radiogroup`, erreurs annoncées et textuelles (cases de
   consentement), cibles ≥ 44 pt réelles.
-- [ ] **9.6** Textes ≥ 12 pt, hauteurs minimales au lieu de fixes,
+- [x] **9.6** Textes ≥ 12 pt, hauteurs minimales au lieu de fixes,
   `maxFontSizeMultiplier` sur la barre d'onglets et la barre vocale ; badge
   Moments annoncé.
-- [ ] **9.7** Site : `h2` dans la section fonctionnalités, bouton de pause
+- [x] **9.7** Site : `h2` dans la section fonctionnalités, bouton de pause
   sans double sens, `aria-live` réduit sur les tarifs, alerte de
   `reset-password` annoncée.
 
