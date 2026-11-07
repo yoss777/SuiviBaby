@@ -1,3 +1,8 @@
+// Fuseau fixé avant le lancement des workers Jest : les tests des bornes de
+// semaine du récap (heure d'été/hiver) supposent Europe/Paris, et changer TZ
+// pendant un test ne prend pas effet sous Linux (CI en UTC).
+process.env.TZ = "Europe/Paris";
+
 module.exports = {
   testEnvironment: "node",
   testTimeout: 10000,
