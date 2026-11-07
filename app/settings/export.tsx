@@ -1002,12 +1002,17 @@ export default function ExportScreen() {
     </View>
   );
 
+  // Rôle contributor (futur « Proche », S12) : export limité à ses
+  // interactions. Texte à revoir quand le rôle « Parent » (admin) existera.
+  const hasProcheChild = children.some((item) => item.role === "contributor");
+
   const renderChildRow = (item: ExportChild) => {
     const counts = getCounts(item);
     const totalEvents = item.events.length;
     const totalInteractions = item.likes.length + item.comments.length;
-    const canExportEventsForChild =
-      item.role === "owner" || item.role === "admin" || item.events.length > 0;
+    const seesAllEvents = item.role === "owner" || item.role === "admin";
+    const canExportEventsForChild = seesAllEvents || item.events.length > 0;
+    const eventsScope = seesAllEvents ? "tout le suivi" : "vos saisies";
     const selectedEvents = eventTypes.reduce((sum, type) => {
       if (!canExportEventsForChild) return sum;
       if (!selectedEventTypes.has(type.id as EventType)) return sum;
@@ -1055,8 +1060,8 @@ export default function ExportScreen() {
                 ]}
               >
                 {totalEvents === 0
-                  ? "Aucun événement (mes données)"
-                  : `${selectedEvents}/${totalEvents} événements (mes données)`}
+                  ? `Aucun événement (${eventsScope})`
+                  : `${selectedEvents}/${totalEvents} événements (${eventsScope})`}
               </Text>
               <Text
                 style={[
@@ -1065,8 +1070,8 @@ export default function ExportScreen() {
                 ]}
               >
                 {totalInteractions === 0
-                  ? "Aucune interaction (mes données)"
-                  : `${totalInteractions} interactions (mes données)`}
+                  ? "Aucune interaction (vos likes et commentaires)"
+                  : `${totalInteractions} interactions (vos likes et commentaires)`}
               </Text>
             </View>
           </View>
@@ -1288,6 +1293,24 @@ export default function ExportScreen() {
                 )}
               </View>
             </View>
+
+            {hasProcheChild && (
+              <View
+                style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+                accessibilityRole="text"
+              >
+                <Ionicons
+                  name="information-circle"
+                  size={24}
+                  color={nc.todayAccent}
+                />
+                <ThemedText style={styles.infoText}>
+                  Pour un enfant partagé avec vous, l&apos;export contient
+                  uniquement vos likes et commentaires. Le suivi complet peut
+                  être exporté par le propriétaire de l&apos;enfant.
+                </ThemedText>
+              </View>
+            )}
 
             {selectedEventsCount > 0 && (
               <View
