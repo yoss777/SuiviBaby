@@ -22,8 +22,13 @@ name: Maestro nightly
 # the commit it was built from.
 
 on:
-  schedule:
-    - cron: "30 2 * * *" # 02:30 UTC every night
+  # Nightly schedule paused (2026-11-08): the secrets MAESTRO_EMAIL /
+  # MAESTRO_PASSWORD are not set, so every night failed and sent an e-mail.
+  # Android builds are made locally (no EAS cloud "preview" APK to download
+  # either). Put the schedule back once a test account and a CI-reachable APK
+  # exist:
+  # schedule:
+  #   - cron: "30 2 * * *" # 02:30 UTC every night
   workflow_dispatch:
     inputs:
       build_profile:
