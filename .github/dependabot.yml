@@ -19,13 +19,20 @@ updates:
       - dependency-name: "react-dom"
       - dependency-name: "@types/react"
       - dependency-name: "@shopify/react-native-skia"
-      - dependency-name: "@react-navigation/*"
       - dependency-name: "@gorhom/bottom-sheet"
       - dependency-name: "@react-native-picker/picker"
       - dependency-name: "@react-native-async-storage/async-storage"
-      # Majeures du SDK Firebase web : lot dédié avec tests sur appareil (#35).
+      # Outillage aligné sur le SDK Expo (montée 58, 2026-11-08) :
+      - dependency-name: "jest-expo"
+      - dependency-name: "eslint-config-expo"
+      - dependency-name: "@react-native/*"
+      - dependency-name: "typescript"
+      - dependency-name: "react-test-renderer"
+      # Testing Library 14 : API asynchrone, migration des tests à part.
+      - dependency-name: "@testing-library/react-native"
+        update-types: ["version-update:semver-major"]
       # SDK Firebase web : ses versions tirent des modules natifs
-      # (AsyncStorage 3.x, PR #44) → lot dédié avec la montée d'Expo.
+      # (AsyncStorage 3.x, PR #44) → lot dédié avec tests sur appareil.
       - dependency-name: "firebase"
       - dependency-name: "@react-native-google-signin/*"
     groups:
