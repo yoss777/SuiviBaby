@@ -1,5 +1,13 @@
+// Fuseau fixé avant le lancement des workers : les tests de dates (heures
+// calmes, filtres « aujourd'hui », regroupements par jour) doivent donner le
+// même résultat en local (Paris) et en CI (UTC).
+process.env.TZ = "Europe/Paris";
+
 module.exports = {
   preset: "jest-expo",
+  // Les tests de rendu lourds (écran d'export, graphiques) dépassaient les
+  // 5 s par défaut sous la charge parallèle de la CI (échecs intermittents).
+  testTimeout: 15000,
   transformIgnorePatterns: [
     "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?(-.*)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|@shopify/react-native-skia|react-native-svg|react-native-reanimated|react-native-gesture-handler|react-native-screens|react-native-safe-area-context|react-native-pager-view|@gorhom|firebase|@firebase)/)",
   ],
