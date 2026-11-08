@@ -3,7 +3,7 @@ name: iOS build (GitHub macOS runner)
 # iOS store build without the EAS cloud quota (2026-11-08: monthly EAS build
 # limit reached; this Mac is on macOS 13 / Xcode 15.2, too old for React
 # Native). Same command as a local build (`eas build --local`) but on a GitHub
-# macOS runner with a recent Xcode, then `eas submit` to App Store Connect
+# macOS runner (macos-26) with a recent Xcode, then `eas submit` to App Store Connect
 # (EAS Submit is not counted in the build quota). Manual only.
 #
 # - Signing: EAS remote credentials (distribution certificate + provisioning
@@ -47,7 +47,8 @@ concurrency:
 jobs:
   build:
     name: Build iOS (production) and submit
-    runs-on: macos-15
+    # Expo 58 needs Xcode 26.4+: macos-15 tops out at Xcode 26.3.
+    runs-on: macos-26
     timeout-minutes: 120
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
