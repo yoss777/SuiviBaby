@@ -135,7 +135,7 @@ describe("easCopyFirebaseFiles", () => {
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
-  it("copies the EAS file variable into android/app", () => {
+  it("copies the EAS file variable to the project root", () => {
     const src = path.join(root, "staging.json");
     fs.writeFileSync(src, json("samaye-staging"));
     run({
@@ -144,7 +144,7 @@ describe("easCopyFirebaseFiles", () => {
       log,
     });
     expect(
-      fs.readFileSync(path.join(root, "android/app/google-services.json"), "utf8"),
+      fs.readFileSync(path.join(root, "google-services.json"), "utf8"),
     ).toBe(json("samaye-staging"));
   });
 
@@ -160,7 +160,7 @@ describe("easCopyFirebaseFiles", () => {
 
   it("rejects a file from the wrong project", () => {
     fs.mkdirSync(path.join(root, "android/app"), { recursive: true });
-    fs.writeFileSync(path.join(root, "android/app/google-services.json"), json("samaye-53723"));
+    fs.writeFileSync(path.join(root, "google-services.json"), json("samaye-53723"));
     expect(() =>
       run({ rootDir: root, env: { APP_ENV: "staging", EAS_BUILD_PLATFORM: "android" }, log }),
     ).toThrow(/expects "samaye-staging"/);
@@ -169,7 +169,7 @@ describe("easCopyFirebaseFiles", () => {
   it("reads the iOS project id from the plist", () => {
     fs.mkdirSync(path.join(root, "ios/SuiviBaby"), { recursive: true });
     fs.writeFileSync(
-      path.join(root, "ios/SuiviBaby/GoogleService-Info.plist"),
+      path.join(root, "GoogleService-Info.plist"),
       "<dict><key>PROJECT_ID</key>\n<string>samaye-53723</string></dict>",
     );
     expect(() =>
@@ -183,7 +183,7 @@ describe("easCopyFirebaseFiles", () => {
 
   it("reads EXPO_PUBLIC_APP_ENV like app.config.js when APP_ENV is empty", () => {
     fs.mkdirSync(path.join(root, "android/app"), { recursive: true });
-    fs.writeFileSync(path.join(root, "android/app/google-services.json"), json("samaye-staging"));
+    fs.writeFileSync(path.join(root, "google-services.json"), json("samaye-staging"));
     expect(() =>
       run({ rootDir: root, env: { APP_ENV: "", EXPO_PUBLIC_APP_ENV: "staging", EAS_BUILD_PLATFORM: "android" }, log }),
     ).not.toThrow();
@@ -213,30 +213,30 @@ describe("easCopyFirebaseFiles", () => {
 
   it("rejects a plist without PROJECT_ID", () => {
     fs.mkdirSync(path.join(root, "ios/SuiviBaby"), { recursive: true });
-    fs.writeFileSync(path.join(root, "ios/SuiviBaby/GoogleService-Info.plist"), "<dict><key>BUNDLE_ID</key><string>x</string></dict>");
+    fs.writeFileSync(path.join(root, "GoogleService-Info.plist"), "<dict><key>BUNDLE_ID</key><string>x</string></dict>");
     expect(() => run({ rootDir: root, env: { EAS_BUILD_PLATFORM: "ios" }, log })).toThrow(/no project id/);
   });
 
   it("rejects an invalid JSON file with a readable message", () => {
     fs.mkdirSync(path.join(root, "android/app"), { recursive: true });
-    fs.writeFileSync(path.join(root, "android/app/google-services.json"), "{not json");
+    fs.writeFileSync(path.join(root, "google-services.json"), "{not json");
     expect(() => run({ rootDir: root, env: { EAS_BUILD_PLATFORM: "android" }, log })).toThrow(
-      /android: android[\\/]app[\\/]google-services\.json cannot be read/,
+      /android: google-services\.json cannot be read/,
     );
   });
 
   it("a JSON file without project_info is rejected too", () => {
     fs.mkdirSync(path.join(root, "android/app"), { recursive: true });
-    fs.writeFileSync(path.join(root, "android/app/google-services.json"), "{}");
+    fs.writeFileSync(path.join(root, "google-services.json"), "{}");
     expect(() => run({ rootDir: root, env: { EAS_BUILD_PLATFORM: "android" }, log })).toThrow(/no project id/);
   });
 
   it("checks both platforms when EAS_BUILD_PLATFORM is not set", () => {
     fs.mkdirSync(path.join(root, "android/app"), { recursive: true });
-    fs.writeFileSync(path.join(root, "android/app/google-services.json"), json("samaye-53723"));
+    fs.writeFileSync(path.join(root, "google-services.json"), json("samaye-53723"));
     fs.mkdirSync(path.join(root, "ios/SuiviBaby"), { recursive: true });
     fs.writeFileSync(
-      path.join(root, "ios/SuiviBaby/GoogleService-Info.plist"),
+      path.join(root, "GoogleService-Info.plist"),
       "<dict><key>PROJECT_ID</key><string>samaye-staging</string></dict>",
     );
     expect(() => run({ rootDir: root, env: {}, log })).toThrow(/ios: .* belongs to project "samaye-staging"/);

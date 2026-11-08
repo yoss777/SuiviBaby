@@ -10,7 +10,7 @@ Deux environnements, choisis par `APP_ENV` :
 | Environnement EAS | `production` | `preview` |
 | Config web Firebase | `config/firebaseEnvironments.json` → `production` | idem → `staging` (valeurs `STAGING_PLACEHOLDER_*` à remplacer) |
 | Fichiers natifs | variables EAS fichier `GOOGLE_SERVICES_JSON` / `GOOGLE_SERVICES_PLIST` (repli : fichiers locaux) | mêmes noms, environnement EAS `preview` |
-| Bundle id / package | `com.tesfa.suivibaby` | `com.tesfa.suivibaby` (inchangé : codé dans `android/` et `ios/` versionnés) |
+| Bundle id / package | `com.tesfa.suivibaby` | `com.tesfa.suivibaby` (inchangé ; depuis l'ADR 0004 les dossiers natifs sont générés, un suffixe par environnement devient possible dans `app.config.js`) |
 
 ## Comment la config est choisie
 
@@ -131,8 +131,8 @@ l'équipe) sous versionnement distant :
    numéro ≥ au minimum ci-dessus (sinon `eas build:version:set`, une fois).
 2. `eas build --platform android --profile production --local` : EAS
    **incrémente lui-même le compteur distant** (`autoIncrement`). Ne plus
-   modifier `versionCode` / `buildNumber` à la main dans `android/app/build.gradle`,
-   `Info.plist` ou `app.json` : ces valeurs sont ignorées avec la source
+   modifier `versionCode` / `buildNumber` à la main dans `app.json`
+   (les dossiers natifs sont générés, ADR 0004) : ces valeurs sont ignorées avec la source
    distante, et deux numéros qui divergent finissent par un envoi refusé.
 3. Récupérer le `.aab`, l'envoyer sur Play (Tests fermés – Alpha), puis
    `eas build:version:get` pour noter le numéro atteint.
