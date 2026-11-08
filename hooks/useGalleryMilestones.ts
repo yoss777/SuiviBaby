@@ -60,6 +60,8 @@ export function useGalleryMilestones(childId: string | undefined) {
   const [loadError, setLoadError] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Dernière lecture de page suivante en échec (évite un squelette sans fin).
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const isMountedRef = useRef(true);
   const eventsRef = useRef<GalleryMilestoneEvent[]>([]);
@@ -112,6 +114,7 @@ export function useGalleryMilestones(childId: string | undefined) {
       commit([]);
       setHasMore(false);
       setLoadingMore(false);
+      setLoadMoreFailed(false);
       loadingMoreRef.current = false;
       loadTokenRef.current += 1;
       resetPagesRef.current = false;
@@ -172,8 +175,10 @@ export function useGalleryMilestones(childId: string | undefined) {
       );
       commit(appendOlderPage(eventsRef.current, page));
       setHasMore(page.length >= GALLERY_PAGE_SIZE);
+      setLoadMoreFailed(false);
     } catch (error) {
       console.error("[Gallery] Erreur page suivante:", error);
+      if (isMountedRef.current) setLoadMoreFailed(true);
     } finally {
       if (loadTokenRef.current === token) {
         loadingMoreRef.current = false;
@@ -204,6 +209,7 @@ export function useGalleryMilestones(childId: string | undefined) {
     loadError: isCurrent && loadError,
     hasMore: isCurrent && hasMore,
     loadingMore: isCurrent && loadingMore,
+    loadMoreFailed: isCurrent && loadMoreFailed,
     loadMore,
     reload,
     retry,

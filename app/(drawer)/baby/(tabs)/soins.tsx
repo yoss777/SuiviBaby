@@ -1,4 +1,5 @@
 import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
@@ -924,8 +925,10 @@ export default function SoinsScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;

@@ -1,3 +1,5 @@
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { getThumbnailPath } from "@/utils/photoThumbnails";
 import {
   getAuthenticatedPhotoSource,
@@ -93,6 +95,18 @@ export function PhotoImage({
     immediateSource,
   );
 
+  // Vignettes : fond neutre tant que l'image (miniature, repli sur l'original)
+  // n'est pas affichée, pour ne jamais montrer un cadre vide ou cassé.
+  const colorScheme = useColorScheme() ?? "light";
+  const [imageReady, setImageReady] = useState(false);
+  useEffect(() => {
+    setImageReady(false);
+  }, [photoRef]);
+  const placeholderStyle =
+    thumbnail && !imageReady
+      ? { backgroundColor: getNeutralColors(colorScheme).borderLight }
+      : null;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -138,7 +152,7 @@ export function PhotoImage({
   if (!photoRef) return null;
 
   if (!source) {
-    return <View style={style} />;
+    return <View style={[style, placeholderStyle]} />;
   }
 
   return (
@@ -150,7 +164,11 @@ export function PhotoImage({
       recyclingKey={props.recyclingKey ?? originalRef ?? undefined}
       contentFit={props.contentFit ?? resizeMode}
       transition={props.transition ?? fadeDuration}
-      style={style}
+      style={[style, placeholderStyle]}
+      onLoad={(event) => {
+        setImageReady(true);
+        props.onLoad?.(event);
+      }}
       onError={(event) => {
         if (usingThumbnail && thumbPath) {
           // Miniature absente : on bascule sur l'original, sans erreur visible.

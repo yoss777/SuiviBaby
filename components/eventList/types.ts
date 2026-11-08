@@ -7,8 +7,8 @@
 // d'autres écrans ; ne pas ajouter de nouveau drapeau sans cette décision :
 // - loadMore.jumpOnManual : « Voir plus » saute au prochain événement (pompages,
 //   couches) ou ajoute 14 jours (repas) ;
-// - loadMore.jumpWindow : après un saut, "extend" (fenêtre élargie, fin fixe)
-//   ou "reset" (retour à 14 jours terminés sur l'événement, repas) ;
+//   (après un saut, tous les écrans chargent [E − 14 j, fin de fenêtre] : plus de
+//   différence « extend » / « reset ») ;
 // - jumpToLatestOnMount : fenêtre ancrée au dernier événement (pompages seuls)
 //   ou à aujourd'hui (repas, couches) ;
 // - filters.resetToTodayOnFocus : retour au filtre « aujourd'hui » (couches seules) ;
@@ -77,8 +77,6 @@ export interface EventListConfig<T extends BaseEvent, S extends object = object>
   loadMore: {
     /** « Voir plus » saute directement au prochain événement plus ancien. */
     jumpOnManual: boolean;
-    /** Après un saut : élargir la fenêtre ("extend") ou la ramener à 14 jours ("reset"). */
-    jumpWindow: "extend" | "reset";
   };
   filters: {
     /** Au retour sur l'écran, revenir à « aujourd'hui » même depuis « passé ». */

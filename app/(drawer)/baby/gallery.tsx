@@ -1,5 +1,12 @@
 import { canManageEvents } from "@/utils/eventPermissions";
 import { SwipeGallery } from "@/components/moments";
+import { GalleryGridSkeleton } from "@/components/gallery/GalleryGridSkeleton";
+import {
+  GRID_GAP,
+  NUM_COLUMNS,
+  THUMB_SIZE,
+  getGalleryViewState,
+} from "@/components/gallery/galleryGrid";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -31,7 +38,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BackHandler,
   ActivityIndicator,
-  Dimensions,
   Animated as RNAnimated,
   FlatList,
   Pressable,
@@ -45,10 +51,6 @@ import { useHeaderLeft, useHeaderRight } from "../_layout";
 import { startLoop } from "@/utils/motion";
 import { toDate } from "@/utils/date";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const GRID_GAP = 2;
-const NUM_COLUMNS = 3;
-const THUMB_SIZE = (SCREEN_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
 // ============================================
 // TYPES
@@ -289,60 +291,6 @@ const styles = StyleSheet.create({
 });
 
 // ============================================
-// SKELETON LOADING
-// ============================================
-
-function GallerySkeleton({ colorScheme }: { colorScheme: "light" | "dark" }) {
-  const nc = getNeutralColors(colorScheme);
-  const shimmerAnim = React.useRef(new RNAnimated.Value(0)).current;
-
-  React.useEffect(() => {
-    const loop = RNAnimated.loop(
-      RNAnimated.timing(shimmerAnim, {
-        toValue: 1,
-        duration: 1200,
-        useNativeDriver: true,
-      }),
-    );
-    startLoop(loop);
-    return () => loop.stop();
-  }, [shimmerAnim]);
-
-  const shimmerTranslate = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-200, 200],
-  });
-  const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
-
-  const Block = ({ width, height }: { width: number | string; height: number }) => (
-    <View style={[styles.skeletonBlock, { width: width as number, height, backgroundColor: nc.borderLight, marginBottom: 10 }]}>
-      <RNAnimated.View style={[styles.shimmerOverlay, { backgroundColor: shimmerBg, transform: [{ translateX: shimmerTranslate }] }]} />
-    </View>
-  );
-
-  return (
-    <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
-      <View style={{ width: "100%", padding: 20 }}>
-        <Block width="50%" height={26} />
-        <Block width="30%" height={14} />
-        <View style={{ height: 20 }} />
-        <View style={{ flexDirection: "row", gap: GRID_GAP }}>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-        </View>
-        <View style={{ height: GRID_GAP }} />
-        <View style={{ flexDirection: "row", gap: GRID_GAP }}>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-          <View style={{ flex: 1 }}><Block width="100%" height={THUMB_SIZE} /></View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// ============================================
 // THUMBNAIL COMPONENT
 // ============================================
 
@@ -481,6 +429,7 @@ export default function GalleryScreen() {
     loadError,
     hasMore,
     loadingMore,
+    loadMoreFailed,
     loadMore,
     reload,
     retry,
@@ -936,13 +885,24 @@ export default function GalleryScreen() {
     setTimeout(() => setIsRefreshing(false), 800);
   }, [reload]);
 
+  // Squelette tant que la première page n'est pas chargée ; le message « aucun
+  // souvenir » seulement une fois chargée sans photo.
+  const viewState = getGalleryViewState({
+    loaded,
+    loadError,
+    eventCount: events.length,
+    photoCount: allPhotoMilestones.length,
+    hasMore,
+    loadMoreFailed,
+  });
+
   // Loading state - skeleton shimmer
-  if (!loaded) {
-    return <GallerySkeleton colorScheme={colorScheme} />;
+  if (viewState === "loading") {
+    return <GalleryGridSkeleton />;
   }
 
   // Error state with retry
-  if (loadError && events.length === 0) {
+  if (viewState === "error") {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: nc.backgroundWarm }]}>
         <FontAwesome6 name="triangle-exclamation" size={32} color={nc.warning} />
@@ -970,7 +930,7 @@ export default function GalleryScreen() {
         </View>
 
         {/* Content */}
-        {allPhotoMilestones.length === 0 ? (
+        {viewState === "empty" ? (
           <View style={styles.emptyState}>
             <FontAwesome6 name="images" size={48} color={nc.textMuted} />
             <Text style={[styles.emptyStateTitle, { color: nc.textStrong }]}>Aucun souvenir</Text>

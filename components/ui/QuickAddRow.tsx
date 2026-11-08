@@ -21,8 +21,9 @@ interface QuickAddRowProps {
 /**
  * Rangée d'ajouts rapides affichée SOUS les filtres (Aujourd'hui / Historique),
  * pour que les filtres restent toujours entièrement visibles, même sur 360 dp.
- * Chaque bouton partage la largeur disponible (plafonnée sur grand écran) et
- * garde une cible tactile de 44 pt.
+ * Boutons compacts (à la taille de leur contenu), alignés à droite, avec un
+ * petit espace entre eux ; ils passent à la ligne plutôt que de déborder.
+ * Chaque bouton garde une cible tactile de 44 pt.
  */
 export const QuickAddRow = memo(function QuickAddRow({
   items,
@@ -49,8 +50,6 @@ export const QuickAddRow = memo(function QuickAddRow({
           <Text
             style={[styles.label, { color: nc.textNormal }]}
             numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
           >
             {item.label}
           </Text>
@@ -63,17 +62,17 @@ export const QuickAddRow = memo(function QuickAddRow({
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "flex-end",
+    gap: 6,
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
   button: {
-    flex: 1,
-    // Sur grand écran, on évite des boutons démesurés
-    maxWidth: 160,
+    // Pastille à la taille de son contenu (pas d'étirement sur la largeur)
     minHeight: 44,
-    paddingHorizontal: 8,
+    paddingHorizontal: 14,
     borderRadius: 22,
     flexDirection: "row",
     alignItems: "center",
@@ -81,7 +80,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    flexShrink: 1,
     fontSize: 13,
     fontWeight: "600",
   },

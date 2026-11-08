@@ -1,4 +1,5 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -870,8 +871,10 @@ export default function ActivitiesScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;

@@ -1,4 +1,5 @@
 import { ThemedText } from "@/components/themed-text";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -879,15 +880,10 @@ export default function RoutinesScreen() {
         );
 
         if (nextEventDate) {
-          const startOfNext = new Date(nextEventDate);
-          startOfNext.setHours(0, 0, 0, 0);
-          const diffDays =
-            Math.floor(
-              (endOfRange.getTime() - startOfNext.getTime()) /
-                (24 * 60 * 60 * 1000),
-            ) + 1;
-          setDaysWindow((prev) => Math.max(prev, diffDays));
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;

@@ -71,6 +71,21 @@ describe("QuickAddRow (ajouts rapides sous les filtres)", () => {
     expect(onNap).toHaveBeenCalledTimes(1);
   });
 
+  it("aligne les pastilles à droite, compactes (non étirées), avec un petit espace", () => {
+    render(<QuickAddRow items={items} />);
+    const row = StyleSheet.flatten(screen.getByTestId("quick-add-row").props.style);
+    expect(row.justifyContent).toBe("flex-end");
+    expect(row.gap).toBeGreaterThan(0);
+    expect(row.gap).toBeLessThanOrEqual(8);
+    expect(row.flexWrap).toBe("wrap");
+    for (const item of items) {
+      const button = StyleSheet.flatten(screen.getByTestId(`quick-add-${item.key}`).props.style);
+      expect(button.flex).toBeUndefined();
+      expect(button.flexGrow).toBeUndefined();
+      expect(button.width).toBeUndefined();
+    }
+  });
+
   it("garde des cibles de 44 pt et des libellés sur une ligne", () => {
     render(<QuickAddRow items={items} />);
     const button = screen.getByTestId("quick-add-sieste");

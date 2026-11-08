@@ -1,9 +1,9 @@
 // Fenêtre de dates chargée par les écrans de liste : 14 jours se terminant à
 // 23:59:59.999, élargie par « Voir plus » et par le chargement automatique
 // quand le filtre ne montre rien. Machine à états reprise telle quelle de
-// l'écran Pompages (avant Sprint 13), sauf le mode « extend » : la fin de la
-// fenêtre reste fixe (les anciens écrans la déplaçaient sur l'événement trouvé
-// et sortaient les jours récents de l'écouteur).
+// l'écran Pompages (avant Sprint 13). « Voir plus » qui saute à un événement E
+// charge le bloc de 15 jours qui le termine (E et les 14 jours avant) tout en
+// gardant la fin de la fenêtre : les jours récents restent écoutés et affichés.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
@@ -14,6 +14,8 @@ import {
 } from "@/services/eventsService";
 
 export const DEFAULT_DAYS_WINDOW = 14;
+/** Jours chargés avant l'événement trouvé par un saut (E + 14 jours = 15 jours). */
+export const JUMP_DAYS_BEFORE_EVENT = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Un seul type : chaîne (comme avant) ; plusieurs : tableau. */
@@ -31,11 +33,25 @@ export function computeRange(rangeEndDate: Date | null, daysWindow: number) {
   return { startOfRange, endOfRange };
 }
 
+/**
+ * Taille de fenêtre (en jours) nécessaire pour couvrir [E − 14 j, fin de fenêtre],
+ * E étant l'événement trouvé. Bornes inclusives, calcul en jours calendaires
+ * (insensible aux changements d'heure).
+ */
+export function daysWindowToCover(eventDate: Date, endOfRange: Date) {
+  const start = new Date(eventDate);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - JUMP_DAYS_BEFORE_EVENT);
+  const endDay = new Date(endOfRange);
+  endDay.setHours(0, 0, 0, 0);
+  return Math.round((endDay.getTime() - start.getTime()) / DAY_MS) + 1;
+}
+
 type Options = {
   childId: string | undefined;
   eventTypes: readonly EventType[];
   jumpToLatestOnMount: boolean;
-  loadMore: { jumpOnManual: boolean; jumpWindow: "extend" | "reset" };
+  loadMore: { jumpOnManual: boolean };
 };
 
 export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadMore }: Options) {
@@ -54,7 +70,7 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
   const typesRef = useRef(eventTypes);
   typesRef.current = eventTypes;
   const typesKey = eventTypes.join(",");
-  const { jumpOnManual, jumpWindow } = loadMore;
+  const { jumpOnManual } = loadMore;
 
   // Changement d'enfant : fenêtre par défaut.
   useEffect(() => {
@@ -139,18 +155,10 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
         }
 
         if (nextEventDate) {
-          if (jumpWindow === "reset") {
-            setDaysWindow(DEFAULT_DAYS_WINDOW);
-            setRangeEndDate(nextEventDate);
-          } else {
-            // « extend » : la fin de la fenêtre ne bouge pas (les jours récents
-            // restent écoutés) ; seule sa longueur grandit jusqu'au prochain événement.
-            const startOfNext = new Date(nextEventDate);
-            startOfNext.setHours(0, 0, 0, 0);
-            const diffDays =
-              Math.floor((endOfRange.getTime() - startOfNext.getTime()) / DAY_MS) + 1;
-            setDaysWindow((prev) => Math.max(prev, diffDays));
-          }
+          // La fin de la fenêtre ne bouge pas ; elle s'allonge pour couvrir
+          // [E − 14 j, fin] (jamais plus courte qu'avant).
+          const needed = daysWindowToCover(nextEventDate, endOfRange);
+          setDaysWindow((prev) => Math.max(prev, needed));
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;
@@ -166,7 +174,7 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
         setAutoLoadMoreAttempts(0);
       }
     },
-    [hasMore, childId, autoLoadMoreAttempts, daysWindow, rangeEndDate, jumpOnManual, jumpWindow],
+    [hasMore, childId, autoLoadMoreAttempts, daysWindow, rangeEndDate, jumpOnManual],
   );
 
   const handleLoadMore = useCallback(() => {
