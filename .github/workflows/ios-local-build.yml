@@ -1,0 +1,113 @@
+name: iOS build (GitHub macOS runner)
+
+# iOS store build without the EAS cloud quota (2026-11-08: monthly EAS build
+# limit reached; this Mac is on macOS 13 / Xcode 15.2, too old for React
+# Native). Same command as a local build (`eas build --local`) but on a GitHub
+# macOS runner with a recent Xcode, then `eas submit` to App Store Connect
+# (EAS Submit is not counted in the build quota). Manual only.
+#
+# - Signing: EAS remote credentials (distribution certificate + provisioning
+#   profile), read with EXPO_TOKEN. Build numbers: EAS remote counter
+#   (appVersionSource: remote), incremented by the build like on EAS cloud.
+# - Firebase iOS file: EAS "secret" file variables are not readable outside EAS
+#   servers, so the plist comes from the GitHub secret
+#   GOOGLE_SERVICE_INFO_PLIST_B64 (base64 of GoogleService-Info.plist) and is
+#   written where both layouts expect it (committed ios/ folder before CNG,
+#   project root with CNG, docs/adr/0004).
+# - Sentry source maps: uploaded when the SENTRY_AUTH_TOKEN secret is set,
+#   skipped otherwise (the build still succeeds).
+#
+# Required secrets: EXPO_TOKEN, GOOGLE_SERVICE_INFO_PLIST_B64;
+# optional: SENTRY_AUTH_TOKEN.
+#
+# Cost: macOS minutes count 10x on a private repository (about 25-35 min per
+# build). Release to the public App Store stays a manual decision in App Store
+# Connect: this only uploads to TestFlight.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or tag to build (e.g. release/1.0.13)"
+        required: true
+        default: main
+      submit:
+        description: "Send the build to App Store Connect (TestFlight) after the build"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-local-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build iOS (production) and submit
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Check required secrets
+        env:
+          PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_B64 }}
+        run: |
+          for v in EXPO_TOKEN PLIST_B64; do
+            if [ -z "${!v}" ]; then echo "::error::Missing secret ${v/PLIST_B64/GOOGLE_SERVICE_INFO_PLIST_B64}"; exit 1; fi
+          done
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "::notice::SENTRY_AUTH_TOKEN not set: Sentry source maps are not uploaded."
+            echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Select the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Firebase iOS file
+        env:
+          PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_B64 }}
+        run: |
+          echo "$PLIST_B64" | base64 --decode > GoogleService-Info.plist
+          if [ -d ios/SuiviBaby ]; then cp GoogleService-Info.plist ios/SuiviBaby/GoogleService-Info.plist; fi
+          grep -q "<key>PROJECT_ID</key>" GoogleService-Info.plist || { echo "::error::Invalid plist"; exit 1; }
+
+      - name: Build (eas build --local)
+        run: |
+          npx --yes eas-cli@latest build --local --platform ios --profile production \
+            --non-interactive --output "$RUNNER_TEMP/app.ipa"
+          ls -l "$RUNNER_TEMP/app.ipa"
+
+      - name: Submit to App Store Connect
+        if: ${{ inputs.submit }}
+        run: |
+          npx --yes eas-cli@latest submit --platform ios --profile production \
+            --path "$RUNNER_TEMP/app.ipa" --non-interactive
+
+      - name: Keep the .ipa (7 days)
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipa-${{ github.run_number }}
+          path: ${{ runner.temp }}/app.ipa
+          retention-days: 7
+          if-no-files-found: ignore
