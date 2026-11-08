@@ -171,7 +171,7 @@ function SommeilChart({
   }, [currentWeek, onWeekChange]);
 
   // Hauteur stable de la carte entre état vide et état avec données
-  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
+  const { onContentLayout, emptyMinHeight, dataMinHeight } = useStableChartBlockHeight();
   const isEmpty = !sommeils || sommeils.length === 0;
 
   // Week bounds keyed on a number so the memos below only recompute when the
@@ -580,7 +580,11 @@ function SommeilChart({
               </Text>
             </View>
           ) : (
-            <View onLayout={onContentLayout} testID="chart-data-block">
+            <View
+            onLayout={onContentLayout}
+            style={{ minHeight: dataMinHeight }}
+            testID="chart-data-block"
+          >
               {/* METRICS */}
               <View style={styles.metricsRow}>
                 <View style={[styles.metricCard, { backgroundColor: C.metricBg, borderColor: C.border }]}>

@@ -80,7 +80,7 @@ describe("chartLayout", () => {
     expect(CHART_EMPTY_STATE_HEIGHT).toBe(CHART_HEIGHT + 2 * CHART_CONTAINER_MARGIN_VERTICAL);
   });
 
-  it("reprend la hauteur du dernier bloc avec données, jamais moins que le graphique", () => {
+  it("garde la plus grande hauteur du bloc avec données, jamais moins que le graphique", () => {
     const { result } = renderHook(() => useStableChartBlockHeight());
     expect(result.current.emptyMinHeight).toBe(CHART_EMPTY_STATE_HEIGHT);
 
@@ -91,11 +91,17 @@ describe("chartLayout", () => {
         } as never);
       });
 
+    expect(result.current.dataMinHeight).toBeUndefined();
+
     layout(512.4);
     expect(result.current.emptyMinHeight).toBe(512);
+    expect(result.current.dataMinHeight).toBe(512);
 
-    layout(100);
-    expect(result.current.emptyMinHeight).toBe(CHART_EMPTY_STATE_HEIGHT);
+    // Filtre avec un bloc plus court (ex. « Bib » sans la légende de « Tous ») :
+    // la carte ne rétrécit pas.
+    layout(430);
+    expect(result.current.emptyMinHeight).toBe(512);
+    expect(result.current.dataMinHeight).toBe(512);
   });
 });
 

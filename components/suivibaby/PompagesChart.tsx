@@ -168,7 +168,7 @@ function PompagesChart({
   }, [currentDay, onDayChange]);
 
   // Hauteur stable de la carte entre état vide et état avec données
-  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
+  const { onContentLayout, emptyMinHeight, dataMinHeight } = useStableChartBlockHeight();
   const isEmpty = !pompages || pompages.length === 0;
 
   // Sessions of the displayed day: range check first, objects built only for that day.
@@ -553,7 +553,11 @@ function PompagesChart({
                 </Text>
               </View>
             ) : (
-              <View onLayout={onContentLayout} testID="chart-data-block">
+              <View
+            onLayout={onContentLayout}
+            style={{ minHeight: dataMinHeight }}
+            testID="chart-data-block"
+          >
                 <View style={styles.metricsRow}>
                   <View
                     style={[
