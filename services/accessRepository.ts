@@ -5,6 +5,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   limit,
   onSnapshot,
@@ -38,6 +39,11 @@ const userAccessIndexQuery = (userId: string) =>
 /** Lit le document d'accès d'un utilisateur sur un enfant. */
 export function getAccessDoc(childId: string, userId: string): Promise<DocumentSnapshot<DocumentData>> {
   return getDoc(accessDocRef(childId, userId));
+}
+
+/** Lit le document d'accès depuis le serveur (jamais le cache) : rôle fiable pour l'export. */
+export function getAccessDocFromServer(childId: string, userId: string): Promise<DocumentSnapshot<DocumentData>> {
+  return getDocFromServer(accessDocRef(childId, userId));
 }
 
 /** Document d'accès typé d'un utilisateur sur un enfant (null s'il n'existe pas). */

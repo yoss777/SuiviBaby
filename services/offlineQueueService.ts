@@ -369,6 +369,27 @@ export async function getPendingEvents(): Promise<QueuedEvent[]> {
   return rows;
 }
 
+/**
+ * Identifiants des enfants ayant des écritures pas encore synchronisées
+ * (en attente, en échec ou abandonnées) pour l'utilisateur courant. Sert à
+ * prévenir qu'un export ne les contiendra pas. Charge illisible : ignorée.
+ */
+export async function getPendingChildIds(): Promise<Set<string>> {
+  const uid = auth.currentUser?.uid;
+  const childIds = new Set<string>();
+  if (!uid) return childIds;
+  const database = await getDb();
+  const rows = await database.getAllAsync<{ payload: string }>(
+    `SELECT payload FROM pending_events WHERE status IN ('pending', 'failed', 'syncing') AND uid = ?`,
+    uid,
+  );
+  for (const row of rows) {
+    const childId = safeParse(row.payload)?.childId;
+    if (typeof childId === "string" && childId) childIds.add(childId);
+  }
+  return childIds;
+}
+
 function safeParse(payload: string): any {
   try {
     return JSON.parse(payload);

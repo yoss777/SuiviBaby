@@ -2,8 +2,7 @@
 // Écran d'export : le chargement lourd attend la fin de la transition et
 // ignore les résultats si l'écran est démonté entre-temps.
 const mockRunAfter = jest.fn();
-const mockGetAccessDoc = jest.fn();
-const mockGetEvents = jest.fn();
+const mockLoadCounts = jest.fn();
 const mockPrefs = jest.fn();
 
 jest.mock("@expo/vector-icons", () => ({ Ionicons: () => null, MaterialCommunityIcons: () => null, FontAwesome6: () => null }));
@@ -25,16 +24,14 @@ const mockChildren = [{ id: "c1", name: "Léo" }];
 jest.mock("@/contexts/BabyContext", () => ({
   useBaby: () => ({ children: mockChildren, loading: false }),
 }));
-jest.mock("@/services/accessRepository", () => ({
-  getAccessDoc: (...a: unknown[]) => mockGetAccessDoc(...a),
+jest.mock("@/services/exportCollector", () => ({
+  ...jest.requireActual("@/services/exportCollector"),
+  loadChildExportCounts: (...a: unknown[]) => mockLoadCounts(...a),
+  collectChildExportData: jest.fn(),
 }));
-jest.mock("@/services/childRepository", () => ({
-  getChildDoc: jest.fn(() => Promise.resolve(null)),
-}));
-jest.mock("@/services/eventsRepository", () => ({
-  getEventsForExport: (...a: unknown[]) => mockGetEvents(...a),
-  getLikesForExport: jest.fn(() => Promise.resolve({ docs: [] })),
-  getCommentsForExport: jest.fn(() => Promise.resolve({ docs: [] })),
+jest.mock("@/services/offlineQueueService", () => ({
+  getPendingChildIds: jest.fn(() => Promise.resolve(new Set())),
+  isOnline: jest.fn(() => Promise.resolve(true)),
 }));
 jest.mock("@/services/userPreferencesService", () => ({
   obtenirPreferences: (...a: unknown[]) => mockPrefs(...a),
@@ -59,8 +56,7 @@ describe("ExportScreen : chargement différé", () => {
     mockRunAfter.mockImplementation(() => ({ cancel }));
     jest.spyOn(InteractionManager, "runAfterInteractions").mockImplementation(((cb: () => void) =>
       mockRunAfter(cb)) as never);
-    mockGetAccessDoc.mockResolvedValue(null);
-    mockGetEvents.mockResolvedValue({ docs: [] });
+    mockLoadCounts.mockResolvedValue({ role: "owner", events: {}, likes: 0, comments: 0 });
     mockPrefs.mockResolvedValue(null);
   });
   afterEach(() => jest.restoreAllMocks());
@@ -68,8 +64,7 @@ describe("ExportScreen : chargement différé", () => {
   it("ne lit rien avant la fin de la transition", () => {
     render(<ExportScreen />);
     expect(mockRunAfter).toHaveBeenCalledTimes(1);
-    expect(mockGetAccessDoc).not.toHaveBeenCalled();
-    expect(mockGetEvents).not.toHaveBeenCalled();
+    expect(mockLoadCounts).not.toHaveBeenCalled();
     expect(mockPrefs).not.toHaveBeenCalled();
   });
 
@@ -78,8 +73,7 @@ describe("ExportScreen : chargement différé", () => {
     await act(async () => {
       mockRunAfter.mock.calls[0][0]();
     });
-    expect(mockGetAccessDoc).toHaveBeenCalledWith("c1", "u1");
-    expect(mockGetEvents).toHaveBeenCalled();
+    expect(mockLoadCounts).toHaveBeenCalledWith("c1", "u1");
   });
 
   it("annule la tâche différée au démontage", () => {
@@ -88,9 +82,9 @@ describe("ExportScreen : chargement différé", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("n'applique aucun résultat et n'enchaîne pas les lectures après démontage", async () => {
-    let resolveAccess: (v: unknown) => void = () => {};
-    mockGetAccessDoc.mockReturnValue(new Promise((r) => (resolveAccess = r)));
+  it("n'applique aucun résultat après démontage", async () => {
+    let resolveCounts: (v: unknown) => void = () => {};
+    mockLoadCounts.mockReturnValue(new Promise((r) => (resolveCounts = r)));
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     const { unmount } = render(<ExportScreen />);
     await act(async () => {
@@ -98,9 +92,8 @@ describe("ExportScreen : chargement différé", () => {
     });
     unmount();
     await act(async () => {
-      resolveAccess(null);
+      resolveCounts({ role: "owner", events: {}, likes: 0, comments: 0 });
     });
-    expect(mockGetEvents).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
@@ -110,6 +103,6 @@ describe("ExportScreen : chargement différé", () => {
     await act(async () => {
       mockRunAfter.mock.calls[0][0]();
     });
-    expect(mockGetAccessDoc).not.toHaveBeenCalled();
+    expect(mockLoadCounts).not.toHaveBeenCalled();
   });
 });
