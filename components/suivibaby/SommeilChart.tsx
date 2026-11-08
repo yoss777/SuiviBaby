@@ -1060,6 +1060,10 @@ export default memo(SommeilChart);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Le ScrollView des stats centre son contenu (alignItems: "center") : sans
+    // ça, la carte prend la largeur de son contenu et se resserre quand un
+    // filtre retire une ligne (ex. Repas « Bib » sans la légende de « Tous »).
+    alignSelf: "stretch",
   },
   emptyContainer: {
     flex: 1,

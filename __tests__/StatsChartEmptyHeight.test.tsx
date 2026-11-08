@@ -154,3 +154,19 @@ describe("état vide des graphiques de stats", () => {
     expect(minHeightOf("chart-empty-state")).toBe(CHART_EMPTY_STATE_HEIGHT);
   });
 });
+
+describe("largeur des cartes de stats", () => {
+  // Le ScrollView des stats centre son contenu : la carte doit s'étirer, sinon
+  // elle se resserre quand un filtre retire une ligne (Repas « Bib »).
+  it.each([
+    ["RepasChart", { tetees: [] }],
+    ["SommeilChart", { sommeils: [] }],
+    ["PompagesChart", { pompages: [] }],
+  ])("%s occupe toute la largeur", async (name, props) => {
+    const Chart = require(`@/components/suivibaby/${name}`).default;
+    render(<Chart {...props} screenWidth={320} />);
+    await act(async () => {});
+    const root = screen.toJSON() as { props: { style: unknown } };
+    expect(StyleSheet.flatten(root.props.style as never).alignSelf).toBe("stretch");
+  });
+});
