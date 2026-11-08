@@ -167,7 +167,7 @@ describe("largeur des cartes de stats", () => {
     const Chart = require(`@/components/suivibaby/${name}`).default;
     render(<Chart {...props} screenWidth={320} />);
     await act(async () => {});
-    const root = screen.toJSON() as { props: { style: ViewStyle | ViewStyle[] } };
-    expect(StyleSheet.flatten(root.props.style).alignSelf).toBe("stretch");
+    const root = screen.toJSON() as unknown as { props: { style: ViewStyle | ViewStyle[] } };
+    expect(StyleSheet.flatten(root.props.style)?.alignSelf).toBe("stretch");
   });
 });

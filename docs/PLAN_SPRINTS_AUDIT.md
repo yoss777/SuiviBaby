@@ -1005,8 +1005,13 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
   ESLint qui interdit `firebase/firestore` hors `services/`.
 - [x] **13.4** Code mort : 5 services par type, `app/backups/*.txt`,
   `app-example/` ; `explore.tsx` renommé.
-- [ ] **13.5** Montée d'Expo SDK (une version à la fois, testée en staging) ;
-  Skia stable ou graphiques en SVG ; suppression de `scripts/patch-expo.js`.
+- [~] **13.5** Montée d'Expo SDK 53 → 58 (2026-11-08, PR #55) : dossiers natifs
+  générés (ADR 0004), Skia 2.14 stable, `scripts/patch-expo.js` supprimé ; builds
+  release iOS (EAS) et Android (local) verts. Reste : test sur appareil avant
+  release. Écarts : @react-native-firebase 26.4 (la v27 impose SPM et des
+  frameworks dynamiques), react-native-purchases 10.16 (pod v11 non publié),
+  Testing Library 13 (`.npmrc` legacy-peer-deps), règles React Compiler en
+  avertissement. Une seule montée (pas de staging, décision 2026-11-06).
 - [x] **13.6** S4 : App Check imposé quand la nouvelle version est
   majoritaire ; décision `expo-updates` (retour arrière OTA) dans un ADR.
 - [x] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,

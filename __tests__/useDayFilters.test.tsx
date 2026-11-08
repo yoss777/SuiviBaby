@@ -3,7 +3,7 @@
 
 // Focus effects run on mount and again on each simulated refocus.
 const mockFocusEffects = new Set<{ current: () => void }>();
-jest.mock("@react-navigation/native", () => {
+jest.mock("expo-router/react-navigation", () => {
   const { useEffect, useRef } = jest.requireActual("react");
   return {
     useFocusEffect: (effect: () => void) => {

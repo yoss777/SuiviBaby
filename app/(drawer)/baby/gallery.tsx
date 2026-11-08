@@ -28,11 +28,11 @@ import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import { getUserNames, toggleLike } from "@/services/socialService";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect } from "@react-navigation/native";
-import * as FileSystem from "expo-file-system";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect } from "expo-router/react-navigation";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
-import * as MediaLibrary from "expo-media-library";
+import * as MediaLibrary from "expo-media-library/legacy";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -968,7 +968,7 @@ export default function GalleryScreen() {
                   color={nc.textMuted}
                   accessibilityLabel="Chargement des photos suivantes"
                 />
-              ) : null
+              ) : undefined
             }
             refreshControl={
               <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />

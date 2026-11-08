@@ -8,6 +8,7 @@ import Animated, {
   withDelay,
   withSpring,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 type MoodLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -69,8 +70,8 @@ const DayCircle = ({
   const opacity = useSharedValue(0);
 
   useEffect(() => {
-    opacity.value = withDelay(index * 60, withSpring(1));
-    scale.value = withDelay(index * 60, withSpring(1, { damping: 12 }));
+    opacity.value = withDelay(index * 60, withSpring(1, SPRING_V3));
+    scale.value = withDelay(index * 60, withSpring(1, { ...SPRING_V3, damping: 12 }));
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({

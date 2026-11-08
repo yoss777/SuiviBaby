@@ -190,7 +190,7 @@ export function InvitationListener() {
 
 const styles = StyleSheet.create({
   prepOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",

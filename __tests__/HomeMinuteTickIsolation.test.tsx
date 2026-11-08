@@ -5,6 +5,11 @@ import { StatsGroup } from "@/components/suivibaby/dashboard/StatsGroup";
 import { RecentEventsList } from "@/components/suivibaby/dashboard/RecentEventsList";
 import { useCalendarDay } from "@/hooks/useMinuteTick";
 
+// Reanimated 4 ne s'initialise pas sous Jest (jest-expo 58).
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
+  __esModule: true,
+  default: ({ children }: { children: unknown }) => children,
+}));
 jest.mock("expo-haptics", () => ({
   impactAsync: jest.fn(),
   ImpactFeedbackStyle: { Light: "light" },

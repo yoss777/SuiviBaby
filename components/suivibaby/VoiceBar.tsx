@@ -24,6 +24,7 @@ import {
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
+import type { HostInstance } from "react-native";
 
 export const VOICE_BAR_HEIGHT = 56;
 /** How far the finger may drift outside the pill before releasing cancels. */
@@ -99,7 +100,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
   const { title, subtitle } = getVoiceBarCopy(status, elapsedSeconds, isHandsFree, willCancel);
 
   const boundsRef = useRef<Bounds | null>(null);
-  const pillRef = useRef<View>(null);
+  const pillRef = useRef<HostInstance>(null);
   const measure = () => {
     pillRef.current?.measureInWindow((x, y, width, height) => {
       boundsRef.current = { x, y, width, height };

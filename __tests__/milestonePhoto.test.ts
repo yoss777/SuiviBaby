@@ -5,7 +5,7 @@
 
 const mockUploadAsync = jest.fn();
 const mockDeleteAsync = jest.fn(() => Promise.resolve());
-jest.mock("expo-file-system", () => ({
+jest.mock("expo-file-system/legacy", () => ({
   uploadAsync: (...args: unknown[]) => mockUploadAsync(...args),
   deleteAsync: (...args: unknown[]) => (mockDeleteAsync as any)(...args),
   FileSystemUploadType: { BINARY_CONTENT: 0 },

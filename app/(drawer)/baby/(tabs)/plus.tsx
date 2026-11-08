@@ -9,7 +9,7 @@ import { PENDING_QUEUE_WARNING } from "@/services/exportCollector";
 import { exportAllEventsCSV } from "@/services/exportService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useRef, useState } from "react";

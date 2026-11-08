@@ -42,8 +42,8 @@ import {
 } from "@/utils/statsWindow";
 import { countStatsRender, markStatsMount } from "@/utils/statsPerf";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect } from "@react-navigation/native";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
@@ -54,7 +54,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  InteractionManager,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -65,6 +64,7 @@ import {
 } from "react-native";
 import PagerView from "react-native-pager-view";
 import { useHeaderLeft } from "../../_layout";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 type TabKey = "tetees" | "pompages" | "sommeil";
 
@@ -245,7 +245,7 @@ export default function StatsScreen() {
   const [chartsReady, setChartsReady] = useState(false);
   useEffect(() => {
     const ready = () => setChartsReady(true);
-    const task = InteractionManager.runAfterInteractions(ready);
+    const task = runAfterInteractions(ready);
     // Safety net: an animation registered as an interaction must never keep
     // the charts on the loader.
     const fallback = setTimeout(ready, 400);
@@ -584,7 +584,7 @@ export default function StatsScreen() {
     if (!chartsReady || !activeTabReady || prewarmDone) return;
     const prewarm = () =>
       setVisitedTabs({ tetees: true, pompages: true, sommeil: true });
-    const task = InteractionManager.runAfterInteractions(prewarm);
+    const task = runAfterInteractions(prewarm);
     const fallback = setTimeout(prewarm, 800);
     return () => {
       task.cancel();

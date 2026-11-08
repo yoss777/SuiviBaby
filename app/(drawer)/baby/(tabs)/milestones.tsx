@@ -35,8 +35,8 @@ import {
 import { JalonEvent } from "@/services/eventsService";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,7 +44,6 @@ import {
   Animated,
   BackHandler,
   FlatList,
-  InteractionManager,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -62,6 +61,7 @@ import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 import { getDateTime, toDate } from "@/utils/date";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 // Enable LayoutAnimation on Android
 if (
@@ -937,7 +937,7 @@ export default function MilestonesScreen() {
     if (!pendingOpen || !layoutReady) return;
     const returnTarget = returnTargetParam ?? returnToRef.current;
     const isEditing = !!pendingEditData;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       stashReturnTo();
       openSheet({
         ownerId: sheetOwnerId,
@@ -1465,7 +1465,7 @@ export default function MilestonesScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.listContent}
               ListFooterComponent={
-                selectedFilter === "today" || selectedDate ? null : (
+                selectedFilter === "today" || selectedDate ? undefined : (
                   <LoadMoreButton
                     loading={isLoadingMore || autoLoadMore}
                     hasMore={hasMore}

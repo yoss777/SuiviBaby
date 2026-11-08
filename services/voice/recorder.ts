@@ -8,7 +8,7 @@ import {
   type AudioRecorder,
   type RecordingOptions,
 } from "expo-audio";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { httpsCallable } from "firebase/functions";
 import { Platform } from "react-native";
 import { captureServiceError } from "@/utils/errorReporting";
@@ -255,7 +255,7 @@ export async function transcribeAudio(audioUri: string): Promise<string> {
 async function transcribeAudioFile(audioUri: string): Promise<string> {
   try {
     // Check file size before reading the whole file into memory + base64ing it.
-    const info = await FileSystem.getInfoAsync(audioUri, { size: true });
+    const info = await FileSystem.getInfoAsync(audioUri);
     if (!info.exists) {
       throw new EmptyAudioError("Le fichier audio est introuvable.");
     }

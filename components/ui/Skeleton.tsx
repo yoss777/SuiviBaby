@@ -78,7 +78,7 @@ export function SkeletonBlock({ width = "100%", height, radius = 8, style }: Ske
       {translateX && (
         <Animated.View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             { width: "60%", backgroundColor: shimmer, transform: [{ translateX }] },
           ]}
         />

@@ -1,7 +1,7 @@
 jest.mock("@/config/firebase", () => ({ functions: {} }));
 jest.mock("@/utils/errorReporting", () => ({ captureServiceError: jest.fn() }));
 jest.mock("firebase/functions", () => ({ httpsCallable: jest.fn() }));
-jest.mock("expo-file-system", () => ({
+jest.mock("expo-file-system/legacy", () => ({
   getInfoAsync: jest.fn(),
   readAsStringAsync: jest.fn(),
   deleteAsync: jest.fn(),
@@ -42,7 +42,7 @@ import {
 // Typed local alias (AudioModule is a native-module object, not an ES namespace).
 const AudioRecorderMock = (AudioModule as unknown as { AudioRecorder: jest.Mock }).AudioRecorder;
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { httpsCallable } from "firebase/functions";
 import { captureServiceError } from "@/utils/errorReporting";
 import {

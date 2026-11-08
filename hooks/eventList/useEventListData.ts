@@ -1,7 +1,7 @@
 // Données d'un écran de liste : un écouteur Firestore par type sur la
 // fenêtre courante, fusion avec les saisies optimistes, relecture serveur au
 // retour au premier plan et tirer-pour-rafraîchir.
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";

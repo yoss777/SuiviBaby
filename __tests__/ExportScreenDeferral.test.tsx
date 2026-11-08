@@ -44,9 +44,10 @@ jest.mock("@/services/tempShareService", () => ({
 
 import { act, render } from "@testing-library/react-native";
 import React from "react";
-import { InteractionManager } from "react-native";
+
 
 import ExportScreen from "@/app/settings/export";
+import * as afterInteractions from "@/utils/afterInteractions";
 
 describe("ExportScreen : chargement différé", () => {
   let cancel: jest.Mock;
@@ -54,7 +55,7 @@ describe("ExportScreen : chargement différé", () => {
     jest.clearAllMocks();
     cancel = jest.fn();
     mockRunAfter.mockImplementation(() => ({ cancel }));
-    jest.spyOn(InteractionManager, "runAfterInteractions").mockImplementation(((cb: () => void) =>
+    jest.spyOn(afterInteractions, "runAfterInteractions").mockImplementation(((cb: () => void) =>
       mockRunAfter(cb)) as never);
     mockLoadCounts.mockResolvedValue({ role: "owner", events: {}, likes: 0, comments: 0 });
     mockPrefs.mockResolvedValue(null);

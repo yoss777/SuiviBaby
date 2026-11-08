@@ -1,5 +1,9 @@
 # ADR 0001 — Android EAS cloud build: why it failed, local workaround, fix
 
+> Mise à jour 2026-11-08 : les dossiers natifs ne sont plus versionnés (ADR 0004).
+> `scripts/easCopyFirebaseFiles.js` copie désormais les variables à la racine du
+> projet, d'où `expo prebuild` les reprend.
+
 - Statut : accepté (code prêt, en attente des variables EAS — voir « Actions »)
 - Date : 2026-11-07
 - Sprint : S12.2 (audit 2026-11)

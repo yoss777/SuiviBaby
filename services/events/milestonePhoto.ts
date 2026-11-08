@@ -6,7 +6,7 @@
 //  - modification acceptée par le serveur -> l'ancienne photo est supprimée ;
 //  - modification refusée -> l'ancienne reste, la nouvelle est supprimée.
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { auth } from "@/config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import { FIREBASE_STORAGE_BUCKET, isLocalPhotoUri } from "@/utils/photoStorage";

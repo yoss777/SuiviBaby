@@ -3,6 +3,12 @@
  */
 // Règle S13.3 : l'UI n'importe pas Firestore/Storage (statique, sous-chemins,
 // SDK natif, require/import dynamiques). `import type` reste autorisé.
+// Globals paresseux d'Expo (winter, SDK 58) : les résoudre tant que le module
+// de test est chargé, sinon ESLint les touche plus tard et Jest refuse le
+// require « hors du test ».
+for (const name of ["__ExpoImportMetaRegistry", "structuredClone", "URL", "URLSearchParams", "TextDecoderStream", "TextEncoderStream", "DOMException", "fetch"]) {
+  void (globalThis as Record<string, unknown>)[name];
+}
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { ESLint } = require("eslint");
 

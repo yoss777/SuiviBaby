@@ -14,7 +14,7 @@ import { SuccessAnimationProvider } from "@/contexts/SuccessAnimationContext";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { composeProviders } from "@/utils/composeProviders";
-import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from "expo-router/react-navigation";
 import { Stack, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
@@ -236,7 +236,6 @@ function AppNavigation() {
           bouton retour et titre dans la couleur du texte, comme les écrans du
           menu, au lieu de la couleur primaire du thème (bleu/sarcelle). */}
       <Stack
-        initialRouteName="boot"
         screenOptions={{
           headerTintColor: Colors[colorScheme].text,
           headerTitleStyle: { color: Colors[colorScheme].text },
@@ -266,11 +265,7 @@ function AppNavigation() {
           options={{ headerShown: false }}
         />
       </Stack>
-      <StatusBar
-        style={colorScheme === "dark" ? "light" : "dark"}
-        translucent={false}
-        backgroundColor={Colors[colorScheme].background}
-      />
+      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
     </NavigationThemeProvider>
   );
 }

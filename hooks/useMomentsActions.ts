@@ -7,9 +7,9 @@ import { toDate } from "@/utils/date";
 import { getAuthenticatedPhotoSource } from "@/utils/photoStorage";
 import type { AnySheetProps } from "@/contexts/SheetContext";
 import type { JalonType, MilestonesEditData } from "@/components/forms/MilestonesForm";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
-import * as MediaLibrary from "expo-media-library";
+import * as MediaLibrary from "expo-media-library/legacy";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 
 type MilestoneEventWithId = JalonEvent & { id: string };

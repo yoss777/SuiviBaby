@@ -28,6 +28,21 @@ module.exports = defineConfig([
     ignores: ['dist/*'],
   },
   {
+    // Règles React Compiler activées par eslint-config-expo 58 (montée Expo,
+    // 2026-11-08) : ~470 signalements préexistants dans 96 fichiers. En
+    // avertissement le temps d'un chantier dédié, pour ne pas mêler cette
+    // refonte à la montée de version. Repasser en erreur une fois traités.
+    rules: {
+      'react-hooks/refs': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/static-components': 'warn',
+      'react-hooks/globals': 'warn',
+    },
+  },
+  {
     files: [
       'app/**/*.{ts,tsx,js,jsx}',
       'components/**/*.{ts,tsx,js,jsx}',

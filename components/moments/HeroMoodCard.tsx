@@ -26,6 +26,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -143,7 +144,7 @@ const AnimatedEmoji = ({ emoji }: { emoji: string }) => {
   const rotation = useSharedValue(-15);
 
   useEffect(() => {
-    scale.value = withSpring(1, { damping: 8, stiffness: 100 });
+    scale.value = withSpring(1, { ...SPRING_V3, damping: 8, stiffness: 100 });
     rotation.value = withSequence(
       withTiming(10, { duration: 150 }),
       withTiming(-8, { duration: 150 }),
@@ -178,7 +179,7 @@ export const HeroMoodCard = ({
 
   useEffect(() => {
     cardOpacity.value = withTiming(1, { duration: 400 });
-    cardScale.value = withSpring(1, { damping: 15 });
+    cardScale.value = withSpring(1, { ...SPRING_V3, damping: 15 });
   }, []);
 
   const cardAnimatedStyle = useAnimatedStyle(() => ({

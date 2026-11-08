@@ -7,8 +7,8 @@ module.exports = function(api) {
     plugins.push('transform-remove-console');
   }
 
-  // react-native-reanimated/plugin MUST be last
-  plugins.push('react-native-reanimated/plugin');
+  // Reanimated 4 / worklets : babel-preset-expo ajoute déjà
+  // react-native-worklets/plugin (le déclarer ici l'appliquait deux fois).
 
   return {
     presets: ['babel-preset-expo'],

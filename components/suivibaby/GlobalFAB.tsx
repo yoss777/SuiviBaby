@@ -32,6 +32,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SPRING_V3 } from "@/constants/motion";
 
 const FAB_ACTION_KEYS = ["tetee", "miction", "vitamine"] as const;
 const MAIN_FAB_SIZE = 56;
@@ -138,12 +139,12 @@ const ActionButton = ({
       const targetOffset = (index + 1) * ACTION_OFFSET_STEP;
       offset.value = withDelay(
         delay,
-        withSpring(targetOffset, { damping: 12 }),
+        withSpring(targetOffset, { ...SPRING_V3, damping: 12 }),
       );
       opacity.value = withDelay(delay, withTiming(1, { duration: 200 }));
-      scale.value = withDelay(delay, withSpring(1, { damping: 10 }));
+      scale.value = withDelay(delay, withSpring(1, { ...SPRING_V3, damping: 10 }));
     } else {
-      offset.value = withSpring(0);
+      offset.value = withSpring(0, SPRING_V3);
       opacity.value = withTiming(0, { duration: 150 });
       scale.value = withTiming(0.5, { duration: 150 });
     }
@@ -270,7 +271,7 @@ export const GlobalFAB = ({
   }, [animations.decorative, isOpen, pulseScale]);
 
   useEffect(() => {
-    rotation.value = withSpring(isOpen ? 45 : 0, { damping: 12 });
+    rotation.value = withSpring(isOpen ? 45 : 0, { ...SPRING_V3, damping: 12 });
     backdropOpacity.value = withTiming(isOpen ? 1 : 0, { duration: 200 });
   }, [backdropOpacity, isOpen, rotation]);
 
@@ -503,7 +504,7 @@ export const GlobalFAB = ({
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.3)",
     zIndex: 1,
     elevation: 1,

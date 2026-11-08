@@ -42,7 +42,7 @@ export function IconPulseDots({
         isInteraction: false,
       }),
       // important pour éviter certains resets visibles selon versions RN
-      { resetBeforeIteration: true }
+      { iterations: -1, resetBeforeIteration: true }
     );
 
     startLoop(loop);

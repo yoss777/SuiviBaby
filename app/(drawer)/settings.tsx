@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation } from "expo-router/react-navigation";
 import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";

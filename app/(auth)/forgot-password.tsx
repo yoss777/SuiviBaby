@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { auth } from "@/config/firebase";
+import type { TextInputInstance } from "react-native";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COOLDOWN_SECONDS = 60;
@@ -35,7 +36,7 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   // Cooldown timer
   useEffect(() => {

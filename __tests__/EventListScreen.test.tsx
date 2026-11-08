@@ -59,14 +59,14 @@ jest.mock("expo-router", () => ({
   router: { replace: jest.fn() },
   useLocalSearchParams: () => ({}),
 }));
-jest.mock("@react-navigation/native", () => {
+jest.mock("expo-router/react-navigation", () => {
   const { useEffect } = jest.requireActual("react");
   return {
     useNavigation: () => ({ setParams: jest.fn() }),
     useFocusEffect: (effect: () => void) => useEffect(effect, [effect]),
+    HeaderBackButton: () => null,
   };
 });
-jest.mock("@react-navigation/elements", () => ({ HeaderBackButton: () => null }));
 let mockHeaderRight: React.ReactNode = null;
 jest.mock("@/contexts/HeaderContext", () => ({
   useHeaderLeft: () => ({ setHeaderLeft: jest.fn() }),

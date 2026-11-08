@@ -55,6 +55,7 @@ import {
   CHART_HEIGHT,
   useStableChartBlockHeight,
 } from "@/components/suivibaby/chartLayout";
+import { SPRING_V3 } from "@/constants/motion";
 
 type Props = {
   sommeils: any[];
@@ -120,7 +121,7 @@ function makeRRect(
   x: number, y: number, w: number, h: number,
   topLeft: number, topRight: number, bottomRight: number, bottomLeft: number,
 ) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   path.addRRect({
     rect: { x, y, width: w, height: h },
     topLeft: { x: topLeft, y: topLeft },
@@ -128,7 +129,7 @@ function makeRRect(
     bottomRight: { x: bottomRight, y: bottomRight },
     bottomLeft: { x: bottomLeft, y: bottomLeft },
   });
-  return path;
+  return path.build();
 }
 
 function SommeilChart({
@@ -450,8 +451,8 @@ function SommeilChart({
       if (barIndex !== null && bars[barIndex].total > 0) {
         setSelectedBarIndex((prev) => {
           if (prev === barIndex) return null;
-          tooltipX.value = withSpring(bars[barIndex].x + bars[barIndex].width / 2 - 60);
-          tooltipY.value = withSpring(bars[barIndex].baseY - bars[barIndex].totalHeight - 70);
+          tooltipX.value = withSpring(bars[barIndex].x + bars[barIndex].width / 2 - 60, SPRING_V3);
+          tooltipY.value = withSpring(bars[barIndex].baseY - bars[barIndex].totalHeight - 70, SPRING_V3);
           return barIndex;
         });
       } else {

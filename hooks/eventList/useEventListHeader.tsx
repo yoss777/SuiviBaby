@@ -2,8 +2,8 @@
 // Sélectionner), bouton retour vers l'écran d'origine, retour matériel
 // Android (ferme d'abord le formulaire ouvert).
 import { Ionicons } from "@expo/vector-icons";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect } from "@react-navigation/native";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import React, { useCallback, useMemo, useRef } from "react";
 import { BackHandler, Pressable, StyleSheet, View } from "react-native";

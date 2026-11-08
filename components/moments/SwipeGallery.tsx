@@ -16,7 +16,7 @@ import {
   StyleSheet,
   Text,
   View,
-  ViewToken,
+  type ListViewToken,
 } from "react-native";
 import {
   Gesture,
@@ -31,6 +31,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  type SharedValue,
   withSequence,
   withSpring,
   withTiming,
@@ -38,6 +39,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { canInteractWithEvent } from "@/utils/eventPermissions";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
+import { SPRING_V3 } from "@/constants/motion";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const DOUBLE_TAP_HINT_KEY = "gallery_double_tap_hint_shown";
@@ -123,7 +125,7 @@ const AnimatedCard = ({
   children,
 }: {
   index: number;
-  scrollX: Animated.SharedValue<number>;
+  scrollX: SharedValue<number>;
   children: React.ReactNode;
 }) => {
   const animatedStyle = useAnimatedStyle(() => {
@@ -343,7 +345,7 @@ export const SwipeGallery = ({
 
   // Handle viewable items change for FlatList
   const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
         setCurrentIndex(viewableItems[0].index);
 
@@ -471,8 +473,8 @@ export const SwipeGallery = ({
       if (heartTimeoutRef.current) clearTimeout(heartTimeoutRef.current);
       setDoubleTapHeartId(photoId);
       heartScale.value = withSequence(
-        withSpring(1.2, { damping: 8, stiffness: 400 }),
-        withSpring(1, { damping: 10, stiffness: 300 }),
+        withSpring(1.2, { ...SPRING_V3, damping: 8, stiffness: 400 }),
+        withSpring(1, { ...SPRING_V3, damping: 10, stiffness: 300 }),
       );
 
       heartTimeoutRef.current = setTimeout(() => {
@@ -531,7 +533,7 @@ export const SwipeGallery = ({
       } else if (translationY < -SWIPE_THRESHOLD || velocityY < -500) {
         runOnJS(openCurrentPhotoComments)();
       } else {
-        translateY.value = withSpring(0);
+        translateY.value = withSpring(0, SPRING_V3);
       }
     });
 
@@ -1474,7 +1476,7 @@ const actionSheetStyles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheetContainer: {

@@ -586,7 +586,9 @@ export default function EditChildScreen() {
           visible={transferModal.visible}
           transparent
           animationType="fade"
-          onRequestClose={() => !transferModal.loading && resetTransferModal()}
+          onRequestClose={() => {
+            if (!transferModal.loading) resetTransferModal();
+          }}
         >
           <Pressable style={styles.modalOverlay} onPress={() => !transferModal.loading && resetTransferModal()}>
             <Pressable style={[styles.modalContent, { backgroundColor: nc.backgroundCard }]} onPress={(e) => e.stopPropagation()}>

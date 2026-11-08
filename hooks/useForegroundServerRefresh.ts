@@ -1,4 +1,4 @@
-import { NavigationContext } from "@react-navigation/native";
+import { NavigationContext } from "expo-router/react-navigation";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { AppState } from "react-native";
 

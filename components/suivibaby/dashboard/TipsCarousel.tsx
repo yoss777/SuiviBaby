@@ -10,7 +10,7 @@ import {
   StyleSheet,
   View,
   type LayoutChangeEvent,
-  type ViewToken,
+  type ListViewToken,
 } from "react-native";
 import { SmartFeedCard } from "./SmartFeedCard";
 
@@ -69,7 +69,7 @@ export const TipsCarousel = memo(function TipsCarousel({
 
   // Track visible item
   const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
         const idx = viewableItems[0].index;
         setCurrentIndex(idx);

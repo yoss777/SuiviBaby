@@ -1,14 +1,15 @@
 // Ouverture du formulaire (bottom sheet) d'un écran de liste : ajout, édition,
 // paramètres d'URL (openModal, editId, tab, returnTo) et retour à l'écran
 // d'origine à la fermeture.
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { InteractionManager } from "react-native";
+
 
 import { useSheet } from "@/contexts/SheetContext";
 
 import { isOptimisticId, SAVING_TOAST } from "./useSoftDelete";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 const RETURN_TARGETS = ["home", "chrono", "journal"] as const;
 
@@ -123,7 +124,7 @@ export function useEventSheetFlow<T extends { id: string }>({
     const returnTarget = returnTargetParam ?? returnToRef.current;
     const editItem = pendingEditItem ?? undefined;
     const preset = pendingPreset;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       stashReturnTo();
       const { formType, ownerId, buildOpenProps, savedToast } = sheetRef.current;
       openSheet({

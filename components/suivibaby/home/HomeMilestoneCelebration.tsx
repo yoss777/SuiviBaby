@@ -20,7 +20,8 @@ import {
   type MilestoneCelebration,
 } from "@/services/milestoneCelebrationService";
 import { useEffect, useRef, useState } from "react";
-import { InteractionManager } from "react-native";
+import { runAfterInteractions } from "@/utils/afterInteractions";
+
 
 interface Props {
   childId: string | null | undefined;
@@ -58,7 +59,7 @@ export function HomeMilestoneCelebration({
   useEffect(() => {
     if (!childId || !weeklyLoaded || premiumLoading || blocked || sheetOpen || shown) return;
     let cancelled = false;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       if (cancelled) return;
       const now = new Date();
       findMilestoneForToday({

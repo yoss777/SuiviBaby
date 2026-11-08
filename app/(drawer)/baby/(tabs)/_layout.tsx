@@ -5,7 +5,7 @@ import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BottomTabBar, type BottomTabBarProps } from "expo-router/tabs";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 import { Keyboard, Text, View } from "react-native";
@@ -52,8 +52,11 @@ function MeasuredTabBar({
   );
 }
 
+// Onglet sans bouton mais toujours navigable (sous-écrans de Plus). Ne PAS
+// utiliser `href: null` : depuis expo-router 58 il marque l'écran « hidden »
+// et toute navigation vers lui est redirigée vers l'onglet initial (Accueil).
 const hiddenTabOptions = {
-  href: null,
+  tabBarButton: () => null,
   tabBarItemStyle: { display: "none" as const },
 };
 
@@ -166,8 +169,7 @@ export default function BabyTabLayout() {
           options={{
             title: "Plus",
             tabBarAccessibilityLabel: tabA11yLabel("plus", "Plus"),
-            href: showPlusTab ? undefined : null,
-            tabBarItemStyle: showPlusTab ? undefined : { display: "none" },
+            ...(showPlusTab ? {} : hiddenTabOptions),
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="ellipsis-h" color={color} />
             ),
@@ -200,8 +202,7 @@ export default function BabyTabLayout() {
           options={{
             title: "Stats",
             tabBarAccessibilityLabel: tabA11yLabel("stats", "Stats"),
-            href: showStatsTab ? undefined : null,
-            tabBarItemStyle: showStatsTab ? undefined : { display: "none" },
+            ...(showStatsTab ? {} : hiddenTabOptions),
             tabBarIcon: ({ color }) => (
               <FontAwesome size={28} name="chart-bar" color={color} />
             ),
