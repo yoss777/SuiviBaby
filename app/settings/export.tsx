@@ -14,6 +14,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  InteractionManager,
   Platform,
   ScrollView,
   StyleSheet,
@@ -278,11 +279,18 @@ export default function ExportScreen() {
 
   useEffect(() => {
     let isMounted = true;
+    // Les lectures Firestore (accès + 10000 événements + likes + commentaires
+    // par enfant) sont lourdes : elles démarrent après la transition d'écran,
+    // sinon le fil JS saturé fait ignorer/empiler les appuis suivants.
     const loadExportData = async () => {
       if (childrenLoading) {
         if (isMounted) setIsLoading(true);
         return;
       }
+      // Écran démonté pendant le chargement : on arrête de lire pour rien.
+      const assertMounted = () => {
+        if (!isMounted) throw new Error("export-load-cancelled");
+      };
       try {
         const [prefs, childrenWithEvents] = await Promise.all([
           obtenirPreferences().catch(() => null),
@@ -293,6 +301,7 @@ export default function ExportScreen() {
               const accessDoc = user?.uid
                 ? await getAccessDoc(child.id, user.uid).catch(() => null)
                 : null;
+              assertMounted();
               const role =
                 accessDoc && accessDoc.exists()
                   ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
@@ -340,6 +349,7 @@ export default function ExportScreen() {
           ),
         ]);
 
+        assertMounted();
         if (prefs) {
           setPreferences({
             notifications: prefs.notifications,
@@ -405,9 +415,12 @@ export default function ExportScreen() {
       }
     };
 
-    loadExportData();
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      if (isMounted) void loadExportData();
+    });
     return () => {
       isMounted = false;
+      interaction.cancel();
     };
   }, [childrenLoading, visibleChildren, isAutoDeleteFlow, preSelectChildId, user?.uid]);
 

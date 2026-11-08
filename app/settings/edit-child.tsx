@@ -1,7 +1,8 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { getAccessDoc, getAccessDocs } from "@/services/accessRepository";
 import { getChildDoc, updateChildDoc } from "@/services/childRepository";
 import { getPublicUserDoc } from "@/services/userRepository";
@@ -64,7 +65,7 @@ export default function EditChildScreen() {
   const { user } = useAuth();
   const { children, hiddenChildrenIds } = useBaby();
   const { showToast } = useToast();
-  const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
 
   const [allChildren, setAllChildren] = useState<ChildWithOwnership[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -296,9 +297,9 @@ export default function EditChildScreen() {
     const child = deleteConfirm.child;
     setDeleteConfirm({ visible: false, child: null });
     if (child) {
-      router.push({ pathname: "/settings/export", params: { childId: child.id } } as any);
+      guardedPush({ pathname: "/settings/export", params: { childId: child.id } } as any);
     }
-  }, [deleteConfirm.child, router]);
+  }, [guardedPush, deleteConfirm.child]);
 
   // ============================================
   // TRANSFER HANDLERS

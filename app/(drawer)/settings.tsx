@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { getAccessDoc } from "@/services/accessRepository";
 import { listenToOwnerDeletionRequests } from "@/services/deletionRequestRepository";
 import { listenToUserPreferencesDoc } from "@/services/userPreferencesService";
@@ -83,6 +84,7 @@ export default function SettingsScreen() {
   const hiddenPhotoIds = useHiddenPhotos();
   const { preference: themePreference } = useThemePreference();
   const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
   const { delete: deleteParam } = useLocalSearchParams();
   const hiddenChildrenCount = hiddenChildrenIds.length;
   const hasHiddenChildren = hiddenChildrenCount > 0;
@@ -323,7 +325,7 @@ export default function SettingsScreen() {
         description: "Modifier vos informations personnelles",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/profile");
+          guardedPush("/settings/profile");
         },
       },
       // Password change only makes sense for e-mail/password accounts.
@@ -336,7 +338,7 @@ export default function SettingsScreen() {
               description: "Changer votre mot de passe",
               onPress: () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/password");
+                guardedPush("/settings/password");
               },
             },
           ] as SettingItem[])
@@ -348,7 +350,7 @@ export default function SettingsScreen() {
         description: "Gérer votre abonnement",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/premium");
+          guardedPush("/settings/premium");
         },
       },
       ...(biometricAvailable
@@ -376,7 +378,7 @@ export default function SettingsScreen() {
         : []),
     ],
     [
-      router,
+      guardedPush,
       isPasswordUser,
       biometricAvailable,
       biometricEnabled,
@@ -397,7 +399,7 @@ export default function SettingsScreen() {
               description: "Modifier le nom de vos enfants ou les supprimer",
               onPress: () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/edit-child");
+                guardedPush("/settings/edit-child");
               },
             },
           ]
@@ -409,7 +411,7 @@ export default function SettingsScreen() {
         description: "Entrer un code ou accepter une invitation",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/join-child");
+          guardedPush("/settings/join-child");
         },
       },
       ...(isOwnerOfAny && pendingDeletionRequests > 0
@@ -423,7 +425,7 @@ export default function SettingsScreen() {
               color: nc.error,
               onPress: () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/deletion-requests");
+                guardedPush("/settings/deletion-requests");
               },
             },
           ]
@@ -438,7 +440,7 @@ export default function SettingsScreen() {
               description: "Gérer les enfants masqués",
               onPress: () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/hidden-children");
+                guardedPush("/settings/hidden-children");
               },
             },
           ]
@@ -453,20 +455,20 @@ export default function SettingsScreen() {
               description: "Gérer les photos masquées",
               onPress: () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push("/settings/hidden-photos");
+                guardedPush("/settings/hidden-photos");
               },
             },
           ]
         : []),
     ],
     [
+      guardedPush,
       isOwnerOfAny,
       pendingDeletionRequests,
       nc.error,
       hasHiddenChildren,
       hiddenChildrenCount,
       hiddenPhotoIds.size,
-      router,
     ],
   );
 
@@ -479,7 +481,7 @@ export default function SettingsScreen() {
         description: "Gérer les notifications",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/notifications");
+          guardedPush("/settings/notifications");
         },
       },
       {
@@ -493,7 +495,7 @@ export default function SettingsScreen() {
             ? "Sombre"
               : "Clair",
         onPress: () => {
-          router.push("/settings/theme");
+          guardedPush("/settings/theme");
         },
       },
       {
@@ -503,11 +505,11 @@ export default function SettingsScreen() {
         description: "Télécharger vos données",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/export");
+          guardedPush("/settings/export");
         },
       },
     ],
-    [router, themePreference],
+    [guardedPush, themePreference],
   );
 
   const informationSettings: SettingItem[] = useMemo(
@@ -519,7 +521,7 @@ export default function SettingsScreen() {
         description: "Politique de confidentialité",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/privacy");
+          guardedPush("/settings/privacy");
         },
       },
       {
@@ -538,7 +540,7 @@ export default function SettingsScreen() {
         label: "Conditions d'utilisation",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/terms");
+          guardedPush("/settings/terms");
         },
       },
       {
@@ -547,11 +549,11 @@ export default function SettingsScreen() {
         label: "Aide & Support",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/settings/help");
+          guardedPush("/settings/help");
         },
       },
     ],
-    [router],
+    [guardedPush],
   );
 
   const dangerSettings: SettingItem[] = useMemo(
@@ -845,7 +847,7 @@ export default function SettingsScreen() {
         onDismiss={() => setShowDeleteExportModal(false)}
         onConfirm={() => {
           setShowDeleteExportModal(false);
-          router.push("/settings/export?afterDelete=1");
+          guardedPush("/settings/export?afterDelete=1");
         }}
         onCancel={() => {
           setShowDeleteExportModal(false);

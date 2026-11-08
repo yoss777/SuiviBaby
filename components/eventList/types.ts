@@ -5,10 +5,8 @@
 // Réglages historiques (différences héritées des anciens écrans, conservées pour
 // ne pas changer le comportement). À trancher avec le produit AVANT de migrer
 // d'autres écrans ; ne pas ajouter de nouveau drapeau sans cette décision :
-// - loadMore.jumpOnManual : « Voir plus » saute au prochain événement (pompages,
-//   couches) ou ajoute 14 jours (repas) ;
-//   (après un saut, tous les écrans chargent [E − 14 j, fin de fenêtre] : plus de
-//   différence « extend » / « reset ») ;
+// (« Voir plus » saute toujours au prochain événement : [E − 14 j, fin de fenêtre],
+//   plus aucun réglage par écran.)
 // - jumpToLatestOnMount : fenêtre ancrée au dernier événement (pompages seuls)
 //   ou à aujourd'hui (repas, couches) ;
 // - filters.resetToTodayOnFocus : retour au filtre « aujourd'hui » (couches seules) ;
@@ -74,10 +72,6 @@ export interface EventListConfig<T extends BaseEvent, S extends object = object>
 
   /** Va chercher le dernier événement au montage (sinon fenêtre se terminant aujourd'hui). */
   jumpToLatestOnMount: boolean;
-  loadMore: {
-    /** « Voir plus » saute directement au prochain événement plus ancien. */
-    jumpOnManual: boolean;
-  };
   filters: {
     /** Au retour sur l'écran, revenir à « aujourd'hui » même depuis « passé ». */
     resetToTodayOnFocus: boolean;

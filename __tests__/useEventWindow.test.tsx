@@ -28,7 +28,6 @@ const NOW = new Date(2026, 10, 7, 15, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 
 type Props = {
-  jumpOnManual: boolean;
   jumpToLatestOnMount?: boolean;
   types?: readonly any[];
   loaded?: boolean;
@@ -41,7 +40,6 @@ function useHarness(p: Props) {
     childId: "child-1",
     eventTypes: p.types ?? ["pompage"],
     jumpToLatestOnMount: p.jumpToLatestOnMount ?? false,
-    loadMore: { jumpOnManual: p.jumpOnManual },
   });
   useAutoLoadMore(window, {
     loaded: p.loaded ?? false,
@@ -87,7 +85,7 @@ describe("computeRange / typesArg", () => {
 describe("useEventWindow", () => {
   it("démarre sur 14 jours et calcule hasMore avant la fenêtre", async () => {
     mockHasMore.mockResolvedValue(false);
-    const { result } = renderHook(() => useHarness({ jumpOnManual: true }));
+    const { result } = renderHook(() => useHarness({}));
     expect(result.current.daysWindow).toBe(14);
     expect(result.current.rangeEndDate).toBeNull();
     await flush();
@@ -103,7 +101,7 @@ describe("useEventWindow", () => {
     const last = new Date(2026, 9, 1, 10, 0);
     mockGetNext.mockResolvedValue(last);
     const { result } = renderHook(() =>
-      useHarness({ jumpOnManual: true, jumpToLatestOnMount: true }),
+      useHarness({ jumpToLatestOnMount: true }),
     );
     await flush();
     expect(mockGetNext).toHaveBeenCalledWith("child-1", "pompage", new Date(2026, 10, 7, 23, 59, 59, 999));
@@ -115,7 +113,7 @@ describe("useEventWindow", () => {
     const J = new Date(2026, 10, 7, 23, 59, 59, 999);
     const next = new Date(2026, 9, 8, 10, 0); // J-30
     mockGetNext.mockResolvedValue(next);
-    const { result } = renderHook(() => useHarness({ jumpOnManual: true }));
+    const { result } = renderHook(() => useHarness({}));
     await flush();
 
     await act(async () => {
@@ -144,7 +142,7 @@ describe("useEventWindow", () => {
     const last = new Date(2026, 9, 20, 10, 0);
     mockGetNext.mockResolvedValueOnce(last);
     const { result } = renderHook(() =>
-      useHarness({ jumpOnManual: true, jumpToLatestOnMount: true }),
+      useHarness({ jumpToLatestOnMount: true }),
     );
     await flush();
     expect(result.current.rangeEndDate).toEqual(last);
@@ -171,7 +169,6 @@ describe("useEventWindow", () => {
         childId: "child-1",
         eventTypes: ["pompage"],
         jumpToLatestOnMount: false,
-        loadMore: { jumpOnManual: true },
       });
       // Simule l'écouteur Firestore : événements de la plage affichée.
       const { startOfRange, endOfRange } = computeRange(window.rangeEndDate, window.daysWindow);
@@ -203,7 +200,7 @@ describe("useEventWindow", () => {
 
   it("« Voir plus » : si la recherche du prochain événement échoue, le chargement est libéré", async () => {
     mockGetNext.mockRejectedValue(new Error("offline"));
-    const { result } = renderHook(() => useHarness({ jumpOnManual: true }));
+    const { result } = renderHook(() => useHarness({}));
     await flush();
     await act(async () => {
       await result.current.loadMoreStep(false);
@@ -220,20 +217,26 @@ describe("useEventWindow", () => {
     expect(result.current.daysWindow).toBeGreaterThan(14);
   });
 
-  it("« Voir plus » manuel sans jumpOnManual (repas) : +14 jours, pas de requête", async () => {
-    const { result } = renderHook(() => useHarness({ jumpOnManual: false }));
+  it("« Voir plus » manuel (repas compris) : saute dès le premier appui à [E-14 j, fin]", async () => {
+    const next = new Date(2026, 6, 1, 10, 0);
+    mockGetNext.mockResolvedValue(next);
+    const { result } = renderHook(() =>
+      useHarness({ types: ["tetee", "biberon", "solide"] }),
+    );
     await flush();
     await act(async () => {
       await result.current.loadMoreStep(false);
     });
-    expect(mockGetNext).not.toHaveBeenCalled();
-    expect(result.current.daysWindow).toBe(28);
+    expect(mockGetNext).toHaveBeenCalledTimes(1);
+    const { startOfRange, endOfRange } = computeRange(null, result.current.daysWindow);
+    expect(endOfRange).toEqual(new Date(2026, 10, 7, 23, 59, 59, 999));
+    expect(startOfRange).toEqual(new Date(2026, 5, 17, 0, 0, 0, 0));
   });
 
   it("auto épuisé (repas) : même saut [E-14 j, fin], les jours récents restent chargés", async () => {
     const next = new Date(2026, 6, 1, 10, 0);
     mockGetNext.mockResolvedValue(next);
-    const { result } = renderHook(() => useHarness({ jumpOnManual: false }));
+    const { result } = renderHook(() => useHarness({}));
     await flush();
 
     await act(async () => {
@@ -251,7 +254,7 @@ describe("useEventWindow", () => {
 
   it("plus rien avant : hasMore false et fin du chargement", async () => {
     mockGetNext.mockResolvedValue(null);
-    const { result } = renderHook(() => useHarness({ jumpOnManual: true }));
+    const { result } = renderHook(() => useHarness({}));
     await flush();
     await act(async () => {
       await result.current.loadMoreStep(false);
@@ -261,8 +264,9 @@ describe("useEventWindow", () => {
   });
 
   it("attend une réponse par écouteur (garde de version)", async () => {
+    mockGetNext.mockResolvedValue(new Date(2026, 6, 1, 10, 0));
     const { result } = renderHook(() =>
-      useHarness({ jumpOnManual: false, types: ["tetee", "biberon", "solide"] }),
+      useHarness({ types: ["tetee", "biberon", "solide"] }),
     );
     await flush();
     await act(async () => {
@@ -286,7 +290,7 @@ describe("useEventWindow", () => {
     const last = new Date(2026, 10, 1, 23, 59, 59, 999);
     mockGetNext.mockResolvedValue(last);
     const { result } = renderHook(() =>
-      useHarness({ jumpOnManual: true, jumpToLatestOnMount: true }),
+      useHarness({ jumpToLatestOnMount: true }),
     );
     await flush();
     act(() => result.current.ensureTodayInRange());
@@ -304,11 +308,11 @@ describe("useAutoLoadMore", () => {
     mockHasMore.mockResolvedValue(true);
     mockGetNext.mockResolvedValue(null);
     const { result, rerender } = renderHook((p: Props) => useHarness(p), {
-      initialProps: { jumpOnManual: true, loaded: false, groupsCount: 0 },
+      initialProps: { loaded: false, groupsCount: 0 },
     });
     await flush();
 
-    rerender({ jumpOnManual: true, loaded: true, groupsCount: 0 });
+    rerender({ loaded: true, groupsCount: 0 });
     await flush();
     // 1re tentative : +14 jours, isLoadingMore jusqu'à la réponse de l'écouteur.
     expect(result.current.daysWindow).toBe(28);
@@ -327,7 +331,7 @@ describe("useAutoLoadMore", () => {
 
   it("ne charge rien sous « aujourd'hui » ou une date choisie", async () => {
     const { result } = renderHook(() =>
-      useHarness({ jumpOnManual: true, loaded: true, groupsCount: 0, blocked: true }),
+      useHarness({ loaded: true, groupsCount: 0, blocked: true }),
     );
     await flush();
     expect(result.current.autoLoadMore).toBe(false);
@@ -336,12 +340,12 @@ describe("useAutoLoadMore", () => {
 
   it("s'arrête dès qu'un groupe apparaît", async () => {
     const { result, rerender } = renderHook((p: Props) => useHarness(p), {
-      initialProps: { jumpOnManual: true, loaded: true, groupsCount: 0 },
+      initialProps: { loaded: true, groupsCount: 0 },
     });
     await flush();
     expect(result.current.autoLoadMore).toBe(true);
     // Les données de la fenêtre élargie arrivent : un groupe, puis fin du chargement.
-    rerender({ jumpOnManual: true, loaded: true, groupsCount: 2 });
+    rerender({ loaded: true, groupsCount: 2 });
     act(() => result.current.notifySnapshot(result.current.loadMoreVersionRef.current));
     await flush();
     expect(result.current.autoLoadMore).toBe(false);

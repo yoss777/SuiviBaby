@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useGuardedNavigation } from '@/hooks/useGuardedNavigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChildPermissions, useChildAccesses } from '@/hooks/useChildPermissions';
 import { revokeChildAccess } from '@/services/accessRepository';
@@ -197,6 +198,7 @@ function AccessListItem({
 
 export default function ManageAccessScreen() {
   const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
   const { setHeaderLeft } = useHeaderLeft();
   const { childId } = useLocalSearchParams<{ childId: string }>();
   const { firebaseUser } = useAuth();
@@ -275,7 +277,7 @@ export default function ManageAccessScreen() {
   const handleInvite = () => {
     if (!childId) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({
+    guardedPush({
       pathname: '/(drawer)/share-child',
       params: { childId, returnTo: `/baby/manage-access?childId=${childId}` },
     });

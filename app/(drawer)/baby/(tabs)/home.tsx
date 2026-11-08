@@ -51,7 +51,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -175,6 +176,7 @@ interface TodayStats {
 // ============================================
 
 export default function HomeDashboard() {
+  const { push: guardedPush } = useGuardedNavigation();
   const { activeChild, reminderPreferences } = useBaby();
   const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
   const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
@@ -461,8 +463,8 @@ export default function HomeDashboard() {
 
 
   const handleViewAllPress = useCallback(() => {
-    router.push("/baby/chrono" as any);
-  }, []);
+    guardedPush("/baby/chrono" as any);
+  }, [guardedPush]);
 
   const recentEvents = useMemo(() => {
     // Candidats triés du plus récent au plus ancien : la fenêtre des 24 h et la
@@ -829,7 +831,7 @@ export default function HomeDashboard() {
           color: itemColors.tetee,
           lastTimestamp: todayStats.meals.seins.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/stats?tab=tetees&returnTo=home" as any)
+            ? () => guardedPush("/baby/stats?tab=tetees&returnTo=home" as any)
             : undefined,
         },
         {
@@ -844,7 +846,7 @@ export default function HomeDashboard() {
           color: itemColors.biberon,
           lastTimestamp: todayStats.meals.biberons.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/stats?tab=biberons&returnTo=home" as any)
+            ? () => guardedPush("/baby/stats?tab=biberons&returnTo=home" as any)
             : undefined,
         },
         {
@@ -856,7 +858,7 @@ export default function HomeDashboard() {
           color: itemColors.solide,
           lastTimestamp: todayStats.meals.solides.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/stats?tab=solides&returnTo=home" as any)
+            ? () => guardedPush("/baby/stats?tab=solides&returnTo=home" as any)
             : undefined,
         },
         {
@@ -870,12 +872,12 @@ export default function HomeDashboard() {
           color: itemColors.pompage,
           lastTimestamp: todayStats.pompages.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/stats?tab=pompages&returnTo=home" as any)
+            ? () => guardedPush("/baby/stats?tab=pompages&returnTo=home" as any)
             : undefined,
         },
       ],
     };
-  }, [
+  }, [guardedPush, 
     todayStats,
     data.tetees,
     data.biberons,
@@ -994,7 +996,7 @@ export default function HomeDashboard() {
           lastTimestamp: todayStats.mictions.lastTimestamp,
           onPress: canManageContent
             ? () =>
-                router.push("/baby/diapers?tab=mictions&returnTo=home" as any)
+                guardedPush("/baby/diapers?tab=mictions&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1006,7 +1008,7 @@ export default function HomeDashboard() {
           color: itemColors.selle,
           lastTimestamp: todayStats.selles.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/diapers?tab=selles&returnTo=home" as any)
+            ? () => guardedPush("/baby/diapers?tab=selles&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1019,7 +1021,7 @@ export default function HomeDashboard() {
           lastTimestamp: todayStats.vitamines.lastTimestamp,
           onPress: canManageContent
             ? () =>
-                router.push("/baby/soins?type=vitamine&returnTo=home" as any)
+                guardedPush("/baby/soins?type=vitamine&returnTo=home" as any)
             : undefined,
         },
         {
@@ -1031,12 +1033,12 @@ export default function HomeDashboard() {
           color: itemColors.vaccin,
           lastTimestamp: todayStats.vaccins.lastTimestamp,
           onPress: canManageContent
-            ? () => router.push("/baby/soins?type=vaccin&returnTo=home" as any)
+            ? () => guardedPush("/baby/soins?type=vaccin&returnTo=home" as any)
             : undefined,
         },
       ],
     };
-  }, [
+  }, [guardedPush, 
     todayStats,
     data.mictions,
     data.selles,

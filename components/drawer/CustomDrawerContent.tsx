@@ -6,6 +6,7 @@ import {
 } from "@react-navigation/drawer";
 import * as Haptics from "expo-haptics";
 import { usePathname, useRouter } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -39,6 +40,7 @@ const DRAWER_REFRESH_TTL_MS = 2 * 60 * 1000;
 
 export function CustomDrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
   const pathname = usePathname();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -293,7 +295,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() =>
-                      router.push(
+                      guardedPush(
                         `/(drawer)/share-child?childId=${child.id}` as any,
                       )
                     }
@@ -330,7 +332,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
               setShowAddChildModal(true);
               return;
             }
-            router.push("/settings/join-child" as any);
+            guardedPush("/settings/join-child" as any);
           }}
           accessibilityRole="button"
           accessibilityLabel="Ajouter un enfant"
@@ -393,7 +395,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
             styles.settingsButton,
             { borderColor: Colors[colorScheme].tint, backgroundColor: getBackgroundTint(Colors[colorScheme].tint, 0.08) },
           ]}
-          onPress={() => router.push("/(drawer)/settings")}
+          onPress={() => guardedPush("/(drawer)/settings")}
           accessibilityRole="button"
           accessibilityLabel="Ouvrir les paramètres"
         >

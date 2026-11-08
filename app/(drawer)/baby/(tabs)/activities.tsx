@@ -857,7 +857,7 @@ export default function ActivitiesScreen() {
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
         endOfRange.setHours(23, 59, 59, 999);
         const startOfRange = new Date(endOfRange);

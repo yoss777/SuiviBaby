@@ -10,7 +10,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -149,6 +149,7 @@ const SECTIONS: Section[] = [
 ];
 
 export default function PlusScreen() {
+  const { push: guardedPush } = useGuardedNavigation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const navLockRef = useRef(false);
@@ -177,12 +178,12 @@ export default function PlusScreen() {
 
       // Ajouter returnTo=plus pour afficher le back arrow + childId si manage-access
       if (route === "/baby/manage-access" && activeChild?.id) {
-        router.push(`${route}?childId=${activeChild.id}&returnTo=plus` as any);
+        guardedPush(`${route}?childId=${activeChild.id}&returnTo=plus` as any);
       } else {
-        router.push(`${route}?returnTo=plus` as any);
+        guardedPush(`${route}?returnTo=plus` as any);
       }
     },
-    [activeChild?.id],
+    [guardedPush, activeChild?.id],
   );
 
   const handleExport = useCallback(async () => {

@@ -308,7 +308,6 @@ export const mealsConfig: EventListConfig<Meal, MealSummary> = {
   },
 
   jumpToLatestOnMount: false,
-  loadMore: { jumpOnManual: false },
   filters: { resetToTodayOnFocus: false },
   navigation: { backUsesStashedReturn: false },
   permissions: "manage",

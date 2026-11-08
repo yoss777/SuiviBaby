@@ -60,7 +60,6 @@ export function useEventList<T extends BaseEvent, S extends object>(
     childId,
     eventTypes: config.eventTypes,
     jumpToLatestOnMount: config.jumpToLatestOnMount,
-    loadMore: config.loadMore,
   });
 
   const data = useEventListData<T>({

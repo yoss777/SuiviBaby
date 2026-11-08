@@ -51,10 +51,9 @@ type Options = {
   childId: string | undefined;
   eventTypes: readonly EventType[];
   jumpToLatestOnMount: boolean;
-  loadMore: { jumpOnManual: boolean };
 };
 
-export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadMore }: Options) {
+export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount }: Options) {
   const [daysWindow, setDaysWindow] = useState(DEFAULT_DAYS_WINDOW);
   const [rangeEndDate, setRangeEndDate] = useState<Date | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -70,7 +69,6 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
   const typesRef = useRef(eventTypes);
   typesRef.current = eventTypes;
   const typesKey = eventTypes.join(",");
-  const { jumpOnManual } = loadMore;
 
   // Changement d'enfant : fenêtre par défaut.
   useEffect(() => {
@@ -137,8 +135,8 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
       const beforeDate = new Date(startOfRange.getTime() - 1);
 
       const exhaustedAuto = auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1;
-      if ((!auto && jumpOnManual) || exhaustedAuto) {
-        // Clic manuel ou auto qui a épuisé ses tentatives : sauter directement au prochain événement
+      if (!auto || exhaustedAuto) {
+        // Clic manuel (toujours) ou auto qui a épuisé ses tentatives : sauter directement au prochain événement
         let nextEventDate: Date | null;
         try {
           nextEventDate = await getNextEventDateBefore(
@@ -174,7 +172,7 @@ export function useEventWindow({ childId, eventTypes, jumpToLatestOnMount, loadM
         setAutoLoadMoreAttempts(0);
       }
     },
-    [hasMore, childId, autoLoadMoreAttempts, daysWindow, rangeEndDate, jumpOnManual],
+    [hasMore, childId, autoLoadMoreAttempts, daysWindow, rangeEndDate],
   );
 
   const handleLoadMore = useCallback(() => {

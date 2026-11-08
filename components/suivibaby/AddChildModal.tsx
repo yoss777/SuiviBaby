@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { router } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import {
   Modal,
   Pressable,
@@ -17,16 +17,17 @@ interface AddChildModalProps {
 }
 
 export function AddChildModal({ visible, onClose }: AddChildModalProps) {
+  const { push: guardedPush } = useGuardedNavigation();
   const colorScheme = useColorScheme() ?? "light";
 
   const handleCreateNew = () => {
     onClose();
-    router.push("/(drawer)/add-baby");
+    guardedPush("/(drawer)/add-baby");
   };
 
   const handleJoinWithCode = () => {
     onClose();
-    router.push("/settings/join-child");
+    guardedPush("/settings/join-child");
   };
 
   return (

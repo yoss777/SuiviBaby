@@ -191,7 +191,6 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   },
 
   jumpToLatestOnMount: false,
-  loadMore: { jumpOnManual: true },
   filters: { resetToTodayOnFocus: true },
   navigation: { backUsesStashedReturn: true },
   permissions: "manage",

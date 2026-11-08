@@ -10,7 +10,7 @@ import {
 } from "@/services/premiumGatingService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback } from "react";
 import {
   StyleSheet,
@@ -34,13 +34,13 @@ export function PaywallPrompt({
 }: PaywallPromptProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
   const message = PAYWALL_MESSAGES[trigger];
 
   const handleUpgrade = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push("/settings/premium");
-  }, [router]);
+    guardedPush("/settings/premium");
+  }, [guardedPush]);
 
   if (variant === "banner") {
     return (
