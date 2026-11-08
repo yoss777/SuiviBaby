@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/react-native";
 
+import { isConnectivityError } from "@/utils/networkError";
+
 /**
  * Capture une erreur dans Sentry avec contexte optionnel.
  * Remplace les console.error/warn silencieux dans les services.
@@ -8,6 +10,15 @@ export function captureServiceError(
   error: unknown,
   context: { service: string; operation: string; extra?: Record<string, unknown> },
 ): void {
+  // Perte de connexion : attendue sur mobile, gardée comme fil d'Ariane seulement.
+  if (isConnectivityError(error)) {
+    Sentry.addBreadcrumb({
+      category: context.service,
+      message: `${context.operation}: connexion indisponible`,
+      level: "warning",
+    });
+    return;
+  }
   const err = error instanceof Error ? error : new Error(String(error));
 
   Sentry.withScope((scope) => {
