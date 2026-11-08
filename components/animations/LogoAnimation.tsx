@@ -19,6 +19,7 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 import { useReduceMotion } from "@/hooks/useReduceMotion";
+import { SPRING_V3 } from "@/constants/motion";
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedG = Animated.createAnimatedComponent(G);
@@ -93,7 +94,7 @@ export default function LogoAnimation({
     leafOpacity.value = withDelay(1850, withTiming(1, { duration: 350 }));
     leafScale.value = withDelay(
       1850,
-      withSpring(1, { damping: 12, stiffness: 100 })
+      withSpring(1, { ...SPRING_V3, damping: 12, stiffness: 100 })
     );
 
     // 5. Plus icon pops at the end
@@ -101,8 +102,8 @@ export default function LogoAnimation({
     plusScale.value = withDelay(
       2200,
       withSequence(
-        withSpring(1.3, { damping: 6, stiffness: 250 }),
-        withSpring(1, { damping: 8, stiffness: 150 })
+        withSpring(1.3, { ...SPRING_V3, damping: 6, stiffness: 250 }),
+        withSpring(1, { ...SPRING_V3, damping: 8, stiffness: 150 })
       )
     );
   }, [reduceMotion, backgroundScale, lineProgress, leafOpacity, leafScale, plusScale, plusOpacity, backgroundOpacity]);

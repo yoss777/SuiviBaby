@@ -12,6 +12,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 type FloatingActionButtonProps = {
   onMoodPress: () => void;
@@ -63,12 +64,12 @@ const ActionButton = ({
       const delay = index * 50;
       translateY.value = withDelay(
         delay,
-        withSpring(-(index + 1) * 70, { damping: 12 })
+        withSpring(-(index + 1) * 70, { ...SPRING_V3, damping: 12 })
       );
       opacity.value = withDelay(delay, withTiming(1, { duration: 200 }));
-      scale.value = withDelay(delay, withSpring(1, { damping: 10 }));
+      scale.value = withDelay(delay, withSpring(1, { ...SPRING_V3, damping: 10 }));
     } else {
-      translateY.value = withSpring(0);
+      translateY.value = withSpring(0, SPRING_V3);
       opacity.value = withTiming(0, { duration: 150 });
       scale.value = withTiming(0.5, { duration: 150 });
     }
@@ -130,7 +131,7 @@ export const FloatingActionButton = ({
   }, [isOpen]);
 
   useEffect(() => {
-    rotation.value = withSpring(isOpen ? 45 : 0, { damping: 12 });
+    rotation.value = withSpring(isOpen ? 45 : 0, { ...SPRING_V3, damping: 12 });
     backdropOpacity.value = withTiming(isOpen ? 1 : 0, { duration: 200 });
   }, [isOpen]);
 

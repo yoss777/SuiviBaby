@@ -7,6 +7,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 // Utility function
 const withAlpha = (hex: string, alpha: number) => {
@@ -30,7 +31,7 @@ export const SparkleBurst = ({ color, size = 80 }: SparkleBurstProps) => {
 
   useEffect(() => {
     scale.value = withSequence(
-      withSpring(1, { damping: 10, stiffness: 120 }),
+      withSpring(1, { ...SPRING_V3, damping: 10, stiffness: 120 }),
       withTiming(1.15, { duration: 600 })
     );
     opacity.value = withSequence(

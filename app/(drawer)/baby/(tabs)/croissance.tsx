@@ -82,6 +82,7 @@ import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 import { getDateTime, toDate } from "@/utils/date";
 import { runAfterInteractions } from "@/utils/afterInteractions";
 import type { ScrollViewInstance } from "react-native";
+import { SPRING_V3 } from "@/constants/motion";
 
 // Enable LayoutAnimation on Android
 if (
@@ -1510,8 +1511,8 @@ export default function CroissanceScreen() {
           if (prev === pointIndex) {
             return null;
           }
-          selectedX.value = withSpring(chartPoints[pointIndex].x);
-          selectedY.value = withSpring(chartPoints[pointIndex].y);
+          selectedX.value = withSpring(chartPoints[pointIndex].x, SPRING_V3);
+          selectedY.value = withSpring(chartPoints[pointIndex].y, SPRING_V3);
           return pointIndex;
         });
         if (plotWidth > chartWidth) {

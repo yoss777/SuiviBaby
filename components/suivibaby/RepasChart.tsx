@@ -55,6 +55,7 @@ import {
   CHART_HEIGHT,
   useStableChartBlockHeight,
 } from "@/components/suivibaby/chartLayout";
+import { SPRING_V3 } from "@/constants/motion";
 
 type Props = {
   tetees: any[];
@@ -577,8 +578,9 @@ function RepasChart({
           }
           tooltipX.value = withSpring(
             bars[barIndex].x + bars[barIndex].width / 2 - 50,
+            SPRING_V3,
           );
-          tooltipY.value = withSpring(bars[barIndex].y - 60);
+          tooltipY.value = withSpring(bars[barIndex].y - 60, SPRING_V3);
           return barIndex;
         });
       } else {

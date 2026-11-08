@@ -47,6 +47,7 @@ import {
   CHART_HEIGHT,
   useStableChartBlockHeight,
 } from "@/components/suivibaby/chartLayout";
+import { SPRING_V3 } from "@/constants/motion";
 
 type Props = {
   pompages: any[];
@@ -278,8 +279,8 @@ function PompagesChart({
       setSelectedPointIndex(pointIndex);
 
       if (pointIndex !== null) {
-        selectedX.value = withSpring(chartPoints[pointIndex].x);
-        selectedY.value = withSpring(chartPoints[pointIndex].y);
+        selectedX.value = withSpring(chartPoints[pointIndex].x, SPRING_V3);
+        selectedY.value = withSpring(chartPoints[pointIndex].y, SPRING_V3);
       }
     });
 
@@ -418,8 +419,9 @@ function PompagesChart({
         setSelectedBarIndex(barIndex);
         barTooltipX.value = withSpring(
           weeklyBars[barIndex].x + weeklyBars[barIndex].width / 2 - 50,
+          SPRING_V3,
         );
-        barTooltipY.value = withSpring(weeklyBars[barIndex].y - 60);
+        barTooltipY.value = withSpring(weeklyBars[barIndex].y - 60, SPRING_V3);
       } else {
         setSelectedBarIndex(null);
       }

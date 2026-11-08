@@ -10,6 +10,7 @@ import Animated, {
   withDelay,
   withSpring,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 type MoodLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -69,7 +70,7 @@ const TimelineItem = ({
   useEffect(() => {
     dotScale.value = withDelay(
       Math.min(index, 4) * 80,
-      withSpring(1, { damping: 12 }),
+      withSpring(1, { ...SPRING_V3, damping: 12 }),
     );
   }, []);
 

@@ -21,6 +21,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { SPRING_V3 } from "@/constants/motion";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const POLAROID_WIDTH = (SCREEN_WIDTH - 48 - 12) / 2;
@@ -130,8 +131,8 @@ const PolaroidCard = ({
   }));
 
   useEffect(() => {
-    opacity.value = withDelay(index * 100, withSpring(1));
-    scale.value = withDelay(index * 100, withSpring(1, { damping: 12 }));
+    opacity.value = withDelay(index * 100, withSpring(1, SPRING_V3));
+    scale.value = withDelay(index * 100, withSpring(1, { ...SPRING_V3, damping: 12 }));
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
