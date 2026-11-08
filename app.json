@@ -222,10 +222,7 @@
         {
           "android": {
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true,
-            "compileSdkVersion": 36,
-            "targetSdkVersion": 36,
-            "minSdkVersion": 21
+            "enableShrinkResourcesInReleaseBuilds": true
           }
         }
       ],
