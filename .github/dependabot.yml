@@ -24,8 +24,10 @@ updates:
       - dependency-name: "@react-native-picker/picker"
       - dependency-name: "@react-native-async-storage/async-storage"
       # Majeures du SDK Firebase web : lot dédié avec tests sur appareil (#35).
+      # SDK Firebase web : ses versions tirent des modules natifs
+      # (AsyncStorage 3.x, PR #44) → lot dédié avec la montée d'Expo.
       - dependency-name: "firebase"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native-google-signin/*"
     groups:
       minor-and-patch:
         update-types: [minor, patch]
