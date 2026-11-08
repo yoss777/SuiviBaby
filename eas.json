@@ -34,7 +34,7 @@
       },
       "ios": {
         "simulator": true,
-        "image": "macos-sequoia-15.6-xcode-26.2"
+        "image": "latest"
       },
       "node": "22.23.4"
     },
@@ -76,7 +76,7 @@
       },
       "ios": {
         "autoIncrement": true,
-        "image": "macos-sequoia-15.6-xcode-26.2"
+        "image": "latest"
       },
       "node": "22.23.4"
     }
