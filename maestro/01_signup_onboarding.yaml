@@ -20,12 +20,12 @@ appId: com.tesfa.suivibaby
 - swipe:
     direction: LEFT
     duration: 400
-- assertVisible: "Toute la famille connectee"
+- assertVisible: "Toute la famille connectée"
 
 - swipe:
     direction: LEFT
     duration: 400
-- assertVisible: "Donnees securisees"
+- assertVisible: "Données sécurisées"
 
 - swipe:
     direction: LEFT
