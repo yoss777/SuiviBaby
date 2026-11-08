@@ -168,6 +168,6 @@ describe("largeur des cartes de stats", () => {
     render(<Chart {...props} screenWidth={320} />);
     await act(async () => {});
     const root = screen.toJSON() as unknown as { props: { style: ViewStyle | ViewStyle[] } };
-    expect(StyleSheet.flatten(root.props.style).alignSelf).toBe("stretch");
+    expect(StyleSheet.flatten(root.props.style)?.alignSelf).toBe("stretch");
   });
 });
