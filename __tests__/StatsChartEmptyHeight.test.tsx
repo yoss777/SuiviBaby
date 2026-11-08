@@ -1,3 +1,4 @@
+import type { ViewStyle } from "react-native";
 import { act, render, renderHook, screen } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 
@@ -166,7 +167,7 @@ describe("largeur des cartes de stats", () => {
     const Chart = require(`@/components/suivibaby/${name}`).default;
     render(<Chart {...props} screenWidth={320} />);
     await act(async () => {});
-    const root = screen.toJSON() as { props: { style: unknown } };
-    expect(StyleSheet.flatten(root.props.style as never).alignSelf).toBe("stretch");
+    const root = screen.toJSON() as { props: { style: ViewStyle | ViewStyle[] } };
+    expect(StyleSheet.flatten(root.props.style).alignSelf).toBe("stretch");
   });
 });
