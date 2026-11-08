@@ -171,7 +171,7 @@ function SommeilChart({
   }, [currentWeek, onWeekChange]);
 
   // Hauteur stable de la carte entre état vide et état avec données
-  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
+  const { onContentLayout, emptyMinHeight, dataMinHeight } = useStableChartBlockHeight();
   const isEmpty = !sommeils || sommeils.length === 0;
 
   // Week bounds keyed on a number so the memos below only recompute when the
@@ -580,7 +580,11 @@ function SommeilChart({
               </Text>
             </View>
           ) : (
-            <View onLayout={onContentLayout} testID="chart-data-block">
+            <View
+            onLayout={onContentLayout}
+            style={{ minHeight: dataMinHeight }}
+            testID="chart-data-block"
+          >
               {/* METRICS */}
               <View style={styles.metricsRow}>
                 <View style={[styles.metricCard, { backgroundColor: C.metricBg, borderColor: C.border }]}>
@@ -1056,6 +1060,10 @@ export default memo(SommeilChart);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Le ScrollView des stats centre son contenu (alignItems: "center") : sans
+    // ça, la carte prend la largeur de son contenu et se resserre quand un
+    // filtre retire une ligne (ex. Repas « Bib » sans la légende de « Tous »).
+    alignSelf: "stretch",
   },
   emptyContainer: {
     flex: 1,

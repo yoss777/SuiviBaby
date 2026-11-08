@@ -233,7 +233,7 @@ function RepasChart({
   }, [currentWeek, onWeekChange]);
 
   // Hauteur stable de la carte entre état vide et état avec données
-  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
+  const { onContentLayout, emptyMinHeight, dataMinHeight } = useStableChartBlockHeight();
   const isEmpty = !tetees || tetees.length === 0;
 
   // Week bounds keyed on a number so every memo below only recomputes when
@@ -859,7 +859,11 @@ function RepasChart({
               </Text>
             </View>
           ) : (
-          <View onLayout={onContentLayout} testID="chart-data-block">
+          <View
+            onLayout={onContentLayout}
+            style={{ minHeight: dataMinHeight }}
+            testID="chart-data-block"
+          >
           <View style={styles.metricsRow}>
             <View
               style={[
@@ -1518,6 +1522,10 @@ export default memo(RepasChart);
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Le ScrollView des stats centre son contenu (alignItems: "center") : sans
+    // ça, la carte prend la largeur de son contenu et se resserre quand un
+    // filtre retire une ligne (ex. Repas « Bib » sans la légende de « Tous »).
+    alignSelf: "stretch",
   },
   emptyContainer: {
     flex: 1,

@@ -66,6 +66,7 @@ beforeEach(() => {
   __setReduceMotionForTests(true);
   jest.clearAllMocks();
   store.clear();
+  store.set("@suivibaby_milestone_baseline", JSON.stringify(["child-a", "child-b"])); // déjà vérifiés : seuls les nouveaux paliers s'affichent
   mockPremium = { isLoading: false, access: false };
   mockSheetOpen = false;
   (AsyncStorage.getItem as jest.Mock).mockImplementation((k: string) => Promise.resolve(store.get(k) ?? null));

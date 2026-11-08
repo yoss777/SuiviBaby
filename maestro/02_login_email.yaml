@@ -17,16 +17,16 @@ appId: com.tesfa.suivibaby
 
 # Remplir les champs de connexion
 - tapOn:
-    id: "Adresse email"
+    text: "Adresse email"
 - inputText: "${EMAIL}"
 
 - tapOn:
-    id: "Mot de passe"
+    text: "Mot de passe"
 - inputText: "${PASSWORD}"
 
 # Appuyer sur le bouton de connexion
 - tapOn:
-    id: "Se connecter"
+    text: "Se connecter"
 
 # Attendre le chargement (Firebase auth peut prendre quelques secondes)
 - extendedWaitUntil:

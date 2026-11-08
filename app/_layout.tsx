@@ -1,4 +1,5 @@
-import { parseResetPasswordUrl } from "@/utils/passwordResetLink";
+import { parseEmailActionUrl } from "@/utils/passwordResetLink";
+import { applyEmailVerificationLink } from "@/utils/emailVerification";
 import * as Sentry from "@sentry/react-native";
 import { Colors } from "@/constants/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -32,7 +33,9 @@ import { cleanupStaleExports } from "@/services/tempShareService";
 import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService";
 import { retryFailedOptimistic } from "@/services/eventsService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
-import { ensureFirebaseAppCheck } from "@/config/firebase";
+import { auth, ensureFirebaseAppCheck } from "@/config/firebase";
+import { applyActionCode } from "firebase/auth";
+import { Alert } from "react-native";
 import { getSentryEnvironment } from "@/config/firebaseEnv";
 import {
   filterBreadcrumb,
@@ -175,14 +178,31 @@ function AppNavigation() {
   useEffect(() => {
     const handleUrl = (event: { url: string }) => {
       const url = event.url;
-      // Gérer les URLs Firebase action (mode=resetPassword&oobCode=xxx)
-      // et les deep links suivibaby://reset-password?oobCode=xxx
+      // Liens d'action Firebase (mode=resetPassword ou verifyEmail, même page)
+      // et deep links suivibaby://reset-password?oobCode=xxx
       // Le code est validé (forme et mode) avant d'atteindre le routeur.
-      const oobCode = parseResetPasswordUrl(url);
-      if (oobCode) {
+      const action = parseEmailActionUrl(url);
+      if (action?.mode === "resetPassword") {
         router.replace({
           pathname: "/(auth)/reset-password",
-          params: { oobCode },
+          params: { oobCode: action.oobCode },
+        });
+      } else if (action?.mode === "verifyEmail") {
+        // Lien de vérification : même page d'action que la réinitialisation
+        // (réglage Firebase) ; il ne doit jamais ouvrir l'écran du mot de passe.
+        void applyEmailVerificationLink(action.oobCode, {
+          applyCode: (code) => applyActionCode(auth, code),
+          currentUser: () => auth.currentUser,
+        }).then((result) => {
+          if (result === "verified") {
+            Alert.alert("Adresse e-mail vérifiée", "Merci, votre adresse est confirmée.");
+            if (auth.currentUser) router.replace("/boot");
+          } else {
+            Alert.alert(
+              "Lien expiré",
+              "Ce lien de vérification n'est plus valide. Demandez un nouvel e-mail depuis l'application.",
+            );
+          }
         });
       }
     };
@@ -212,7 +232,18 @@ function AppNavigation() {
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
-      <Stack>
+      {/* En-tête commun des écrans de la pile racine (paramètres, partage…) :
+          bouton retour et titre dans la couleur du texte, comme les écrans du
+          menu, au lieu de la couleur primaire du thème (bleu/sarcelle). */}
+      <Stack
+        screenOptions={{
+          headerTintColor: Colors[colorScheme].text,
+          headerTitleStyle: { color: Colors[colorScheme].text },
+          headerStyle: { backgroundColor: Colors[colorScheme].background },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: Colors[colorScheme].background },
+        }}
+      >
         <Stack.Screen
           name="(auth)"
           options={{ headerShown: false }}
