@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
+import { PENDING_QUEUE_WARNING } from "@/services/exportCollector";
 import { exportAllEventsCSV } from "@/services/exportService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -190,16 +191,26 @@ export default function PlusScreen() {
     if (!activeChild?.id || !activeChild?.name || exporting) return;
     setExporting(true);
     try {
-      const { failedTypes } = await exportAllEventsCSV(
+      await exportAllEventsCSV(
         activeChild.id,
         activeChild.name,
+        firebaseUser?.uid ?? "",
+        {
+          // Saisies hors ligne en attente : elles ne figureront pas dans le fichier.
+          confirmPending: () =>
+            new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "Export incomplet",
+                PENDING_QUEUE_WARNING,
+                [
+                  { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
+                  { text: "Exporter quand même", onPress: () => resolve(true) },
+                ],
+                { cancelable: true, onDismiss: () => resolve(false) },
+              );
+            }),
+        },
       );
-      if (failedTypes.length > 0) {
-        Alert.alert(
-          "Export incomplet",
-          `Certains types d'événements n'ont pas pu être lus et sont absents du fichier : ${failedTypes.join(", ")}. Vérifiez votre connexion puis relancez l'export.`,
-        );
-      }
     } catch (e: any) {
       Alert.alert(
         "Erreur d'export",
@@ -208,7 +219,7 @@ export default function PlusScreen() {
     } finally {
       setExporting(false);
     }
-  }, [activeChild?.id, activeChild?.name, exporting]);
+  }, [activeChild?.id, activeChild?.name, exporting, firebaseUser?.uid]);
 
   const isDark = colorScheme === "dark";
 

@@ -385,6 +385,8 @@ export default function ExportScreen() {
     }
     if (wasDeleteFlow) {
       autoExportTriggered.current = false;
+      // Une seule navigation : déjà faite par onConfirm si l'utilisateur a confirmé.
+      if (confirmed) return;
       router.replace("/(drawer)/settings");
     }
   };
@@ -795,6 +797,8 @@ export default function ExportScreen() {
         confirmText: shouldReturnToDelete ? "Supprimer le compte" : undefined,
         onConfirm: shouldReturnToDelete
           ? () => {
+              // Confirmé : closeModal (appelé juste après) ne doit pas re-naviguer.
+              confirmedRef.current = true;
               router.replace("/(drawer)/settings?delete=1");
             }
           : undefined,

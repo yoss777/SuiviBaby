@@ -307,5 +307,23 @@ describe("ExportScreen : flux", () => {
       });
       expect(mockWrite).toHaveBeenCalledTimes(1);
     });
+
+    it("« Supprimer le compte » navigue une seule fois vers settings?delete=1", async () => {
+      await open();
+      await act(async () => {
+        fireEvent.press(screen.getByText("Supprimer le compte"));
+      });
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/settings?delete=1");
+    });
+
+    it("fermer simplement navigue une seule fois vers settings", async () => {
+      await open();
+      await act(async () => {
+        fireEvent.press(screen.getByText("Fermer et revenir aux paramètres"));
+      });
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/settings");
+    });
   });
 });
