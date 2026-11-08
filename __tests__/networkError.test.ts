@@ -46,3 +46,20 @@ describe("isNotFoundError", () => {
     expect(isNotFoundError(null)).toBe(false);
   });
 });
+
+describe("isConnectivityError", () => {
+  const { isConnectivityError } = jest.requireActual("@/utils/networkError");
+
+  it("recognises lost connections to Firebase", () => {
+    expect(isConnectivityError({ code: "unavailable", message: "Failed to get documents from server. (However…)" })).toBe(true);
+    expect(isConnectivityError({ code: "firestore/unavailable", message: "x" })).toBe(true);
+    expect(isConnectivityError({ code: "auth/network-request-failed", message: "x" })).toBe(true);
+    expect(isConnectivityError(new Error("Failed to get document because the client is offline."))).toBe(true);
+  });
+
+  it("leaves permission, server and app errors to Sentry", () => {
+    expect(isConnectivityError({ code: "permission-denied", message: "Missing or insufficient permissions." })).toBe(false);
+    expect(isConnectivityError({ code: "functions/internal", message: "internal" })).toBe(false);
+    expect(isConnectivityError(new TypeError("Cannot read property 'color' of undefined"))).toBe(false);
+  });
+});

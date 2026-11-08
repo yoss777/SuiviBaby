@@ -52,3 +52,15 @@ export function isNetworkError(error: unknown): boolean {
     msg.includes("billing")
   );
 }
+
+/**
+ * Pas de connexion au serveur Firestore/Firebase (code `unavailable`, client
+ * hors ligne, lecture `source: "server"` impossible). Attendu sur mobile : le
+ * signaler à Sentry ne dit rien de l'app (SUIVIBABY-A, 1.0.11+15). Plus étroit
+ * que isNetworkError, qui couvre aussi les erreurs serveur à surveiller.
+ */
+export function isConnectivityError(error: unknown): boolean {
+  if (errorCode(error).endsWith("unavailable")) return true;
+  if (errorCode(error).endsWith("network-request-failed")) return true;
+  return /client is offline|failed to get documents? from server/i.test(errorMessage(error));
+}

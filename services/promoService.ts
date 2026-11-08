@@ -104,8 +104,11 @@ export async function getUserPromoState(): Promise<UserPromos> {
     if (docSnap.exists()) {
       state = { ...DEFAULT_USER_PROMOS, ...docSnap.data() } as UserPromos;
     } else {
+      // Pas d'écriture ici : si getDoc a répondu depuis le cache alors que le
+      // serveur a déjà créé le document (code parrainage), un setDoc complet
+      // effacerait referralCode → refus des règles (SUIVIBABY-2, 1.0.11+15).
+      // trackImpression / dismissPromo créent le document en merge.
       state = { ...DEFAULT_USER_PROMOS };
-      await setDoc(docRef, state);
     }
 
     // The referral code is created by the server (firestore.rules forbid the

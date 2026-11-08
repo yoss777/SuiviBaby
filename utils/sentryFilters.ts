@@ -114,18 +114,25 @@ export function filterTransaction<T>(event: T): T {
  * Transient network noise from Google endpoints the SDKs retry on their own:
  * Firestore's real-time channels (Listen/Write) and Firebase Auth answer 5xx
  * on drops and the HTTP client integration reported each one as an error
- * (Sentry, 1.0.9+13). Also Firestore "client is offline" reads. Our own
- * Cloud Functions (cloudfunctions.net) stay reported.
+ * (Sentry, 1.0.9+13). Also Firestore "client is offline" reads.
+ *
+ * Our own Cloud Functions stay reported, except gateway answers (502/504):
+ * on 1.0.11+15 a recordHealthConsent 504 never reached the function (no
+ * server log) and the app's retry succeeded. A real function timeout is
+ * logged server-side and covered by the Cloud Monitoring alerts.
  */
 const RETRIED_GOOGLE_HOSTS = /^https:\/\/(firestore|identitytoolkit|securetoken)\.googleapis\.com\//;
+const OUR_FUNCTIONS_HOST = /^https:\/\/[a-z0-9-]+\.cloudfunctions\.net\//;
 
 export function isTransientNetworkNoise(event: unknown): boolean {
   const e = event as SentryEventLike;
   const value = e.exception?.values?.[0]?.value ?? e.message ?? "";
   if (/client is offline/i.test(value)) return true;
-  if (/^HTTP Client Error with status code: 5\d\d/.test(value)) {
+  const status = /^HTTP Client Error with status code: (5\d\d)/.exec(value)?.[1];
+  if (status) {
     const url = typeof e.request?.url === "string" ? e.request.url : "";
-    return RETRIED_GOOGLE_HOSTS.test(url);
+    if (RETRIED_GOOGLE_HOSTS.test(url)) return true;
+    return (status === "502" || status === "504") && OUR_FUNCTIONS_HOST.test(url);
   }
   return false;
 }

@@ -81,8 +81,15 @@ describe("isTransientNetworkNoise", () => {
     expect(isTransientNetworkNoise({ exception: { values: [{ value: "Failed to get document because the client is offline." }] } })).toBe(true);
   });
 
+  it("drops gateway answers (502/504) from our Cloud Functions", () => {
+    const fn = "https://europe-west1-samaye-53723.cloudfunctions.net/recordHealthConsent";
+    expect(isTransientNetworkNoise(http(fn, 504))).toBe(true);
+    expect(isTransientNetworkNoise(http(fn, 502))).toBe(true);
+  });
+
   it("keeps our Cloud Functions errors, 4xx and ordinary errors", () => {
-    expect(isTransientNetworkNoise(http("https://europe-west1-samaye-53723.cloudfunctions.net/getUsageQuotaStatus"))).toBe(false);
+    expect(isTransientNetworkNoise(http("https://europe-west1-samaye-53723.cloudfunctions.net/getUsageQuotaStatus", 500))).toBe(false);
+    expect(isTransientNetworkNoise(http("https://europe-west1-samaye-53723.cloudfunctions.net/getUsageQuotaStatus", 503))).toBe(false);
     expect(isTransientNetworkNoise(http("https://firestore.googleapis.com/x", 403))).toBe(false);
     expect(isTransientNetworkNoise({ exception: { values: [{ value: "Missing or insufficient permissions." }] } })).toBe(false);
   });
