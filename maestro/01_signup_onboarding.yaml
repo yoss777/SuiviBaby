@@ -50,19 +50,19 @@ appId: com.tesfa.suivibaby
 
 # Remplir le formulaire d'inscription
 - tapOn:
-    id: "Adresse email"
+    text: "Adresse email"
 - inputText: "test-e2e@suivibaby.com"
 
 - tapOn:
-    id: "Pseudo"
+    text: "Pseudo"
 - inputText: "TestE2E"
 
 - tapOn:
-    id: "Mot de passe"
+    text: "Mot de passe"
 - inputText: "Test1234!"
 
 - tapOn:
-    id: "Confirmer le mot de passe"
+    text: "Confirmer le mot de passe"
 - inputText: "Test1234!"
 
 # Cocher les consentements (RGPD)
