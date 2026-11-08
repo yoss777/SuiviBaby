@@ -6,7 +6,7 @@
 // home.tsx pour être testable.
 
 import { useEffect, useState } from "react";
-import { InteractionManager } from "react-native";
+
 import { obtenirEvenements } from "@/services/eventsService";
 import {
   WEEKLY_INSIGHT_TYPES,
@@ -15,6 +15,7 @@ import {
   setWeeklyEventsCache,
 } from "@/services/weeklyEventsCache";
 import { toDate } from "@/utils/date";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 export type WeeklyInsightEvent = {
   id: string;
@@ -110,7 +111,7 @@ export function useWeeklyInsightEvents(
     setState({ childId, events: cached ?? EMPTY });
     if (cached && refreshKey === 0 && isWeeklyEventsCacheFresh(childId)) return;
 
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       if (cancelled) return;
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);

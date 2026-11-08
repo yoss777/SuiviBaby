@@ -24,7 +24,7 @@ import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 import { useMomentsActions } from "@/hooks/useMomentsActions";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { useCallback, useRef } from "react";
 import {

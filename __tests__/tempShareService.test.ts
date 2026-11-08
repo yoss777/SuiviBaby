@@ -1,4 +1,4 @@
-jest.mock("expo-file-system", () => ({
+jest.mock("expo-file-system/legacy", () => ({
   cacheDirectory: "file:///cache/",
   deleteAsync: jest.fn(),
   makeDirectoryAsync: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock("expo-sharing", () => ({
   shareAsync: jest.fn(),
 }));
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import {
   adoptTempFile,

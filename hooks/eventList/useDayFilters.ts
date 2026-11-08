@@ -1,6 +1,6 @@
 // Filtre jour (aujourd'hui / passé / date du calendrier), calendrier et
 // jours dépliés des écrans de liste d'événements.
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { useCallback, useMemo, useState } from "react";
 import { LayoutAnimation } from "react-native";

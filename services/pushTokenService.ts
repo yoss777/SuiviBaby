@@ -46,6 +46,8 @@ async function getExpoPushToken(): Promise<string | null> {
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
       name: "default",
+      // Faux positif d'import/namespace (enum compilé en IIFE) : exporté à l'exécution.
+      // eslint-disable-next-line import/namespace
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#FF231F7C",

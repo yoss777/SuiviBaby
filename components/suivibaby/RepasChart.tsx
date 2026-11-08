@@ -104,7 +104,7 @@ function makeRRect(
   x: number, y: number, w: number, h: number,
   topLeft: number, topRight: number, bottomRight: number, bottomLeft: number,
 ) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   path.addRRect({
     rect: { x, y, width: w, height: h },
     topLeft: { x: topLeft, y: topLeft },
@@ -112,7 +112,7 @@ function makeRRect(
     bottomRight: { x: bottomRight, y: bottomRight },
     bottomLeft: { x: bottomLeft, y: bottomLeft },
   });
-  return path;
+  return path.build();
 }
 
 function RepasChart({

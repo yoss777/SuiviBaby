@@ -16,7 +16,7 @@ import {
   StyleSheet,
   Text,
   View,
-  ViewToken,
+  type ListViewToken,
 } from "react-native";
 import {
   Gesture,
@@ -31,6 +31,7 @@ import Animated, {
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  type SharedValue,
   withSequence,
   withSpring,
   withTiming,
@@ -123,7 +124,7 @@ const AnimatedCard = ({
   children,
 }: {
   index: number;
-  scrollX: Animated.SharedValue<number>;
+  scrollX: SharedValue<number>;
   children: React.ReactNode;
 }) => {
   const animatedStyle = useAnimatedStyle(() => {
@@ -343,7 +344,7 @@ export const SwipeGallery = ({
 
   // Handle viewable items change for FlatList
   const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
         setCurrentIndex(viewableItems[0].index);
 
@@ -1474,7 +1475,7 @@ const actionSheetStyles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheetContainer: {

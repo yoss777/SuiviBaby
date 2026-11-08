@@ -361,7 +361,7 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
             renderItem={renderDayGroup}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[styles.listContent, config.layout.growList && { flexGrow: 1 }]}
-            ListFooterComponent={loadMoreButton}
+            ListFooterComponent={loadMoreButton ?? undefined}
             refreshControl={
               <RefreshControl
                 refreshing={data.isRefreshing}

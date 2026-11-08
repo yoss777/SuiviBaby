@@ -38,14 +38,13 @@ import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
   FlatList,
-  InteractionManager,
   Platform,
   Pressable,
   StyleSheet,
@@ -58,6 +57,7 @@ import { Calendar, DateData } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { getDateTime, toDate } from "@/utils/date";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 // ============================================
 // TYPES
@@ -475,7 +475,7 @@ export default function ImmunizationsScreen() {
 
   useEffect(() => {
     if (!pendingOpen || !layoutReady) return;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       stashReturnTo();
       if (pendingMode !== "edit") {
         prepareAddModal(tab as "vitamines" | "vaccins" | undefined);
@@ -1969,7 +1969,7 @@ export default function ImmunizationsScreen() {
             style={styles.flatlistContent}
             contentContainerStyle={styles.listContent}
             ListFooterComponent={
-              selectedFilter === "today" || selectedDate ? null : (
+              selectedFilter === "today" || selectedDate ? undefined : (
                 <LoadMoreButton
                   hasMore={hasMore}
                   loading={isLoadingMore}

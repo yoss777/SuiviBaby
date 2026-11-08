@@ -8,6 +8,8 @@ const mockShowActionToast = jest.fn();
 const mockObtenir = jest.fn();
 const mockMettreAJour = jest.fn();
 
+// Reanimated 4 ne s'initialise pas sous Jest (jest-expo 58).
+jest.mock("@/hooks/useReduceMotion", () => ({ useReduceMotion: () => false }));
 jest.mock("expo-router", () => ({ Stack: { Screen: () => null } }));
 jest.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showToast: mockShowToast, showActionToast: mockShowActionToast }),

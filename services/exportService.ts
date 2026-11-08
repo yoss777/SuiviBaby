@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
 import {
   collectChildExportData,

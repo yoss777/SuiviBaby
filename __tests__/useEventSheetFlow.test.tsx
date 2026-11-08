@@ -13,7 +13,7 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
 }));
 const mockSetParams = jest.fn();
-jest.mock("@react-navigation/native", () => {
+jest.mock("expo-router/react-navigation", () => {
   const { useEffect } = jest.requireActual("react");
   return {
     useNavigation: () => ({ setParams: mockSetParams }),
@@ -22,9 +22,10 @@ jest.mock("@react-navigation/native", () => {
 });
 
 import { act, renderHook } from "@testing-library/react-native";
-import { InteractionManager } from "react-native";
+
 
 import { navigateToReturnTarget, useEventSheetFlow } from "@/hooks/eventList/useEventSheetFlow";
+import * as afterInteractions from "@/utils/afterInteractions";
 
 type Item = { id: string; type?: string };
 const showToast = jest.fn();
@@ -59,7 +60,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
   jest
-    .spyOn(InteractionManager, "runAfterInteractions")
+    .spyOn(afterInteractions, "runAfterInteractions")
     .mockImplementation((task: any) => {
       const id = setTimeout(() => task?.(), 0);
       return { cancel: () => clearTimeout(id) } as any;

@@ -21,7 +21,7 @@ jest.mock("expo-haptics", () => ({
   notificationAsync: jest.fn(),
   NotificationFeedbackType: { Success: "success", Error: "error" },
 }));
-jest.mock("expo-file-system", () => ({
+jest.mock("expo-file-system/legacy", () => ({
   writeAsStringAsync: (...a: unknown[]) => mockWrite(...a),
   EncodingType: { UTF8: "utf8" },
 }));
@@ -68,11 +68,12 @@ jest.mock("@/services/tempShareService", () => ({
 
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import React from "react";
-import { InteractionManager } from "react-native";
+
 
 import ExportScreen from "@/app/settings/export";
 import { getExportEventTypes } from "@/services/eventTypeSupport";
 import { ExportOfflineError } from "@/services/exportCollector";
+import * as afterInteractions from "@/utils/afterInteractions";
 
 const counts = (role: string, events: Record<string, number>, likes = 0, comments = 0) => ({
   role,
@@ -115,7 +116,7 @@ describe("ExportScreen : flux", () => {
     mockFocusCallbacks = [];
     mockParams = {};
     mockChildren = [{ id: "c1", name: "Léo" }];
-    jest.spyOn(InteractionManager, "runAfterInteractions").mockImplementation(((cb: () => void) => {
+    jest.spyOn(afterInteractions, "runAfterInteractions").mockImplementation(((cb: () => void) => {
       cb();
       return { cancel: jest.fn() };
     }) as never);

@@ -1,12 +1,12 @@
 import { exportAllEventsCSV } from "@/services/exportService";
 import { ExportOfflineError } from "@/services/exportCollector";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 const mockCollect = jest.fn();
 const mockIsOnline = jest.fn();
 const mockPending = jest.fn();
 
-jest.mock("expo-file-system", () => ({
+jest.mock("expo-file-system/legacy", () => ({
   writeAsStringAsync: jest.fn(async () => undefined),
   EncodingType: { UTF8: "utf8" },
 }));

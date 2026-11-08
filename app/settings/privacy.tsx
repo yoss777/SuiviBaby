@@ -15,11 +15,12 @@ import { ThemedText } from "@/components/themed-text";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import type { ScrollViewInstance } from "react-native";
 
 export default function PrivacyScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
   const sectionRefs = useRef<Record<number, number>>({});
   const [showScrollTop, setShowScrollTop] = useState(false);
   const scrollTopOpacity = useRef(new Animated.Value(0)).current;

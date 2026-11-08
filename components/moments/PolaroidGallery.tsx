@@ -6,7 +6,6 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
-  ImageErrorEventData,
   Pressable,
   StyleSheet,
   Text,
@@ -94,7 +93,7 @@ const PolaroidCard = ({
   const hasSocialInfo = hasLikes || hasComments;
   const [imageError, setImageError] = useState(false);
 
-  const handleImageError = useCallback((_e: ImageErrorEventData) => {
+  const handleImageError = useCallback((_e: unknown) => {
     setImageError(true);
   }, []);
 

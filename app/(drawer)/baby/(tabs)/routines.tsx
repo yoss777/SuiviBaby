@@ -37,8 +37,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { HeaderBackButton } from "@react-navigation/elements";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { HeaderBackButton } from "expo-router/react-navigation";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +46,6 @@ import {
   Animated,
   BackHandler,
   FlatList,
-  InteractionManager,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -69,6 +68,7 @@ import {
 import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { runAfterInteractions } from "@/utils/afterInteractions";
 
 // Enable LayoutAnimation on Android
 if (
@@ -1112,7 +1112,7 @@ export default function RoutinesScreen() {
     const returnTarget = returnTargetParam ?? returnToRef.current;
 
     const isEditing = !!pendingEditData;
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = runAfterInteractions(() => {
       stashReturnTo();
 
       openSheet({
@@ -1757,7 +1757,7 @@ export default function RoutinesScreen() {
                 />
               }
               ListFooterComponent={
-                selectedFilter === "today" || selectedDate ? null : (
+                selectedFilter === "today" || selectedDate ? undefined : (
                   <LoadMoreButton
                     loading={isLoadingMore}
                     hasMore={hasMore}

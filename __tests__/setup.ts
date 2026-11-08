@@ -115,3 +115,7 @@ jest.mock("@sentry/react-native", () => ({
 jest.mock("@/utils/errorReporting", () => ({
   captureServiceError: jest.fn(),
 }));
+
+// Reanimated 4 (Expo 58) s'appuie sur react-native-worklets, module natif
+// absent sous Jest : on utilise le mock fourni par la bibliothèque.
+jest.mock("react-native-worklets", () => require("react-native-worklets/src/mock"));

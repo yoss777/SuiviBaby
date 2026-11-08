@@ -5,7 +5,7 @@ import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
-import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BottomTabBar, type BottomTabBarProps } from "expo-router/tabs";
 import { Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 import { Keyboard, Text, View } from "react-native";

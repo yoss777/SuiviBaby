@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import type { HostInstance } from "react-native";
 
 export interface HeaderMenuItem {
   label: string;
@@ -26,7 +27,7 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const [visible, setVisible] = useState(false);
-  const anchorRef = useRef<View>(null);
+  const anchorRef = useRef<HostInstance>(null);
   const [anchorPos, setAnchorPos] = useState({ x: 0, y: 0 });
 
   const measure = useCallback(() => {

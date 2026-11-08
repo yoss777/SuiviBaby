@@ -3,7 +3,7 @@
 // Sharing.shareAsync resolves: on Android the receiving app (Gmail, Drive) may
 // read the content URI later and would get an empty attachment. Instead,
 // leftovers older than ~1 hour are purged at the next export and at app start.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 type ShareOptions = Parameters<typeof Sharing.shareAsync>[1];

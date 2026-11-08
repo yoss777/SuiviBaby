@@ -28,6 +28,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { TextInputInstance } from "react-native";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.7;
@@ -316,7 +317,7 @@ export const CommentsBottomSheet = ({
 
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const flatListRef = useRef<FlatList>(null);
 
   // Load mentionable users from child access list
@@ -781,7 +782,7 @@ export const CommentsBottomSheet = ({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 999,
   },
   container: {
@@ -789,7 +790,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   sheet: {

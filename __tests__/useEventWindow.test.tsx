@@ -4,7 +4,7 @@
 
 const mockGetNext = jest.fn();
 const mockHasMore = jest.fn();
-jest.mock("@react-navigation/native", () => ({ useFocusEffect: jest.fn() }));
+jest.mock("expo-router/react-navigation", () => ({ useFocusEffect: jest.fn() }));
 jest.mock("expo-haptics", () => ({ impactAsync: jest.fn(), ImpactFeedbackStyle: {} }));
 jest.mock("@/services/eventsService", () => ({
   getNextEventDateBefore: (...args: unknown[]) => mockGetNext(...args),

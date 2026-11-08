@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   splash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1000,
   },
   gradient: {

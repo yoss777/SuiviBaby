@@ -1,13 +1,12 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
-  InteractionManager,
   Platform,
   ScrollView,
   StyleSheet,
@@ -44,6 +43,8 @@ import {
 } from "@/services/exportDataHelpers";
 import { getPendingChildIds } from "@/services/offlineQueueService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
+import { runAfterInteractions } from "@/utils/afterInteractions";
+import type { ScrollViewInstance } from "react-native";
 
 interface ExportFormat {
   id: string;
@@ -247,7 +248,7 @@ export default function ExportScreen() {
   });
   const [exportSummary, setExportSummary] = useState<ExportSummary[]>([]);
   const [summaryIndex, setSummaryIndex] = useState(0);
-  const summaryScrollRef = useRef<ScrollView | null>(null);
+  const summaryScrollRef = useRef<ScrollViewInstance | null>(null);
   const autoExportTriggered = useRef(false);
   // Le premier focus coïncide avec l'ouverture (déjà chargée) : seuls les
   // retours sur l'écran relancent le chargement des décomptes.
@@ -341,7 +342,7 @@ export default function ExportScreen() {
       }
     };
 
-    const interaction = InteractionManager.runAfterInteractions(() => {
+    const interaction = runAfterInteractions(() => {
       if (isMounted) void loadOpening();
     });
     return () => {

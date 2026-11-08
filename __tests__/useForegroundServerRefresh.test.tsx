@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react-native";
 import React from "react";
 import { AppState } from "react-native";
-import { NavigationContext } from "@react-navigation/native";
+import { NavigationContext } from "expo-router/react-navigation";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 
 type AppStateHandler = (state: string) => void;

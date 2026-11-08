@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
-import { InteractionManager } from "react-native";
+
 
 import { useWeeklyInsightEvents } from "@/hooks/useWeeklyInsightEvents";
 import { obtenirEvenements } from "@/services/eventsService";
@@ -7,6 +7,7 @@ import {
   WEEKLY_INSIGHT_TYPES,
   clearWeeklyEventsCache,
 } from "@/services/weeklyEventsCache";
+import * as afterInteractions from "@/utils/afterInteractions";
 
 jest.mock("@/services/eventsService", () => ({
   obtenirEvenements: jest.fn(),
@@ -25,7 +26,7 @@ describe("useWeeklyInsightEvents (S7.6)", () => {
     ]);
     runInteractions = null;
     jest
-      .spyOn(InteractionManager, "runAfterInteractions")
+      .spyOn(afterInteractions, "runAfterInteractions")
       .mockImplementation(((task: () => void) => {
         runInteractions = task;
         return { then: jest.fn(), done: jest.fn(), cancel: jest.fn() } as any;

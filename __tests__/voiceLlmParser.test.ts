@@ -9,7 +9,7 @@ jest.mock("firebase/functions", () => ({
   httpsCallable: jest.fn(() => mockCallable),
 }));
 jest.mock("expo-audio", () => ({ AudioModule: {}, RecordingPresets: { HIGH_QUALITY: {} } }));
-jest.mock("expo-file-system", () => ({ EncodingType: { Base64: "base64" } }));
+jest.mock("expo-file-system/legacy", () => ({ EncodingType: { Base64: "base64" } }));
 
 import NetInfo from "@react-native-community/netinfo";
 import { httpsCallable } from "firebase/functions";

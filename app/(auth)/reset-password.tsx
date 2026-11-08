@@ -24,6 +24,7 @@ import {
 import { auth } from "@/config/firebase";
 import { isValidOobCode } from "@/utils/passwordResetLink";
 import { startLoop } from "@/utils/motion";
+import type { TextInputInstance } from "react-native";
 
 const PASSWORD_RULES = [
   {
@@ -61,7 +62,7 @@ export default function ResetPasswordScreen() {
   const [invalidCode, setInvalidCode] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
-  const confirmRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
 
   const unmetRules = useMemo(
     () => PASSWORD_RULES.filter((rule) => !rule.test(password)),

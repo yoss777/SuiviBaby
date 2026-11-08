@@ -3,12 +3,12 @@ import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
   getDrawerStatusFromState,
-} from "@react-navigation/drawer";
+} from "expo-router/drawer";
 import * as Haptics from "expo-haptics";
 import { usePathname, useRouter } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import {
   Modal,
   Pressable,
@@ -196,7 +196,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
 
   // Menu fermé : son contenu reste monté hors écran ; on le retire de l'arbre
   // d'accessibilité pour que VoiceOver/TalkBack ne puissent pas y naviguer.
-  const isDrawerClosed = getDrawerStatusFromState(props.state) === "closed";
+  const isDrawerClosed = getDrawerStatusFromState(props.state, "closed") === "closed";
 
   return (
     <DrawerContentScrollView

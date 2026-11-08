@@ -16,7 +16,7 @@ AppBackground.displayName = "AppBackground";
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 });
 

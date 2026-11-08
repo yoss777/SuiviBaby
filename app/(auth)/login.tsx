@@ -50,6 +50,7 @@ import { announceError } from "@/utils/a11yAnnounce";
 import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consentMessage";
 import { auth } from "../../config/firebase";
 import { configureLayoutAnimation } from "@/utils/motion";
+import type { ScrollViewInstance } from "react-native";
 
 const LAST_EMAIL_KEY = "@suivibaby_last_email";
 const LEGACY_EMAIL_KEY = "@samaye_last_email";
@@ -117,7 +118,7 @@ export default function LoginScreen() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: "",

@@ -24,7 +24,7 @@ import { ecouterEvenements, obtenirEvenements } from "@/services/eventsService";
 import { parseBirthDateOrNull } from "@/utils/ageUtils";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import {
   Canvas,
   Circle,
@@ -51,7 +51,6 @@ import {
   Animated as RNAnimated,
   Dimensions,
   FlatList,
-  InteractionManager,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -81,6 +80,8 @@ import { supprimerEvenement as supprimerCroissance } from "@/services/eventsServ
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 import { getDateTime, toDate } from "@/utils/date";
+import { runAfterInteractions } from "@/utils/afterInteractions";
+import type { ScrollViewInstance } from "react-native";
 
 // Enable LayoutAnimation on Android
 if (
@@ -117,10 +118,10 @@ const CHART_AXIS_WIDTH = 40;
 function createSmoothPath(points: { x: number; y: number }[]) {
   if (points.length === 0) return "";
 
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   path.moveTo(points[0].x, points[0].y);
 
-  if (points.length === 1) return path;
+  if (points.length === 1) return path.build();
 
   for (let i = 0; i < points.length - 1; i += 1) {
     const p0 = i > 0 ? points[i - 1] : points[i];
@@ -136,7 +137,7 @@ function createSmoothPath(points: { x: number; y: number }[]) {
     path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
   }
 
-  return path;
+  return path.build();
 }
 
 function createBandPath(
@@ -144,7 +145,7 @@ function createBandPath(
   lower: { x: number; y: number }[],
 ) {
   if (upper.length === 0 || lower.length === 0) return "";
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   path.moveTo(upper[0].x, upper[0].y);
   for (let i = 1; i < upper.length; i += 1) {
     path.lineTo(upper[i].x, upper[i].y);
@@ -153,7 +154,7 @@ function createBandPath(
     path.lineTo(lower[i].x, lower[i].y);
   }
   path.close();
-  return path;
+  return path.build();
 }
 
 function getAgeInDays(birthDate: Date, target: Date) {
@@ -859,7 +860,7 @@ export default function CroissanceScreen() {
   const [chartWidth, setChartWidth] = useState(
     Dimensions.get("window").width - 80,
   );
-  const chartScrollRef = useRef<ScrollView | null>(null);
+  const chartScrollRef = useRef<ScrollViewInstance | null>(null);
   const autoScrollRef = useRef(false);
   const sortMergedEntries = useCallback(
     (merged: any[]) =>
@@ -1023,7 +1024,7 @@ export default function CroissanceScreen() {
   useFocusEffect(
     useCallback(() => {
       if (openModal !== "true") return;
-      const task = InteractionManager.runAfterInteractions(() => {
+      const task = runAfterInteractions(() => {
         openAddModal();
         navigation.setParams({
           openModal: undefined,
@@ -2133,7 +2134,7 @@ export default function CroissanceScreen() {
                         color={palette.tint}
                       />
                     </TouchableOpacity>
-                  ) : null
+                  ) : undefined
                 }
               />
             </View>

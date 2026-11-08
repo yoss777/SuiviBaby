@@ -1,5 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { DrawerToggleButton } from "@react-navigation/drawer";
+import { DrawerToggleButton } from "expo-router/drawer";
 import { Drawer } from "expo-router/drawer";
 import {
   useCallback,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ColorValue,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -97,7 +98,12 @@ function BabyHeaderTitle() {
 }
 
 /** Bouton d'ouverture du menu avec un libellé français (défaut anglais « Show navigation menu »). */
-function renderDrawerToggle(props: { tintColor?: string }) {
+// Écran initial du menu (le prop initialRouteName a disparu d'expo-router 58).
+export const unstable_settings = {
+  initialRouteName: "baby",
+};
+
+function renderDrawerToggle(props: { tintColor?: ColorValue }) {
   return (
     <DrawerToggleButton tintColor={props.tintColor} accessibilityLabel="Ouvrir le menu" />
   );
@@ -303,7 +309,6 @@ export default function DrawerLayout() {
             onConfirm={() => void failed.retry()}
           />
           <Drawer
-            initialRouteName="baby"
             backBehavior="initialRoute"
             drawerContent={(props) => <CustomDrawerContent {...props} />}
             screenOptions={{

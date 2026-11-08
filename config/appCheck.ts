@@ -8,8 +8,8 @@
 // The native package is loaded via dynamic import below, gated by
 // nativeAppCheckConfigured (= GoogleService-Info.plist + google-services.json
 // present at build time). app.config.js registers the matching Expo plugins.
-// Keep @react-native-firebase pinned to a major that ships with Expo SDK 53;
-// bump it together with the SDK upgrade, never on its own.
+// Keep @react-native-firebase on a major tested with the current Expo SDK
+// (58: v27); bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
 import {
   CustomProvider,
@@ -108,18 +108,17 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     return;
   }
 
-  let reactNativeFirebaseAppCheck: typeof import("@react-native-firebase/app-check").default;
+  let rnfbAppCheck: typeof import("@react-native-firebase/app-check");
   try {
-    const module = await import("@react-native-firebase/app-check");
-    reactNativeFirebaseAppCheck = module.default;
+    rnfbAppCheck = await import("@react-native-firebase/app-check");
   } catch (error) {
     console.warn("[AppCheck] Native module unavailable, skipping native App Check:", error);
     return;
   }
 
-  const nativeAppCheck = reactNativeFirebaseAppCheck();
-  const provider = nativeAppCheck.newReactNativeFirebaseAppCheckProvider();
-
+  // API modulaire (@react-native-firebase v22+ ; l'espace de noms par défaut
+  // a disparu en v27, montée Expo 58).
+  const provider = new rnfbAppCheck.ReactNativeFirebaseAppCheckProvider();
   provider.configure({
     android: {
       provider: __DEV__ ? "debug" : "playIntegrity",
@@ -131,7 +130,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     },
   });
 
-  await nativeAppCheck.initializeAppCheck({
+  const nativeAppCheck = await rnfbAppCheck.initializeAppCheck(undefined, {
     provider,
     isTokenAutoRefreshEnabled: true,
   });
@@ -139,7 +138,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   initializeAppCheck(app, {
     provider: new CustomProvider({
       async getToken() {
-        const result = await nativeAppCheck.getToken(false);
+        const result = await rnfbAppCheck.getToken(nativeAppCheck, false);
         return {
           token: result.token,
           expireTimeMillis: getExpireTimeMillis(result.token),

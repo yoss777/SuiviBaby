@@ -54,7 +54,7 @@ jest.mock("expo-router", () => ({
 }));
 // Focus effects run on mount and again on each simulated refocus.
 const mockFocusEffects = new Set<{ current: () => void }>();
-jest.mock("@react-navigation/native", () => {
+jest.mock("expo-router/react-navigation", () => {
   const { useEffect, useRef } = jest.requireActual("react");
   return {
     useFocusEffect: (effect: () => void) => {
@@ -68,6 +68,7 @@ jest.mock("@react-navigation/native", () => {
       }, []);
       useEffect(effect, [effect]);
     },
+    HeaderBackButton: () => null,
   };
 });
 function refocus() {
@@ -78,7 +79,6 @@ function refocus() {
     jest.advanceTimersByTime(200);
   });
 }
-jest.mock("@react-navigation/elements", () => ({ HeaderBackButton: () => null }));
 jest.mock("@/app/(drawer)/_layout", () => ({
   useHeaderLeft: () => ({ setHeaderLeft: jest.fn() }),
 }));
