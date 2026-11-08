@@ -6,6 +6,10 @@
 // Règles d'affichage (accueil) : au plus UNE célébration par jour et par enfant,
 // jamais rejouée (marquée célébrée à l'affichage), une seule passe de détection
 // par enfant et par jour (donc au plus 3 lectures légères par jour).
+// Seulement les paliers franchis APRÈS la première vérification sur l'appareil :
+// à la première passe, les paliers déjà atteints sont enregistrés sans pop-up
+// (décision Yoss, 2026-11-08 : pas de rattrapage « bravo 100 repas » des mois
+// plus tard).
 //
 // Jalons actifs : tracking_* (durée depuis le premier événement), events_*
 // (comptage serveur), feedings_100 (comptage serveur tétées + biberons),
@@ -45,6 +49,8 @@ export type MilestoneType =
 const CELEBRATED_KEY = "@suivibaby_celebrated_milestones";
 const LAST_SHOWN_KEY = "@suivibaby_milestone_last_shown";
 const LAST_CHECKED_KEY = "@suivibaby_milestone_last_checked";
+/** Enfants dont les paliers déjà franchis ont été enregistrés sans affichage. */
+const BASELINE_KEY = "@suivibaby_milestone_baseline";
 
 /** Séparateur enfant/jalon dans les ids stockés (jamais présent dans un id Firestore). */
 const SCOPE_SEP = ":";
@@ -389,9 +395,44 @@ export async function findMilestoneForToday(
     currentStreak: params.local.currentStreak,
     now,
   });
+  // Première vérification pour cet enfant : les paliers déjà franchis sont
+  // enregistrés sans affichage ; seuls les suivants seront célébrés.
+  if (!(await isBaselined(params.childId))) {
+    if (candidates.length > 0) {
+      await markMilestonesCelebrated(params.childId, candidates.map((c) => c.id));
+    }
+    await markBaselined(params.childId);
+    await writeDayStamp(LAST_CHECKED_KEY, params.childId, now);
+    return null;
+  }
+
   const selection = selectMilestoneToShow(candidates);
   if (!selection) await writeDayStamp(LAST_CHECKED_KEY, params.childId, now);
   return selection;
+}
+
+async function readBaseline(): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(BASELINE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function isBaselined(childId: string): Promise<boolean> {
+  return (await readBaseline()).includes(childId);
+}
+
+async function markBaselined(childId: string): Promise<void> {
+  const ids = await readBaseline();
+  if (ids.includes(childId)) return;
+  try {
+    await AsyncStorage.setItem(BASELINE_KEY, JSON.stringify([...ids, childId]));
+  } catch {
+    // Au pire, une nouvelle passe silencieuse au prochain jour.
+  }
 }
 
 /**

@@ -42,6 +42,7 @@ const base = (over: Partial<DetectionParams> = {}): DetectionParams => ({
 
 beforeEach(() => {
   store.clear();
+  store.set("@suivibaby_milestone_baseline", JSON.stringify(["child-a", "child-b"])); // déjà vérifiés : seuls les nouveaux paliers s'affichent
   getItem.mockImplementation((k: string) => Promise.resolve(store.get(k) ?? null));
   setItem.mockImplementation((k: string, v: string) => {
     store.set(k, v);
@@ -276,6 +277,45 @@ describe("findMilestoneForToday (une fois par jour et par enfant)", () => {
     // Le passage gratuit a été mémorisé pour la journée ; autre enfant pour le test Premium.
     const prem = await findMilestoneForToday({ childId: "child-b", premium: true, local: streak, now: NOW });
     expect(prem?.milestone.id).toBe("streak_7d");
+  });
+});
+
+describe("première vérification : pas de rattrapage des paliers déjà franchis", () => {
+  const local = { currentStreak: 1, longestNightSleepMin: 0 };
+
+  beforeEach(() => {
+    store.delete("@suivibaby_milestone_baseline");
+    firstMock.mockResolvedValue(daysAgo(200));
+    countMock.mockImplementation((_c: string, types?: string[]) =>
+      Promise.resolve(types ? 150 : 600),
+    );
+  });
+
+  it("enregistre en silence les paliers atteints, sans pop-up", async () => {
+    expect(await findMilestoneForToday({ childId: "child-a", premium: false, local, now: NOW })).toBeNull();
+    const ids = JSON.parse(store.get("@suivibaby_celebrated_milestones") ?? "[]");
+    expect(ids).toEqual(
+      expect.arrayContaining(["child-a:tracking_180d", "child-a:events_500", "child-a:feedings_100"]),
+    );
+    // Les jours suivants, rien d'ancien ne revient.
+    const tomorrow = new Date(NOW.getTime() + 86400000);
+    expect(await findMilestoneForToday({ childId: "child-a", premium: false, local, now: tomorrow })).toBeNull();
+  });
+
+  it("célèbre ensuite un palier franchi après cette vérification", async () => {
+    await findMilestoneForToday({ childId: "child-a", premium: false, local, now: NOW });
+    countMock.mockImplementation((_c: string, types?: string[]) =>
+      Promise.resolve(types ? 150 : 1001),
+    );
+    const tomorrow = new Date(NOW.getTime() + 86400000);
+    const sel = await findMilestoneForToday({ childId: "child-a", premium: false, local, now: tomorrow });
+    expect(sel?.milestone.id).toBe("events_1000");
+  });
+
+  it("chaque enfant a sa propre première vérification", async () => {
+    await findMilestoneForToday({ childId: "child-a", premium: false, local, now: NOW });
+    expect(await findMilestoneForToday({ childId: "child-b", premium: false, local, now: NOW })).toBeNull();
+    expect(JSON.parse(store.get("@suivibaby_milestone_baseline") ?? "[]")).toEqual(["child-a", "child-b"]);
   });
 });
 
