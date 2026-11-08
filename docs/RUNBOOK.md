@@ -208,7 +208,7 @@ l'alerte `webhook_5xx`. Procédure dans FIREBASE_MONITORING §6.4.
 | Emplacement | Secrets |
 |---|---|
 | Firebase Secret Manager (fonctions) | `RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `ASSEMBLYAI_API_KEY`, `REVENUECAT_WEBHOOK_SECRET`, `RECAP_UNSUBSCRIBE_SECRET`, `APPLE_KEY_ID`, `APPLE_TEAM_ID`, `APPLE_PRIVATE_KEY`, `INITIAL_ADMIN_EMAIL` |
-| GitHub, cible : environnements `production`, `staging`, `store-release` (déplacements et création en attente, ENVIRONMENTS §3) | `GCP_SA_KEY` (clé JSON, à remplacer par la fédération d'identité, S11.7), `GCP_SA_KEY_STAGING`, `APP_CONFIG_WRITER_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` |
+| GitHub, cible : environnements `production`, `staging`, `store-release` (déplacements et création en attente, ENVIRONMENTS §3) | `GCP_SA_KEY` (clé JSON de secours, plus utilisée depuis le passage à la fédération d'identité ; suppression en attente de décision, §5.3), `GCP_SA_KEY_STAGING`, `APP_CONFIG_WRITER_KEY`, `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` |
 | GitHub (dépôt, état actuel) | `EXPO_TOKEN`, `MAESTRO_EMAIL`, `MAESTRO_PASSWORD`, `FIREBASE_PROJECT_ID`, et les clés ci-dessus tant que leur déplacement n'est pas fait |
 | EAS, environnement `production` | `GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICES_PLIST` (fichiers), `SENTRY_AUTH_TOKEN` (secret) ; `EXPO_PUBLIC_SENTRY_DSN` (non secret, en clair) |
 | Local, non versionné | `.env`, dossier `secrets/` (clé Play) |
@@ -233,8 +233,46 @@ strict : leur sécurité repose sur les règles et App Check.
    jamais la valeur).
 
 Fréquence de rotation : aucune politique n'est écrite à ce jour. Rotation immédiate
-en cas de soupçon de fuite (section 6). Le compte de service `GCP_SA_KEY` doit être
-remplacé dès que la fédération d'identité est en place (S11.7).
+en cas de soupçon de fuite (section 6).
+
+### 5.3 Clé JSON `GCP_SA_KEY` : suppression en attente de décision (Yoss)
+
+**État au 2026-11-07.** Les déploiements de production s'authentifient par
+Workload Identity Federation (pool `github`, fournisseur `github-oidc`, limité au
+dépôt `yoss777/SuiviBaby`, compte `github-deploy`, variables du dépôt
+`GCP_WIF_PROVIDER` et `GCP_DEPLOY_SA`). Premier déploiement réussi ainsi le
+2026-11-07 (run GitHub Actions 42411164705), sans recours à la clé. La clé JSON
+du compte `github-deploy` (id commençant par `f0262656`, créée le 2026-10-29) et
+le secret GitHub `GCP_SA_KEY` restent en place comme secours. Yoss a choisi de ne
+pas les supprimer pour l'instant et décidera plus tard.
+
+**Impact d'une suppression :**
+- Aucun effet sur le fonctionnement actuel : déploiements de production par la
+  fédération d'identité ; préprod sur un autre secret (`GCP_SA_KEY_STAGING`, pas
+  encore créé) ; `release.yml` sur `APP_CONFIG_WRITER_KEY` ; déploiements manuels
+  et scripts depuis le Mac par la connexion `gcloud` / Firebase CLI, pas par cette
+  clé.
+- Plus de secours : si la fédération d'identité casse (variables du dépôt
+  supprimées, pool ou fournisseur désactivé), le déploiement échoue au lieu de
+  retomber sur la clé. Une nouvelle clé se recrée en deux minutes si besoin.
+- Risque non vérifiable : si la clé a été copiée ailleurs (fichier local, autre
+  outil, autre dépôt), cet usage s'arrête. Dans le dépôt, plus rien ne l'utilise
+  hors de l'étape de secours de `deploy-functions.yml`.
+- Suppression définitive : une clé supprimée ne se restaure pas (on en recrée une).
+
+**Bénéfice :** cette clé donne les droits d'administration Firebase sur la
+production, sans expiration ; une fuite permettrait de modifier ou d'effacer la
+production. Après suppression, il ne reste que des jetons valables une heure,
+réservés au dépôt. Recommandation : supprimer.
+
+**Pour supprimer (après le go de Yoss) :**
+```
+gcloud iam service-accounts keys list --iam-account github-deploy@samaye-53723.iam.gserviceaccount.com --managed-by=user
+gcloud iam service-accounts keys delete <KEY_ID> --iam-account github-deploy@samaye-53723.iam.gserviceaccount.com
+gh secret delete GCP_SA_KEY
+```
+Puis retirer l'étape « Write service account key (fallback) » de
+`deploy-functions.yml` et mettre à jour §5.1.
 
 ---
 
