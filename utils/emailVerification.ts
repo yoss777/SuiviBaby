@@ -50,3 +50,35 @@ export async function refreshEmailVerification(user: {
   await user.getIdToken(true);
   return user.emailVerified;
 }
+
+type VerifiableUser = Parameters<typeof refreshEmailVerification>[0];
+
+/**
+ * Applies the code of an e-mail verification link opened in the app, then
+ * refreshes the signed-in user. An already-used code counts as success when
+ * the address is verified (the link was opened twice, or on two devices).
+ * Returns "verified", or "invalid" for an expired / unknown code.
+ */
+export async function applyEmailVerificationLink(
+  oobCode: string,
+  deps: {
+    applyCode: (code: string) => Promise<void>;
+    currentUser: () => VerifiableUser | null;
+  },
+): Promise<"verified" | "invalid"> {
+  let applyError: unknown = null;
+  try {
+    await deps.applyCode(oobCode);
+  } catch (error) {
+    applyError = error;
+  }
+  const user = deps.currentUser();
+  if (user) {
+    try {
+      if (await refreshEmailVerification(user)) return "verified";
+    } catch {
+      // Hors ligne : on se fie au résultat de applyCode.
+    }
+  }
+  return applyError ? "invalid" : "verified";
+}

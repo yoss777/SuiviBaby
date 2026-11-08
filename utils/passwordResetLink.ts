@@ -29,3 +29,27 @@ export function parseResetPasswordUrl(url: string | null | undefined): string | 
   }
   return isValidOobCode(code) ? code : null;
 }
+
+export type EmailAction = { mode: "resetPassword" | "verifyEmail"; oobCode: string };
+
+/**
+ * Firebase e-mail action links all point to the same page (/reset-password,
+ * set in the Firebase console), whatever their mode. Returns the validated
+ * action for the two modes the app handles, null otherwise.
+ * A link without mode (suivibaby://reset-password?oobCode=...) is a reset.
+ */
+export function parseEmailActionUrl(url: string | null | undefined): EmailAction | null {
+  if (typeof url !== "string" || url.length > 2048) return null;
+  const modeMatch = url.match(/[?&]mode=([^&#]*)/);
+  const mode = modeMatch ? modeMatch[1] : "resetPassword";
+  if (mode !== "resetPassword" && mode !== "verifyEmail") return null;
+  const oobCodeMatch = url.match(/[?&]oobCode=([^&#]*)/);
+  if (!oobCodeMatch) return null;
+  let code: string;
+  try {
+    code = decodeURIComponent(oobCodeMatch[1]);
+  } catch {
+    return null;
+  }
+  return isValidOobCode(code) ? { mode, oobCode: code } : null;
+}

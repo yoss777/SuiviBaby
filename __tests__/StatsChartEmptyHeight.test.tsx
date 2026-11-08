@@ -1,3 +1,4 @@
+import type { ViewStyle } from "react-native";
 import { act, render, renderHook, screen } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 
@@ -80,7 +81,7 @@ describe("chartLayout", () => {
     expect(CHART_EMPTY_STATE_HEIGHT).toBe(CHART_HEIGHT + 2 * CHART_CONTAINER_MARGIN_VERTICAL);
   });
 
-  it("reprend la hauteur du dernier bloc avec données, jamais moins que le graphique", () => {
+  it("garde la plus grande hauteur du bloc avec données, jamais moins que le graphique", () => {
     const { result } = renderHook(() => useStableChartBlockHeight());
     expect(result.current.emptyMinHeight).toBe(CHART_EMPTY_STATE_HEIGHT);
 
@@ -91,11 +92,17 @@ describe("chartLayout", () => {
         } as never);
       });
 
+    expect(result.current.dataMinHeight).toBeUndefined();
+
     layout(512.4);
     expect(result.current.emptyMinHeight).toBe(512);
+    expect(result.current.dataMinHeight).toBe(512);
 
-    layout(100);
-    expect(result.current.emptyMinHeight).toBe(CHART_EMPTY_STATE_HEIGHT);
+    // Filtre avec un bloc plus court (ex. « Bib » sans la légende de « Tous ») :
+    // la carte ne rétrécit pas.
+    layout(430);
+    expect(result.current.emptyMinHeight).toBe(512);
+    expect(result.current.dataMinHeight).toBe(512);
   });
 });
 
@@ -146,5 +153,21 @@ describe("état vide des graphiques de stats", () => {
     await act(async () => {});
     expect(screen.getByText("Aucune session ce jour")).toBeTruthy();
     expect(minHeightOf("chart-empty-state")).toBe(CHART_EMPTY_STATE_HEIGHT);
+  });
+});
+
+describe("largeur des cartes de stats", () => {
+  // Le ScrollView des stats centre son contenu : la carte doit s'étirer, sinon
+  // elle se resserre quand un filtre retire une ligne (Repas « Bib »).
+  it.each([
+    ["RepasChart", { tetees: [] }],
+    ["SommeilChart", { sommeils: [] }],
+    ["PompagesChart", { pompages: [] }],
+  ])("%s occupe toute la largeur", async (name, props) => {
+    const Chart = require(`@/components/suivibaby/${name}`).default;
+    render(<Chart {...props} screenWidth={320} />);
+    await act(async () => {});
+    const root = screen.toJSON() as { props: { style: ViewStyle | ViewStyle[] } };
+    expect(StyleSheet.flatten(root.props.style).alignSelf).toBe("stretch");
   });
 });
