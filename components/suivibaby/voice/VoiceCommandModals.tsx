@@ -11,7 +11,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import type { VoiceInput } from "@/hooks/useVoiceInput";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface VoiceCommandModalsProps {
@@ -46,7 +46,7 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
 
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
 
   const choiceTextColor = Colors[colorScheme].text;
   const choiceAccent = Colors[colorScheme].tint;
@@ -245,7 +245,7 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         textColor={Colors[colorScheme].text}
         onConfirm={() => {
           setVoiceLimitReached(false);
-          router.push("/settings/premium");
+          guardedPush("/settings/premium");
         }}
         onClose={() => setVoiceLimitReached(false)}
       />

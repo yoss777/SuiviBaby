@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   onSnapshot,
   updateDoc,
 } from 'firebase/firestore';
@@ -19,6 +20,11 @@ import { db } from '@/config/firebase';
 /** Lit le document d'un enfant. */
 export function getChildDoc(childId: string): Promise<DocumentSnapshot<DocumentData>> {
   return getDoc(doc(db, 'children', childId));
+}
+
+/** Lit le document d'un enfant depuis le serveur (jamais le cache) : export. */
+export function getChildDocFromServer(childId: string): Promise<DocumentSnapshot<DocumentData>> {
+  return getDocFromServer(doc(db, 'children', childId));
 }
 
 /** Écoute le document d'un enfant (même sémantique que onSnapshot). */

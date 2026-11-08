@@ -15,6 +15,7 @@ import { HeaderBackButton } from "@react-navigation/elements";
 import * as Haptics from "expo-haptics";
 import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { getChildDoc } from "@/services/childRepository";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -39,6 +40,7 @@ export default function ShareChildScreen() {
   const { showAlert } = useModal();
   const { user } = useAuth();
   const router = useRouter();
+  const { push: guardedPush } = useGuardedNavigation();
   const { setHeaderLeft } = useHeaderLeft();
   const params = useLocalSearchParams();
   const childId = params.childId as string;
@@ -384,7 +386,7 @@ export default function ShareChildScreen() {
           "Le plan gratuit permet 2 co-parents maximum. Passez à Premium pour un partage illimité.",
           [
             { text: "Plus tard", style: "cancel" },
-            { text: "Voir Premium", onPress: () => router.push("/settings/premium") },
+            { text: "Voir Premium", onPress: () => guardedPush("/settings/premium") },
           ],
         );
       } else {
@@ -397,7 +399,7 @@ export default function ShareChildScreen() {
       setIsLoadingInvite(false);
       isSendingInviteRef.current = false;
     }
-  }, [childId, childName, inviteEmail, isLoadingInvite, router, showAlert, user?.uid]);
+  }, [guardedPush, childId, childName, inviteEmail, isLoadingInvite, router, showAlert, user?.uid]);
 
   if (isLoadingChild) {
     return (

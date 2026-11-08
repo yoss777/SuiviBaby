@@ -4,16 +4,10 @@ import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
-import { getAccessDoc } from "@/services/accessRepository";
-import { getChildDoc } from "@/services/childRepository";
-import {
-  getCommentsForExport,
-  getEventsForExport,
-  getLikesForExport,
-} from "@/services/eventsRepository";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
+  InteractionManager,
   Platform,
   ScrollView,
   StyleSheet,
@@ -32,16 +26,24 @@ import type { Child } from "@/contexts/BabyContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { Event, EventType } from "@/services/eventsService";
+import type { EventType } from "@/services/eventsService";
 import { getExportEventTypes } from "@/services/eventTypeSupport";
 import {
-  buildChildExportProfile,
+  buildPreExportWarnings,
+  collectChildExportData,
+  EXPORT_OFFLINE_MESSAGE,
+  ExportOfflineError,
+  loadChildExportCounts,
+  seesWholeTracking,
+} from "@/services/exportCollector";
+import type { ChildExportCounts, CollectedChild } from "@/services/exportCollector";
+import {
   collectEventPhotoPaths,
   EXPORT_PHOTO_NOTE,
+  EXPORT_TRUNCATED_NOTE,
 } from "@/services/exportDataHelpers";
+import { getPendingChildIds } from "@/services/offlineQueueService";
 import { obtenirPreferences } from "@/services/userPreferencesService";
-import type { ChildRole } from "@/types/permissions";
-import type { EventComment, EventLike } from "@/types/social";
 
 interface ExportFormat {
   id: string;
@@ -53,20 +55,16 @@ interface ExportFormat {
 
 interface ExportChild {
   child: Child;
-  /** Full child document (allergies, notes, ...), technical fields removed. */
-  profile: Record<string, unknown>;
-  events: Event[];
-  likes: EventLike[];
-  comments: EventComment[];
-  role: ChildRole | null;
+  /** Rôle et décomptes serveur (null : indisponibles, affichés « — »). */
+  counts: ChildExportCounts | null;
   selected: boolean;
 }
 
 interface ExportSummaryRow {
   type: EventType | InteractionType;
   label: string;
-  selected: number;
-  total: number;
+  /** Nombre réellement exporté. */
+  count: number;
 }
 
 interface ExportSummary {
@@ -189,11 +187,6 @@ const INTERACTION_TYPES: ExportTypeItem[] = [
   },
 ];
 
-// Types offered to every role; the others are hidden for contributors.
-const CONTRIBUTOR_TYPE_IDS = new Set<string>(
-  BASE_EVENT_TYPES.map((item) => item.id),
-);
-
 // Single source of truth: the list of exported types is derived from
 // services/eventTypeSupport.ts; the arrays above only provide labels and icons.
 const TYPE_META = new Map<string, ExportTypeItem>(
@@ -208,12 +201,8 @@ const EXPORT_TYPE_ITEMS: ExportTypeItem[] = getExportEventTypes().map(
     },
 );
 
-const ALL_EVENT_TYPE_IDS = new Set<EventType>(getExportEventTypes());
-
-const getEventTypes = (hideExtra: boolean) =>
-  hideExtra
-    ? EXPORT_TYPE_ITEMS.filter((item) => CONTRIBUTOR_TYPE_IDS.has(item.id))
-    : EXPORT_TYPE_ITEMS;
+const ALL_EVENT_TYPE_IDS = getExportEventTypes();
+const eventTypes = EXPORT_TYPE_ITEMS;
 
 export default function ExportScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -224,16 +213,18 @@ export default function ExportScreen() {
   const router = useRouter();
   const isAutoDeleteFlow = afterDelete === "1";
   const { children: visibleChildren, loading: childrenLoading } = useBaby();
+  const uid = user?.uid;
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [children, setChildren] = useState<ExportChild[]>([]);
-  const [isContributorOnly, setIsContributorOnly] = useState(false);
-  const eventTypes = useMemo(
-    () => getEventTypes(isContributorOnly),
-    [isContributorOnly],
-  );
+  // Rôle + décomptes serveur par enfant (null : lecture impossible, « — »).
+  const [countsByChild, setCountsByChild] = useState<
+    Record<string, ChildExportCounts | null>
+  >({});
+  const [countsError, setCountsError] = useState(false);
+  // Sélection des enfants (absent = valeur par défaut).
+  const [selection, setSelection] = useState<Record<string, boolean>>({});
   const [selectedEventTypes, setSelectedEventTypes] = useState<Set<EventType>>(
-    () => new Set(getEventTypes(false).map((item) => item.id as EventType)),
+    () => new Set(eventTypes.map((item) => item.id as EventType)),
   );
   const [selectedInteractionTypes, setSelectedInteractionTypes] = useState<
     Set<InteractionType>
@@ -244,7 +235,10 @@ export default function ExportScreen() {
     message: string;
     mode: "text" | "summary";
     confirmText?: string;
+    dismissText?: string;
     onConfirm?: () => void;
+    /** Appelé si la fenêtre est fermée sans confirmer. */
+    onCancel?: () => void;
   }>({
     visible: false,
     title: "",
@@ -255,9 +249,15 @@ export default function ExportScreen() {
   const [summaryIndex, setSummaryIndex] = useState(0);
   const summaryScrollRef = useRef<ScrollView | null>(null);
   const autoExportTriggered = useRef(false);
+  // Le premier focus coïncide avec l'ouverture (déjà chargée) : seuls les
+  // retours sur l'écran relancent le chargement des décomptes.
+  const hasFocusedOnce = useRef(false);
+  const [focusTick, setFocusTick] = useState(0);
   useFocusEffect(
     useCallback(() => {
       autoExportTriggered.current = false;
+      if (hasFocusedOnce.current) setFocusTick((tick) => tick + 1);
+      hasFocusedOnce.current = true;
     }, []),
   );
   const [preferences, setPreferences] = useState<{
@@ -276,70 +276,29 @@ export default function ExportScreen() {
     },
   ];
 
+  // Clé stable : seuls les identifiants des enfants et l'utilisateur comptent.
+  // Une mise à jour du document d'un enfant (nom, photo...) ne relit rien.
+  const childIdsKey = useMemo(
+    () => visibleChildren.map((child) => child.id).sort().join(","),
+    [visibleChildren],
+  );
+  const childIdsRef = useRef<string[]>([]);
+  childIdsRef.current = visibleChildren.map((child) => child.id);
+
   useEffect(() => {
     let isMounted = true;
-    const loadExportData = async () => {
+    // Ouverture légère : rôle relu sur le serveur + décomptes par agrégation
+    // (aucun document transféré), après la transition d'écran. Les données
+    // complètes ne sont lues qu'au clic sur « Exporter ».
+    const loadOpening = async () => {
       if (childrenLoading) {
         if (isMounted) setIsLoading(true);
         return;
       }
+      if (isMounted) setIsLoading(true);
       try {
-        const [prefs, childrenWithEvents] = await Promise.all([
-          obtenirPreferences().catch(() => null),
-          Promise.all(
-            visibleChildren.map(async (child) => {
-              // Role first: owners/admins export ALL events of the child,
-              // others only their own entries.
-              const accessDoc = user?.uid
-                ? await getAccessDoc(child.id, user.uid).catch(() => null)
-                : null;
-              const role =
-                accessDoc && accessDoc.exists()
-                  ? ((accessDoc.data()?.role ?? null) as ChildRole | null)
-                  : null;
-              const seesAllEvents = role === "owner" || role === "admin";
-
-              const [eventsSnapshot, likesSnapshot, commentsSnapshot, childDoc] =
-                await Promise.all([
-                  user?.uid
-                    ? getEventsForExport(child.id, user.uid, seesAllEvents)
-                    : Promise.resolve({ docs: [] } as any),
-                  user?.uid
-                    ? getLikesForExport(child.id, user.uid)
-                    : Promise.resolve({ docs: [] } as any),
-                  user?.uid
-                    ? getCommentsForExport(child.id, user.uid)
-                    : Promise.resolve({ docs: [] } as any),
-                  getChildDoc(child.id).catch(() => null),
-                ]);
-
-              const events = eventsSnapshot.docs.map(
-                (d: any) => ({ id: d.id, ...d.data() }) as Event,
-              );
-
-              const profile = buildChildExportProfile(
-                childDoc && childDoc.exists()
-                  ? (childDoc.data() as Record<string, unknown>)
-                  : null,
-              );
-
-              return {
-                child,
-                profile,
-                events,
-                likes: likesSnapshot.docs.map(
-                  (d: any) => ({ id: d.id, ...d.data() }) as EventLike,
-                ),
-                comments: commentsSnapshot.docs.map(
-                  (d: any) => ({ id: d.id, ...d.data() }) as EventComment,
-                ),
-                role,
-                selected: preSelectChildId ? child.id === preSelectChildId : true,
-              };
-            }),
-          ),
-        ]);
-
+        const prefs = await obtenirPreferences().catch(() => null);
+        if (!isMounted) return;
         if (prefs) {
           setPreferences({
             notifications: prefs.notifications,
@@ -347,50 +306,27 @@ export default function ExportScreen() {
             language: prefs.language,
           });
         }
-
-        if (isMounted) {
-          const roles = childrenWithEvents
-            .map((item) => item.role)
-            .filter(Boolean);
-          const hasElevatedRole = roles.some(
-            (role) => role === "owner" || role === "admin",
-          );
-          const hasContributorRole = roles.some(
-            (role) => role === "contributor",
-          );
-          const contributorOnly =
-            !hasElevatedRole && (hasContributorRole || roles.length === 0);
-
-          setIsContributorOnly(contributorOnly);
-          setChildren((prev) => {
-            const selectionMap = new Map(
-              prev.map((item) => [item.child.id, item.selected]),
-            );
-            return childrenWithEvents.map((item) => ({
-              ...item,
-              selected: isAutoDeleteFlow
-                ? true
-                : (selectionMap.get(item.child.id) ?? true),
-            }));
-          });
-
-          if (isAutoDeleteFlow) {
-            setSelectedEventTypes(
-              contributorOnly
-                ? new Set()
-                : new Set(
-                    getEventTypes(contributorOnly).map(
-                      (item) => item.id as EventType,
-                    ),
-                  ),
-            );
-            setSelectedInteractionTypes(
-              new Set(
-                INTERACTION_TYPES.map((item) => item.id as InteractionType),
-              ),
-            );
-          }
+        // Suppression de compte : aucun écran à décompter, l'export est
+        // lancé tout de suite et relit tout (rôle compris) sur le serveur.
+        if (isAutoDeleteFlow || !uid) {
+          setCountsByChild({});
+          setCountsError(false);
+          return;
         }
+        const ids = childIdsRef.current;
+        const results = await Promise.allSettled(
+          ids.map((id) => loadChildExportCounts(id, uid)),
+        );
+        if (!isMounted) return;
+        setCountsByChild(
+          Object.fromEntries(
+            ids.map((id, i) => {
+              const result = results[i];
+              return [id, result.status === "fulfilled" ? result.value : null];
+            }),
+          ),
+        );
+        setCountsError(results.some((result) => result.status === "rejected"));
       } catch {
         if (isMounted) {
           setModalConfig({
@@ -405,34 +341,52 @@ export default function ExportScreen() {
       }
     };
 
-    loadExportData();
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      if (isMounted) void loadOpening();
+    });
     return () => {
       isMounted = false;
+      interaction.cancel();
     };
-  }, [childrenLoading, visibleChildren, isAutoDeleteFlow, preSelectChildId, user?.uid]);
+  }, [childrenLoading, childIdsKey, isAutoDeleteFlow, uid, focusTick]);
 
-  useEffect(() => {
-    if (isContributorOnly) {
-      setSelectedEventTypes(new Set());
-      return;
-    }
-    setSelectedEventTypes(
-      new Set(eventTypes.map((item) => item.id as EventType)),
-    );
-  }, [eventTypes, isContributorOnly]);
+  const children = useMemo<ExportChild[]>(
+    () =>
+      visibleChildren.map((child) => ({
+        child,
+        counts: countsByChild[child.id] ?? null,
+        selected:
+          selection[child.id] ??
+          (preSelectChildId ? child.id === preSelectChildId : true),
+      })),
+    [visibleChildren, countsByChild, selection, preSelectChildId],
+  );
 
+  // InfoModal appelle onConfirm puis onClose : on distingue « confirmé » de « fermé ».
+  const confirmedRef = useRef(false);
   const closeModal = () => {
-    const wasDeleteFlow = isAutoDeleteFlow && modalConfig.onConfirm;
+    const confirmed = confirmedRef.current;
+    confirmedRef.current = false;
+    const onCancel = modalConfig.onCancel;
+    const wasDeleteFlow = isAutoDeleteFlow && modalConfig.onConfirm && !onCancel;
     setModalConfig((prev) => ({
       ...prev,
       visible: false,
       mode: "text",
       message: "",
       confirmText: undefined,
+      dismissText: undefined,
       onConfirm: undefined,
+      onCancel: undefined,
     }));
+    if (onCancel && !confirmed) {
+      onCancel();
+      return;
+    }
     if (wasDeleteFlow) {
       autoExportTriggered.current = false;
+      // Une seule navigation : déjà faite par onConfirm si l'utilisateur a confirmé.
+      if (confirmed) return;
       router.replace("/(drawer)/settings");
     }
   };
@@ -459,30 +413,29 @@ export default function ExportScreen() {
     [children],
   );
 
+  // Total par type pour les enfants sélectionnés (null : décomptes indisponibles).
+  const selectedTotals = useMemo(() => {
+    const totals: Record<string, number> = { likes: 0, comments: 0 };
+    ALL_EVENT_TYPE_IDS.forEach((type) => {
+      totals[type] = 0;
+    });
+    selectedChildren.forEach((item) => {
+      if (!item.counts) return;
+      ALL_EVENT_TYPE_IDS.forEach((type) => {
+        totals[type] += item.counts?.events[type] ?? 0;
+      });
+      totals.likes += item.counts.likes;
+      totals.comments += item.counts.comments;
+    });
+    return totals;
+  }, [selectedChildren]);
+
   const selectedEventsCount = useMemo(
-    () => selectedChildren.reduce((sum, item) => sum + item.events.length, 0),
-    [selectedChildren],
+    () => ALL_EVENT_TYPE_IDS.reduce((sum, type) => sum + selectedTotals[type], 0),
+    [selectedTotals],
   );
 
-  const selectedInteractionsCount = useMemo(
-    () =>
-      selectedChildren.reduce(
-        (sum, item) => sum + item.likes.length + item.comments.length,
-        0,
-      ),
-    [selectedChildren],
-  );
-
-  const selectedCanExportEvents = useMemo(
-    () =>
-      selectedChildren.some(
-        (child) =>
-          child.role === "owner" ||
-          child.role === "admin" ||
-          child.events.length > 0,
-      ),
-    [selectedChildren],
-  );
+  const selectedInteractionsCount = selectedTotals.likes + selectedTotals.comments;
 
   const selectedEventTypesArray = useMemo(
     () => Array.from(selectedEventTypes),
@@ -493,24 +446,14 @@ export default function ExportScreen() {
     [selectedInteractionTypes],
   );
 
-  useEffect(() => {
-    if (!selectedCanExportEvents) {
-      setSelectedEventTypes(new Set());
-    }
-  }, [selectedCanExportEvents]);
-
   const toggleChild = (childId: string) => {
-    setChildren((prev) =>
-      prev.map((item) =>
-        item.child.id === childId
-          ? { ...item, selected: !item.selected }
-          : item,
-      ),
-    );
+    setSelection((prev) => {
+      const current = children.find((item) => item.child.id === childId)?.selected ?? true;
+      return { ...prev, [childId]: !current };
+    });
   };
 
   const toggleEventType = (type: EventType) => {
-    if (!selectedCanExportEvents) return;
     setSelectedEventTypes((prev) => {
       const next = new Set(prev);
       if (next.has(type)) {
@@ -523,7 +466,6 @@ export default function ExportScreen() {
   };
 
   const toggleAllEventTypes = () => {
-    if (!selectedCanExportEvents) return;
     setSelectedEventTypes((prev) => {
       if (prev.size === eventTypes.length) {
         return new Set();
@@ -556,55 +498,29 @@ export default function ExportScreen() {
   };
 
   const toggleAllChildren = () => {
-    setChildren((prev) => {
-      const hasUnselected = prev.some((item) => !item.selected);
-      return prev.map((item) => ({ ...item, selected: hasUnselected }));
-    });
+    const hasUnselected = children.some((item) => !item.selected);
+    setSelection(Object.fromEntries(children.map((item) => [item.child.id, hasUnselected])));
   };
 
-  const getCounts = (item: ExportChild) => {
-    const counts: Record<EventType | InteractionType, number> = {
-      likes: item.likes.length,
-      comments: item.comments.length,
-    } as Record<EventType | InteractionType, number>;
-
-    ALL_EVENT_TYPE_IDS.forEach((type) => {
-      counts[type] = 0;
-    });
-
-    item.events.forEach((event) => {
-      if (!ALL_EVENT_TYPE_IDS.has(event.type)) return;
-      counts[event.type] += 1;
-    });
-
-    return counts;
-  };
-
-  const buildSummary = useCallback(() => {
-    return selectedChildren.map((item) => {
-      const counts = getCounts(item);
-      const rows = [...eventTypes, ...INTERACTION_TYPES]
-        .filter((type) => counts[type.id] > 0)
-        .map((type) => ({
-          type: type.id,
-          label: type.label,
-          total: counts[type.id],
-          selected:
-            type.id === "likes" || type.id === "comments"
-              ? selectedInteractionTypes.has(type.id as InteractionType)
-                ? counts[type.id]
-                : 0
-              : selectedEventTypes.has(type.id as EventType)
-                ? counts[type.id]
-                : 0,
-        }));
-
-      return {
-        childName: item.child.name,
-        rows,
+  /** Récapitulatif d'après les données RÉELLEMENT exportées. */
+  const buildSummary = (exported: Array<{ name: string; data: CollectedChild }>, types: EventType[]) =>
+    exported.map(({ name, data }) => {
+      const counts: Record<string, number> = {
+        likes: data.likes.length,
+        comments: data.comments.length,
       };
+      data.events.forEach((event) => {
+        const type = String(event.type);
+        counts[type] = (counts[type] ?? 0) + 1;
+      });
+      const rows = [...eventTypes, ...INTERACTION_TYPES]
+        .filter((type) =>
+          type.id === "likes" || type.id === "comments" || types.includes(type.id as EventType),
+        )
+        .filter((type) => (counts[type.id] ?? 0) > 0)
+        .map((type) => ({ type: type.id, label: type.label, count: counts[type.id] }));
+      return { childName: name, rows };
     });
-  }, [eventTypes, selectedChildren, selectedEventTypes, selectedInteractionTypes]);
 
   const renderSummarySlider = (summary: ExportSummary[]) => {
     const sliderWidth = Dimensions.get("window").width * 0.85 - 48;
@@ -673,7 +589,7 @@ export default function ExportScreen() {
                         { color: nc.textStrong },
                       ]}
                     >
-                      {row.selected}/{row.total}
+                      {row.count}
                     </Text>
                   </View>
                 ))
@@ -735,17 +651,162 @@ export default function ExportScreen() {
     selectedEventTypesArray.length > 0 ||
     selectedInteractionTypesArray.length > 0;
   const hasSelectedData =
-    (selectedEventsCount > 0 && selectedEventTypesArray.length > 0) ||
-    (selectedInteractionsCount > 0 && selectedInteractionTypesArray.length > 0);
+    selectedEventTypesArray.some((type) => selectedTotals[type] > 0) ||
+    selectedInteractionTypesArray.some((type) => selectedTotals[type] > 0);
+  // Décomptes indisponibles (hors ligne) : on n'exporte pas à l'aveugle.
   const isExportDisabled =
     isExporting ||
     isLoading ||
+    countsError ||
     !hasSelectedChildren ||
     !hasSelectedTypes ||
     !hasSelectedData;
 
   // Synchronous guard against double taps (isExporting state updates async).
   const exportInFlightRef = useRef(false);
+
+  const handleExportRef = useRef<((force?: boolean) => Promise<void>) | null>(null);
+  const [exportFailed, setExportFailed] = useState(false);
+
+  const showExportError = useCallback(
+    (error: unknown) => {
+      setExportFailed(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const offline = error instanceof ExportOfflineError;
+      const message = offline
+        ? EXPORT_OFFLINE_MESSAGE
+        : "Impossible d'exporter vos données. Réessayez.";
+      if (!offline) {
+        showActionToast("Impossible d'exporter vos données.", "Réessayer", () => {
+          void handleExportRef.current?.();
+        });
+      }
+      setModalConfig({
+        visible: true,
+        title: offline ? "Connexion requise" : "Erreur",
+        message,
+        mode: "text",
+        // Suppression de compte : sans export, on revient aux réglages.
+        onCancel: isAutoDeleteFlow
+          ? () => router.replace("/(drawer)/settings")
+          : undefined,
+      });
+    },
+    [isAutoDeleteFlow, router, showActionToast],
+  );
+  /** Lecture complète (serveur) puis écriture du fichier ; aucun fichier si une lecture échoue. */
+  const runExport = useCallback(
+    async (effectiveChildren: ExportChild[], effectiveEventTypes: EventType[], effectiveInteractionTypes: InteractionType[]) => {
+      if (!uid) throw new Error("Utilisateur non connecté");
+      const includeLikes = effectiveInteractionTypes.includes("likes");
+      const includeComments = effectiveInteractionTypes.includes("comments");
+
+      // Tout est lu AVANT de créer le fichier : un échec (hors ligne...) ne
+      // laisse ni fichier partiel ni fichier temporaire. Enfant par enfant
+      // pour limiter la mémoire ; rien n'est conservé après l'export.
+      const exported: Array<{ item: ExportChild; data: CollectedChild }> = [];
+      for (const item of effectiveChildren) {
+        const data = await collectChildExportData(item.child.id, uid, {
+          eventTypes: effectiveEventTypes,
+          includeLikes,
+          includeComments,
+        });
+        exported.push({ item, data });
+      }
+      const truncated = exported.some(({ data }) => data.truncated);
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        exportBy: {
+          email: email ?? user?.email ?? null,
+          pseudo: userName ?? null,
+        },
+        format: "json",
+        notes: {
+          photos: EXPORT_PHOTO_NOTE,
+          ...(truncated ? { truncated: EXPORT_TRUNCATED_NOTE } : {}),
+        },
+        filters: {
+          eventTypes: effectiveEventTypes,
+          interactionTypes: effectiveInteractionTypes,
+        },
+        data: {
+          account: {
+            email: email ?? user?.email ?? null,
+            pseudo: userName ?? null,
+          },
+          preferences,
+          children: exported.map(({ item, data }) => ({
+            childName: item.child.name,
+            birthDate: item.child.birthDate ?? null,
+            gender: item.child.gender ?? null,
+            photoUri: item.child.photoUri ?? null,
+            // Full child document (allergies, notes, ...), technical fields removed.
+            profile: serializeValue(data.profile),
+            events: data.events.map((event) => {
+              const photoPaths = collectEventPhotoPaths(event as any);
+              return {
+                ...serializeValue(event),
+                ...(photoPaths.length > 0 ? { photoStoragePaths: photoPaths } : {}),
+              };
+            }),
+            likes: data.likes.map(serializeValue),
+            comments: data.comments.map(serializeValue),
+          })),
+        },
+      };
+
+      const fileName = `suivibaby_export_${new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")}.json`;
+      // Cache exports folder, purged after ~1h: health data must not stay
+      // in the app's persistent (and backed-up) storage.
+      const fileUri = await prepareExportFile(fileName);
+      try {
+        await FileSystem.writeAsStringAsync(
+          fileUri,
+          JSON.stringify(exportData, null, 2),
+          {
+            encoding: FileSystem.EncodingType.UTF8,
+          },
+        );
+        await shareTempFile(fileUri);
+      } catch (error) {
+        // A failed write leaves a partial file; a share error does not need it either.
+        await deleteTempFile(fileUri);
+        throw error;
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Export terminé avec succès");
+
+      setSummaryIndex(0);
+      setExportSummary(
+        buildSummary(
+          exported.map(({ item, data }) => ({ name: item.child.name, data })),
+          effectiveEventTypes,
+        ),
+      );
+
+      const shouldReturnToDelete = isAutoDeleteFlow;
+      setModalConfig({
+        visible: true,
+        title: "Export terminé",
+        message: "",
+        mode: "summary",
+        confirmText: shouldReturnToDelete ? "Supprimer le compte" : undefined,
+        onConfirm: shouldReturnToDelete
+          ? () => {
+              // Confirmé : closeModal (appelé juste après) ne doit pas re-naviguer.
+              confirmedRef.current = true;
+              router.replace("/(drawer)/settings?delete=1");
+            }
+          : undefined,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildSummary ne dépend que de constantes
+    [email, isAutoDeleteFlow, preferences, router, serializeValue, showToast, uid, user?.email, userName],
+  );
 
   const handleExport = useCallback(async (force = false) => {
     if (exportInFlightRef.current) return;
@@ -779,144 +840,75 @@ export default function ExportScreen() {
       return;
     }
 
-    try {
-      exportInFlightRef.current = true;
-      setIsExporting(true);
-      const effectiveEventTypes = force
-        ? eventTypes.map((item) => item.id as EventType)
-        : selectedEventTypesArray;
-      const effectiveInteractionTypes = force
-        ? INTERACTION_TYPES.map((item) => item.id as InteractionType)
-        : selectedInteractionTypesArray;
-      const effectiveChildren = force ? children : selectedChildren;
-      const includeLikes = effectiveInteractionTypes.includes("likes");
-      const includeComments = effectiveInteractionTypes.includes("comments");
+    const effectiveEventTypes = force
+      ? eventTypes.map((item) => item.id as EventType)
+      : selectedEventTypesArray;
+    const effectiveInteractionTypes = force
+      ? INTERACTION_TYPES.map((item) => item.id as InteractionType)
+      : selectedInteractionTypesArray;
+    const effectiveChildren = force ? children : selectedChildren;
 
-      const exportData = {
-        exportDate: new Date().toISOString(),
-        exportBy: {
-          email: email ?? user?.email ?? null,
-          pseudo: userName ?? null,
-        },
-        format: "json",
-        notes: { photos: EXPORT_PHOTO_NOTE },
-        filters: {
-          eventTypes: effectiveEventTypes,
-          interactionTypes: effectiveInteractionTypes,
-        },
-        data: {
-          account: {
-            email: email ?? user?.email ?? null,
-            pseudo: userName ?? null,
-          },
-          preferences,
-          children: effectiveChildren.map((item) => {
-            const canExportEventsForChild =
-              item.role === "owner" ||
-              item.role === "admin" ||
-              item.events.length > 0;
-            const filteredEvents = canExportEventsForChild
-              ? item.events.filter((event) =>
-                  effectiveEventTypes.includes(event.type),
-                )
-              : [];
-            return {
-              childName: item.child.name,
-              birthDate: item.child.birthDate ?? null,
-              gender: item.child.gender ?? null,
-              photoUri: item.child.photoUri ?? null,
-              // Full child document (allergies, notes, ...), technical fields removed.
-              profile: serializeValue(item.profile),
-              events: filteredEvents.map((event) => {
-                const photoPaths = collectEventPhotoPaths(event as any);
-                return {
-                  ...serializeValue(event),
-                  ...(photoPaths.length > 0 ? { photoStoragePaths: photoPaths } : {}),
-                };
-              }),
-              likes: includeLikes ? item.likes.map(serializeValue) : [],
-              comments: includeComments
-                ? item.comments.map(serializeValue)
-                : [],
-            };
-          }),
-        },
-      };
-
-      const fileName = `suivibaby_export_${new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")}.json`;
-      // Cache exports folder, purged after ~1h: health data must not stay
-      // in the app's persistent (and backed-up) storage.
-      const fileUri = await prepareExportFile(fileName);
+    const doExport = async () => {
       try {
-        await FileSystem.writeAsStringAsync(
-          fileUri,
-          JSON.stringify(exportData, null, 2),
-          {
-            encoding: FileSystem.EncodingType.UTF8,
-          },
-        );
-        await shareTempFile(fileUri);
+        exportInFlightRef.current = true;
+        setIsExporting(true);
+        setExportFailed(false);
+        await runExport(effectiveChildren, effectiveEventTypes, effectiveInteractionTypes);
       } catch (error) {
-        // A failed write leaves a partial file; a share error does not need it either.
-        await deleteTempFile(fileUri);
-        throw error;
+        showExportError(error);
+      } finally {
+        exportInFlightRef.current = false;
+        setIsExporting(false);
       }
+    };
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Export terminé avec succès");
-
-      const summary = buildSummary();
-      setSummaryIndex(0);
-      setExportSummary(summary);
-
-      const shouldReturnToDelete = isAutoDeleteFlow;
-      setModalConfig({
-        visible: true,
-        title: "Export terminé",
-        message: "",
-        mode: "summary",
-        confirmText: shouldReturnToDelete ? "Supprimer le compte" : undefined,
-        onConfirm: shouldReturnToDelete
-          ? () => {
-              router.replace("/(drawer)/settings?delete=1");
-            }
-          : undefined,
-      });
-    } catch {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showActionToast("Impossible d'exporter vos données.", "Réessayer", () => {
-        handleExport();
-      });
-      setModalConfig({
-        visible: true,
-        title: "Erreur",
-        message: "Impossible d'exporter vos données. Réessayez.",
-        mode: "text",
+    // Saisies hors ligne pas encore envoyées / volume au-delà du plafond :
+    // l'export serait incomplet, l'utilisateur choisit en connaissance de cause.
+    exportInFlightRef.current = true;
+    let warnings: string[] = [];
+    try {
+      const pendingChildIds = await getPendingChildIds().catch(() => new Set<string>());
+      warnings = buildPreExportWarnings({
+        selectedChildIds: effectiveChildren.map((item) => item.child.id),
+        pendingChildIds,
+        countsByChild,
       });
     } finally {
       exportInFlightRef.current = false;
-      setIsExporting(false);
     }
+    if (warnings.length > 0) {
+      setModalConfig({
+        visible: true,
+        title: "Export incomplet",
+        message: warnings.join("\n\n"),
+        mode: "text",
+        confirmText: "Exporter quand même",
+        dismissText: "Annuler",
+        onConfirm: () => {
+          confirmedRef.current = true;
+          void doExport();
+        },
+        // Suppression de compte : annuler = retour aux réglages.
+        onCancel: () => {
+          if (isAutoDeleteFlow) router.replace("/(drawer)/settings");
+        },
+      });
+      return;
+    }
+    await doExport();
   }, [
     children,
-    email,
-    eventTypes,
+    countsByChild,
     hasSelectedTypes,
     isAutoDeleteFlow,
-    preferences,
     router,
+    runExport,
     selectedChildren,
     selectedEventTypesArray,
     selectedInteractionTypesArray,
-    serializeValue,
-    showActionToast,
-    showToast,
-    user?.email,
-    userName,
-    buildSummary,
+    showExportError,
   ]);
+  handleExportRef.current = handleExport;
 
   useEffect(() => {
     if (!isAutoDeleteFlow) return;
@@ -974,21 +966,27 @@ export default function ExportScreen() {
     </View>
   );
 
-  // Rôle contributor = « Proche » : export limité à ses interactions.
-  const hasProcheChild = children.some((item) => item.role === "contributor");
+  // Proche (contributor/viewer) : export limité à ses saisies, likes et commentaires.
+  const hasProcheChild = children.some(
+    (item) => item.counts && !seesWholeTracking(item.counts.role),
+  );
 
   const renderChildRow = (item: ExportChild) => {
-    const counts = getCounts(item);
-    const totalEvents = item.events.length;
-    const totalInteractions = item.likes.length + item.comments.length;
-    const seesAllEvents = item.role === "owner" || item.role === "admin";
-    const canExportEventsForChild = seesAllEvents || item.events.length > 0;
-    const eventsScope = seesAllEvents ? "tout le suivi" : "vos saisies";
-    const selectedEvents = eventTypes.reduce((sum, type) => {
-      if (!canExportEventsForChild) return sum;
-      if (!selectedEventTypes.has(type.id as EventType)) return sum;
-      return sum + counts[type.id];
-    }, 0);
+    const counts = item.counts;
+    const eventsScope = seesWholeTracking(counts?.role) ? "tout le suivi" : "vos saisies";
+    const totalEvents = counts
+      ? ALL_EVENT_TYPE_IDS.reduce((sum, type) => sum + (counts.events[type] ?? 0), 0)
+      : 0;
+    const totalInteractions = counts ? counts.likes + counts.comments : 0;
+    const selectedEvents = counts
+      ? eventTypes.reduce(
+          (sum, type) =>
+            selectedEventTypes.has(type.id as EventType)
+              ? sum + (counts.events[type.id] ?? 0)
+              : sum,
+          0,
+        )
+      : 0;
 
     return (
       <View
@@ -1030,9 +1028,11 @@ export default function ExportScreen() {
                   { color: nc.textLight },
                 ]}
               >
-                {totalEvents === 0
-                  ? `Aucun événement (${eventsScope})`
-                  : `${selectedEvents}/${totalEvents} événements (${eventsScope})`}
+                {!counts
+                  ? `— événements (${eventsScope})`
+                  : totalEvents === 0
+                    ? `Aucun événement (${eventsScope})`
+                    : `${selectedEvents}/${totalEvents} événements (${eventsScope})`}
               </Text>
               <Text
                 style={[
@@ -1040,9 +1040,11 @@ export default function ExportScreen() {
                   { color: nc.textLight },
                 ]}
               >
-                {totalInteractions === 0
-                  ? "Aucune interaction (vos likes et commentaires)"
-                  : `${totalInteractions} interactions (vos likes et commentaires)`}
+                {!counts
+                  ? "— interactions (vos likes et commentaires)"
+                  : totalInteractions === 0
+                    ? "Aucune interaction (vos likes et commentaires)"
+                    : `${totalInteractions} interactions (vos likes et commentaires)`}
               </Text>
             </View>
           </View>
@@ -1073,6 +1075,8 @@ export default function ExportScreen() {
     isSelected: boolean,
     onToggle: () => void,
   ) => {
+    // Total des enfants sélectionnés ; « — » si les décomptes sont indisponibles.
+    const total = countsError ? "—" : String(selectedTotals[type.id] ?? 0);
     return (
       <TouchableOpacity
         key={type.id}
@@ -1116,6 +1120,12 @@ export default function ExportScreen() {
           </View>
           <ThemedText style={styles.typeName}>{type.label}</ThemedText>
         </View>
+        <Text
+          style={[styles.typeCount, { color: nc.textLight }]}
+          accessibilityLabel={`${total} éléments`}
+        >
+          {total}
+        </Text>
         <View
           style={[
             styles.checkbox,
@@ -1163,7 +1173,9 @@ export default function ExportScreen() {
             >
               {isExporting || isLoading
                 ? "Préparation de l'export..."
-                : "Export terminé."}
+                : exportFailed
+                  ? "Export interrompu."
+                  : "Export terminé."}
             </Text>
             {(isExporting || isLoading) && (
               <View
@@ -1265,6 +1277,18 @@ export default function ExportScreen() {
               </View>
             </View>
 
+            {countsError && !isLoading && (
+              <View
+                style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
+                accessibilityRole="alert"
+              >
+                <Ionicons name="cloud-offline" size={24} color={nc.error} />
+                <ThemedText style={[styles.infoText, { color: nc.errorText }]}>
+                  {EXPORT_OFFLINE_MESSAGE}
+                </ThemedText>
+              </View>
+            )}
+
             {hasProcheChild && (
               <View
                 style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}
@@ -1276,14 +1300,15 @@ export default function ExportScreen() {
                   color={nc.todayAccent}
                 />
                 <ThemedText style={styles.infoText}>
-                  Pour un enfant dont vous êtes proche, l&apos;export contient
-                  uniquement vos likes et commentaires. Le suivi complet peut
-                  être exporté par un parent de l&apos;enfant.
+                  Pour un enfant dont vous êtes proche, l&apos;export contient vos
+                  likes, vos commentaires et les événements que vous avez
+                  saisis. Le reste du suivi peut être exporté par un parent de
+                  l&apos;enfant.
                 </ThemedText>
               </View>
             )}
 
-            {selectedEventsCount > 0 && (
+            {(selectedEventsCount > 0 || countsError) && (
               <View
                 style={[styles.section, { backgroundColor: nc.backgroundCard }]}
               >
@@ -1298,9 +1323,7 @@ export default function ExportScreen() {
                   </ThemedText>
                   <TouchableOpacity
                     onPress={toggleAllEventTypes}
-                    disabled={
-                      isLoading || isExporting || !selectedCanExportEvents
-                    }
+                    disabled={isLoading || isExporting}
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel="Tout sélectionner ou désélectionner les types d'événements"
@@ -1329,7 +1352,7 @@ export default function ExportScreen() {
               </View>
             )}
 
-            {selectedInteractionsCount > 0 && (
+            {(selectedInteractionsCount > 0 || countsError) && (
               <View
                 style={[styles.section, { backgroundColor: nc.backgroundCard }]}
               >
@@ -1374,7 +1397,7 @@ export default function ExportScreen() {
               </View>
             )}
 
-            {selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
+            {!countsError && !isLoading && selectedEventsCount === 0 && selectedInteractionsCount === 0 && (
               <View
                 style={[styles.section, { backgroundColor: nc.backgroundCard }]}
               >
@@ -1449,9 +1472,10 @@ export default function ExportScreen() {
           backgroundColor={nc.backgroundCard}
           textColor={nc.textStrong}
           dismissText={
-            modalConfig.onConfirm
+            modalConfig.dismissText ??
+            (modalConfig.onConfirm
               ? "Fermer et revenir aux paramètres"
-              : undefined
+              : undefined)
           }
           allowBackdropDismiss={!!modalConfig.onConfirm}
           onClose={closeModal}
@@ -1619,6 +1643,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
+  },
+  typeCount: {
+    marginLeft: 'auto',
+    marginRight: 12,
+    fontSize: 14,
   },
   typeLeft: {
     flexDirection: "row",

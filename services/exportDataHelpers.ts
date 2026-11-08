@@ -35,3 +35,6 @@ export function collectEventPhotoPaths(event: {
 
 export const EXPORT_PHOTO_NOTE =
   "Les photos ne sont pas incluses dans ce fichier : seuls leurs chemins de stockage sont indiqués. Elles restent consultables dans l'application.";
+
+export const EXPORT_TRUNCATED_NOTE =
+  "Export incomplet : la limite de 100 000 éléments par catégorie et par enfant a été atteinte, les éléments au-delà ne figurent pas dans ce fichier.";

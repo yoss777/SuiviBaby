@@ -10,7 +10,7 @@
 // argument, so the hook can live in /hooks alongside the other custom
 // hooks the home component composes.
 
-import { router } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import React, { useCallback } from "react";
 
 // Open-sheet payload is a discriminated union (see SheetContext) and the
@@ -63,6 +63,7 @@ export function useEventEditHandler(
   promenadeEnCours: any,
   showToast?: (msg: string) => void,
 ) {
+  const { push: guardedPush } = useGuardedNavigation();
   return useCallback(
     (event: any) => {
       if (event.id?.startsWith?.("__optimistic_")) {
@@ -71,7 +72,7 @@ export function useEventEditHandler(
       }
       if (!event.id) {
         const route = getEditRoute(event);
-        if (route) router.push(route as any);
+        if (route) guardedPush(route as any);
         return;
       }
 
@@ -329,9 +330,9 @@ export function useEventEditHandler(
         handler();
       } else {
         const route = getEditRoute(event);
-        if (route) router.push(route as any);
+        if (route) guardedPush(route as any);
       }
     },
-    [openSheet, toDate, headerOwnerId, sommeilEnCours, promenadeEnCours, showToast],
+    [openSheet, toDate, headerOwnerId, sommeilEnCours, promenadeEnCours, showToast, guardedPush],
   );
 }

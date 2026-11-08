@@ -1,4 +1,5 @@
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
@@ -834,7 +835,7 @@ export default function MilestonesScreen() {
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
         endOfRange.setHours(23, 59, 59, 999);
         const startOfRange = new Date(endOfRange);
@@ -848,8 +849,10 @@ export default function MilestonesScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;

@@ -10,7 +10,7 @@ import type { JalonType, MilestonesEditData } from "@/components/forms/Milestone
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
-import { router } from "expo-router";
+import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 
 type MilestoneEventWithId = JalonEvent & { id: string };
 
@@ -36,6 +36,7 @@ export function useMomentsActions({
   canManageContent,
 }: UseMomentsActionsParams) {
   const { showAlert } = useModal();
+  const { push: guardedPush } = useGuardedNavigation();
   const [isMoodSaving, setIsMoodSaving] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [galleryVisible, setGalleryVisible] = useState(false);
@@ -105,8 +106,8 @@ export function useMomentsActions({
   );
 
   const handleSeeAll = useCallback(() => {
-    router.push("/baby/gallery");
-  }, []);
+    guardedPush("/baby/gallery");
+  }, [guardedPush]);
 
   const handleEditPhoto = useCallback(
     (photoId: string, photoIndex: number) => {

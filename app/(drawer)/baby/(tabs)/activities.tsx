@@ -1,8 +1,10 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
+import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -855,7 +857,7 @@ export default function ActivitiesScreen() {
       pendingLoadMoreRef.current = 1;
       loadMoreVersionRef.current += 1;
 
-      if (auto && autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
+      if (!auto || autoLoadMoreAttempts >= MAX_AUTO_LOAD_ATTEMPTS - 1) {
         const endOfRange = rangeEndDate ? new Date(rangeEndDate) : new Date();
         endOfRange.setHours(23, 59, 59, 999);
         const startOfRange = new Date(endOfRange);
@@ -869,8 +871,10 @@ export default function ActivitiesScreen() {
         );
 
         if (nextEventDate) {
-          setDaysWindow(14);
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;
@@ -1424,54 +1428,46 @@ export default function ActivitiesScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <View style={styles.filterRow}>
-            <DateFilterBar
-              selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
-              onSelect={handleFilterPress}
-              variant="soft"
-              activeAccentColor={eventColors.activite.dark}
-            >
-              {selectedDate && (
-                <SelectedDateChip
-                  label={formatSelectedDateLabel(selectedDate)}
-                  accentColor={eventColors.activite.dark}
-                  onPress={clearSelectedDate}
-                />
-              )}
-            </DateFilterBar>
-            <View style={styles.quickActionsRow}>
-              <Pressable
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("tummyTime")}
-              >
-                <FontAwesome
-                  name="baby"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("jeux")}
-              >
-                <FontAwesome
-                  name="puzzle-piece"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </Pressable>
-              <Pressable
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("promenade")}
-              >
-                <FontAwesome
-                  name="person-walking"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </Pressable>
-            </View>
-          </View>
+          <DateFilterBar
+            selected={selectedDate ? ("past" as DateFilterValue) : selectedFilter}
+            onSelect={handleFilterPress}
+            variant="soft"
+            activeAccentColor={eventColors.activite.dark}
+          >
+            {selectedDate && (
+              <SelectedDateChip
+                label={formatSelectedDateLabel(selectedDate)}
+                accentColor={eventColors.activite.dark}
+                onPress={clearSelectedDate}
+              />
+            )}
+          </DateFilterBar>
+          {/* Ajouts rapides sur une 2e ligne : les filtres restent toujours visibles */}
+          <QuickAddRow
+            items={[
+              {
+                key: "tummy",
+                label: "Tummy",
+                accessibilityLabel: "Ajouter un tummy time",
+                icon: <FontAwesome name="baby" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("tummyTime"),
+              },
+              {
+                key: "jeux",
+                label: "Jeux",
+                accessibilityLabel: "Ajouter un moment de jeux",
+                icon: <FontAwesome name="puzzle-piece" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("jeux"),
+              },
+              {
+                key: "promenade",
+                label: "Promenade",
+                accessibilityLabel: "Ajouter une promenade",
+                icon: <FontAwesome name="person-walking" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("promenade"),
+              },
+            ]}
+          />
           {showCalendar && (
             <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
@@ -1649,25 +1645,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-  },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingRight: 16,
-  },
-  quickActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
-  },
-  quickActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
   listContent: {
     paddingHorizontal: 16,

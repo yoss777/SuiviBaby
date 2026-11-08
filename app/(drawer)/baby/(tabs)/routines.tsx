@@ -1,5 +1,7 @@
 import { ThemedText } from "@/components/themed-text";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
@@ -51,7 +53,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
@@ -879,15 +880,10 @@ export default function RoutinesScreen() {
         );
 
         if (nextEventDate) {
-          const startOfNext = new Date(nextEventDate);
-          startOfNext.setHours(0, 0, 0, 0);
-          const diffDays =
-            Math.floor(
-              (endOfRange.getTime() - startOfNext.getTime()) /
-                (24 * 60 * 60 * 1000),
-            ) + 1;
-          setDaysWindow((prev) => Math.max(prev, diffDays));
-          setRangeEndDate(nextEventDate);
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+          setDaysWindow((prev) =>
+            Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+          );
         } else {
           setHasMore(false);
           pendingLoadMoreRef.current = 0;
@@ -1603,72 +1599,53 @@ export default function RoutinesScreen() {
         onLayout={() => setLayoutReady(true)}
       >
         <View>
-          <View style={styles.filterRow}>
-            <DateFilterBar
-              selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter ?? "today")}
-              onSelect={handleFilterPress}
-              variant="soft"
-              activeAccentColor={eventColors.sommeil.dark}
-            >
-              {selectedDate && (
-                <SelectedDateChip
-                  label={formatSelectedDateLabel(selectedDate)}
-                  accentColor={eventColors.sommeil.dark}
-                  onPress={clearSelectedDate}
-                />
-              )}
-            </DateFilterBar>
-            <View style={styles.quickActionsRow}>
-              <TouchableOpacity
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("sommeil", "nap")}
-                accessibilityLabel="Ajouter une sieste"
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="bed"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("sommeil", "night")}
-                accessibilityLabel="Ajouter un sommeil nocturne"
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="moon"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("bain")}
-                accessibilityLabel="Ajouter un bain"
-                accessibilityRole="button"
-              >
-                <FontAwesome
-                  name="bath"
-                  size={14}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.quickActionButton, { backgroundColor: nc.backgroundPressed }]}
-                onPress={() => openAddModal("nettoyage_nez")}
-                accessibilityLabel="Ajouter un nettoyage de nez"
-                accessibilityRole="button"
-              >
-                <MaterialCommunityIcons
-                  name="eyedropper"
-                  size={16}
-                  color={Colors[colorScheme].tint}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
+          <DateFilterBar
+            selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter ?? "today")}
+            onSelect={handleFilterPress}
+            variant="soft"
+            activeAccentColor={eventColors.sommeil.dark}
+          >
+            {selectedDate && (
+              <SelectedDateChip
+                label={formatSelectedDateLabel(selectedDate)}
+                accentColor={eventColors.sommeil.dark}
+                onPress={clearSelectedDate}
+              />
+            )}
+          </DateFilterBar>
+          {/* Ajouts rapides sur une 2e ligne : les filtres restent toujours visibles */}
+          <QuickAddRow
+            items={[
+              {
+                key: "sieste",
+                label: "Sieste",
+                accessibilityLabel: "Ajouter une sieste",
+                icon: <FontAwesome name="bed" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("sommeil", "nap"),
+              },
+              {
+                key: "nuit",
+                label: "Nuit",
+                accessibilityLabel: "Ajouter un sommeil nocturne",
+                icon: <FontAwesome name="moon" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("sommeil", "night"),
+              },
+              {
+                key: "bain",
+                label: "Bain",
+                accessibilityLabel: "Ajouter un bain",
+                icon: <FontAwesome name="bath" size={14} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("bain"),
+              },
+              {
+                key: "nez",
+                label: "Nez",
+                accessibilityLabel: "Ajouter un nettoyage de nez",
+                icon: <MaterialCommunityIcons name="eyedropper" size={16} color={Colors[colorScheme].tint} />,
+                onPress: () => openAddModal("nettoyage_nez"),
+              },
+            ]}
+          />
           {showCalendar && (
             <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
               <Calendar
@@ -1695,7 +1672,9 @@ export default function RoutinesScreen() {
         </View>
 
         {(!!sommeilEnCours) && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 12, flexDirection: "row" }}>
+          // Un seul sommeil en cours possible : la carte prend toute la largeur
+          // (l'ancien flexDirection "row" la réduisait à la largeur de son contenu).
+          <View style={styles.ongoingSleepContainer} testID="ongoing-sleep-container">
             <SleepWidget
               isActive={true}
               isNap={sommeilEnCours.isNap}
@@ -1840,29 +1819,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
+  ongoingSleepContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
   calendarContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-  },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingRight: 16,
-  },
-  quickActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
-  },
-  quickActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
   listContent: {
     paddingHorizontal: 16,

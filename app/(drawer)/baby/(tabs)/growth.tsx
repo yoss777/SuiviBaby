@@ -1,4 +1,5 @@
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
+import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -877,14 +878,10 @@ export default function GrowthScreen() {
       );
 
       if (nextEventDate) {
-        const startOfNext = new Date(nextEventDate);
-        startOfNext.setHours(0, 0, 0, 0);
-        const diffDays =
-          Math.floor(
-            (endOfRange.getTime() - startOfNext.getTime()) /
-              (24 * 60 * 60 * 1000),
-          ) + 1;
-        setDaysWindow((prev) => Math.max(prev, diffDays));
+// Saut à l'événement E : couvrir [E − 14 j, fin de fenêtre] (fin inchangée).
+        setDaysWindow((prev) =>
+          Math.max(prev, daysWindowToCover(nextEventDate, endOfRange)),
+        );
       } else {
         setHasMore(false);
         pendingLoadMoreRef.current = 0;

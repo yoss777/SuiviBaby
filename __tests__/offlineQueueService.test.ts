@@ -12,6 +12,7 @@ import {
   cleanupFailedEvents,
   onSignOut,
   retryExhaustedEvents,
+  getPendingChildIds,
 } from "@/services/offlineQueueService";
 
 // Get mock db instance
@@ -33,6 +34,27 @@ beforeEach(() => {
 });
 
 describe("offlineQueueService", () => {
+  describe("getPendingChildIds", () => {
+    it("renvoie les enfants concernés par des écritures non synchronisées (payload illisible ignoré)", async () => {
+      await getQueueSize(); // initialise la base (l'init consomme des lectures)
+      mockDb.getAllAsync.mockResolvedValueOnce([
+        { payload: JSON.stringify({ childId: "c1", type: "biberon" }) },
+        { payload: JSON.stringify({ childId: "c2", eventId: "e" }) },
+        { payload: JSON.stringify({ childId: "c1" }) },
+        { payload: "pas du json" },
+        { payload: JSON.stringify({ type: "x" }) },
+      ]);
+      const ids = await getPendingChildIds();
+      expect(Array.from(ids).sort()).toEqual(["c1", "c2"]);
+      expect(mockDb.getAllAsync).toHaveBeenCalledWith(expect.stringContaining("uid = ?"), "test-uid");
+    });
+
+    it("file vide : aucun enfant", async () => {
+      mockDb.getAllAsync.mockResolvedValueOnce([]);
+      expect((await getPendingChildIds()).size).toBe(0);
+    });
+  });
+
   describe("enqueueEvent", () => {
     it("should insert an event into SQLite and return an ID", async () => {
       mockDb.getFirstAsync.mockResolvedValueOnce({ count: 1 });

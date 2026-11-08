@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useGuardedNavigation } from '@/hooks/useGuardedNavigation';
 import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -36,6 +37,7 @@ interface MedicalCategory {
 }
 
 export default function ChildPicker() {
+  const { push: guardedPush } = useGuardedNavigation();
   const colorScheme = useColorScheme() ?? 'light';
   const { signOut, user } = useAuth();
   const { children, setActiveChild, loading, hiddenChildrenIds } = useBaby();
@@ -175,7 +177,7 @@ export default function ChildPicker() {
 
     if (category.route === 'baby' && category.child) {
       setActiveChild(category.child);
-      router.push('/(drawer)/baby' as any);
+      guardedPush('/(drawer)/baby' as any);
       return;
     }
 
@@ -184,7 +186,7 @@ export default function ChildPicker() {
       return;
     }
 
-    router.push(`/(drawer)/${category.route}` as any);
+    guardedPush(`/(drawer)/${category.route}` as any);
   };
 
   const handleToggleChild = (childId: string) => {
@@ -300,7 +302,7 @@ export default function ChildPicker() {
                   styles.inviteButton,
                   { backgroundColor: Colors[colorScheme].tint },
                 ]}
-                onPress={() => router.push('/settings/join-child' as any)}
+                onPress={() => guardedPush('/settings/join-child' as any)}
                 activeOpacity={0.8}
               >
                 <Ionicons name="mail-outline" size={18} color="#fff" />
@@ -311,7 +313,7 @@ export default function ChildPicker() {
             )}
 
             <TouchableOpacity
-              onPress={() => router.push('/(drawer)/settings' as any)}
+              onPress={() => guardedPush('/(drawer)/settings' as any)}
               style={styles.settingsButton}
               activeOpacity={0.7}
               accessibilityRole="button"

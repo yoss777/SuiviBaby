@@ -153,7 +153,6 @@ export const pumpingConfig: EventListConfig<Pompage, PompageSummary> = {
   ),
 
   jumpToLatestOnMount: true,
-  loadMore: { jumpOnManual: true, jumpWindow: "extend" },
   filters: { resetToTodayOnFocus: false },
   navigation: { backUsesStashedReturn: false },
   permissions: "manage",

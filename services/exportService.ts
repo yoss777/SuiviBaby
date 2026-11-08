@@ -1,6 +1,11 @@
 import * as FileSystem from "expo-file-system";
 import { deleteTempFile, prepareExportFile, shareTempFile } from "@/services/tempShareService";
-import { EventType, obtenirEvenements } from "./eventsService";
+import {
+  collectChildExportData,
+  EXPORT_OFFLINE_MESSAGE,
+  ExportOfflineError,
+} from "./exportCollector";
+import { getPendingChildIds, isOnline } from "./offlineQueueService";
 import { getHiddenEventIds } from "./hiddenPhotosService";
 import { getExportEventTypes } from "./eventTypeSupport";
 import { toDate } from "@/utils/date";
@@ -105,25 +110,60 @@ function buildDetails(type: string, event: any): string {
 }
 
 export interface CsvExportResult {
-  /** Types whose events could not be read: the file is incomplete for them. */
-  failedTypes: EventType[];
+  /** Vrai si l'utilisateur a annulé après l'avertissement (aucun fichier produit). */
+  cancelled: boolean;
 }
 
+/**
+ * Export CSV de tous les événements d'un enfant. Mêmes règles que l'export
+ * JSON : lectures serveur uniquement (rôle relu sur le serveur : Parent = tout,
+ * Proche = ses propres saisies), échec complet hors ligne ou à la moindre
+ * erreur de lecture (jamais de fichier partiel).
+ * `confirmPending` est appelé si des saisies hors ligne de l'enfant attendent
+ * d'être envoyées ; retourner false annule l'export.
+ */
 export async function exportAllEventsCSV(
   childId: string,
   childName: string,
+  uid: string,
+  options: { confirmPending?: () => Promise<boolean> } = {},
 ): Promise<CsvExportResult> {
   const eventTypes = getExportEventTypes();
-  const failedTypes: EventType[] = [];
+
+  // Connexion vérifiée avant tout (et avant l'avertissement).
+  let online = false;
+  try {
+    online = await isOnline();
+  } catch {
+    online = false;
+  }
+  if (!online) throw new ExportOfflineError();
+
+  if (options.confirmPending) {
+    const pending = await getPendingChildIds().catch(() => new Set<string>());
+    if (pending.has(childId) && !(await options.confirmPending())) {
+      return { cancelled: true };
+    }
+  }
+
+  let collected;
+  try {
+    collected = await collectChildExportData(childId, uid, {
+      eventTypes,
+      includeLikes: false,
+      includeComments: false,
+    });
+  } catch (error) {
+    // Toute erreur de lecture : l'export échoue entièrement.
+    if (error instanceof ExportOfflineError) throw error;
+    throw new Error(EXPORT_OFFLINE_MESSAGE);
+  }
 
   const rows: string[][] = [];
   rows.push(["Date", "Heure", "Type", "Details", "Note"]);
 
   // B5.S3 — exclure les events que l'utilisateur a explicitement masqués
-  // côté UI via hidePhoto(). Avant, exportAllEventsCSV ignorait
-  // hiddenEventIds → des photos/notes cachées ré-apparaissaient dans
-  // l'export, surprise désagréable pour le user qui pensait avoir caché
-  // ces entrées. NB : la liste hiddenEventIds est globale au user
+  // côté UI via hidePhoto(). NB : la liste hiddenEventIds est globale au user
   // (pas par enfant), c'est OK car les IDs d'events sont uniques.
   let hiddenIds: Set<string>;
   try {
@@ -132,25 +172,19 @@ export async function exportAllEventsCSV(
     hiddenIds = new Set();
   }
 
-  for (const type of eventTypes) {
-    try {
-      const events = await obtenirEvenements(childId, { type });
-      for (const event of events) {
-        if (event.id && hiddenIds.has(event.id)) continue; // B5.S3 skip
-        const date = toDate(event.date);
-        const details = buildDetails(type, event);
-        rows.push([
-          formatDate(date),
-          formatTime(date),
-          type,
-          details,
-          event.note || "",
-        ]);
-      }
-    } catch {
-      // Keep going, but report the incomplete types to the caller.
-      failedTypes.push(type);
-    }
+  const supported = new Set<string>(eventTypes);
+  for (const event of collected.events as any[]) {
+    const type = String(event.type ?? "");
+    if (!supported.has(type)) continue;
+    if (event.id && hiddenIds.has(event.id)) continue; // B5.S3 skip
+    const date = toDate(event.date);
+    rows.push([
+      formatDate(date),
+      formatTime(date),
+      type,
+      buildDetails(type, event),
+      event.note || "",
+    ]);
   }
 
   // Sort by date descending
@@ -179,7 +213,7 @@ export async function exportAllEventsCSV(
       mimeType: "text/csv",
       UTI: "public.comma-separated-values-text",
     });
-    return { failedTypes };
+    return { cancelled: false };
   } catch (error) {
     await deleteTempFile(filePath);
     throw error;
