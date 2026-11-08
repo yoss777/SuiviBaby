@@ -13,9 +13,9 @@ end
 `;
 
 describe("withIosPodfileFixes", () => {
-  it("adds the fmt fix after react_native_post_install and no Firebase pod", () => {
+  it("adds Firebase modular headers inside the target and the fmt fix after react_native_post_install", () => {
     const out = applyPodfileFixes(PODFILE);
-    expect(out).not.toMatch(/pod 'Firebase/);
+    expect(out).toMatch(/target 'SuiviBaby' do\n  # @suivibaby\/podfile-fixes[^\n]*\n  pod 'GoogleUtilities', :modular_headers => true/);
     expect(out.indexOf("CLANG_CXX_LANGUAGE_STANDARD")).toBeGreaterThan(out.indexOf("react_native_post_install"));
     expect(out.trimEnd().endsWith("  end\nend")).toBe(true);
   });
