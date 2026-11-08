@@ -24,6 +24,17 @@
         "simulator": true
       }
     },
+    "verify-simulator": {
+      "environment": "production",
+      "distribution": "internal",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "ios": {
+        "simulator": true,
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "env": {
