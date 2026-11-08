@@ -62,6 +62,7 @@ commandes) et [ROADMAP.md](../ROADMAP.md).
 ## Audits et plans
 
 - [AUDIT_COMPLET_2026-11.md](AUDIT_COMPLET_2026-11.md) : audit complet du 2026-11-05 (neuf revues par domaine).
+- [AUDIT_2026-11-08.md](AUDIT_2026-11-08.md) : audit complet n° 2 du 2026-11-08 (dix agents, dont UI et UX) et plan des sprints 14 à 20.
 - [PLAN_SPRINTS_AUDIT.md](PLAN_SPRINTS_AUDIT.md) : plan des sprints issu de l'audit (S1 à S13).
 - [SUIVI_ACTIONS.md](SUIVI_ACTIONS.md) : suivi des actions de l'audit et des décisions (D1 à D10).
 - [redteam-app/](redteam-app/README.md) : plans d'action et clôtures de la revue de sécurité de l'app (lots A, B et 0).
