@@ -50,6 +50,11 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import {
+  CHART_CONTAINER_MARGIN_VERTICAL,
+  CHART_HEIGHT,
+  useStableChartBlockHeight,
+} from "@/components/suivibaby/chartLayout";
 
 type Props = {
   sommeils: any[];
@@ -61,7 +66,6 @@ type Props = {
 };
 
 const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
-const CHART_HEIGHT = 210;
 const CHART_PADDING = { top: 18, right: 18, bottom: 46, left: 50 };
 
 const TAP_HINT_KEY = "sommeil_chart_tap_hint_shown";
@@ -166,6 +170,8 @@ function SommeilChart({
     onWeekChange?.(getStartOfWeek(currentWeek));
   }, [currentWeek, onWeekChange]);
 
+  // Hauteur stable de la carte entre état vide et état avec données
+  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
   const isEmpty = !sommeils || sommeils.length === 0;
 
   // Week bounds keyed on a number so the memos below only recompute when the
@@ -564,14 +570,17 @@ function SommeilChart({
           </View>
 
           {totalWeekCount === 0 ? (
-            <View style={styles.noDataContainer}>
+            <View
+              style={[styles.noDataContainer, { minHeight: emptyMinHeight }]}
+              testID="chart-empty-state"
+            >
               <FontAwesome name="chart-bar" size={24} color={C.muted} />
               <Text style={[styles.noDataText, { color: C.muted }]}>
                 Aucune donnée cette semaine
               </Text>
             </View>
           ) : (
-            <>
+            <View onLayout={onContentLayout} testID="chart-data-block">
               {/* METRICS */}
               <View style={styles.metricsRow}>
                 <View style={[styles.metricCard, { backgroundColor: C.metricBg, borderColor: C.border }]}>
@@ -1032,7 +1041,7 @@ function SommeilChart({
                   </View>
                 </View>
               )}
-            </>
+            </View>
           )}
         </View>
       )}
@@ -1205,7 +1214,7 @@ const styles = StyleSheet.create({
   chartContainer: {
     position: "relative",
     height: CHART_HEIGHT,
-    marginVertical: 4,
+    marginVertical: CHART_CONTAINER_MARGIN_VERTICAL,
   },
   yAxisContainer: {
     position: "absolute",

@@ -209,7 +209,13 @@ export const SleepWidget = memo(function SleepWidget({
               accessibilityRole="button"
               accessibilityLabel="Terminer le sommeil"
             >
-              <Text style={[styles.actionButtonText, { color: nc.backgroundCard }]}>
+              <Text
+                style={[styles.actionButtonText, { color: nc.backgroundCard }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                testID="stop-button-label"
+              >
                 Terminer
               </Text>
             </TouchableOpacity>
@@ -261,6 +267,9 @@ export const SleepWidget = memo(function SleepWidget({
                 styles.startButtonText,
                 { color: preferNight ? sleepColors.text : nc.backgroundCard },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
               Sieste
             </Text>
@@ -288,6 +297,9 @@ export const SleepWidget = memo(function SleepWidget({
                 styles.startButtonText,
                 { color: preferNight ? nc.backgroundCard : sleepColors.text },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
               Nuit
             </Text>
@@ -347,14 +359,19 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    // Largeur minimale : « Terminer » tient sur une ligne même si la carte est étroite
+    minWidth: 96,
     minHeight: 44,
     paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   actionButtonText: {
+    fontSize: 14,
     fontWeight: "700",
+    textAlign: "center",
   },
   actionRow: {
     flexDirection: "row",

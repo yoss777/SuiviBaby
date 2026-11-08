@@ -2,6 +2,7 @@ import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -1389,51 +1390,46 @@ export default function SoinsScreen() {
           onLayout={() => setLayoutReady(true)}
         >
           <View>
-            <View style={styles.filterRow}>
-              <DateFilterBar
-                selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter as DateFilterValue)}
-                onSelect={handleFilterPress}
-                variant="soft"
-                activeAccentColor={eventColors.temperature.dark}
-              >
-                {selectedDate && (
-                  <SelectedDateChip
-                    label={formatSelectedDateLabel(selectedDate)}
-                    accentColor={eventColors.temperature.dark}
-                    onPress={clearSelectedDate}
-                  />
-                )}
-              </DateFilterBar>
-              <View style={styles.quickActionsRow}>
-                <Pressable
-                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
-                  onPress={() => openAddModal("temperature")}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une température"
-                >
-                  <FontAwesome name="temperature-half" size={14} color={Colors[colorScheme].tint} />
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
-                  onPress={() => openAddModal("vitamine")}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une vitamine"
-                >
-                  <FontAwesome name="pills" size={14} color={Colors[colorScheme].tint} />
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.quickActionButton, { backgroundColor: pressed ? nc.border : nc.backgroundPressed }]}
-                  onPress={() => openAddModal("vaccin")}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter un vaccin"
-                >
-                  <FontAwesome name="syringe" size={14} color={Colors[colorScheme].tint} />
-                </Pressable>
-              </View>
-            </View>
+            <DateFilterBar
+              selected={selectedDate ? ("past" as DateFilterValue) : (selectedFilter as DateFilterValue)}
+              onSelect={handleFilterPress}
+              variant="soft"
+              activeAccentColor={eventColors.temperature.dark}
+            >
+              {selectedDate && (
+                <SelectedDateChip
+                  label={formatSelectedDateLabel(selectedDate)}
+                  accentColor={eventColors.temperature.dark}
+                  onPress={clearSelectedDate}
+                />
+              )}
+            </DateFilterBar>
+            {/* Ajouts rapides sur une 2e ligne : les filtres restent toujours visibles */}
+            <QuickAddRow
+              items={[
+                {
+                  key: "temperature",
+                  label: "Temp.",
+                  accessibilityLabel: "Ajouter une température",
+                  icon: <FontAwesome name="temperature-half" size={14} color={Colors[colorScheme].tint} />,
+                  onPress: () => openAddModal("temperature"),
+                },
+                {
+                  key: "vitamine",
+                  label: "Vitamine",
+                  accessibilityLabel: "Ajouter une vitamine",
+                  icon: <FontAwesome name="pills" size={14} color={Colors[colorScheme].tint} />,
+                  onPress: () => openAddModal("vitamine"),
+                },
+                {
+                  key: "vaccin",
+                  label: "Vaccin",
+                  accessibilityLabel: "Ajouter un vaccin",
+                  icon: <FontAwesome name="syringe" size={14} color={Colors[colorScheme].tint} />,
+                  onPress: () => openAddModal("vaccin"),
+                },
+              ]}
+            />
             {showCalendar && (
               <View style={[styles.calendarContainer, { borderBottomColor: nc.border }]}>
                 <Calendar
@@ -1591,25 +1587,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-  },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingRight: 16,
-  },
-  quickActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginLeft: 8,
-  },
-  quickActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
   listContent: {
     paddingHorizontal: 16,

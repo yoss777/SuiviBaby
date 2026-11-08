@@ -42,6 +42,11 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import {
+  CHART_CONTAINER_MARGIN_VERTICAL,
+  CHART_HEIGHT,
+  useStableChartBlockHeight,
+} from "@/components/suivibaby/chartLayout";
 
 type Props = {
   pompages: any[];
@@ -53,7 +58,6 @@ type Props = {
 };
 
 const DEFAULT_SCREEN_WIDTH = Dimensions.get("window").width - 40;
-const CHART_HEIGHT = 210;
 const CHART_PADDING = { top: 18, right: 18, bottom: 42, left: 50 };
 
 const TAP_HINT_KEY = "pompages_chart_tap_hint_shown";
@@ -163,6 +167,8 @@ function PompagesChart({
     onDayChange?.(currentDay);
   }, [currentDay, onDayChange]);
 
+  // Hauteur stable de la carte entre état vide et état avec données
+  const { onContentLayout, emptyMinHeight } = useStableChartBlockHeight();
   const isEmpty = !pompages || pompages.length === 0;
 
   // Sessions of the displayed day: range check first, objects built only for that day.
@@ -533,7 +539,10 @@ function PompagesChart({
             </View>
 
             {dailyValues.length === 0 ? (
-              <View style={styles.noDataContainer}>
+              <View
+                style={[styles.noDataContainer, { minHeight: emptyMinHeight }]}
+                testID="chart-empty-state"
+              >
                 <FontAwesome
                   name="info-circle"
                   size={24}
@@ -544,7 +553,7 @@ function PompagesChart({
                 </Text>
               </View>
             ) : (
-              <>
+              <View onLayout={onContentLayout} testID="chart-data-block">
                 <View style={styles.metricsRow}>
                   <View
                     style={[
@@ -778,7 +787,7 @@ function PompagesChart({
                       ))}
                   </View>
                 </View>
-              </>
+              </View>
             )}
           </View>
 
@@ -1224,6 +1233,7 @@ const styles = StyleSheet.create({
   },
   noDataContainer: {
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 40,
     gap: 12,
   },
@@ -1233,7 +1243,7 @@ const styles = StyleSheet.create({
   chartContainer: {
     position: "relative",
     height: CHART_HEIGHT,
-    marginVertical: 4,
+    marginVertical: CHART_CONTAINER_MARGIN_VERTICAL,
   },
   yAxisContainer: {
     position: "absolute",
