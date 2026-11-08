@@ -12,7 +12,8 @@
       },
       "android": {
         "gradleCommand": ":app:assembleDebug"
-      }
+      },
+      "node": "22.23.4"
     },
     "development-simulator": {
       "developmentClient": true,
@@ -22,7 +23,8 @@
       },
       "ios": {
         "simulator": true
-      }
+      },
+      "node": "22.23.4"
     },
     "verify-simulator": {
       "environment": "production",
@@ -33,7 +35,8 @@
       "ios": {
         "simulator": true,
         "image": "macos-sequoia-15.6-xcode-26.2"
-      }
+      },
+      "node": "22.23.4"
     },
     "preview": {
       "distribution": "internal",
@@ -47,7 +50,8 @@
       "ios": {
         "resourceClass": "m-medium"
       },
-      "environment": "production"
+      "environment": "production",
+      "node": "22.23.4"
     },
     "staging": {
       "environment": "preview",
@@ -59,7 +63,8 @@
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
-      }
+      },
+      "node": "22.23.4"
     },
     "production": {
       "environment": "production",
@@ -72,7 +77,8 @@
       "ios": {
         "autoIncrement": true,
         "image": "macos-sequoia-15.6-xcode-26.2"
-      }
+      },
+      "node": "22.23.4"
     }
   },
   "submit": {
