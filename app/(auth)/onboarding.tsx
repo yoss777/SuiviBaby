@@ -22,6 +22,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useExitOnBack } from "@/hooks/useExitOnBack";
 
 const ONBOARDING_DONE_KEY = "@suivibaby_onboarding_done";
 const LEGACY_ONBOARDING_KEY = "@samaye_onboarding_done";
@@ -87,6 +88,7 @@ export async function markOnboardingComplete(): Promise<void> {
 }
 
 export default function OnboardingScreen() {
+  useExitOnBack();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const router = useRouter();

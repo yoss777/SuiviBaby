@@ -51,6 +51,7 @@ import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consent
 import { auth } from "../../config/firebase";
 import { configureLayoutAnimation } from "@/utils/motion";
 import type { ScrollViewInstance } from "react-native";
+import { useExitOnBack } from "@/hooks/useExitOnBack";
 
 const LAST_EMAIL_KEY = "@suivibaby_last_email";
 const LEGACY_EMAIL_KEY = "@samaye_last_email";
@@ -94,6 +95,15 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [userName, setUserName] = useState("");
   const [isLogin, setIsLogin] = useState(true);
+  // Retour Android : quitte le mode inscription, sinon ferme l'app (pas
+  // d'écran vide après une déconnexion).
+  useExitOnBack(
+    useCallback(() => {
+      if (isLogin) return false;
+      setIsLogin(true);
+      return true;
+    }, [isLogin]),
+  );
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
