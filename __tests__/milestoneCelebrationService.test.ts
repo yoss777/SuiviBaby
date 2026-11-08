@@ -252,6 +252,15 @@ describe("findMilestoneForToday (une fois par jour et par enfant)", () => {
     expect(retry?.milestone.id).toBe("tracking_30d");
   });
 
+  it("un échec de lecture serveur (ex. index manquant) est signalé à Sentry", async () => {
+    const { captureServiceError } = jest.requireMock("@/utils/errorReporting");
+    (captureServiceError as jest.Mock).mockClear();
+    const err = Object.assign(new Error("The query requires an index"), { code: "failed-precondition" });
+    firstMock.mockRejectedValue(err);
+    expect(await findMilestoneForToday({ childId: "child-a", premium: true, local, now: NOW })).toBeNull();
+    expect(captureServiceError).toHaveBeenCalledWith(err, { service: "milestones", operation: "loadServerStats" });
+  });
+
   it("sans événement : aucune lecture de comptage, aucun jalon", async () => {
     firstMock.mockResolvedValue(null);
     expect(await findMilestoneForToday({ childId: "child-a", premium: true, local, now: NOW })).toBeNull();

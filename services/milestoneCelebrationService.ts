@@ -13,6 +13,7 @@
 // Inactifs, faute de donnée peu coûteuse : streak_30d (la fenêtre locale ne
 // couvre que 8 jours), types "growth" et "first" (aucune détection).
 
+import { captureServiceError } from "@/utils/errorReporting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { countChildEvents, getFirstEventDate } from "@/services/eventsRepository";
 
@@ -371,7 +372,10 @@ export async function findMilestoneForToday(
   let stats: Awaited<ReturnType<typeof loadServerStats>>;
   try {
     stats = await loadServerStats(params.childId);
-  } catch {
+  } catch (error) {
+    // Jamais en silence : un index manquant (childId + date croissante) a
+    // empêché toute célébration sans laisser de trace (2026-11-08).
+    captureServiceError(error, { service: "milestones", operation: "loadServerStats" });
     return null;
   }
 
