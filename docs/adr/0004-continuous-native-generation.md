@@ -30,7 +30,9 @@ Les dossiers natifs ne sont plus versionnés (`/ios` et `/android` dans
 `.gitignore`) : EAS (cloud et `--local`) les génère à chaque build avec
 `expo prebuild`.
 
-- 1 → `plugins/withIosPodfileFixes.js` (plugin de configuration, testé) ;
+- 1 → `plugins/withIosPodfileFixes.js` (plugin de configuration, testé). Depuis
+  Expo 58, il ne garde que fmt : @react-native-firebase 27 résout Firebase par
+  Swift Package Manager, les pods Firebase déclarés à la main entraient en conflit ;
 - 2 → `expo.ios.privacyManifests` dans `app.json` ;
 - 3 et 4 → abandonnés.
 - Les fichiers Firebase natifs restent à la racine (`google-services.json`,
