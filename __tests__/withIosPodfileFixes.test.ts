@@ -20,6 +20,11 @@ describe("withIosPodfileFixes", () => {
     expect(out.trimEnd().endsWith("  end\nend")).toBe(true);
   });
 
+  it("keeps Firebase on CocoaPods before any target block", () => {
+    const out = applyPodfileFixes(PODFILE);
+    expect(out.indexOf("$RNFirebaseDisableSPM = true")).toBeLessThan(out.indexOf("target 'SuiviBaby'"));
+  });
+
   it("is idempotent", () => {
     const once = applyPodfileFixes(PODFILE);
     expect(applyPodfileFixes(once)).toBe(once);

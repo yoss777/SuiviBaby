@@ -9,7 +9,8 @@
 // nativeAppCheckConfigured (= GoogleService-Info.plist + google-services.json
 // present at build time). app.config.js registers the matching Expo plugins.
 // Keep @react-native-firebase on a major tested with the current Expo SDK
-// (58: v27); bump it together with the SDK upgrade, never on its own.
+// (58: v26.4 — v27 resolves Firebase through SPM only and needs dynamic
+// frameworks); bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
 import {
   CustomProvider,
@@ -117,7 +118,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   }
 
   // API modulaire (@react-native-firebase v22+ ; l'espace de noms par défaut
-  // a disparu en v27, montée Expo 58).
+  // disparaît en v27).
   const provider = new rnfbAppCheck.ReactNativeFirebaseAppCheckProvider();
   provider.configure({
     android: {

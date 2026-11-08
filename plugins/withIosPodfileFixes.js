@@ -3,7 +3,11 @@
 //   1. modular headers for the Firebase Swift pods pulled by
 //      @react-native-firebase (App Check): without them `pod install` fails
 //      on FirebaseCoreInternal / GoogleUtilities;
-//   2. fmt compiled as C++17: fmt 11's consteval format strings fail with the
+//   2. `$RNFirebaseDisableSPM = true`: @react-native-firebase 26 resolves
+//      Firebase with Swift Package Manager by default, which requires dynamic
+//      frameworks; the app keeps static pods + CocoaPods Firebase (v27 drops
+//      CocoaPods entirely: dynamic frameworks will be needed then);
+//   3. fmt compiled as C++17: fmt 11's consteval format strings fail with the
 //      Xcode 26 clang (kept while React Native still pulls fmt 11).
 const { withDangerousMod } = require("expo/config-plugins");
 const fs = require("fs");
@@ -27,6 +31,10 @@ const FMT_CXX17 = `    ${MARK}: fmt 11 consteval vs Xcode 26 clang
     end
 `;
 
+const DISABLE_SPM = `${MARK}: Firebase through CocoaPods (static pods)
+$RNFirebaseDisableSPM = true
+`;
+
 function applyPodfileFixes(podfile) {
   if (podfile.includes(MARK)) return podfile;
   const target = /^target '[^']+' do\n/m;
@@ -36,7 +44,7 @@ function applyPodfileFixes(podfile) {
   if (!target.test(podfile) || !podfile.includes("post_install do |installer|") || !postInstallEnd.test(podfile)) {
     throw new Error("withIosPodfileFixes: Podfile layout not recognised");
   }
-  return podfile
+  return (DISABLE_SPM + podfile)
     .replace(target, (m) => m + MODULAR_HEADERS)
     .replace(postInstallEnd, `\n${FMT_CXX17}  end\nend\n`);
 }
