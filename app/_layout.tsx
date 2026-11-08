@@ -212,7 +212,19 @@ function AppNavigation() {
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
-      <Stack initialRouteName="boot">
+      {/* En-tête commun des écrans de la pile racine (paramètres, partage…) :
+          bouton retour et titre dans la couleur du texte, comme les écrans du
+          menu, au lieu de la couleur primaire du thème (bleu/sarcelle). */}
+      <Stack
+        initialRouteName="boot"
+        screenOptions={{
+          headerTintColor: Colors[colorScheme].text,
+          headerTitleStyle: { color: Colors[colorScheme].text },
+          headerStyle: { backgroundColor: Colors[colorScheme].background },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: Colors[colorScheme].background },
+        }}
+      >
         <Stack.Screen
           name="(auth)"
           options={{ headerShown: false }}
