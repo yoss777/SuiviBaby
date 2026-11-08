@@ -12,6 +12,7 @@
 // (58: v26.4 — v27 resolves Firebase through SPM only and needs dynamic
 // frameworks); bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
+import { captureServiceError } from "@/utils/errorReporting";
 import {
   CustomProvider,
   ReCaptchaV3Provider,
@@ -131,7 +132,9 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     },
   });
 
-  const nativeAppCheck = await rnfbAppCheck.initializeAppCheck(undefined, {
+  // Synchrone en v26 : l'initialisation native part en arrière-plan ; le
+  // premier getToken ci-dessous sert de vérification.
+  const nativeAppCheck = rnfbAppCheck.initializeAppCheck(undefined, {
     provider,
     isTokenAutoRefreshEnabled: true,
   });
@@ -167,7 +170,10 @@ async function initializeForCurrentPlatform(app: FirebaseApp): Promise<void> {
 export function ensureFirebaseAppCheck(app: FirebaseApp): Promise<void> {
   if (!appCheckInitializationPromise) {
     appCheckInitializationPromise = initializeForCurrentPlatform(app).catch((error) => {
+      // Sans App Check, les Cloud Functions refusent les appels : ne jamais
+      // laisser cet échec silencieux en production.
       console.warn("[AppCheck] Initialization skipped:", error);
+      captureServiceError(error, { service: "appCheck", operation: "initialize" });
     });
   }
 

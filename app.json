@@ -236,7 +236,13 @@
           "color": "#0891b2"
         }
       ],
-      "./plugins/withIosPodfileFixes"
+      "./plugins/withIosPodfileFixes",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Autoriser $(PRODUCT_NAME) à utiliser Face ID pour déverrouiller l’application."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

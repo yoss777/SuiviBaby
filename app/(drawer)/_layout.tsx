@@ -97,12 +97,13 @@ function BabyHeaderTitle() {
   );
 }
 
-/** Bouton d'ouverture du menu avec un libellé français (défaut anglais « Show navigation menu »). */
-// Écran initial du menu (le prop initialRouteName a disparu d'expo-router 58).
+// Écran initial du menu (le prop initialRouteName a disparu d'expo-router 58 ;
+// `anchor` remplace `unstable_settings.initialRouteName`, déprécié).
 export const unstable_settings = {
-  initialRouteName: "baby",
+  anchor: "baby",
 };
 
+/** Bouton d'ouverture du menu avec un libellé français (défaut anglais « Show navigation menu »). */
 function renderDrawerToggle(props: { tintColor?: ColorValue }) {
   return (
     <DrawerToggleButton tintColor={props.tintColor} accessibilityLabel="Ouvrir le menu" />
