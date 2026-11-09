@@ -106,7 +106,7 @@ export function useMomentsActions({
   );
 
   const handleSeeAll = useCallback(() => {
-    guardedPush("/baby/gallery");
+    guardedPush("/baby/gallery?returnTo=moments");
   }, [guardedPush]);
 
   const handleEditPhoto = useCallback(

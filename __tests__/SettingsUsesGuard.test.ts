@@ -7,7 +7,7 @@ const GUARDED_FILES = [
   "app/(drawer)/settings.tsx",
   "app/settings/edit-child.tsx",
   "app/(drawer)/share-child.tsx",
-  "app/(drawer)/baby/manage-access.tsx",
+  "app/(drawer)/baby/(tabs)/manage-access.tsx",
   "app/(drawer)/baby/(tabs)/plus.tsx",
   "app/(drawer)/baby/(tabs)/home.tsx",
   "app/child-picker.tsx",

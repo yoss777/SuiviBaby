@@ -33,7 +33,7 @@ import { useFocusEffect } from "expo-router/react-navigation";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library/legacy";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -47,7 +47,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useHeaderLeft, useHeaderRight } from "../_layout";
+import { useHeaderLeft, useHeaderRight } from "../../_layout";
 import { startLoop } from "@/utils/motion";
 import { toDate } from "@/utils/date";
 
@@ -422,6 +422,14 @@ export default function GalleryScreen() {
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent = canManageEvents(permissions.role);
 
+  // Onglet masqué : router.back() suivrait l'historique des onglets (Accueil).
+  // On revient donc explicitement à l'écran d'origine (Plus ou Moments).
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  const returnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const goBack = useCallback(() => {
+    router.replace(returnTarget === "plus" ? "/baby/plus" : "/baby/moments");
+  }, [returnTarget]);
+
   // S7.4 : jalons paginés par 60 (première page en direct, suite au défilement).
   const {
     events,
@@ -468,7 +476,7 @@ export default function GalleryScreen() {
     useCallback(() => {
       const backButton = (
         <HeaderBackButton
-          onPress={() => router.back()}
+          onPress={goBack}
           tintColor={nc.textStrong}
         />
       );
@@ -477,7 +485,7 @@ export default function GalleryScreen() {
       return () => {
         setHeaderLeft(null, headerOwnerId.current);
       };
-    }, [colorScheme, setHeaderLeft]),
+    }, [colorScheme, goBack, setHeaderLeft]),
   );
 
   // Header right - mark all read + add button
@@ -534,7 +542,7 @@ export default function GalleryScreen() {
           closeSheet();
           return true;
         }
-        router.back();
+        goBack();
         return true;
       };
 
@@ -543,7 +551,7 @@ export default function GalleryScreen() {
         onBackPress,
       );
       return () => subscription.remove();
-    }, [closeSheet, isOpen]),
+    }, [closeSheet, goBack, isOpen]),
   );
 
   // Ne PAS appeler markMomentsAsSeen à la sortie — les badges restent

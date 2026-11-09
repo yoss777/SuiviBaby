@@ -224,6 +224,17 @@ export default function BabyTabLayout() {
           name="growth"
           options={hiddenTabOptions}
         />
+        {/* Galerie et gestion des accès : dans les onglets pour garder la barre
+            du bas (et sa marge au-dessus des boutons Android) comme les autres
+            sous-écrans de Plus. */}
+        <Tabs.Screen
+          name="gallery"
+          options={hiddenTabOptions}
+        />
+        <Tabs.Screen
+          name="manage-access"
+          options={hiddenTabOptions}
+        />
       </Tabs>
       {canManageContent && (
         <VoiceDock tabBarHeight={tabBarHeight} visible={showVoiceDock} />

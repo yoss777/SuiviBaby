@@ -105,7 +105,7 @@ Pour chaque enfant de chaque utilisateur, créer un document dans la collection 
 
 ### 5. UI de gestion des accès ✅
 
-**Fichier** : [`app/(drawer)/baby/manage-access.tsx`](../app/(drawer)/baby/manage-access.tsx)
+**Fichier** : [`app/(drawer)/baby/(tabs)/manage-access.tsx`](../app/(drawer)/baby/(tabs)/manage-access.tsx)
 
 **Fonctionnalités** :
 - ✅ Liste tous les parents ayant accès

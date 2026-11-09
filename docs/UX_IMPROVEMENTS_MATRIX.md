@@ -51,7 +51,7 @@
 
 | Abrév. | Écran | Fichier |
 |--------|-------|---------|
-| GA | Gallery (Souvenirs) | `app/(drawer)/baby/gallery.tsx` |
+| GA | Gallery (Souvenirs) | `app/(drawer)/baby/(tabs)/gallery.tsx` |
 
 ## Matrice de déploiement
 
@@ -115,7 +115,7 @@ Aucun gap restant — tous les écrans sont à 100%.
 | AB | Add Baby (Ajout enfant) | `app/(drawer)/add-baby.tsx` |
 | SC | Share Child (Partage) | `app/(drawer)/share-child.tsx` |
 | ST | Stats (Statistiques) | `app/(drawer)/baby/(tabs)/stats.tsx` |
-| MA | Manage Access (Accès) | `app/(drawer)/baby/manage-access.tsx` |
+| MA | Manage Access (Accès) | `app/(drawer)/baby/(tabs)/manage-access.tsx` |
 
 > Ces écrans sont des formulaires/utilitaires. Seuls les P-items applicables sont listés.
 

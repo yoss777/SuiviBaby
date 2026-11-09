@@ -17,6 +17,8 @@ const MOMENTS_EVENT_PREVIEW_LIMIT = 500;
 
 export type MoodEntry = {
   id: string;
+  /** Clé de rendu stable : l'id passe de temporaire à définitif à la confirmation. */
+  key: string;
   date: Date;
   humeur: 1 | 2 | 3 | 4 | 5;
 };
@@ -181,6 +183,7 @@ export function useMomentsData(
       if (event.typeJalon === "humeur" && event.humeur) {
         const entry: MoodEntry = {
           id: event.id,
+          key: (event as { idempotencyKey?: string }).idempotencyKey ?? event.id,
           date: toDate(event.date),
           humeur: event.humeur as 1 | 2 | 3 | 4 | 5,
         };
