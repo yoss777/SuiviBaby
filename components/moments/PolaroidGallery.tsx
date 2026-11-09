@@ -28,6 +28,8 @@ const POLAROID_WIDTH = (SCREEN_WIDTH - 48 - 12) / 2;
 
 type PhotoMilestone = {
   id: string;
+  /** Clé stable (idempotencyKey) : la carte n'est pas recréée à la confirmation serveur. */
+  key?: string;
   date: Date;
   photo: string;
   titre?: string;
@@ -98,15 +100,17 @@ const PolaroidCard = ({
     setImageError(true);
   }, []);
 
-  // Stable rotation based on photo ID hash
+  // Stable rotation based on the stable key hash (the id changes when the
+  // optimistic photo is confirmed by the server).
+  const rotationSeed = photo.key ?? photo.id;
   const rotation = useMemo(() => {
     let hash = 0;
-    for (let i = 0; i < photo.id.length; i++) {
-      hash = ((hash << 5) - hash + photo.id.charCodeAt(i)) | 0;
+    for (let i = 0; i < rotationSeed.length; i++) {
+      hash = ((hash << 5) - hash + rotationSeed.charCodeAt(i)) | 0;
     }
     const rotations = [-3, 2, -2, 3, -1, 1];
     return rotations[Math.abs(hash) % rotations.length];
-  }, [photo.id]);
+  }, [rotationSeed]);
 
   const scale = useSharedValue(0.8);
   const opacity = useSharedValue(0);
@@ -383,7 +387,7 @@ export const PolaroidGallery = ({
           <>
             {displayPhotos.map((photo, index) => (
               <PolaroidCard
-                key={photo.id}
+                key={photo.key ?? photo.id}
                 photo={photo}
                 index={index}
                 onPress={() => onPhotoPress(photo)}

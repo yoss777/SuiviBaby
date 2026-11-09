@@ -30,6 +30,8 @@ import { getDateTime, isValidDate } from "@/utils/date";
 
 export interface RecentEvent {
   id?: string;
+  /** Stable across the optimistic → server confirmation (the id changes). */
+  idempotencyKey?: string;
   type: string;
   date: any;
   isNap?: boolean;
@@ -711,7 +713,7 @@ function RecentEventsListComponent({
       ) : (
         events.map((event, index) => (
           <EventRow
-            key={event.id ?? getFallbackEventKey(event)}
+            key={event.idempotencyKey ?? event.id ?? getFallbackEventKey(event)}
             event={event}
             index={index}
             isLast={index === events.length - 1}

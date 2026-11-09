@@ -25,6 +25,8 @@ export type MoodEntry = {
 
 export type PhotoMilestone = {
   id: string;
+  /** Clé de rendu stable (idempotencyKey) : même carte avant et après confirmation. */
+  key: string;
   date: Date;
   photo: string;
   titre?: string;
@@ -214,6 +216,7 @@ export function useMomentsData(
 
         photos.push({
           id: event.id,
+          key: (event as { idempotencyKey?: string }).idempotencyKey ?? event.id,
           date: toDate(event.date),
           photo: event.photos[0],
           titre: photoTitre,

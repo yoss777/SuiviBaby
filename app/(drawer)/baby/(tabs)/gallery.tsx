@@ -60,6 +60,8 @@ type MilestoneEventWithId = GalleryMilestoneEvent;
 
 type PhotoMilestone = {
   id: string;
+  /** Clé de rendu stable (idempotencyKey) : la vignette n'est pas recréée à la confirmation. */
+  key: string;
   date: Date;
   photo: string;
   titre?: string;
@@ -575,6 +577,7 @@ export default function GalleryScreen() {
 
         photos.push({
           id: event.id,
+          key: (event as { idempotencyKey?: string }).idempotencyKey ?? event.id,
           date: eventDate,
           photo: event.photos[0],
           titre: photoTitre,
@@ -866,7 +869,7 @@ export default function GalleryScreen() {
       <View style={styles.monthGrid}>
         {item.photos.map((photo) => (
           <PhotoThumbnail
-            key={photo.id}
+            key={photo.key}
             photo={photo}
             onPhotoPress={handlePhotoPress}
             onPhotoEdit={handleEditPhoto}
