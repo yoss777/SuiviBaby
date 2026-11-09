@@ -5,6 +5,7 @@
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
+  BackHandler,
   View,
   Text,
   StyleSheet,
@@ -27,7 +28,7 @@ import {
 } from '@/types/permissions';
 import { Ionicons } from '@expo/vector-icons';
 import { useBaby } from '@/contexts/BabyContext';
-import { useHeaderLeft } from '../_layout';
+import { useHeaderLeft } from '../../_layout';
 import { HeaderBackButton } from "expo-router/react-navigation";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -233,7 +234,16 @@ export default function ManageAccessScreen() {
         />
       );
       setHeaderLeft(backButton, headerOwnerId.current);
-      return () => setHeaderLeft(null, headerOwnerId.current);
+      // Onglet masqué : le retour Android suivrait l'historique des onglets
+      // (Accueil) ; on revient à Plus comme le bouton de l'en-tête.
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/baby/plus");
+        return true;
+      });
+      return () => {
+        subscription.remove();
+        setHeaderLeft(null, headerOwnerId.current);
+      };
     }, [colorScheme, router, setHeaderLeft])
   );
 
@@ -263,7 +273,7 @@ export default function ManageAccessScreen() {
           </Text>
           <TouchableOpacity
             style={ds.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.replace('/baby/plus')}
             accessibilityRole="button"
             accessibilityLabel="Retour à l'écran précédent"
           >

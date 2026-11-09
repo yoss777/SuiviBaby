@@ -16,6 +16,8 @@ type MoodLevel = 1 | 2 | 3 | 4 | 5;
 
 type MoodEntry = {
   id: string;
+  /** Clé stable (idempotencyKey) : évite de recréer la ligne à la confirmation serveur. */
+  key?: string;
   date: Date;
   humeur: MoodLevel;
 };
@@ -178,7 +180,7 @@ export const VerticalMoodTimeline = ({
         >
           {visibleMoods.map((mood, index) => (
             <TimelineItem
-              key={mood.id}
+              key={mood.key ?? mood.id}
               mood={mood}
               index={index}
               isLast={index === visibleMoods.length - 1}
@@ -190,7 +192,7 @@ export const VerticalMoodTimeline = ({
         <View style={styles.listContent}>
           {visibleMoods.map((mood, index) => (
             <TimelineItem
-              key={mood.id}
+              key={mood.key ?? mood.id}
               mood={mood}
               index={index}
               isLast={index === visibleMoods.length - 1 && !hasMoreToShow}
