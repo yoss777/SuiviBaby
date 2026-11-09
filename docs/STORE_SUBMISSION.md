@@ -163,7 +163,7 @@ Biberons, tétées, couches, sommeil, bains, médicaments, vaccins, croissance �
 Ajoutez un événement en parlant : "Biberon de 150 ml à 14h30". Idéal à 3h du matin.
 
 📊 Statistiques et courbes
-Visualisez les tendances, comparez avec les courbes OMS, recevez des insights IA personnalisés.
+Visualisez les tendances et comparez avec les courbes OMS.
 
 👨‍👩‍👧 Partage famille
 Invitez le co-parent, la nounou ou les grands-parents. Chacun peut suivre et contribuer.
@@ -176,7 +176,6 @@ Fonctionne sans internet. Les données se synchronisent automatiquement au retou
 
 PREMIUM :
 - Commandes vocales illimitées
-- Insights IA avancés
 - Export PDF pour le pédiatre
 - Historique illimité
 - Partage famille étendu
