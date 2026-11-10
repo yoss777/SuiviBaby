@@ -17,6 +17,7 @@ Règle : une ligne ne revient dans le paywall, sur le site (`public/index.html#t
 | 1 | Gratuit / Premium | `"Historique 90 jours"` / `"Historique illimité"` | `getHistoryCutoffDate()` existe dans `services/premiumGatingService.ts` mais n'est appelée nulle part : aucune limite n'est appliquée. Le prompt `history_limit` existe mais n'est jamais affiché. |
 | 2 | Premium | `"Widgets iOS/Android"` | Aucun widget dans le projet. |
 | 3 | Premium | `"Rapport pédiatre PDF"` | Seul l'export PDF générique existe. Il n'y a pas de rapport formaté pour le pédiatre. |
+| 4 | Premium | `"Insights IA"` | Retiré le 2026-11-09 (décision Yoss) : la Cloud Function `generateAiInsight` appelée par `services/aiInsightsService.ts` n'existe pas et aucun écran ne l'utilise. À remettre seulement une fois livrée, avec l'avis préalable et la ligne Anthropic dans la politique de confidentialité (`docs/STORE_PRIVACY.md`). |
 | 4 | Famille | `"Dashboard partagé temps réel"` | Tout le monde a déjà la synchronisation temps réel, quelle que soit l'offre. Pour que la ligne ait un sens, il faut une vue réservée à Famille. |
 | 5 | Famille | `"Notifications croisées"` | Introuvable dans le code. Cible : « Papa a donné le biberon à 14h ». |
 | 6 | Toutes | Sous-titre `"14 jours d'essai gratuit, sans engagement."` et FAQ « les 14 premiers jours sont gratuits » | Le code reconnaît `periodType === "TRIAL"`, mais la durée dépend des offres d'introduction configurées dans App Store Connect et Google Play Console, ce qui n'est pas vérifié. |

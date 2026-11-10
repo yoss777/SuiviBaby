@@ -98,7 +98,6 @@ const PLANS: PlanConfig[] = [
       "Exports PDF illimités",
       "Commandes vocales illimitées",
       "Partage illimité",
-      "Insights IA",
     ],
   },
 ];
