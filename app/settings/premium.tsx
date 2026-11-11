@@ -22,9 +22,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import { Stack } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Stack, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   LayoutAnimation,
   Linking,
   Platform,
@@ -43,6 +44,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { configureLayoutAnimation } from "@/utils/motion";
+import {
+  getDisplayPrices,
+  purchaseDisclosure,
+  storeName,
+  type BillingCycle,
+  type OfferProduct,
+} from "@/utils/premiumOffer";
+import { FREE_LIMITS, PREMIUM_LIMITS } from "@/services/premiumGatingService";
 
 // Enable LayoutAnimation on Android
 if (
@@ -52,34 +61,25 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-type BillingCycle = "monthly" | "annual" | "lifetime";
-
 interface PlanConfig {
   tier: PremiumTier;
   name: string;
-  monthlyPrice: string;
-  annualPrice: string;
-  annualMonthly: string;
-  savings: string;
   features: string[];
-  highlighted?: boolean;
-  badge?: string;
 }
 
+// Ne lister que ce qui est livré et réellement appliqué (docs/PREMIUM_OFFRE_CIBLE.md).
+// Décisions du 2026-11-11 : enfants et partage illimités pour tous ; voix
+// Premium plafonnée à 50 par jour, annoncée telle quelle.
 const PLANS: PlanConfig[] = [
   {
     tier: "free",
     name: "Gratuit",
-    monthlyPrice: "0€",
-    annualPrice: "0€",
-    annualMonthly: "0€",
-    savings: "",
     features: [
-      "Suivi multi-bébé illimité",
+      "Enfants illimités",
       "18 types d'événements",
       "Statistiques et courbes OMS",
-      "2 co-parents",
-      "3 commandes vocales/jour",
+      "Partage illimité avec la famille",
+      `${FREE_LIMITS.voiceCommandsPerDay} commandes vocales par jour`,
       "1 export PDF",
       "Mode nuit automatique",
     ],
@@ -87,39 +87,37 @@ const PLANS: PlanConfig[] = [
   {
     tier: "premium",
     name: "Premium",
-    monthlyPrice: "3,99€",
-    annualPrice: "29,99€",
-    annualMonthly: "2,49€",
-    savings: "-37%",
-    highlighted: true,
-    badge: "Populaire",
     features: [
       "Tout le plan Gratuit",
+      `Jusqu'à ${PREMIUM_LIMITS.voiceCommandsPerDay} commandes vocales par jour`,
       "Exports PDF illimités",
-      "Commandes vocales illimitées",
-      "Partage illimité",
     ],
   },
 ];
 
-const FAQ_ITEMS = [
-  {
-    q: "Puis-je annuler à tout moment ?",
-    a: "Oui, vous pouvez annuler votre abonnement à tout moment depuis les paramètres de votre store (App Store ou Google Play). Vous conservez l'accès Premium jusqu'à la fin de la période payée.",
-  },
-  {
-    q: "Y a-t-il un essai gratuit ?",
-    a: "Lorsqu'un essai gratuit est proposé, sa durée est indiquée par l'App Store ou Google Play avant l'achat. Si vous annulez au moins 24 heures avant la fin de l'essai, vous ne serez pas facturé.",
-  },
-  {
-    q: "Mes données sont-elles conservées si je repasse en Gratuit ?",
-    a: "Oui, toutes vos données restent intactes. Seules les fonctionnalités Premium sont désactivées.",
-  },
-];
+function faqItems(os: string) {
+  const store = storeName(os);
+  return [
+    {
+      q: "Puis-je résilier à tout moment ?",
+      a: `Oui, depuis les réglages d'abonnement de ${store}, ou avec « Résilier mon abonnement » sur cet écran. Vous gardez Premium jusqu'à la fin de la période payée.`,
+    },
+    {
+      q: "Y a-t-il un essai gratuit ?",
+      a: `Lorsqu'un essai gratuit est proposé (formule annuelle), sa durée est affichée sous le bouton et par ${store} avant l'achat. Si vous résiliez au moins 24 heures avant la fin de l'essai, vous ne payez rien.`,
+    },
+    {
+      q: "Mes données sont-elles conservées si je repasse en Gratuit ?",
+      a: "Oui, toutes vos données restent intactes. Seules les fonctionnalités Premium sont désactivées.",
+    },
+  ];
+}
 
 export default function PremiumScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const router = useRouter();
+  const FAQ_ITEMS = useMemo(() => faqItems(Platform.OS), []);
   const {
     tier: currentTier,
     billingPeriod: currentBilling,
@@ -155,6 +153,16 @@ export default function PremiumScreen() {
     Record<string, PurchasesPackage>
   >({});
   const [purchasing, setPurchasing] = useState(false);
+  // Prix des stores (RevenueCat) ; repli sur les prix de lancement tant qu'ils chargent.
+  const prices = useMemo(
+    () =>
+      getDisplayPrices({
+        monthly: rcPackages.premium_monthly?.product as OfferProduct | undefined,
+        annual: rcPackages.premium_annual?.product as OfferProduct | undefined,
+        lifetime: rcPackages.lifetime?.product as OfferProduct | undefined,
+      }),
+    [rcPackages],
+  );
   const [modalConfig, setModalConfig] = useState({
     visible: false,
     title: "",
@@ -208,9 +216,11 @@ export default function PremiumScreen() {
         if (result.success) {
           setModalConfig({
             visible: true,
-            title: "Bienvenue dans SuiviBaby+ !",
+            title: "Bienvenue dans Premium !",
             message:
-              "Votre abonnement est actif. Profitez de toutes les fonctionnalités Premium.",
+              billingCycle === "lifetime"
+                ? "Votre achat est confirmé. Premium est actif sans limite de durée."
+                : "Votre abonnement est actif. Profitez de toutes les fonctionnalités Premium.",
           });
         }
       } catch {
@@ -244,7 +254,7 @@ export default function PremiumScreen() {
           visible: true,
           title: "Aucun achat à restaurer",
           message:
-            "Aucun abonnement actif n'a été trouvé pour ce compte SuiviBaby sur ce compte App Store / Google Play.",
+            `Aucun achat actif n'a été trouvé pour ce compte SuiviBaby sur votre compte ${storeName(Platform.OS)}.`,
         });
         return;
       }
@@ -265,7 +275,7 @@ export default function PremiumScreen() {
       edges={["bottom"]}
     >
       <Stack.Screen
-        options={{ title: "SuiviBaby+", headerBackTitle: "Retour" }}
+        options={{ title: "Premium", headerBackTitle: "Retour" }}
       />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -283,9 +293,15 @@ export default function PremiumScreen() {
         ) : (
           <>
         {/* Header */}
-        <View style={styles.header} accessibilityRole="header">
-          <FontAwesome name="crown" size={36} color={nc.todayAccent} />
-          <Text style={[styles.title, { color: nc.textStrong }]}>
+        <View style={styles.header}>
+          <FontAwesome
+            name="crown"
+            size={36}
+            color={nc.todayAccent}
+            accessible={false}
+            importantForAccessibility="no"
+          />
+          <Text style={[styles.title, { color: nc.textStrong }]} accessibilityRole="header">
             {currentTier === "free"
               ? "Choisissez votre plan"
               : "Gérez votre abonnement"}
@@ -445,7 +461,6 @@ export default function PremiumScreen() {
           (() => {
             const plan = PLANS[1];
             const isCurrentPlan = plan.tier === currentTier;
-            const lifetimePrice = "79,99€";
             const cardBorderColor = isCurrentPlan ? nc.success : nc.todayAccent;
 
             return (
@@ -459,25 +474,6 @@ export default function PremiumScreen() {
                   },
                 ]}
               >
-                {plan.badge && (
-                  <View
-                    style={[
-                      styles.planBadge,
-                      { backgroundColor: cardBorderColor },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.planBadgeText,
-                        // Texte sombre sur le vert « actuel » (blanc : 2.3:1)
-                        { color: isCurrentPlan ? "#052e16" : nc.onTodayAccent },
-                      ]}
-                    >
-                      {plan.badge}
-                    </Text>
-                  </View>
-                )}
-
                 <View style={styles.radioRow}>
                   <Text style={[styles.planName, { color: nc.textStrong }]}>
                     {plan.name}
@@ -512,24 +508,32 @@ export default function PremiumScreen() {
                     {
                       key: "monthly" as BillingCycle,
                       label: "Mensuel",
-                      price: plan.monthlyPrice,
-                      sub: null,
-                      spokenPrice: `${plan.monthlyPrice} par mois`,
+                      price: prices.monthly,
+                      sub: "sans engagement",
+                      badge: null as string | null,
+                      spokenPrice: `${prices.monthly} par mois, sans engagement`,
                     },
                     {
                       key: "annual" as BillingCycle,
                       label: "Annuel",
-                      price: plan.annualPrice,
-                      sub: `soit ${plan.annualMonthly}/mois`,
-                      badge: "-37%",
-                      spokenPrice: `${plan.annualPrice} par an, soit ${plan.annualMonthly} par mois, moins 37 %`,
+                      price: prices.annual,
+                      sub: [
+                        prices.annualTrial,
+                        `soit ${prices.annualPerMonth}/mois`,
+                        prices.annualSavingsPercent ? `-${prices.annualSavingsPercent} %` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                      badge: "Meilleur prix",
+                      spokenPrice: `${prices.annual} par an${prices.annualTrial ? `, ${prices.annualTrial}` : ""}, soit ${prices.annualPerMonth} par mois${prices.annualSavingsPercent ? `, moins ${prices.annualSavingsPercent} %` : ""}, meilleur prix`,
                     },
                     {
                       key: "lifetime" as BillingCycle,
                       label: "À vie",
-                      price: lifetimePrice,
+                      price: prices.lifetime,
                       sub: "paiement unique",
-                      spokenPrice: `${lifetimePrice}, paiement unique`,
+                      badge: null as string | null,
+                      spokenPrice: `${prices.lifetime}, paiement unique`,
                     },
                   ].map((opt) => {
                     const isCurrentBilling =
@@ -624,10 +628,10 @@ export default function PremiumScreen() {
                               <View
                                 style={[
                                   styles.savingsBadge,
-                                  { backgroundColor: "#22c55e" },
+                                  { backgroundColor: nc.todayAccent },
                                 ]}
                               >
-                                <Text style={styles.savingsBadgeText}>
+                                <Text style={[styles.savingsBadgeText, { color: nc.onTodayAccent }]}>
                                   {opt.badge}
                                 </Text>
                               </View>
@@ -682,35 +686,71 @@ export default function PremiumScreen() {
                         ? "Passer à l'annuel"
                         : "Passer au mensuel";
                   } else if (!userIsPaying) {
-                    buttonLabel = `Essayer ${tierLabel} (14j)`;
+                    buttonLabel = `Passer à ${tierLabel}`;
                   } else {
-                    buttonLabel = `Passer a ${tierLabel}`;
+                    buttonLabel = `Passer à ${tierLabel}`;
                   }
 
                   return (
-                    <TouchableOpacity
-                      style={[
-                        styles.subscribeButton,
-                        { backgroundColor: nc.todayAccent },
-                        (isExactSameBilling || purchasing) && { opacity: 0.5 },
-                      ]}
-                      onPress={() => handleSubscribe(plan)}
-                      disabled={isExactSameBilling || purchasing}
-                      accessibilityRole="button"
-                      accessibilityLabel={buttonLabel}
-                      accessibilityState={{
-                        disabled: isExactSameBilling || purchasing,
-                      }}
-                    >
-                      <Text
+                    <>
+                      <TouchableOpacity
                         style={[
-                          styles.subscribeButtonText,
-                          { color: nc.onTodayAccent },
+                          styles.subscribeButton,
+                          { backgroundColor: nc.todayAccent },
+                          (isExactSameBilling || purchasing) && { opacity: 0.5 },
                         ]}
+                        onPress={() => handleSubscribe(plan)}
+                        disabled={isExactSameBilling || purchasing}
+                        accessibilityRole="button"
+                        accessibilityLabel={buttonLabel}
+                        accessibilityState={{
+                          disabled: isExactSameBilling || purchasing,
+                          busy: purchasing,
+                        }}
                       >
-                        {buttonLabel}
-                      </Text>
-                    </TouchableOpacity>
+                        {purchasing ? (
+                          <ActivityIndicator color={nc.onTodayAccent} />
+                        ) : (
+                          <Text
+                            style={[
+                              styles.subscribeButtonText,
+                              { color: nc.onTodayAccent },
+                            ]}
+                          >
+                            {buttonLabel}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                      {/* Conditions juste sous le bouton (App Store 3.1.2, Google Play) */}
+                      {!isExactSameBilling && (
+                        <Text style={[styles.disclosure, { color: nc.textLight }]}>
+                          {purchaseDisclosure(billingCycle, prices, Platform.OS)}
+                        </Text>
+                      )}
+                      <View style={styles.legalLinks}>
+                        <TouchableOpacity
+                          onPress={() => router.push("/settings/terms")}
+                          accessibilityRole="link"
+                          hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                        >
+                          <Text style={[styles.legalLink, { color: nc.todayAccent }]}>
+                            Conditions d&apos;utilisation
+                          </Text>
+                        </TouchableOpacity>
+                        <Text style={[styles.legalLink, { color: nc.textLight }]} accessible={false}>
+                          ·
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => router.push("/settings/privacy")}
+                          accessibilityRole="link"
+                          hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                        >
+                          <Text style={[styles.legalLink, { color: nc.todayAccent }]}>
+                            Confidentialité
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
                   );
                 })()}
               </View>
@@ -740,11 +780,11 @@ export default function PremiumScreen() {
                 );
               }}
               accessibilityRole="button"
-              accessibilityLabel="Annuler mon abonnement"
+              accessibilityLabel="Résilier mon abonnement"
               accessibilityHint="Ouvre les paramètres d'abonnement du store"
             >
               <Text style={[styles.restoreText, { color: nc.textLight }]}>
-                Annuler mon abonnement
+                Résilier mon abonnement
               </Text>
             </TouchableOpacity>
           )}
@@ -757,34 +797,38 @@ export default function PremiumScreen() {
             Questions fréquentes
           </Text>
           {FAQ_ITEMS.map((item, index) => (
-            <TouchableOpacity
+            <View
               key={index}
               style={[styles.faqItem, { borderColor: nc.borderLight }]}
-              accessibilityRole="button"
-              accessibilityLabel={item.q}
-              accessibilityState={{ expanded: expandedFaq === index }}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setExpandedFaq(expandedFaq === index ? null : index);
-              }}
-              activeOpacity={0.7}
             >
-              <View style={styles.faqHeader}>
-                <Text style={[styles.faqQuestion, { color: nc.textStrong }]}>
-                  {item.q}
-                </Text>
-                <Ionicons
-                  name={expandedFaq === index ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color={nc.textMuted}
-                />
-              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={item.q}
+                accessibilityState={{ expanded: expandedFaq === index }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setExpandedFaq(expandedFaq === index ? null : index);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.faqHeader}>
+                  <Text style={[styles.faqQuestion, { color: nc.textStrong }]}>
+                    {item.q}
+                  </Text>
+                  <Ionicons
+                    name={expandedFaq === index ? "chevron-up" : "chevron-down"}
+                    size={18}
+                    color={nc.textMuted}
+                  />
+                </View>
+              </TouchableOpacity>
+              {/* Hors du bouton : VoiceOver lit la réponse une fois dépliée. */}
               {expandedFaq === index && (
                 <Text style={[styles.faqAnswer, { color: nc.textLight }]}>
                   {item.a}
                 </Text>
               )}
-            </TouchableOpacity>
+            </View>
           ))}
         </View>
 
@@ -860,9 +904,7 @@ export default function PremiumScreen() {
 
         {/* Legal */}
         <Text style={[styles.legal, { color: nc.textLight }]}>
-          L&apos;abonnement se renouvelle automatiquement sauf annulation au moins
-          24h avant la fin de la période. Le paiement est débité via votre
-          compte App Store ou Google Play.
+          {`Les abonnements se renouvellent automatiquement, sauf résiliation au moins 24 h avant la fin de la période. Le paiement est débité sur votre compte ${storeName(Platform.OS)}. Prix TTC.`}
         </Text>
           </>
         )}
@@ -885,6 +927,15 @@ export default function PremiumScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
+  disclosure: { fontSize: 13, lineHeight: 18, textAlign: "center", marginTop: 10 },
+  legalLinks: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  legalLink: { fontSize: 13, fontWeight: "600", paddingVertical: 4 },
   header: { alignItems: "center", marginBottom: 24 },
   title: { fontSize: 24, fontWeight: "700", marginTop: 12 },
   subtitle: { fontSize: 15, marginTop: 6 },

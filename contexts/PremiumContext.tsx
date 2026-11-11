@@ -96,7 +96,8 @@ const PREMIUM_FEATURES: Set<PremiumFeature> = new Set([
 
 // Fonctionnalités gratuites pour tous (décision Q7, 2026-11-07) : gardées dans
 // le type PremiumFeature pour ne rien casser, mais jamais bloquées.
-const FREE_FEATURES: ReadonlySet<PremiumFeature> = new Set<PremiumFeature>(["advanced_stats", "oms_curves"]);
+// Partage illimité pour tous depuis le 2026-11-11.
+const FREE_FEATURES: ReadonlySet<PremiumFeature> = new Set<PremiumFeature>(["advanced_stats", "oms_curves", "unlimited_sharing"]);
 
 /** Vrai si la fonctionnalité est accessible à tous, quel que soit l'abonnement. */
 export function isAlwaysFreeFeature(feature: PremiumFeature): boolean {

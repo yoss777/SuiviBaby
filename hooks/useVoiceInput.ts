@@ -40,13 +40,16 @@ export function formatRecordingDuration(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export type VoiceLimitKind = "free" | "premium";
+
 export function useVoiceInput() {
   const { activeChild } = useBaby();
   const uid = useAuth().firebaseUser?.uid ?? null;
   const voice = useVoiceCommand(activeChild?.id || "", false);
   const { checkFeatureAccess } = usePremium();
 
-  const [voiceLimitReached, setVoiceLimitReached] = useState(false);
+  // Which daily allowance ran out: the free one (3) or the Premium one (50).
+  const [voiceLimitReached, setVoiceLimitReached] = useState<VoiceLimitKind | false>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isHandsFree, setIsHandsFree] = useState(false);
   const [voiceNoticeVisible, setVoiceNoticeVisible] = useState(false);
@@ -109,10 +112,11 @@ export function useVoiceInput() {
   }, [childId, cancel]);
 
   const checkVoiceLimit = useCallback(async (): Promise<boolean> => {
-    if (checkFeatureAccess("unlimited_voice")) return true;
+    // Premium is capped too (50 a day): always ask the server.
     const quota = await getVoiceUsageStatus();
+    if (quota.isUnlimited) return true;
     if (!quota.allowed || (quota.remaining ?? 0) <= 0) {
-      setVoiceLimitReached(true);
+      setVoiceLimitReached(checkFeatureAccess("unlimited_voice") ? "premium" : "free");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return false;
     }

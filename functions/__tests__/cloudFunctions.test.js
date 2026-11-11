@@ -209,7 +209,7 @@ describe("usage quota functions", () => {
   it("returns free voice quota status", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
-      if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ voiceCommandDate: new Date().toISOString().split("T")[0], voiceCommandCount: 1 })) };
+      if (p === "usage_limits/u1") return { get: jest.fn().mockResolvedValue(doc({ voiceCommandDate: require("../src/billing/quotas").quotaDayKey(), voiceCommandCount: 1 })) };
       return { get: jest.fn().mockResolvedValue(no()) };
     });
 
@@ -233,7 +233,7 @@ describe("usage quota functions", () => {
       if (p === "usage_limits/u1") {
         return {
           get: jest.fn().mockResolvedValue(doc({
-            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandDate: require("../src/billing/quotas").quotaDayKey(),
             voiceCommandCount: 3,
           })),
         };
@@ -244,6 +244,30 @@ describe("usage quota functions", () => {
     await expect(
       fns.transcribeAudio(auth("u1", { audioBase64: Buffer.alloc(8000).toString("base64") }))
     ).rejects.toThrow("Limite quotidienne atteinte");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("caps Premium at 50 voice commands a day with an honest message", async () => {
+    process.env.ASSEMBLYAI_API_KEY = "test-key";
+    global.fetch = jest.fn();
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    mockFirestore.doc.mockImplementation((p) => {
+      if (p === "rate_limits/u1") return { get: jest.fn().mockResolvedValue(no()), set: jest.fn() };
+      if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(doc({ tier: "premium", status: "active", expiresAt: future })) };
+      if (p === "usage_limits/u1") {
+        return {
+          get: jest.fn().mockResolvedValue(doc({
+            voiceCommandDate: require("../src/billing/quotas").quotaDayKey(),
+            voiceCommandCount: 50,
+          })),
+        };
+      }
+      return { get: jest.fn().mockResolvedValue(no()) };
+    });
+
+    await expect(
+      fns.transcribeAudio(auth("u1", { audioBase64: Buffer.alloc(8000).toString("base64") }))
+    ).rejects.toThrow("vos 50 commandes vocales du jour");
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -281,7 +305,7 @@ describe("usage quota functions", () => {
       if (p === "usage_limits/u1") {
         return {
           get: jest.fn().mockResolvedValue(doc({
-            voiceCommandDate: new Date().toISOString().split("T")[0],
+            voiceCommandDate: require("../src/billing/quotas").quotaDayKey(),
             voiceCommandCount: 1,
           })),
         };
@@ -657,7 +681,7 @@ describe("deleteUserAccount (T4 — admin-only direct path)", () => {
 });
 
 describe("createShareInvitation", () => {
-  it("rejects when free sharing limit is reached", async () => {
+  it("no longer limits sharing on the free plan", async () => {
     mockFirestore.doc.mockImplementation((p) => {
       if (p === "subscriptions/u1") return { get: jest.fn().mockResolvedValue(no()) };
       if (p === "children/c1/access/u1") return { get: jest.fn().mockResolvedValue(doc({ role: "owner" })) };
@@ -678,7 +702,9 @@ describe("createShareInvitation", () => {
       return { add: jest.fn().mockResolvedValue({ id: "new" }), where: jest.fn().mockReturnThis(), limit: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(snap()) };
     });
 
-    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.toThrow("2 co-parents maximum");
+    // Sharing is unlimited on every plan (2026-11-11): two caregivers already
+    // linked no longer block a third invitation.
+    await expect(fns.createShareInvitation(auth("u1", { childId: "c1", childName: "Bebe", invitedEmail: "target@example.com" }))).rejects.not.toThrow(/co-parents maximum/);
   });
 
   it("rejects a contributor even with canWriteEvents (owner/admin only)", async () => {
@@ -1137,7 +1163,7 @@ describe("transcribeAudio — quota refund on failure (T1.3)", () => {
       // refundVoiceQuota: decrements
       return fn({
         get: jest.fn().mockResolvedValue(doc({
-          voiceCommandDate: new Date().toISOString().split("T")[0],
+          voiceCommandDate: require("../src/billing/quotas").quotaDayKey(),
           voiceCommandCount: 1,
         })),
         set: jest.fn(),
@@ -1928,14 +1954,14 @@ describe("subscription kept until expiresAt after cancellation (S8)", () => {
   };
   const inDays = (d) => new Date(Date.now() + d * 24 * 60 * 60 * 1000).toISOString();
 
-  it("keeps unlimited voice for a cancelled subscription not yet expired", async () => {
+  it("keeps the Premium voice allowance for a cancelled subscription not yet expired", async () => {
     await expect(voiceStatusWith({ tier: "premium", status: "cancelled", expiresAt: inDays(10) }))
-      .resolves.toMatchObject({ isUnlimited: true });
+      .resolves.toMatchObject({ isUnlimited: false, limit: 50 });
   });
 
-  it("keeps unlimited voice during a billing issue grace period", async () => {
+  it("keeps the Premium voice allowance during a billing issue grace period", async () => {
     await expect(voiceStatusWith({ tier: "premium", status: "billing_issue", expiresAt: inDays(3) }))
-      .resolves.toMatchObject({ isUnlimited: true });
+      .resolves.toMatchObject({ isUnlimited: false, limit: 50 });
   });
 
   it("falls back to the free quota once a cancelled subscription has expired", async () => {

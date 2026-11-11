@@ -15,6 +15,9 @@ describe("isAlwaysFreeFeature", () => {
   it("keeps the gated features gated", () => {
     expect(isAlwaysFreeFeature("unlimited_voice")).toBe(false);
     expect(isAlwaysFreeFeature("pdf_export")).toBe(false);
-    expect(isAlwaysFreeFeature("unlimited_sharing")).toBe(false);
+  });
+
+  it("makes sharing free for everyone (2026-11-11)", () => {
+    expect(isAlwaysFreeFeature("unlimited_sharing")).toBe(true);
   });
 });

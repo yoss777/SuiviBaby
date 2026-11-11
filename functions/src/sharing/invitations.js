@@ -2,7 +2,6 @@ const admin = require("firebase-admin");
 const crypto = require("node:crypto");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { hasChildRole } = require("../../accessControl");
-const { getSharingQuotaStatus } = require("../billing/quotas");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
 const { checkRateLimit } = require("../shared/rateLimit");
 const { assertVerifiedEmail, isValidDocId } = require("../shared/validation");
@@ -58,14 +57,7 @@ const createShareInvitation = onCall(
       throw new HttpsError("not-found", "Enfant introuvable.", { reason: "child-not-found" });
     }
 
-    const sharingQuota = await getSharingQuotaStatus(db, uid, childId);
-    if (!sharingQuota.isUnlimited && sharingQuota.remaining <= 0) {
-      throw new HttpsError(
-        "resource-exhausted",
-        "Le plan gratuit permet 2 co-parents maximum. Passez en Famille pour inviter plus de personnes.",
-        { reason: "sharing-limit" }
-      );
-    }
+    // Sharing is unlimited on every plan (decision 2026-11-11): no quota check.
 
     // Résolution via Firebase Auth (source de vérité de l'e-mail du compte),
     // pas via users/{uid}.email que chaque utilisateur peut réécrire : sinon

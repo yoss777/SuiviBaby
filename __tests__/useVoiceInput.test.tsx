@@ -134,18 +134,31 @@ describe("useVoiceInput gestures", () => {
       await result.current.onPressIn();
     });
     expect(mockVoice.startVoiceCommand).not.toHaveBeenCalled();
-    expect(result.current.voiceLimitReached).toBe(true);
+    expect(result.current.voiceLimitReached).toBe("free");
   });
 
-  it("skips the quota check for unlimited (Premium) users", async () => {
+  // Premium is capped too (50 a day, 2026-11-11): the server is always asked.
+  it("records for Premium users while their daily allowance remains", async () => {
     mockHasUnlimitedVoice = true;
+    mockQuota = { allowed: true, remaining: 12 };
     const premiumUsage = jest.requireMock("@/services/premiumUsageService");
     const { result } = renderHook(() => useVoiceInput());
     await act(async () => {
       await result.current.onPressIn();
     });
-    expect(premiumUsage.getVoiceUsageStatus).not.toHaveBeenCalled();
+    expect(premiumUsage.getVoiceUsageStatus).toHaveBeenCalled();
     expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the Premium cap (not the paywall) when a Premium user used their 50", async () => {
+    mockHasUnlimitedVoice = true;
+    mockQuota = { allowed: false, remaining: 0 };
+    const { result } = renderHook(() => useVoiceInput());
+    await act(async () => {
+      await result.current.onPressIn();
+    });
+    expect(mockVoice.startVoiceCommand).not.toHaveBeenCalled();
+    expect(result.current.voiceLimitReached).toBe("premium");
   });
 
   it("sends the recording when a long press is released", async () => {
