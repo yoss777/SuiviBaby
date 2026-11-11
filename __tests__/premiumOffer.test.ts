@@ -35,7 +35,12 @@ describe("premiumOffer", () => {
     expect(freeTrialLabel(product(29.99, "29,99 €", { price: 0, priceString: "0 €", periodNumberOfUnits: 1, periodUnit: "MONTH" }))).toBe("1 mois gratuit");
     // A paid intro offer is not a free trial.
     expect(freeTrialLabel(product(29.99, "29,99 €", { price: 19.99, priceString: "19,99 €", periodNumberOfUnits: 1, periodUnit: "YEAR" }))).toBeNull();
+    expect(freeTrialLabel(product(29.99, "29,99 €", { price: 0, priceString: "0 €", periodNumberOfUnits: 3, periodUnit: "MONTH" }))).toBe("3 mois gratuits");
     expect(freeTrialLabel(undefined)).toBeNull();
+  });
+
+  it("shows no saving when a store price would be compared with a fallback price", () => {
+    expect(getDisplayPrices({ annual: product(34.99, "34,99 €") }).annualSavingsPercent).toBeNull();
   });
 
   it("names only the user's store", () => {

@@ -63,7 +63,7 @@ export function freeTrialLabel(product: OfferProduct | undefined): string | null
   if (!labels) return null;
   const n = intro.periodNumberOfUnits;
   const unit = n > 1 ? labels[1] : labels[0];
-  return `${n} ${unit} ${n > 1 && intro.periodUnit !== "MONTH" ? "gratuits" : "gratuit"}`;
+  return `${n} ${unit} ${n > 1 ? "gratuits" : "gratuit"}`;
 }
 
 export function getDisplayPrices(products: Partial<Record<BillingCycle, OfferProduct>>): DisplayPrices {
@@ -71,9 +71,14 @@ export function getDisplayPrices(products: Partial<Record<BillingCycle, OfferPro
   const currency = annual?.currencyCode ?? monthly?.currencyCode ?? "EUR";
   const monthlyPrice = monthly?.price ?? FALLBACK_PRICES.monthly.price;
   const annualPrice = annual?.price ?? FALLBACK_PRICES.annual.price;
-  const sameCurrency = !monthly || !annual || monthly.currencyCode === annual.currencyCode;
+  // Compare like with like: both prices from the store (same currency), or both
+  // fallback prices. A store price mixed with a fallback price gives no saving.
+  const bothFromStore = !!monthly && !!annual && monthly.currencyCode === annual.currencyCode;
+  const neitherFromStore = !monthly && !annual;
   const savings =
-    sameCurrency && monthlyPrice > 0 ? Math.round((1 - annualPrice / (monthlyPrice * 12)) * 100) : null;
+    (bothFromStore || neitherFromStore) && monthlyPrice > 0
+      ? Math.round((1 - annualPrice / (monthlyPrice * 12)) * 100)
+      : null;
 
   return {
     monthly: monthly?.priceString ?? FALLBACK_PRICES.monthly.label,

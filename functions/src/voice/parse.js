@@ -1,4 +1,5 @@
 const admin = require("firebase-admin");
+const { quotaDayKey } = require("../billing/quotas");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const voiceParse = require("../../lib/voiceParse");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
@@ -14,7 +15,7 @@ const VOICE_PARSE_DAILY_CAP = 200;
 
 async function reserveVoiceParseSlot(db, uid) {
   const usageRef = db.doc(`usage_limits/${uid}`);
-  const today = new Date().toISOString().split("T")[0];
+  const today = quotaDayKey();
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(usageRef);
     const data = snap.exists ? snap.data() : {};
@@ -32,7 +33,7 @@ async function reserveVoiceParseSlot(db, uid) {
  */
 async function refundVoiceParseSlot(db, uid) {
   const usageRef = db.doc(`usage_limits/${uid}`);
-  const today = new Date().toISOString().split("T")[0];
+  const today = quotaDayKey();
   try {
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(usageRef);
