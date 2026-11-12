@@ -104,18 +104,14 @@ describe("aperçus internes", () => {
     expect(resolveShowPreviews(false, null)).toBe(false);
   });
 
-  it("l'entrée Plus de l'aperçu croissance-fusion suit le drapeau", () => {
-    expect(isPlusRouteVisible("/baby/croissance-fusion", false)).toBe(false);
-    expect(isPlusRouteVisible("/baby/croissance-fusion", true)).toBe(true);
+  it("l'aperçu croissance-fusion a été retiré (2026-11-12)", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const root = path.join(__dirname, "..");
+    expect(fs.existsSync(path.join(root, "app/(drawer)/baby/(tabs)/croissance-fusion.tsx"))).toBe(false);
+    expect(read("app/(drawer)/baby/(tabs)/plus.tsx")).not.toMatch(/croissance-fusion/);
+    expect(read("app/(drawer)/baby/(tabs)/_layout.tsx")).not.toMatch(/croissance-fusion/);
     expect(isPlusRouteVisible("/baby/growth", false)).toBe(true);
-  });
-
-  it("l'écran d'aperçu redirige hors drapeau et ne monte Croissance qu'au focus", () => {
-    const src = read("app/(drawer)/baby/(tabs)/croissance-fusion.tsx");
-    expect(src).toMatch(/if \(!SHOW_PREVIEWS\) return <Redirect/);
-    expect(src).toMatch(/lazy\(\(\) => import\("\.\/croissance"\)\)/);
-    expect(src).toMatch(/isFocused \?/);
-    expect(src).not.toMatch(/^import CroissanceScreen/m);
   });
 
   it("app.json ne porte pas showPreviews (builds de store)", () => {

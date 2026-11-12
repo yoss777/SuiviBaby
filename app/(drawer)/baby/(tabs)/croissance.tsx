@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { computeGrowthDeltas, formatGrowthDelta, type GrowthDeltas } from "@/utils/growthDeltas";
 import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
@@ -258,6 +259,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     marginTop: 6,
+  },
+  // Écart neutre (comme Plus > Croissance) : couleur atténuée, signe seul.
+  metricDelta: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
   },
   summaryCard: {
     flex: 1,
@@ -603,6 +610,8 @@ interface CroissanceRowProps {
   item: CroissanceEntry;
   index: number;
   visibleEntries: CroissanceEntry[];
+  /** Progression par rapport à la mesure précédente du même indicateur. */
+  deltas?: GrowthDeltas;
   canManageContent: boolean;
   palette: any;
   nc: any;
@@ -616,6 +625,7 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
   item,
   index,
   visibleEntries,
+  deltas,
   canManageContent,
   palette,
   nc,
@@ -728,6 +738,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Taille</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.tailleCm} cm</Text>
+                    {deltas?.tailleCm !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.tailleCm)} cm depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.tailleCm)} cm
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {item.poidsKg ? (
@@ -737,6 +755,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Poids</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.poidsKg} kg</Text>
+                    {deltas?.poidsKg !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.poidsKg)} kg depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.poidsKg)} kg
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {item.teteCm ? (
@@ -746,6 +772,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Tête</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.teteCm} cm</Text>
+                    {deltas?.teteCm !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.teteCm)} cm depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.teteCm)} cm
+                      </Text>
+                    )}
                   </View>
                 ) : null}
               </View>
@@ -1232,6 +1266,10 @@ export default function CroissanceScreen() {
     () => filteredEntries.slice(0, visibleCount),
     [filteredEntries, visibleCount],
   );
+  const growthDeltas = useMemo(
+    () => computeGrowthDeltas(filteredEntries, toDate),
+    [filteredEntries, toDate],
+  );
   const hasMore = visibleCount < filteredEntries.length;
 
   const handleShowMore = useCallback(() => {
@@ -1267,6 +1305,7 @@ export default function CroissanceScreen() {
         item={item}
         index={index}
         visibleEntries={visibleEntries}
+        deltas={growthDeltas.get(item.id)}
         canManageContent={canManageContent}
         palette={palette}
         nc={nc}
@@ -1278,6 +1317,7 @@ export default function CroissanceScreen() {
     ),
     [
       visibleEntries,
+      growthDeltas,
       canManageContent,
       palette,
       nc,

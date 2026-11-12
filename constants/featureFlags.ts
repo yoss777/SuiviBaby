@@ -1,5 +1,5 @@
 // constants/featureFlags.ts
-// Écrans d'aperçu internes (ex. croissance-fusion) : visibles en développement,
+// Écrans d'aperçu internes (aucun pour l'instant ; l'aperçu croissance-fusion a été retiré le 2026-11-12) : visibles en développement,
 // ou dans un build interne dont la config porte `extra.showPreviews === true`
 // (variable SHOW_PREVIEWS=true sur un profil EAS dédié, lue par app.config.js).
 // Jamais dans un build de store par défaut.
@@ -18,7 +18,7 @@ export const SHOW_PREVIEWS = resolveShowPreviews(
 );
 
 /** Routes d'aperçu temporaires (à supprimer avec leur écran). */
-export const PREVIEW_ROUTES: ReadonlySet<string> = new Set(["/baby/croissance-fusion"]);
+export const PREVIEW_ROUTES: ReadonlySet<string> = new Set<string>([]);
 
 /** Une entrée de Plus pointant vers un aperçu n'apparaît que sous le drapeau. */
 export function isPlusRouteVisible(route: string, showPreviews: boolean): boolean {

@@ -71,7 +71,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
-import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, pressedTint, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -1305,7 +1305,8 @@ const TimelineCard = React.memo(
           android_ripple={ripple}
           style={({ pressed }) => [
             styles.card, flatInDark(colorScheme), { backgroundColor, borderColor },
-            pressedOpacity(pressed, 0.85),
+            // Opaque au toucher : le bouton « Supprimer » est derrière la carte.
+            pressedTint(pressed, getNeutralColors(colorScheme).backgroundPressed),
           ]}
           onPress={onPress}
           onLongPress={

@@ -245,11 +245,6 @@ export default function BabyTabLayout() {
           name="growth"
           options={hiddenTabOptions}
         />
-        {/* APERÇU TEMPORAIRE : écran Croissance fusionné (à supprimer après décision) */}
-        <Tabs.Screen
-          name="croissance-fusion"
-          options={hiddenTabOptions}
-        />
         {/* Galerie et gestion des accès : dans les onglets pour garder la barre
             du bas (et sa marge au-dessus des boutons Android) comme les autres
             sous-écrans de Plus. */}
