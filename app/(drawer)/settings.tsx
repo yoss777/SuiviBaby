@@ -407,8 +407,10 @@ export default function SettingsScreen() {
       {
         id: "join-child",
         icon: "person-add-outline",
-        label: "Ajouter un enfant",
-        description: "Entrer un code ou accepter une invitation",
+        // Ouvre la saisie d'un code / d'une invitation, pas la création d'un
+        // enfant : « Ajouter un enfant » reste réservé à la création (P2-9).
+        label: "Rejoindre un suivi (code ou invitation)",
+        description: "Suivre un enfant déjà créé par un proche",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           guardedPush("/settings/join-child");

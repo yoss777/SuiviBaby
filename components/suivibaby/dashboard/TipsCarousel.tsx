@@ -1,5 +1,6 @@
 // components/suivibaby/dashboard/TipsCarousel.tsx
 // Horizontal carousel of tips with dots indicator and auto-scroll
+// (jamais la nuit, avec « Réduire les animations » ou un lecteur d'écran)
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Tip } from "@/types/content";
@@ -12,6 +13,9 @@ import {
   type LayoutChangeEvent,
   type ListViewToken,
 } from "react-native";
+import { useScreenReaderEnabled } from "@/hooks/useScreenReaderEnabled";
+import { isReduceMotionEnabled } from "@/utils/motion";
+import { shouldAutoScrollTips } from "@/utils/tipsAutoScroll";
 import { SmartFeedCard } from "./SmartFeedCard";
 
 interface TipsCarouselProps {
@@ -82,42 +86,52 @@ export const TipsCarousel = memo(function TipsCarousel({
     itemVisiblePercentThreshold: 60,
   }).current;
 
+  // Lecteur d'écran : le défilement automatique déplacerait le focus (WCAG 2.2.2)
+  const screenReaderEnabled = useScreenReaderEnabled();
+  const screenReaderRef = useRef(screenReaderEnabled);
+  screenReaderRef.current = screenReaderEnabled;
+
+  // Une avance d'une carte, seulement si la règle l'autorise À CET INSTANT :
+  // l'heure est relue à chaque tick (un carrousel monté à 21 h 59 s'arrête à 22 h).
+  const advance = useCallback(() => {
+    if (userInteractedRef.current) return;
+    if (
+      !shouldAutoScrollTips({
+        now: new Date(),
+        reduceMotion: isReduceMotionEnabled(),
+        screenReaderEnabled: screenReaderRef.current,
+      })
+    ) {
+      return;
+    }
+    const nextIndex = (currentIndexRef.current + 1) % tips.length;
+    flatListRef.current?.scrollToIndex({
+      index: nextIndex,
+      animated: true,
+    });
+    currentIndexRef.current = nextIndex;
+    setCurrentIndex(nextIndex);
+  }, [tips.length]);
+
+  const autoScrollEnabled =
+    autoScrollInterval > 0 && tips.length > 1 && !screenReaderEnabled;
+
   // Auto-scroll
   useEffect(() => {
-    if (autoScrollInterval <= 0 || tips.length <= 1) return;
+    if (!autoScrollEnabled) return;
 
-    const startAutoScroll = () => {
-      autoScrollTimerRef.current = setInterval(() => {
-        if (userInteractedRef.current) {
-          // User scrolled manually, stop auto-scroll
-          if (autoScrollTimerRef.current) {
-            clearInterval(autoScrollTimerRef.current);
-            autoScrollTimerRef.current = null;
-          }
-          return;
-        }
-
-        const nextIndex = (currentIndexRef.current + 1) % tips.length;
-        flatListRef.current?.scrollToIndex({
-          index: nextIndex,
-          animated: true,
-        });
-        currentIndexRef.current = nextIndex;
-        setCurrentIndex(nextIndex);
-      }, autoScrollInterval);
-    };
-
-    startAutoScroll();
+    autoScrollTimerRef.current = setInterval(advance, autoScrollInterval);
 
     return () => {
       if (autoScrollTimerRef.current) {
         clearInterval(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = null;
       }
       if (resumeTimeoutRef.current) {
         clearTimeout(resumeTimeoutRef.current);
       }
     };
-  }, [autoScrollInterval, tips.length]);
+  }, [autoScrollEnabled, autoScrollInterval, advance]);
 
   // Pause auto-scroll on user interaction
   const onScrollBeginDrag = useCallback(() => {
@@ -126,27 +140,13 @@ export const TipsCarousel = memo(function TipsCarousel({
 
   // Resume auto-scroll after 15s of no interaction
   const onScrollEndDrag = useCallback(() => {
-    if (autoScrollInterval <= 0 || tips.length <= 1) return;
+    if (!autoScrollEnabled) return;
 
     if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
     resumeTimeoutRef.current = setTimeout(() => {
       userInteractedRef.current = false;
-      // Restart auto-scroll
-      if (autoScrollTimerRef.current) {
-        clearInterval(autoScrollTimerRef.current);
-      }
-      autoScrollTimerRef.current = setInterval(() => {
-        if (userInteractedRef.current) return;
-        const nextIndex = (currentIndexRef.current + 1) % tips.length;
-        flatListRef.current?.scrollToIndex({
-          index: nextIndex,
-          animated: true,
-        });
-        currentIndexRef.current = nextIndex;
-        setCurrentIndex(nextIndex);
-      }, autoScrollInterval);
     }, 15000);
-  }, [autoScrollInterval, tips.length]);
+  }, [autoScrollEnabled]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: Tip; index: number }) => (
@@ -205,11 +205,10 @@ export const TipsCarousel = memo(function TipsCarousel({
   }
 
   return (
-    <View
-      accessibilityRole="adjustable"
-      accessibilityLabel={`Conseils : ${currentIndex + 1} sur ${tips.length}`}
-      accessibilityHint="Balayez pour voir les autres conseils"
-    >
+    // Pas de rôle « adjustable » sur le conteneur : il regrouperait les cartes
+    // en un seul élément et rendrait leurs boutons (Lire, Enregistrer)
+    // inatteignables au lecteur d'écran. Chaque carte reste parcourable.
+    <View>
       <FlatList
         ref={flatListRef}
         data={tips}

@@ -1125,7 +1125,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.tetees.blue + "40" },
                 ]}
                 onPress={() => handleTabChange("tetees")}
-                accessibilityLabel="Résumé repas, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isTeteesReady
+                    ? `${thisWeekCounts.repas} repas cette semaine`
+                    : "Résumé repas, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="utensils"
@@ -1136,7 +1142,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.tetees.blue },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.repas}
@@ -1154,7 +1160,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.pompages.green + "40" },
                 ]}
                 onPress={() => handleTabChange("pompages")}
-                accessibilityLabel="Résumé pompages, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isPompagesReady
+                    ? `${thisWeekCounts.pompages} pompages cette semaine`
+                    : "Résumé pompages, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="pump-medical"
@@ -1165,7 +1177,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.pompages.green },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.pompages}
@@ -1183,7 +1195,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.sommeil.purple + "40" },
                 ]}
                 onPress={() => handleTabChange("sommeil")}
-                accessibilityLabel="Résumé sommeil, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isSommeilReady
+                    ? `${thisWeekCounts.sommeil} sommeils cette semaine`
+                    : "Résumé sommeil, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="bed"
@@ -1194,7 +1212,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.sommeil.purple },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.sommeil}

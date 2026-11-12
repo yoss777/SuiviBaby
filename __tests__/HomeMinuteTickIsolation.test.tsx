@@ -42,15 +42,15 @@ describe("S7.6 - tick à la minute isolé dans les widgets", () => {
     };
     const { getByText, queryByText } = render(<Parent />);
     const rendersAfterMount = parentRenders;
-    expect(getByText("il y a 5min")).toBeTruthy();
+    expect(getByText("il y a 5\u00A0min")).toBeTruthy();
 
     act(() => {
       jest.advanceTimersByTime(3 * 60 * 1000);
     });
 
     // 3 minutes plus tard : l'affichage a avancé, pas le parent.
-    expect(queryByText("il y a 5min")).toBeNull();
-    expect(getByText("il y a 8min")).toBeTruthy();
+    expect(queryByText("il y a 5\u00A0min")).toBeNull();
+    expect(getByText("il y a 8\u00A0min")).toBeTruthy();
     expect(parentRenders).toBe(rendersAfterMount);
   });
 

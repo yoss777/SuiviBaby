@@ -33,7 +33,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 // « Données sécurisées » évoquait le danger sur le message de confiance.
 const ONBOARDING_ACCENT = "#6366f1";
 
-const SLIDES = [
+// Contenu source des slides (icônes et couleurs). Seuls 3 écrans sont montrés
+// (voir SLIDES plus bas) ; les entrées 4 et 5 restent ici comme source de
+// couleurs, leur contenu est fusionné dans les 3 écrans affichés.
+const ALL_SLIDES = [
   {
     icon: "baby-carriage" as const,
     title: `Bienvenue sur ${APP_NAME}`,
@@ -68,6 +71,27 @@ const SLIDES = [
     description:
       "Découvrez des tendances : \"Les jours avec activité d'éveil, bébé dort mieux la nuit\". Statistiques et courbes de croissance OMS incluses gratuitement.",
     color: ONBOARDING_ACCENT,
+  },
+];
+
+// P1-22 : 3 écrans au plus avant la connexion (5 auparavant). Promesse exacte
+// sur la saisie (« Un tap suffit » était faux : FAB, action, Ajouter).
+const SLIDES = [
+  {
+    ...ALL_SLIDES[0],
+    description:
+      "Alimentation, sommeil, couches et croissance au même endroit, avec les courbes OMS et des tendances incluses gratuitement.",
+  },
+  {
+    ...ALL_SLIDES[1],
+    description:
+      "Un biberon à 3 h du matin ? Trois touches, ou votre voix. Mode nuit automatique, pensé pour les parents fatigués.",
+  },
+  {
+    ...ALL_SLIDES[2],
+    title: "Partagé et protégé",
+    description:
+      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents, en temps réel. Données chiffrées, zéro publicité, conformité RGPD.",
   },
 ];
 
@@ -157,13 +181,17 @@ export default function OnboardingScreen() {
         style={[styles.slide, { width: SCREEN_WIDTH }]}
         accessible
         accessibilityLabel={`${item.title}. ${item.description}`}
+        accessibilityHint={`Écran ${SLIDES.indexOf(item) + 1} sur ${SLIDES.length}`}
       >
         <View
           style={[styles.iconCircle, { backgroundColor: item.color + "20" }]}
         >
           <FontAwesome name={item.icon} size={60} color={item.color} accessibilityElementsHidden />
         </View>
-        <Text style={[styles.slideTitle, { color: nc.textStrong }]}>
+        <Text
+          style={[styles.slideTitle, { color: nc.textStrong }]}
+          accessibilityRole="header"
+        >
           {item.title}
         </Text>
         <Text style={[styles.slideDescription, { color: nc.textLight }]}>
