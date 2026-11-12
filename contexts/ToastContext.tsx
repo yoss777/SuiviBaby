@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
+import { toastBottomOffset } from "@/utils/toastInset";
 
 type ToastAction = {
   label: string;
@@ -36,7 +37,6 @@ type ToastContextValue = {
 
 /** Un toast avec action reste au moins 8 s (WCAG 2.2.1, temps suffisant). */
 export const ACTION_TOAST_MIN_MS = 8000;
-const TOAST_GAP = 12;
 
 const ToastContext = createContext<ToastContextValue>({
   showToast: () => {},
@@ -209,7 +209,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 : {
                     // Au-dessus de la barre d'onglets et du dock vocal quand
                     // ils sont affichés (leur hauteur inclut la zone de sécurité).
-                    bottom: bottomInset > 0 ? bottomInset + TOAST_GAP : insets.bottom + 24,
+                    bottom: toastBottomOffset({ chromeInset: bottomInset, safeAreaBottom: insets.bottom }),
                   },
             ]}
           >

@@ -6,9 +6,10 @@ import { useMomentsNotification } from "@/contexts/MomentsNotificationContext";
 import { useToastBottomInset } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
+import { resolveTabChromeInset } from "@/utils/toastInset";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { BottomTabBar, type BottomTabBarProps } from "expo-router/tabs";
-import { Tabs } from "expo-router";
+import { Tabs, useIsFocused } from "expo-router";
 import { useEffect, useState } from "react";
 import { Keyboard, Text, View } from "react-native";
 
@@ -73,9 +74,17 @@ export default function BabyTabLayout() {
   const [tabBarHeight, setTabBarHeight] = useState(0);
   const showVoiceDock =
     VOICE_DOCK_ROUTES.has(currentRoute) && !keyboardVisible && tabBarHeight > 0;
-  // Les toasts du bas se posent au-dessus de la barre d'onglets et du dock.
+  // Les toasts du bas se posent au-dessus de la barre d'onglets et du dock,
+  // mais seulement quand les onglets sont au premier plan : sur un écran
+  // empilé (Réglages, Partager…) ils reviennent à la zone de sécurité.
+  const isFocused = useIsFocused();
   useToastBottomInset(
-    tabBarHeight + (canManageContent && showVoiceDock ? VOICE_DOCK_INSET : 0),
+    resolveTabChromeInset({
+      focused: isFocused,
+      keyboardVisible,
+      tabBarHeight,
+      dockInset: canManageContent && showVoiceDock ? VOICE_DOCK_INSET : 0,
+    }),
   );
 
   const showPlusTab = canManageContent;
