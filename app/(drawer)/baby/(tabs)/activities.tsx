@@ -2,10 +2,10 @@ import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesF
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
-import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -1528,38 +1528,27 @@ export default function ActivitiesScreen() {
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.activite.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.activite.dark}
+              icon={
                 <FontAwesome
                   name="baby"
                   size={36}
                   color={eventColors.activite.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucune activité enregistrée"
-                  : "Aucune activité pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                {"Suivez les activités et le temps d'éveil"}
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={() => openAddModal("tummyTime")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une activité"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter une activité</Text>
-                </Pressable>
-              )}
+                  : "Aucune activité pour ce filtre"
+              }
+              subtitle={"Suivez les activités et le temps d'éveil"}
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter une activité", onPress: () => openAddModal("tummyTime") }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -1569,7 +1558,7 @@ export default function ActivitiesScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1775,43 +1764,6 @@ const styles = StyleSheet.create({
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   dateChip: {
     flexDirection: "row",

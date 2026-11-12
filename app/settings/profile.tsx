@@ -182,7 +182,7 @@ export default function ProfileScreen() {
             <Ionicons
               name="checkmark"
               size={20}
-              color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+              color={nc.onTodayAccent}
             />
             <Text
               style={[

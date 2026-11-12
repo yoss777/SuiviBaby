@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { APP_NAME } from "@/constants/app";
 import { router } from 'expo-router';
 import { useGuardedNavigation } from '@/hooks/useGuardedNavigation';
 import React, { useMemo, useRef, useState } from 'react';
@@ -290,7 +291,7 @@ export default function ChildPicker() {
                 textAlign: 'center',
               }}
             >
-              Suivi Baby
+              {APP_NAME}
             </ThemedText>
             <ThemedText style={styles.subtitle}>
               L&apos;Amour au Cœur de la Vie
@@ -305,8 +306,8 @@ export default function ChildPicker() {
                 onPress={() => guardedPush('/settings/join-child' as any)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="mail-outline" size={18} color="#fff" />
-                <Text style={styles.inviteButtonText}>
+                <Ionicons name="mail-outline" size={18} color={Colors[colorScheme].onTint} />
+                <Text style={[styles.inviteButtonText, { color: Colors[colorScheme].onTint }]}>
                   Voir les invitations ({pendingInvitations.length})
                 </Text>
               </TouchableOpacity>
@@ -429,7 +430,7 @@ export default function ChildPicker() {
                 activeOpacity={0.7}
                 disabled={toggledIds.size === 0}
               >
-                <Text style={styles.confirmButtonText}>
+                <Text style={[styles.confirmButtonText, { color: Colors[colorScheme].onTint }]}>
                   Réactiver {toggledIds.size > 0 ? `(${toggledIds.size})` : ''}
                 </Text>
               </TouchableOpacity>

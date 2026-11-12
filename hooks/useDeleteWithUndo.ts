@@ -35,7 +35,7 @@ export function useDeleteWithUndo() {
             context: { service: "events", operation: "deleteWithUndo" },
           });
         },
-        params.durationMs ?? 4000,
+        params.durationMs, // défaut et plancher : ACTION_TOAST_MIN_MS (8 s)
       );
     },
     [showUndoToast],

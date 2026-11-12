@@ -2,7 +2,11 @@
 // Guide du premier tracking — affiché une seule fois après l'ajout du premier bébé.
 // Objectif : amener l'utilisateur à son premier enregistrement en < 30 secondes.
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import {
+  getCategoryColors,
+  getCategoryTextColors,
+  getNeutralColors,
+} from "@/constants/dashboardColors";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheetActions } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -25,6 +29,18 @@ interface FirstTrackGuideProps {
 export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  // Tuiles dérivées des tokens de catégorie (lisibles en sombre) : Repas =
+  // alimentation, Couche = santé, comme sur l'Accueil et le FAB.
+  const cc = getCategoryColors(colorScheme);
+  const ct = getCategoryTextColors(colorScheme);
+  const feedingTile = {
+    backgroundColor: cc.alimentation.background,
+    borderColor: cc.alimentation.border,
+  };
+  const diaperTile = {
+    backgroundColor: cc.sante.background,
+    borderColor: cc.sante.border,
+  };
   const { activeChild } = useBaby();
   const { openSheet } = useSheetActions();
   const [showCelebration, setShowCelebration] = useState(false);
@@ -85,13 +101,14 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
           bas à droite.
         </Text>
         <TouchableOpacity
+          accessibilityRole="button"
           style={[styles.dismissButton, { backgroundColor: nc.todayAccent }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onDismiss();
           }}
         >
-          <Text style={[styles.dismissButtonText, { color: nc.white }]}>
+          <Text style={[styles.dismissButtonText, { color: nc.onTodayAccent }]}>
             C&apos;est parti !
           </Text>
         </TouchableOpacity>
@@ -127,36 +144,30 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
 
       <View style={styles.quickActions}>
         <TouchableOpacity
-          style={[
-            styles.quickAction,
-            { backgroundColor: "#FEF5F3", borderColor: "#FCEAE6" },
-          ]}
+          accessibilityRole="button"
+          style={[styles.quickAction, feedingTile]}
           onPress={() => handleQuickAdd("meals", "biberon")}
         >
-          <FontAwesome name="bottle-water" size={22} color="#E8785A" />
-          <Text style={[styles.quickActionLabel, { color: "#E8785A" }]}>
+          <FontAwesome name="bottle-water" size={22} color={ct.alimentation} />
+          <Text style={[styles.quickActionLabel, { color: ct.alimentation }]}>
             Biberon
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.quickAction,
-            { backgroundColor: "#FEF5F3", borderColor: "#FCEAE6" },
-          ]}
+          accessibilityRole="button"
+          style={[styles.quickAction, feedingTile]}
           onPress={() => handleQuickAdd("meals", "tetee")}
         >
-          <FontAwesome name="heart" size={22} color="#D66B8F" />
-          <Text style={[styles.quickActionLabel, { color: "#D66B8F" }]}>
-            Tetee
+          <FontAwesome name="person-breastfeeding" size={22} color={ct.alimentation} />
+          <Text style={[styles.quickActionLabel, { color: ct.alimentation }]}>
+            Tétée
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[
-            styles.quickAction,
-            { backgroundColor: "#d1ecf1", borderColor: "#bee5eb" },
-          ]}
+          accessibilityRole="button"
+          style={[styles.quickAction, diaperTile]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             openSheet({
@@ -173,17 +184,21 @@ export function FirstTrackGuide({ onDismiss }: FirstTrackGuideProps) {
             }, 3000);
           }}
         >
-          <FontAwesome name="baby" size={22} color="#17a2b8" />
-          <Text style={[styles.quickActionLabel, { color: "#17a2b8" }]}>
+          <FontAwesome name="baby" size={22} color={ct.sante} />
+          <Text style={[styles.quickActionLabel, { color: ct.sante }]}>
             Couche
           </Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity onPress={() => {
-        trackOnboardingEvent("first_track_skipped");
-        onDismiss();
-      }}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        style={styles.skipButton}
+        onPress={() => {
+          trackOnboardingEvent("first_track_skipped");
+          onDismiss();
+        }}
+      >
         <Text style={[styles.skipText, { color: nc.textLight }]}>
           Plus tard
         </Text>
@@ -241,6 +256,11 @@ const styles = StyleSheet.create({
   quickActionLabel: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  skipButton: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    justifyContent: "center",
   },
   skipText: {
     fontSize: 14,

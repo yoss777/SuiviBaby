@@ -84,6 +84,8 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
   const colorScheme = useColorScheme() ?? "light";
   const colors = Colors[colorScheme];
   const [modalState, setModalState] = useState<ModalState>(null);
+  // Alerte protégée affichée : le bouton retour Android ne la ferme pas.
+  const [modalProtected, setModalProtected] = useState(false);
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Modale protégée en cours + file d'attente (refs : lues à chaque appel, sans
   // dépendre du dernier rendu).
@@ -104,6 +106,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     }
     currentProtectedRef.current = protectedModal;
     currentRef.current = content;
+    setModalProtected(protectedModal);
     setModalState(content);
     if (protectedModal) protectedListenersRef.current.forEach((listener) => listener());
   }, []);
@@ -125,14 +128,14 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     const next = queueRef.current.shift();
     currentProtectedRef.current = next?.protectedModal ?? false;
     currentRef.current = next?.content ?? null;
+    setModalProtected(next?.protectedModal ?? false);
     setModalState(next?.content ?? null);
     if (next?.protectedModal) protectedListenersRef.current.forEach((listener) => listener());
   }, []);
 
-  const backgroundColor = colors.background;
-  const textColor = colors.text;
-  const tintTextColor =
-    colors.tint === "#fff" ? "#1b1b1b" : "#fff";
+  // Texte posé sur l'aplat tint : token du thème (blanc en clair, foncé en
+  // sombre, où le blanc ne fait que 2.54:1 sur #60a5fa).
+  const tintTextColor = colors.onTint;
 
   const showAlert = useCallback((
     title: string,
@@ -141,7 +144,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     options: AlertOptions = {},
   ) => {
     const colors = colorsRef.current;
-    const tintTextColor = colors.tint === "#fff" ? "#1b1b1b" : "#fff";
+    const tintTextColor = colors.onTint;
     const isProtected = options.dismissible === false || options.callEmergency === true;
     if (buttons.length <= 1) {
       const onlyButton = buttons[0];
@@ -175,7 +178,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
         confirmText: confirmButton?.text || "Confirmer",
         cancelText: cancelButton?.text || "Annuler",
         confirmButtonColor: confirmIsDestructive ? "#dc3545" : colors.tint,
-        confirmTextColor: "#fff",
+        confirmTextColor: confirmIsDestructive ? "#fff" : tintTextColor,
         onConfirm: confirmButton?.onPress,
       },
       isProtected,
@@ -248,8 +251,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           confirmText={modalState.confirmText}
           confirmButtonColor={modalState.confirmButtonColor ?? colors.tint}
           confirmTextColor={modalState.confirmTextColor ?? tintTextColor}
-          backgroundColor={backgroundColor}
-          textColor={textColor}
+          dismissOnBack={!modalProtected}
           onConfirm={() => {
             // Fermer d'abord : un callback qui affiche une autre modale ne la
             // verra pas effacée par la fermeture.
@@ -268,10 +270,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           cancelText={modalState.cancelText}
           confirmButtonColor={modalState.confirmButtonColor}
           confirmTextColor={modalState.confirmTextColor ?? tintTextColor}
-          cancelButtonColor={`${colors.tabIconDefault}20`}
-          cancelTextColor={colors.text}
-          backgroundColor={backgroundColor}
-          textColor={textColor}
+          dismissOnBack={!modalProtected}
           onCancel={() => closeCurrent(modalState)}
           onConfirm={() => {
             closeCurrent(modalState);

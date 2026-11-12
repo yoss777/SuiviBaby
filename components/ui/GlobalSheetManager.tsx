@@ -82,7 +82,7 @@ function FormCrashFallback({ onClose, onCrash }: { onClose: () => void; onCrash?
         accessibilityLabel="Fermer"
         style={[fallbackStyles.button, { backgroundColor: Colors[colorScheme].tint }]}
       >
-        <Text style={fallbackStyles.buttonText}>Fermer</Text>
+        <Text style={[fallbackStyles.buttonText, { color: Colors[colorScheme].onTint }]}>Fermer</Text>
       </Pressable>
     </View>
   );
@@ -93,7 +93,7 @@ const fallbackStyles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
   message: { fontSize: 14, textAlign: 'center' },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  buttonText: { fontWeight: '600', fontSize: 15 },
 });
 
 // Boundary d'un formulaire : un crash de rendu n'emporte que la feuille.

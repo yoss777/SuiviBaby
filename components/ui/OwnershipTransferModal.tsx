@@ -3,6 +3,7 @@ import {
   LOW_PRIVILEGE_ROLES,
   type OwnershipBlocker,
 } from "@/services/accountDeletionService";
+import { getReadableTextColor } from "@/constants/theme";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -115,7 +116,7 @@ export function OwnershipTransferModal({
                 accessibilityRole="button"
                 accessibilityLabel="Je confirme le transfert de tous les droits"
               >
-                <Text style={[styles.buttonText, { color: "#fff" }]}>Je confirme</Text>
+                <Text style={[styles.buttonText, { color: getReadableTextColor(accentColor) }]}>Je confirme</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -265,7 +266,7 @@ export function OwnershipTransferModal({
               }
               accessibilityState={{ disabled: !allChosen }}
             >
-              <Text style={[styles.buttonText, { color: "#fff" }]}>Continuer</Text>
+              <Text style={[styles.buttonText, { color: getReadableTextColor(accentColor) }]}>Continuer</Text>
             </TouchableOpacity>
           </View>
         </View>

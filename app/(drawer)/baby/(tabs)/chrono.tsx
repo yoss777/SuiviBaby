@@ -2593,10 +2593,7 @@ export default function ChronoScreen() {
                                         styles.calendarDayText,
                                         { color: colors.text },
                                         isSelected && {
-                                          color:
-                                            colorScheme === "dark"
-                                              ? Colors[colorScheme].background
-                                              : "#fff",
+                                          color: Colors[colorScheme].onTint,
                                         },
                                       ]}
                                     >

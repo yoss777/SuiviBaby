@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { APP_NAME } from "@/constants/app";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Image, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -461,7 +462,7 @@ function BootScreenContent() {
             source={require("@/assets/images/icon.png")}
             style={styles.logo}
             resizeMode="contain"
-            accessibilityLabel="Logo Suivi Baby"
+            accessibilityLabel={`Logo ${APP_NAME}`}
           />
           {showBootFallback ? (
             <View style={styles.feedbackCard}>

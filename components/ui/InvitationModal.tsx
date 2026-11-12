@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getReadableTextColor } from "@/constants/theme";
 import {
   Animated,
   Easing,
@@ -145,7 +146,7 @@ export function InvitationModal({
               <Text
                 style={[
                   styles.acceptText,
-                  { color: accentColor === "#fff" ? "#1b1b1b" : "#fff" },
+                  { color: getReadableTextColor(accentColor) },
                 ]}
               >
                 Accepter

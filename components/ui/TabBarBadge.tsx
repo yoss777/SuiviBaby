@@ -1,4 +1,7 @@
 import React from 'react';
+import { getNeutralColors } from '@/constants/dashboardColors';
+import { getReadableTextColor } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { StyleSheet, Text, View } from 'react-native';
 
 interface TabBarBadgeProps {
@@ -15,9 +18,12 @@ export function TabBarBadge({
   count = 0,
   visible,
   type = 'dot',
-  color = '#e63946',
+  color,
   children,
 }: TabBarBadgeProps) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
+  const badgeColor = color ?? nc.error;
   return (
     <View style={styles.container}>
       {children}
@@ -29,11 +35,12 @@ export function TabBarBadge({
           style={[
             styles.badge,
             type === 'dot' ? styles.dot : styles.countBadge,
-            { backgroundColor: color },
+            // Liseré de la couleur de la barre d'onglets (fond de l'écran)
+            { backgroundColor: badgeColor, borderColor: nc.background },
           ]}
         >
           {type === 'count' && count > 0 && (
-            <Text style={styles.countText}>
+            <Text style={[styles.countText, { color: getReadableTextColor(badgeColor) }]}>
               {count > 99 ? '99+' : count}
             </Text>
           )}
@@ -52,7 +59,6 @@ const styles = StyleSheet.create({
     top: -4,
     right: -6,
     borderWidth: 2,
-    borderColor: '#fff',
   },
   dot: {
     width: 10,
@@ -68,7 +74,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   countText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
   },

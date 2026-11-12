@@ -639,9 +639,9 @@ export default function EditChildScreen() {
                   disabled={!transferModal.selectedParentId || transferModal.loading}
                 >
                   {transferModal.loading ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={Colors[colorScheme].onTint} />
                   ) : (
-                    <Text style={[styles.modalButtonText, { color: nc.white, fontWeight: "700" }]}>Confirmer</Text>
+                    <Text style={[styles.modalButtonText, { color: Colors[colorScheme].onTint, fontWeight: "700" }]}>Confirmer</Text>
                   )}
                 </TouchableOpacity>
               </View>

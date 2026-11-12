@@ -220,7 +220,7 @@ export const ChangelogModal = memo(function ChangelogModal({
             }
             accessibilityState={{ disabled: false }}
           >
-            <Text style={[styles.ctaText, { color: nc.background }]}>
+            <Text style={[styles.ctaText, { color: Colors[colorScheme].onTint }]}>
               {currentIndex === entries.length - 1 ? "Compris !" : "Suivant"}
             </Text>
           </TouchableOpacity>

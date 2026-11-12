@@ -67,7 +67,7 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
   const nc = getNeutralColors(colorScheme);
   const { push: guardedPush } = useGuardedNavigation();
 
-  const choiceTextColor = Colors[colorScheme].text;
+  const choiceTextColor = nc.textStrong;
   const choiceAccent = Colors[colorScheme].tint;
   const choiceBorder = Colors[colorScheme].tabIconDefault + "40";
   const excretionSelectionLabel =
@@ -97,7 +97,7 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
     >
-      <Text style={[styles.choiceButtonText, active && { color: choiceAccent }]}>{label}</Text>
+      <Text style={[styles.choiceButtonText, { color: active ? choiceAccent : choiceTextColor }]}>{label}</Text>
     </Pressable>
   );
 
@@ -112,8 +112,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         }
         value={testPromptText}
         placeholder="Entrez votre commande..."
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         onChangeText={setTestPromptText}
         onCancel={cancelTestPrompt}
         onConfirm={submitTestPrompt}
@@ -123,8 +121,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         visible={infoModal.visible}
         title={infoModal.title}
         message={infoModal.message}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         onClose={() => setInfoModal({ visible: false, title: "", message: "" })}
       />
 
@@ -172,8 +168,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         }
         confirmText="Confirmer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         confirmButtonColor={nc.success}
         onConfirm={async () => {
           if (
@@ -210,8 +204,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         message="L'accès au microphone est nécessaire pour utiliser les commandes vocales."
         confirmText="Paramètres"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         confirmButtonColor={nc.success}
         onConfirm={() => {
           setPermissionModal(false);
@@ -230,8 +222,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         message="Impossible de transcrire l'audio. Voulez-vous réessayer en mode test ?"
         confirmText="Mode test"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         confirmButtonColor={nc.success}
         onConfirm={() => {
           setTranscriptionErrorModal(false);
@@ -249,8 +239,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         title={VOICE_NOTICE_TITLE}
         message={VOICE_NOTICE_MESSAGE}
         dismissText="Compris"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         onClose={dismissVoiceNotice}
       />
 
@@ -262,8 +250,6 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
         // a parent feeding a baby at 3 a.m. needs the manual entry, not a paywall.
         confirmText={showPremiumOffer ? PAYWALL_MESSAGES.voice_limit.ctaText : "Compris"}
         dismissText={showPremiumOffer ? "Plus tard" : undefined}
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
         onConfirm={() => {
           setVoiceLimitReached(false);
           if (showPremiumOffer) guardedPush("/settings/premium");
@@ -294,6 +280,8 @@ const styles = StyleSheet.create({
   },
   choiceButton: {
     flex: 1,
+    minHeight: 44,
+    justifyContent: "center",
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,

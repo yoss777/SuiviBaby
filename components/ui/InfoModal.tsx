@@ -5,41 +5,40 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+
+import { getNeutralColors } from '@/constants/dashboardColors';
+import { Colors, getReadableTextColor } from '@/constants/theme';
+import { elevation, radius } from '@/constants/tokens';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { DESTRUCTIVE_COLOR } from './ConfirmModal';
+import { pressedOpacity, usePressRipple } from './pressFeedback';
 
 interface InfoModalProps {
   visible: boolean;
   title: string;
   message: React.ReactNode;
   confirmText?: string;
-  backgroundColor: string;
-  textColor: string;
+  /** Par défaut : surface de carte du thème (nc.backgroundCard). */
+  backgroundColor?: string;
+  /** Par défaut : nc.textStrong. */
+  textColor?: string;
+  /** Par défaut : `tint` du thème (rouge si le titre annonce une erreur). */
   confirmButtonColor?: string;
   confirmTextColor?: string;
   dismissText?: string;
   allowBackdropDismiss?: boolean;
+  /**
+   * Bouton retour Android : ferme la modale (onClose) par défaut. false pour
+   * une alerte protégée qui ne doit se fermer que par ses boutons.
+   */
+  dismissOnBack?: boolean;
   onClose: () => void;
   onConfirm?: () => void;
 }
 
-const getReadableTextColor = (color: string, fallback = "#fff") => {
-  if (!color || !color.startsWith("#")) return fallback;
-  let hex = color.slice(1);
-  if (hex.length === 3) {
-    hex = hex
-      .split("")
-      .map((char) => char + char)
-      .join("");
-  }
-  if (hex.length !== 6) return fallback;
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.7 ? "#1b1b1b" : "#fff";
-};
+const NOOP = () => {};
 
 export function InfoModal({
   visible,
@@ -52,19 +51,28 @@ export function InfoModal({
   confirmTextColor,
   dismissText,
   allowBackdropDismiss = false,
+  dismissOnBack = true,
   onClose,
   onConfirm,
 }: InfoModalProps) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
+  const theme = Colors[colorScheme];
+  const ripple = usePressRipple();
+  const surface = backgroundColor ?? nc.backgroundCard;
+  const ink = textColor ?? nc.textStrong;
   const isErrorTitle = /erreur|error|echec|failed|❌/i.test(title);
+  const usesThemeTint = !confirmButtonColor && !isErrorTitle;
   const resolvedConfirmButtonColor =
-    confirmButtonColor ?? (isErrorTitle ? "#dc3545" : "#28a745");
+    confirmButtonColor ?? (isErrorTitle ? DESTRUCTIVE_COLOR : theme.tint);
   const resolvedConfirmTextColor =
-    confirmTextColor ?? getReadableTextColor(resolvedConfirmButtonColor);
+    confirmTextColor ??
+    (usesThemeTint ? theme.onTint : getReadableTextColor(resolvedConfirmButtonColor));
   const showConfirmButton = !!confirmText;
   const renderMessage = () => {
     if (typeof message === 'string') {
       return (
-        <Text style={[styles.modalMessage, { color: textColor }]}>
+        <Text style={[styles.modalMessage, { color: ink }]}>
           {message}
         </Text>
       );
@@ -81,7 +89,7 @@ export function InfoModal({
       return React.cloneElement(message as React.ReactElement<any>, {
         style: [
           styles.modalMessage,
-          { color: textColor },
+          { color: ink },
           (message.props as { style?: any }).style,
         ],
       });
@@ -99,25 +107,30 @@ export function InfoModal({
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={() => {}}
+      onRequestClose={dismissOnBack ? onClose : NOOP}
     >
       <Pressable style={styles.modalOverlay} onPress={allowBackdropDismiss ? onClose : undefined}>
         <Pressable
-          style={[styles.modalContent, { backgroundColor }]}
+          style={[
+            styles.modalContent,
+            elevation.raised(colorScheme),
+            { backgroundColor: surface },
+          ]}
           onPress={(event) => event.stopPropagation()}
         >
-          <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
+          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
           {renderMessage()}
           {showConfirmButton && (
             <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[
+              <Pressable
+                style={({ pressed }) => [
                   styles.modalButton,
-                  styles.confirmButton,
                   { backgroundColor: resolvedConfirmButtonColor },
+                  pressedOpacity(pressed),
                 ]}
+                android_ripple={ripple}
                 onPress={handleConfirm}
-                activeOpacity={0.7}
+                accessibilityRole="button"
               >
                 <Text
                   style={[
@@ -127,13 +140,17 @@ export function InfoModal({
                 >
                   {confirmText}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           )}
           {!!dismissText && (
-            <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.dismissLink}>
-              <Text style={[styles.dismissText, { color: textColor }]}>{dismissText}</Text>
-            </TouchableOpacity>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [styles.dismissLink, pressedOpacity(pressed)]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.dismissText, { color: ink }]}>{dismissText}</Text>
+            </Pressable>
           )}
         </Pressable>
       </Pressable>
@@ -152,13 +169,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: width * 0.85,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
   modalTitle: {
     fontSize: 22,
@@ -182,25 +194,25 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+    minHeight: 44,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  confirmButton: {
-    backgroundColor: '#28a745',
+    overflow: 'hidden', // borne le ripple Android au bouton
   },
   confirmButtonText: {
     fontSize: 16,
-    color: '#fff',
     fontWeight: '600',
   },
   dismissLink: {
-    marginTop: 16,
+    marginTop: 8,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   dismissText: {
     fontSize: 14,
-    opacity: 0.6,
+    opacity: 0.75, // ≥ 4.5:1 sur les surfaces claires et sombres
   },
 });

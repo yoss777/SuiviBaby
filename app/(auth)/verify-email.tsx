@@ -171,7 +171,7 @@ export default function VerifyEmailScreen() {
             accessibilityLabel="J'ai vérifié mon e-mail"
             accessibilityState={{ disabled: checking }}
           >
-            <Text style={styles.mainButtonText}>
+            <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
               {checking ? "Vérification..." : "J'ai vérifié mon e-mail"}
             </Text>
           </TouchableOpacity>
@@ -195,7 +195,7 @@ export default function VerifyEmailScreen() {
             accessibilityHint="Renvoie un email de vérification à votre adresse"
             accessibilityState={{ disabled: !canResend }}
           >
-            <Text style={styles.mainButtonText}>
+            <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
               {cooldown > 0
                 ? `Renvoyer dans ${cooldown}s`
                 : "Renvoyer l'email"}

@@ -222,8 +222,8 @@ export default function BackupScreen() {
             accessibilityLabel={isBackingUp ? 'Sauvegarde en cours' : 'Sauvegarder maintenant'}
             accessibilityState={{ disabled: isBackingUp }}
           >
-            <Ionicons name="cloud-upload" size={20} color={nc.white} />
-            <Text style={[styles.primaryButtonText, { color: nc.white }]}>
+            <Ionicons name="cloud-upload" size={20} color={Colors[colorScheme].onTint} />
+            <Text style={[styles.primaryButtonText, { color: Colors[colorScheme].onTint }]}>
               {isBackingUp ? 'Sauvegarde en cours...' : 'Sauvegarder maintenant'}
             </Text>
           </TouchableOpacity>

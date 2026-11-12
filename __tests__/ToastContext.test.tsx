@@ -11,9 +11,14 @@ jest.mock("react-native-safe-area-context", () => ({
 }));
 
 import React from "react";
-import { AppState } from "react-native";
-import { act, fireEvent, render } from "@testing-library/react-native";
-import { ToastProvider, useToast } from "@/contexts/ToastContext";
+import { AccessibilityInfo, AppState, Text } from "react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import {
+  ACTION_TOAST_MIN_MS,
+  ToastProvider,
+  useToast,
+  useToastBottomInset,
+} from "@/contexts/ToastContext";
 
 type Api = ReturnType<typeof useToast>;
 let api: Api;
@@ -50,8 +55,8 @@ describe("showUndoToast", () => {
   it("runs onExpire once after the delay", () => {
     setup();
     const onExpire = jest.fn();
-    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
-    act(() => { jest.advanceTimersByTime(3999); });
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 8000));
+    act(() => { jest.advanceTimersByTime(7999); });
     expect(onExpire).not.toHaveBeenCalled();
     act(() => { jest.advanceTimersByTime(1); });
     expect(onExpire).toHaveBeenCalledTimes(1);
@@ -122,7 +127,7 @@ describe("showUndoToast", () => {
     act(() => api.showUndoToast("Second", jest.fn(), second, 4000));
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
-    act(() => { jest.advanceTimersByTime(4000); });
+    act(() => { jest.advanceTimersByTime(8000); });
     expect(second).toHaveBeenCalledTimes(1);
     expect(first).toHaveBeenCalledTimes(1);
   });
@@ -157,5 +162,52 @@ describe("lifecycle", () => {
     const { unmount } = setup();
     unmount();
     expect(removeSpy).toHaveBeenCalled();
+  });
+});
+
+describe("accessibilité et confort (P1-11)", () => {
+  it("un toast avec action reste au moins 8 s, même si l'appelant demande moins", () => {
+    setup();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
+    act(() => { jest.advanceTimersByTime(ACTION_TOAST_MIN_MS - 1); });
+    expect(onExpire).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("annonce le message et l'action au lecteur d'écran", () => {
+    const spy = jest.spyOn(AccessibilityInfo, "announceForAccessibility").mockImplementation(() => {});
+    setup();
+    act(() => api.showActionToast("Échec de l'envoi", "Réessayer", jest.fn()));
+    expect(spy).toHaveBeenCalledWith("Échec de l'envoi. Action disponible : Réessayer.");
+    act(() => api.showToast("Enregistré"));
+    expect(spy).toHaveBeenLastCalledWith("Enregistré");
+  });
+
+  it("le bouton d'action est un bouton d'au moins 44 pt", () => {
+    setup();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), jest.fn()));
+    const button = screen.getByRole("button", { name: "Annuler" });
+    const style = Object.assign({}, ...[button.props.style].flat(Infinity).filter(Boolean));
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    expect(style.minWidth).toBeGreaterThanOrEqual(44);
+  });
+
+  it("se pose au-dessus de la barre d'onglets déclarée", () => {
+    function TabBar() {
+      useToastBottomInset(120);
+      return <Text>tabs</Text>;
+    }
+    render(
+      <ToastProvider>
+        <Probe />
+        <TabBar />
+      </ToastProvider>,
+    );
+    act(() => api.showToast("Enregistré"));
+    const toast = screen.getByText("Enregistré").parent?.parent;
+    const style = Object.assign({}, ...[toast?.props.style].flat(Infinity).filter(Boolean));
+    expect(style.bottom).toBeGreaterThan(120);
   });
 });

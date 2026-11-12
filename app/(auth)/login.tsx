@@ -776,20 +776,20 @@ export default function LoginScreen() {
             accessibilityLabel={isLogin ? "Se connecter" : "Créer mon compte"}
           >
             {loading ? (
-              <ActivityIndicator color={nc.white} />
+              <ActivityIndicator color={nc.onTodayAccent} />
             ) : isCoolingDown ? (
               <>
-                <FontAwesome name="clock" size={20} color={nc.white} />
-                <Text style={[styles.mainButtonText, { color: nc.white }]}>
+                <FontAwesome name="clock" size={20} color={nc.onTodayAccent} />
+                <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
                   Réessayer dans {cooldownRemaining}s
                 </Text>
               </>
             ) : (
               <>
-                <Text style={[styles.mainButtonText, { color: nc.white }]}>
+                <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
                   {isLogin ? "Se connecter" : "Créer mon compte"}
                 </Text>
-                <FontAwesome name="arrow-right" size={20} color={nc.white} />
+                <FontAwesome name="arrow-right" size={20} color={nc.onTodayAccent} />
               </>
             )}
           </TouchableOpacity>

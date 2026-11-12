@@ -99,6 +99,10 @@ export const neutralColors = {
   success: "#22c55e", // green-500
   warning: "#f59e0b", // amber-500
   error: "#ef4444", // red-500
+  // Aplat d'action destructive (Supprimer) sous texte blanc : red-600, 4.83:1
+  // (error #ef4444 ne fait que 3.76:1 avec du blanc).
+  destructive: "#dc2626",
+  onDestructive: "#ffffff",
 
   // Accents
   // indigo-600 : ≥ 4.5:1 en texte sur les fonds clairs ET en aplat sous texte blanc
@@ -147,6 +151,8 @@ export const neutralColorsDark = {
   success: "#22c55e",
   warning: "#f59e0b",
   error: "#ef4444",
+  destructive: "#dc2626",
+  onDestructive: "#ffffff",
 
   todayAccent: "#818cf8", // indigo-400 (brighter for dark bg) : ≥ 4.5:1 en texte sur les fonds sombres
   // Texte/icône posé sur un aplat todayAccent : le blanc n'atteint que 2.98:1 sur indigo-400.

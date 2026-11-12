@@ -1499,8 +1499,8 @@ export default function SoinsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Enregistrer un soin"
                   >
-                    <Ionicons name="add" size={20} color={nc.white} />
-                    <Text style={[styles.emptyCtaText, { color: nc.white }]}>Enregistrer un soin</Text>
+                    <Ionicons name="add" size={20} color={Colors[colorScheme].onTint} />
+                    <Text style={[styles.emptyCtaText, { color: Colors[colorScheme].onTint }]}>Enregistrer un soin</Text>
                   </Pressable>
                 )}
                 {!(selectedFilter === "today" || selectedDate) && (
