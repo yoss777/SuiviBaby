@@ -1,3 +1,4 @@
+/* global describe, it, expect */
 // Daily voice counters reset at midnight in France, not at midnight UTC.
 const { quotaDayKey, FREE_DAILY_VOICE_LIMIT, PREMIUM_DAILY_VOICE_LIMIT } = require("../src/billing/quotas");
 
