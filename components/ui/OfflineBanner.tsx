@@ -49,7 +49,8 @@ export function OfflineBanner() {
         {
           paddingTop: insets.top + 4,
           transform: [{ translateY: slideAnim }],
-          backgroundColor: isConnected ? "#16a34a" : "#dc2626",
+          // Texte blanc : green-700 5.0:1, red-600 4.8:1 (green-600 plafonnait à 3.3:1)
+          backgroundColor: isConnected ? "#15803d" : "#dc2626",
         },
       ]}
     >

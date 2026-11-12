@@ -131,10 +131,7 @@ export function DateFilterBar({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    // borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
+  container: {},
   content: {
     flexDirection: "row",
     gap: 8,

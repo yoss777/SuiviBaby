@@ -120,7 +120,7 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                   <DeleteAction
                     label={config.a11y.deleteAction}
                     onPress={() => requestDelete(item)}
-                    errorColor={nc.error}
+                    errorColor={nc.destructive}
                     whiteColor={nc.white}
                   />
                 )

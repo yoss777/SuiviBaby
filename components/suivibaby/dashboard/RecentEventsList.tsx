@@ -460,7 +460,7 @@ const EventRow = memo(function EventRow({
   }, [onEventPress, event]);
 
   const renderDeleteAction = useCallback(
-    () => <DeleteAction onPress={handleDelete} backgroundColor={nc.error} />,
+    () => <DeleteAction onPress={handleDelete} backgroundColor={nc.destructive} />,
     [handleDelete, nc.error],
   );
 
