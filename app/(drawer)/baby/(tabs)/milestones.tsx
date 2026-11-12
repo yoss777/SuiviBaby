@@ -1,6 +1,7 @@
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
@@ -10,7 +11,6 @@ import {
   MilestonesEditData,
 } from "@/components/forms/MilestonesForm";
 import { PhotoImage } from "@/components/ui/PhotoImage";
-import { ThemedText } from "@/components/themed-text";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
@@ -1417,38 +1417,27 @@ export default function MilestonesScreen() {
 
         {loaded.jalons && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.jalon.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.jalon.dark}
+              icon={
                 <FontAwesome
                   name="star"
                   size={36}
                   color={eventColors.jalon.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucun jalon enregistré"
-                  : "Aucun jalon pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                Capturez les premiers pas, sourires et moments importants
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={() => openAddModal("dent")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter un jalon"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter un jalon</Text>
-                </Pressable>
-              )}
+                  : "Aucun jalon pour ce filtre"
+              }
+              subtitle="Capturez les premiers pas, sourires et moments importants"
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter un jalon", onPress: () => openAddModal("dent") }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   loading={isLoadingMore || autoLoadMore}
@@ -1457,7 +1446,7 @@ export default function MilestonesScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1562,43 +1551,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 80,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   dayGroup: {
     marginBottom: 24,

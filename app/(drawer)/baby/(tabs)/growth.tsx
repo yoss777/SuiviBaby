@@ -1,8 +1,8 @@
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
-import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
@@ -1447,38 +1447,27 @@ export default function GrowthScreen() {
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.croissance.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.croissance.dark}
+              icon={
                 <FontAwesome
                   name="seedling"
                   size={36}
                   color={eventColors.croissance.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucune mesure enregistrée"
-                  : "Aucune mesure pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                Suivez le poids, la taille et le périmètre crânien
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={openAddModal}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une mesure"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
-                </Pressable>
-              )}
+                  : "Aucune mesure pour ce filtre"
+              }
+              subtitle="Suivez le poids, la taille et le périmètre crânien"
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter une mesure", onPress: openAddModal }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -1488,7 +1477,7 @@ export default function GrowthScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1724,44 +1713,6 @@ const styles = StyleSheet.create({
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
   },
   deleteAction: {
     backgroundColor: "#ef4444",
