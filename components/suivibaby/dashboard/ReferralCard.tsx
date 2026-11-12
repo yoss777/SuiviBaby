@@ -17,7 +17,7 @@ import {
   Pressable,
   View,
 } from "react-native";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface ReferralCardProps {
   referralCode: string;
@@ -243,6 +243,7 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   codeBtn: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -259,6 +260,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   shareBtn: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

@@ -1,6 +1,7 @@
 import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
@@ -19,6 +20,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -88,13 +90,13 @@ const DeleteAction = React.memo(function DeleteAction({
 }) {
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -348,7 +350,7 @@ export default function SoinsScreen() {
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -1217,6 +1219,14 @@ export default function SoinsScreen() {
             },
           ]}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Soin",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
         >
           {selectionMode && (
             <Pressable

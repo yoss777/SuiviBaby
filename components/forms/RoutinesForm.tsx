@@ -1,6 +1,5 @@
 // components/forms/RoutinesForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
 import { SheetFooter } from "@/components/forms/SheetFooter";
@@ -14,9 +13,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -175,8 +174,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 }) => {
   const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -519,38 +518,23 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     onSuccess?.();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    const typeLabel =
-      editData.type === "nettoyage_nez"
-        ? "ce nettoyage de nez"
-        : editData.type === "bain"
-          ? "ce bain"
-          : "ce sommeil";
-    showConfirm(
-      "Supprimer",
-      `Voulez-vous vraiment supprimer ${typeLabel} ?`,
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          const deletedText =
-            editData.type === "nettoyage_nez"
-              ? "Nettoyage nez supprimé"
-              : editData.type === "bain"
-                ? "Bain supprimé"
-                : "Sommeil supprimé";
-          showToast(deleteToastMessage(outcome, deletedText));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "nettoyage_nez"
+          ? "Nettoyage nez supprimé"
+          : editData.type === "bain"
+            ? "Bain supprimé"
+            : "Sommeil supprimé",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -1195,6 +1179,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    ...RIPPLE_CLIP,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
@@ -1222,6 +1207,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
+    ...RIPPLE_CLIP,
     // Cible >= 44 pt (48 dp Android), utilisable d'une main.
     width: 48,
     height: 48,
@@ -1253,6 +1239,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -1266,6 +1253,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

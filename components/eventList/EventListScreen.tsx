@@ -31,6 +31,7 @@ import { useEventList } from "@/hooks/eventList/useEventList";
 import { isOptimisticId } from "@/hooks/eventList/useSoftDelete";
 import { formatDayLabel, formatSelectedDateLabel } from "@/utils/dayLabel";
 import {
+  ROW_LONG_PRESS_HINT,
   buildRowAccessibilityActions,
   handleRowAccessibilityAction,
   showRowActionMenu,
@@ -141,6 +142,7 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
             accessibilityRole={canManage ? "button" : undefined}
             accessibilityLabel={canManage ? config.a11y.row : undefined}
             // Alternative au glissement : actions d'accessibilité et appui long.
+            accessibilityHint={canManage && !selectionMode ? ROW_LONG_PRESS_HINT : undefined}
             accessibilityActions={
               selectionMode
                 ? undefined

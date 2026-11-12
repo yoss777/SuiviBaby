@@ -434,7 +434,7 @@ export default function JoinChildScreen() {
                         style={[
                           styles.invitationButton,
                           styles.rejectButton,
-                          { borderColor: "transparent", backgroundColor: nc.error, opacity: 0.85 },
+                          { borderColor: "transparent", backgroundColor: nc.destructive },
                         ]}
                         onPress={() => handleRejectInvitation(invitation.id!)}
                         disabled={processingInvitation === invitation.id}

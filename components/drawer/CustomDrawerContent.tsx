@@ -472,13 +472,13 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                 <Text style={[styles.cancelButtonText, { color: nc.textNormal }]}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: nc.error }]}
+                style={[styles.modalButton, { backgroundColor: nc.destructive }]}
                 onPress={confirmHideChild}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="Confirmer masquer l'enfant"
               >
-                <Text style={[styles.deleteButtonText, { color: nc.white }]}>Masquer</Text>
+                <Text style={[styles.deleteButtonText, { color: nc.onDestructive }]}>Masquer</Text>
               </TouchableOpacity>
             </View>
           </Pressable>

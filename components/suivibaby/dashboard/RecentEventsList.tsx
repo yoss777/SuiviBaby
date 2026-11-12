@@ -24,12 +24,13 @@ import {
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import {
+  ROW_LONG_PRESS_HINT,
   buildRowAccessibilityActions,
   handleRowAccessibilityAction,
   showRowActionMenu,
 } from "@/utils/rowActions";
 import { getDateTime, isValidDate } from "@/utils/date";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // ============================================
 // TYPES
@@ -555,7 +556,7 @@ const EventRow = memo(function EventRow({
               accessibilityRole="button"
               accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
               accessibilityHint={
-                onEventPress ? "Appuyez pour modifier" : undefined
+                onEventPress || canDelete ? ROW_LONG_PRESS_HINT : undefined
               }
               accessibilityActions={buildRowAccessibilityActions({
                 canEdit: !!onEventPress,
@@ -863,6 +864,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   recentCard: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderRadius: 14,
     padding: space.sm,

@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { startLoop } from "@/utils/motion";
 import { isNightHour } from "@/utils/decorativeMotion";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -374,6 +374,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   startButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     minHeight: 44,
     paddingVertical: 10,
@@ -387,6 +388,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   actionButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     // Largeur minimale : « Terminer » tient sur une ligne même si la carte est étroite
     minWidth: 96,
@@ -409,6 +411,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   editButton: {
+    ...RIPPLE_CLIP,
     width: 44,
     height: 44,
     borderRadius: radius.md,

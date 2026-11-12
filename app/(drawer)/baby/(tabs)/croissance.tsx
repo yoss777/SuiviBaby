@@ -17,7 +17,9 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import {
+  ROW_LONG_PRESS_HINT,
   buildRowAccessibilityActions,
   handleRowAccessibilityAction,
   showRowActionMenu,
@@ -688,7 +690,7 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
-              accessibilityHint={canManageContent ? "Appuyer pour modifier" : undefined}
+              accessibilityHint={canManageContent ? ROW_LONG_PRESS_HINT : undefined}
               // Alternative au glissement : actions d'accessibilité et appui long.
               accessibilityActions={buildRowAccessibilityActions({
                 canEdit: canManageContent,
@@ -866,7 +868,7 @@ export default function CroissanceScreen() {
   const [loadError, setLoadError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const [metric, setMetric] = useState<MetricKey>("poids");
   const metricKeys: MetricKey[] = ["taille", "poids", "tete"];
   const [tabsWidth, setTabsWidth] = useState(0);

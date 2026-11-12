@@ -8,13 +8,13 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { getTemperatureAlert, getTemperatureEditAlert } from "@/utils/temperatureAlert";
 import { validateSoinsSubmission } from "@/utils/soinsSubmit";
 import { showTemperatureAlertDialog } from "@/utils/temperatureAlertDialog";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -34,7 +34,7 @@ import {
   View,
 } from "react-native";
 import { toDate } from "@/utils/date";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -218,8 +218,8 @@ export function SoinsForm({
   const ripple = usePressRipple();
   const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -810,39 +810,29 @@ export function SoinsForm({
     onSuccess();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cet élément ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          if (outcome === "queued") {
-            // Hors ligne : la suppression n'est PAS faite, elle est en attente.
-            showToast("Suppression enregistrée : synchronisation en attente");
-          } else if (editData.type === "temperature") {
-            showToast("Température supprimée");
-          } else if (editData.type === "medicament") {
-            showToast("Médicament supprimé");
-          } else if (editData.type === "symptome") {
-            showToast("Symptôme supprimé");
-          } else if (editData.type === "vaccin") {
-            showToast("Vaccin supprimé");
-          } else if (editData.type === "vitamine") {
-            showToast("Vitamine supprimée");
-          }
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "temperature"
+          ? "Température supprimée"
+          : editData.type === "medicament"
+            ? "Médicament supprimé"
+            : editData.type === "symptome"
+              ? "Symptôme supprimé"
+              : editData.type === "vaccin"
+                ? "Vaccin supprimé"
+                : editData.type === "vitamine"
+                  ? "Vitamine supprimée"
+                  : "Soin supprimé",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   const getVaccinDisplay = (nomVaccin: string, dosage?: string | null) =>
@@ -1971,6 +1961,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   pickerItem: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
@@ -2057,6 +2048,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   templateChip: {
+    ...RIPPLE_CLIP,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -2110,6 +2102,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    ...RIPPLE_CLIP,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
@@ -2137,6 +2130,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
+    ...RIPPLE_CLIP,
     // Cible >= 44 pt (48 dp Android), utilisable d'une main.
     width: 48,
     height: 48,
@@ -2160,6 +2154,7 @@ const styles = StyleSheet.create({
   },
   // Selector button (for vaccin/vitamine)
   selectorButton: {
+    ...RIPPLE_CLIP,
     padding: 16,
     borderRadius: 12,
     flexDirection: "row",
@@ -2190,6 +2185,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -2203,6 +2199,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

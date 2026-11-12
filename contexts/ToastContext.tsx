@@ -71,121 +71,167 @@ function announce(text: string, actionLabel?: string) {
   );
 }
 
+type PendingUndo = {
+  key: number;
+  message: string;
+  onUndo: () => void;
+  onExpire: (() => void) | null;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type InfoToast = {
+  message: string;
+  action: ToastAction | null;
+  position: "top" | "bottom";
+};
+
+/** Écart vertical entre le toast d'annulation et un toast affiché au-dessus. */
+const STACK_GAP = 56;
+
+/**
+ * Deux emplacements indépendants (audit UI/UX V3, N-V3-4) :
+ * - les annulations en attente : chacune garde son propre délai (8 s) et reste
+ *   annulable jusqu'au bout. « Annuler » porte sur la plus récente ; la
+ *   précédente reprend alors sa place. Un autre toast ne valide plus en
+ *   silence une suppression en attente ;
+ * - le toast d'information ou d'action (« Enregistré », « Réessayer »), posé
+ *   au-dessus du toast d'annulation quand les deux sont visibles.
+ * Les suppressions en attente partent tout de suite si l'app passe en
+ * arrière-plan (minuteur non fiable une fois l'app suspendue).
+ */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
-  const [message, setMessage] = useState<string | null>(null);
-  const [action, setAction] = useState<ToastAction | null>(null);
-  const [position, setPosition] = useState<"top" | "bottom">("bottom");
+  const [info, setInfo] = useState<InfoToast | null>(null);
+  const [undos, setUndos] = useState<{ key: number; message: string }[]>([]);
   const [bottomInset, setBottomInsetState] = useState(0);
   const setBottomInset = useCallback((height: number) => {
     setBottomInsetState(Math.max(0, Math.round(height)));
   }, []);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onExpireRef = useRef<(() => void) | null>(null);
+  const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<PendingUndo[]>([]);
+  const nextKeyRef = useRef(1);
 
-  const clearTimer = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+  const syncUndos = useCallback(() => {
+    setUndos(pendingRef.current.map(({ key, message }) => ({ key, message })));
+  }, []);
+
+  const clearInfoTimer = useCallback(() => {
+    if (infoTimerRef.current) {
+      clearTimeout(infoTimerRef.current);
+      infoTimerRef.current = null;
     }
   }, []);
 
-  // Exécute tout de suite la suppression qui attendait la fin du délai
-  // d'annulation. Appelé quand un autre toast prend la place du toast
-  // d'annulation (sinon la suppression serait perdue : l'élément resterait
-  // masqué puis réapparaîtrait) et quand l'app passe en arrière-plan (le
-  // minuteur ne tourne plus de façon fiable une fois l'app suspendue).
-  const flushPendingUndo = useCallback(() => {
-    const pending = onExpireRef.current;
-    if (!pending) return;
-    onExpireRef.current = null;
-    clearTimer();
-    setMessage(null);
-    setAction(null);
-    pending();
-  }, [clearTimer]);
+  const takePending = useCallback(
+    (key: number): PendingUndo | null => {
+      const entry = pendingRef.current.find((item) => item.key === key) ?? null;
+      if (!entry) return null;
+      clearTimeout(entry.timer);
+      pendingRef.current = pendingRef.current.filter((item) => item.key !== key);
+      syncUndos();
+      return entry;
+    },
+    [syncUndos],
+  );
 
-  // Fermer le toast pendant un délai d'annulation : la suppression part (flush)
-  // plutôt que de laisser un rappel périmé qui se déclencherait au toast suivant.
+  // Exécute tout de suite toutes les suppressions en attente (arrière-plan,
+  // fermeture explicite du toast).
+  const flushPendingUndos = useCallback(() => {
+    if (pendingRef.current.length === 0) return;
+    const entries = pendingRef.current;
+    pendingRef.current = [];
+    entries.forEach((entry) => clearTimeout(entry.timer));
+    syncUndos();
+    entries.forEach((entry) => entry.onExpire?.());
+  }, [syncUndos]);
+
   const dismiss = useCallback(() => {
-    flushPendingUndo();
-    setMessage(null);
-    setAction(null);
-    clearTimer();
-  }, [clearTimer, flushPendingUndo]);
+    flushPendingUndos();
+    clearInfoTimer();
+    setInfo(null);
+  }, [clearInfoTimer, flushPendingUndos]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "background") flushPendingUndo();
+      if (state === "background") flushPendingUndos();
     });
     return () => subscription.remove();
-  }, [flushPendingUndo]);
+  }, [flushPendingUndos]);
+
+  // Minuteurs arrêtés au démontage du provider.
+  useEffect(
+    () => () => {
+      pendingRef.current.forEach((entry) => clearTimeout(entry.timer));
+      if (infoTimerRef.current) clearTimeout(infoTimerRef.current);
+    },
+    [],
+  );
+
+  const showInfo = useCallback(
+    (next: InfoToast, durationMs: number) => {
+      setInfo(next);
+      clearInfoTimer();
+      infoTimerRef.current = setTimeout(() => {
+        setInfo(null);
+        infoTimerRef.current = null;
+      }, durationMs);
+    },
+    [clearInfoTimer],
+  );
 
   const showToast = useCallback(
     (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
-    flushPendingUndo();
-    setMessage(text);
-    setAction(null);
-    setPosition(toastPosition);
-    announce(text);
-    clearTimer();
-    timeoutRef.current = setTimeout(() => {
-      setMessage(null);
-      setAction(null);
-      timeoutRef.current = null;
-    }, durationMs);
-  }, [clearTimer, flushPendingUndo]);
+      announce(text);
+      showInfo({ message: text, action: null, position: toastPosition }, durationMs);
+    },
+    [showInfo],
+  );
 
   const showUndoToast = useCallback(
     (text: string, onUndo: () => void, onExpire?: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
-    flushPendingUndo();
-    onExpireRef.current = onExpire ?? null;
-    setMessage(text);
-    announce(text, "Annuler");
-    setAction({
-      label: "Annuler",
-      onPress: () => {
-        clearTimer();
-        onExpireRef.current = null;
-        onUndo();
-        setMessage(null);
-        setAction(null);
-      },
-    });
-    setPosition("bottom");
-    clearTimer();
-    timeoutRef.current = setTimeout(() => {
-      setMessage(null);
-      setAction(null);
-      timeoutRef.current = null;
-      const expire = onExpireRef.current;
-      onExpireRef.current = null;
-      expire?.();
-    }, Math.max(durationMs, ACTION_TOAST_MIN_MS));
-  }, [clearTimer, flushPendingUndo]);
+      const key = nextKeyRef.current++;
+      const timer = setTimeout(() => {
+        const entry = takePending(key);
+        entry?.onExpire?.();
+      }, Math.max(durationMs, ACTION_TOAST_MIN_MS));
+      pendingRef.current = [
+        ...pendingRef.current,
+        { key, message: text, onUndo, onExpire: onExpire ?? null, timer },
+      ];
+      syncUndos();
+      announce(text, "Annuler");
+    },
+    [syncUndos, takePending],
+  );
+
+  const undoLatest = useCallback(() => {
+    const latest = pendingRef.current[pendingRef.current.length - 1];
+    if (!latest) return;
+    const entry = takePending(latest.key);
+    entry?.onUndo();
+  }, [takePending]);
 
   const showActionToast = useCallback(
     (text: string, actionLabel: string, onAction: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
-    flushPendingUndo();
-    setMessage(text);
-    announce(text, actionLabel);
-    setAction({
-      label: actionLabel,
-      onPress: () => {
-        clearTimer();
-        onAction();
-        setMessage(null);
-        setAction(null);
-      },
-    });
-    setPosition("bottom");
-    clearTimer();
-    timeoutRef.current = setTimeout(() => {
-      setMessage(null);
-      setAction(null);
-      timeoutRef.current = null;
-    }, Math.max(durationMs, ACTION_TOAST_MIN_MS));
-  }, [clearTimer, flushPendingUndo]);
+      announce(text, actionLabel);
+      showInfo(
+        {
+          message: text,
+          position: "bottom",
+          action: {
+            label: actionLabel,
+            onPress: () => {
+              clearInfoTimer();
+              setInfo(null);
+              onAction();
+            },
+          },
+        },
+        Math.max(durationMs, ACTION_TOAST_MIN_MS),
+      );
+    },
+    [clearInfoTimer, showInfo],
+  );
 
   // Valeur stable : le message affiché reste en état local du provider, les
   // consommateurs (qui n'appellent que des fonctions) ne se re-rendent pas.
@@ -194,43 +240,77 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [showToast, showUndoToast, showActionToast, dismiss, setBottomInset],
   );
 
+  // Au-dessus de la barre d'onglets et du dock vocal quand ils sont affichés
+  // (leur hauteur inclut la zone de sécurité).
+  const bottomBase = toastBottomOffset({ chromeInset: bottomInset, safeAreaBottom: insets.bottom });
+  const latestUndo = undos[undos.length - 1];
+  const undoMessage = latestUndo
+    ? undos.length > 1
+      ? `${latestUndo.message} (+${undos.length - 1})`
+      : latestUndo.message
+    : null;
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {message && (
+      {(info || undoMessage) && (
         <Portal>
-          <View
-            pointerEvents={action ? "box-none" : "none"}
-            style={[
-              styles.toast,
-              action && styles.toastWithAction,
-              position === "top"
-                ? { top: insets.top + 16 }
-                : {
-                    // Au-dessus de la barre d'onglets et du dock vocal quand
-                    // ils sont affichés (leur hauteur inclut la zone de sécurité).
-                    bottom: toastBottomOffset({ chromeInset: bottomInset, safeAreaBottom: insets.bottom }),
-                  },
-            ]}
-          >
-            <Text style={[styles.toastText, action && styles.toastTextWithAction]}>
-              {message}
-            </Text>
-            {action && (
-              <Pressable
-                onPress={action.onPress}
-                hitSlop={4}
-                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
-              >
-                <Text style={styles.actionText}>{action.label}</Text>
-              </Pressable>
-            )}
-          </View>
+          {undoMessage && (
+            <ToastView
+              testID="toast-undo"
+              message={undoMessage}
+              action={{ label: "Annuler", onPress: undoLatest }}
+              positionStyle={{ bottom: bottomBase }}
+            />
+          )}
+          {info && (
+            <ToastView
+              testID="toast-info"
+              message={info.message}
+              action={info.action}
+              positionStyle={
+                info.position === "top"
+                  ? { top: insets.top + 16 }
+                  : { bottom: undoMessage ? bottomBase + STACK_GAP : bottomBase }
+              }
+            />
+          )}
         </Portal>
       )}
     </ToastContext.Provider>
+  );
+}
+
+function ToastView({
+  message,
+  action,
+  positionStyle,
+  testID,
+}: {
+  message: string;
+  action: ToastAction | null;
+  positionStyle: { top: number } | { bottom: number };
+  testID: string;
+}) {
+  return (
+    <View
+      testID={testID}
+      pointerEvents={action ? "box-none" : "none"}
+      style={[styles.toast, action && styles.toastWithAction, positionStyle]}
+    >
+      <Text style={[styles.toastText, action && styles.toastTextWithAction]}>{message}</Text>
+      {action && (
+        <Pressable
+          onPress={action.onPress}
+          hitSlop={4}
+          style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+        >
+          <Text style={styles.actionText}>{action.label}</Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
 

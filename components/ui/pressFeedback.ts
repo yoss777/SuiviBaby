@@ -4,9 +4,26 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 /**
+ * Borne le ripple Android aux coins arrondis d'un Pressable : à étaler dans
+ * son style (`...RIPPLE_CLIP`). Android seulement : sur iOS, `overflow:
+ * "hidden"` couperait l'ombre (shadow*) du bouton. Sous Android, l'ombre
+ * d'`elevation` reste dessinée. Si un badge déborde du bouton, ne pas
+ * l'utiliser sur le bouton : envelopper seulement la surface pressable dans
+ * une vue `rippleContainerStyle(rayon)`.
+ */
+export const RIPPLE_CLIP: ViewStyle = Platform.OS === "android" ? { overflow: "hidden" } : {};
+
+/** Enveloppe arrondie qui borne le ripple de la surface pressable qu'elle contient. */
+export function rippleContainerStyle(radius: number): ViewStyle {
+  return Platform.OS === "android"
+    ? { borderRadius: radius, overflow: "hidden" }
+    : { borderRadius: radius };
+}
+
+/**
  * Retour au toucher des boutons partagés : ripple sur Android (natif),
- * opacité sur iOS. À combiner avec `overflow: "hidden"` sur le bouton pour
- * borner le ripple à ses coins arrondis.
+ * opacité sur iOS. À combiner avec `RIPPLE_CLIP` (ou `overflow: "hidden"`)
+ * sur le bouton pour borner le ripple à ses coins arrondis.
  */
 export function usePressRipple(): PressableAndroidRippleConfig {
   const scheme = useColorScheme() ?? "light";

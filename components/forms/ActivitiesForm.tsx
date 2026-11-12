@@ -1,6 +1,5 @@
 // components/forms/ActivitiesForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
@@ -13,9 +12,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -168,8 +167,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 }) => {
   const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -390,26 +389,18 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     }
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cette activité ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Activité supprimée"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Activité supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -702,6 +693,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
+    ...RIPPLE_CLIP,
     // Cible >= 44 pt (48 dp Android), utilisable d'une main.
     width: 48,
     height: 48,
@@ -729,6 +721,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -742,6 +735,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

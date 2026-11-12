@@ -121,6 +121,11 @@ export function hasNursingProgress(state: NursingTimerState): boolean {
   return state.leftSeconds > 0 || state.rightSeconds > 0 || state.runningSide !== null;
 }
 
+/** Heure (ms epoch) à laquelle le brouillon sera écarté s'il n'est pas repris. */
+export function nursingDraftExpiresAt(state: NursingTimerState): number {
+  return state.updatedAt + (state.runningSide ? RUNNING_DRAFT_TTL_MS : PAUSED_DRAFT_TTL_MS);
+}
+
 export function isNursingDraftStale(state: NursingTimerState, now: number): boolean {
   const ttl = state.runningSide ? RUNNING_DRAFT_TTL_MS : PAUSED_DRAFT_TTL_MS;
   return now - state.updatedAt > ttl;

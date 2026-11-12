@@ -44,14 +44,14 @@ export function SelectionToolbar({
       </Pressable>
 
       <Pressable
-        style={[styles.deleteButton, { backgroundColor: nc.error }, selectedCount === 0 && styles.deleteButtonDisabled]}
+        style={[styles.deleteButton, { backgroundColor: nc.destructive }, selectedCount === 0 && styles.deleteButtonDisabled]}
         onPress={onDelete}
         disabled={selectedCount === 0}
         accessibilityRole="button"
         accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
       >
-        <Ionicons name="trash-outline" size={16} color={nc.white} />
-        <Text style={[styles.deleteButtonText, { color: nc.white }]}>
+        <Ionicons name="trash-outline" size={16} color={nc.onDestructive} />
+        <Text style={[styles.deleteButtonText, { color: nc.onDestructive }]}>
           Supprimer{selectedCount > 0 ? ` (${selectedCount})` : ""}
         </Text>
       </Pressable>

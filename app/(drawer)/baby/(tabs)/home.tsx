@@ -26,6 +26,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
 import { softDeleteNow } from "@/utils/softDeleteNow";
@@ -220,7 +221,7 @@ export default function HomeDashboard() {
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const lastBackPressRef = useRef(0);
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const softDeletedIdsRef = useRef<Set<string>>(new Set());
   // Keep ref in sync with state for use in closures (scheduleMerge)
   softDeletedIdsRef.current = softDeletedIds;

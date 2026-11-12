@@ -1,5 +1,4 @@
 // components/forms/MilestonesForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
@@ -10,9 +9,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supprimerJalon } from "@/services/eventsService";
 import {
@@ -35,7 +34,7 @@ import {
   View,
 } from "react-native";
 import { toDate } from "@/utils/date";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -166,8 +165,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const formScroll = useFormScroll();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -393,26 +392,18 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
     }
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer ce jalon ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerJalon(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Jalon supprimé"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Jalon supprimé",
+      run: () => supprimerJalon(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -837,6 +828,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   moodChip: {
+    ...RIPPLE_CLIP,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
@@ -863,6 +855,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   photoRemoveButton: {
+    ...RIPPLE_CLIP,
     position: "absolute" as const,
     top: -8,
     right: -8,
@@ -878,6 +871,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   photoPlaceholder: {
+    ...RIPPLE_CLIP,
     height: 80,
     borderRadius: 12,
     borderWidth: 1,
@@ -904,6 +898,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -917,6 +912,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

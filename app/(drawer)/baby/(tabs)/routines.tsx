@@ -1,6 +1,7 @@
 import { flatInDark } from "@/constants/theme";
 import { toDecimalInputFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -20,6 +21,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useCalendarDay, useMinuteTick } from "@/hooks/useMinuteTick";
@@ -101,13 +103,13 @@ const DeleteAction = React.memo(function DeleteAction({
   const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -310,7 +312,7 @@ export default function RoutinesScreen() {
   const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
   const [pendingSleepMode, setPendingSleepMode] = useState<SleepMode>("nap");
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   const sortMergedEvents = useCallback(
@@ -1319,6 +1321,14 @@ export default function RoutinesScreen() {
           ];
         }}
         onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+        // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+        // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+        {...rowActionProps({
+          title: "Routine",
+          onEdit: () => openEditModal(event),
+          onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+          disabled: selectionMode,
+        })}
       >
         {selectionMode && (
           <Pressable

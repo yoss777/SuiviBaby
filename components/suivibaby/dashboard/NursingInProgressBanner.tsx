@@ -6,9 +6,13 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "expo-router";
 import React, { memo, useCallback, useEffect, useState } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { loadNursingTimer, type NursingTimerState } from "@/components/forms/nursingTimer";
+import {
+  isNursingDraftStale,
+  loadNursingTimer,
+  type NursingTimerState,
+} from "@/components/forms/nursingTimer";
 import {
   getCategoryColors,
   getCategoryTextColors,
@@ -20,6 +24,8 @@ import { describeNursingDraft } from "@/utils/nursingDraftDisplay";
 
 /** Rafraîchissement du temps affiché pendant qu'un côté tourne. */
 export const NURSING_BANNER_TICK_MS = 15_000;
+/** En pause : seule l'échéance d'effacement compte, une minute suffit. */
+export const NURSING_BANNER_PAUSED_TICK_MS = 60_000;
 
 interface Props {
   childId: string | undefined;
@@ -68,11 +74,23 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
   }, [reload]);
 
   const running = draft?.runningSide != null;
+  const hasDraft = draft != null;
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => setNow(Date.now()), NURSING_BANNER_TICK_MS);
+    if (!hasDraft) return;
+    const id = setInterval(
+      () => setNow(Date.now()),
+      running ? NURSING_BANNER_TICK_MS : NURSING_BANNER_PAUSED_TICK_MS,
+    );
     return () => clearInterval(id);
-  }, [running]);
+  }, [hasDraft, running]);
+
+  // Brouillon arrivé à échéance pendant que l'Accueil est affiché : relu (et
+  // effacé par loadNursingTimer) pour que le bandeau disparaisse.
+  const stale = draft != null && isNursingDraftStale(draft, now);
+  useEffect(() => {
+    if (!stale) return;
+    return reload();
+  }, [stale, reload]);
 
   if (!draft) return null;
 
@@ -92,7 +110,9 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
         styles.banner,
         {
           minHeight: minButtonSize,
-          backgroundColor: pressed ? nc.backgroundPressed : cat.background,
+          // Android : le ripple suffit (pas de double retour au toucher).
+          backgroundColor:
+            pressed && Platform.OS !== "android" ? nc.backgroundPressed : cat.background,
           borderColor: cat.border,
         },
       ]}
@@ -100,9 +120,19 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
     >
       <View style={[styles.dot, { backgroundColor: running ? cat.primary : nc.textMuted }]} />
       <FontAwesome name="person-breastfeeding" size={16} color={accentText} />
-      <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={2}>
-        {display.label}
-      </Text>
+      <View style={styles.labelColumn}>
+        <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={2}>
+          {display.label}
+        </Text>
+        {display.expiryLabel && (
+          <Text
+            style={[styles.expiry, { color: display.expiringSoon ? nc.errorText : nc.textNormal }]}
+            numberOfLines={1}
+          >
+            {display.expiryLabel}
+          </Text>
+        )}
+      </View>
       <Text style={[styles.action, { color: accentText }]}>Reprendre</Text>
       <FontAwesome name="chevron-right" size={12} color={accentText} />
     </Pressable>
@@ -119,16 +149,25 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     marginBottom: 12,
+    // Borne le ripple Android aux coins arrondis (aucun badge ne déborde).
+    overflow: "hidden",
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  label: {
+  labelColumn: {
     flex: 1,
+    gap: 2,
+  },
+  label: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  expiry: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   action: {
     fontSize: 14,

@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { neutralColors } from '@/constants/dashboardColors';
+import { RIPPLE_CLIP } from "@/components/ui/pressFeedback";
 
 interface ModernActionButtonsProps {
   onCancel: () => void;
@@ -112,6 +113,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   button: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 24,

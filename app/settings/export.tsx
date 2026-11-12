@@ -1180,7 +1180,7 @@ export default function ExportScreen() {
             </Text>
             {(isExporting || isLoading) && (
               <View
-                style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}
+                style={[styles.autoDeleteButton, { backgroundColor: nc.destructive }]}
               >
                 <Text
                   style={[

@@ -2,7 +2,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { memo } from "react";
 import { StyleSheet, Text, Pressable, View } from "react-native";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 export type Gender = "male" | "female";
 
@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   button: {
+    ...RIPPLE_CLIP,
     flex: 1,
     minHeight: 56,
     flexDirection: "row",

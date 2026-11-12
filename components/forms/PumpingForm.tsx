@@ -1,12 +1,11 @@
-import { deleteToastMessage } from "@/utils/deleteOutcome";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -70,8 +69,8 @@ export function PumpingForm({
 }: PumpingFormProps) {
   const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -180,26 +179,18 @@ export function PumpingForm({
   };
 
   // Delete handler
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!activeChild?.id || !editData?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cette session ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Session supprimée"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur lors de la suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Session supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   return (
@@ -506,6 +497,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   breastToggleButton: {
+    ...RIPPLE_CLIP,
     paddingVertical: 8,
     paddingHorizontal: 18,
     borderRadius: 999,
@@ -524,6 +516,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
+    ...RIPPLE_CLIP,
     // Cible >= 44 pt (48 dp Android), utilisable d'une main.
     width: 48,
     height: 48,
@@ -552,6 +545,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -565,6 +559,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

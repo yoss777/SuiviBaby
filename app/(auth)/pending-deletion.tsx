@@ -1,5 +1,6 @@
 import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -24,6 +25,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function PendingDeletionScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  // « Annuler la suppression » est une action de récupération : couleur
+  // principale (tint / onTint), pas le rouge destructif.
+  const { tint, onTint } = Colors[colorScheme];
   const { user, loading, refreshUser, signOut } = useAuth();
   const [isCancelling, setIsCancelling] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -169,7 +173,7 @@ export default function PendingDeletionScreen() {
           <TouchableOpacity
             style={[
               styles.primaryButton,
-              { backgroundColor: nc.error },
+              { backgroundColor: tint },
               busy && styles.buttonDisabled,
             ]}
             onPress={handleCancelDeletion}
@@ -183,9 +187,9 @@ export default function PendingDeletionScreen() {
             }
           >
             {isCancelling ? (
-              <ActivityIndicator color={nc.white} />
+              <ActivityIndicator color={onTint} />
             ) : (
-              <Text style={[styles.primaryButtonText, { color: nc.white }]}>
+              <Text style={[styles.primaryButtonText, { color: onTint }]}>
                 Annuler la suppression
               </Text>
             )}

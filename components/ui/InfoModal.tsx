@@ -13,6 +13,7 @@ import { Colors, getReadableTextColor } from '@/constants/theme';
 import { elevation, radius, space } from "@/constants/tokens";
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DESTRUCTIVE_COLOR } from './ConfirmModal';
+import { RIPPLE_CLIP } from "@/components/ui/pressFeedback";
 import { pressedOpacity, usePressRipple } from './pressFeedback';
 
 interface InfoModalProps {
@@ -193,6 +194,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   modalButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     minHeight: 44,
     paddingVertical: 14,

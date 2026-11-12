@@ -119,35 +119,88 @@ describe("showUndoToast", () => {
     expect(queryByText("Info")).toBeNull();
   });
 
-  it("a second undo toast does not drop the first deletion", () => {
+  // Audit UI/UX V3, N-V3-4 : plusieurs annulations en attente, chacune sur
+  // son propre délai ; un autre toast ne valide plus rien en silence.
+  it("a second undo toast keeps the first deletion pending and undoable for its own 8 s", () => {
+    const { getByText, queryByText } = setup();
+    const firstUndo = jest.fn();
+    const first = jest.fn();
+    const secondUndo = jest.fn();
+    const second = jest.fn();
+    act(() => api.showUndoToast("Premier", firstUndo, first));
+    act(() => { jest.advanceTimersByTime(3000); });
+    act(() => api.showUndoToast("Second", secondUndo, second));
+    expect(first).not.toHaveBeenCalled();
+    // Le plus récent est affiché, avec le nombre d'autres annulations possibles.
+    expect(getByText("Second (+1)")).toBeTruthy();
+
+    // « Annuler » porte sur le plus récent, puis le premier reprend sa place.
+    fireEvent.press(getByText("Annuler"));
+    expect(secondUndo).toHaveBeenCalledTimes(1);
+    expect(getByText("Premier")).toBeTruthy();
+    fireEvent.press(getByText("Annuler"));
+    expect(firstUndo).toHaveBeenCalledTimes(1);
+    expect(queryByText("Annuler")).toBeNull();
+
+    act(() => { jest.advanceTimersByTime(20_000); });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("each pending deletion expires on its own schedule", () => {
     setup();
     const first = jest.fn();
     const second = jest.fn();
-    act(() => api.showUndoToast("Premier", jest.fn(), first, 4000));
-    act(() => api.showUndoToast("Second", jest.fn(), second, 4000));
+    act(() => api.showUndoToast("Premier", jest.fn(), first));
+    act(() => { jest.advanceTimersByTime(3000); });
+    act(() => api.showUndoToast("Second", jest.fn(), second));
+    act(() => { jest.advanceTimersByTime(5000); });
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
-    act(() => { jest.advanceTimersByTime(8000); });
+    expect(screen.getByText("Second")).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(3000); });
     expect(second).toHaveBeenCalledTimes(1);
-    expect(first).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Annuler")).toBeNull();
   });
 
-  it("a plain toast shown during the undo window does not drop the deletion", () => {
-    setup();
+  it("a plain toast shown during the undo window neither commits nor hides the undo", () => {
+    const { getByText } = setup();
+    const onUndo = jest.fn();
     const onExpire = jest.fn();
-    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
+    act(() => api.showUndoToast("Supprimé", onUndo, onExpire));
     act(() => api.showToast("Autre message"));
-    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(getByText("Autre message")).toBeTruthy();
+    expect(getByText("Supprimé")).toBeTruthy();
+    fireEvent.press(getByText("Annuler"));
+    expect(onUndo).toHaveBeenCalledTimes(1);
     act(() => { jest.advanceTimersByTime(10_000); });
-    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(onExpire).not.toHaveBeenCalled();
   });
 
-  it("an action toast shown during the undo window does not drop the deletion", () => {
+  it("an action toast shown during the undo window does not commit the deletion", () => {
     setup();
     const onExpire = jest.fn();
     act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
     act(() => api.showActionToast("Erreur", "Réessayer", jest.fn()));
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    act(() => { jest.advanceTimersByTime(ACTION_TOAST_MIN_MS); });
     expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("the background flush commits every pending deletion once", () => {
+    setup();
+    const first = jest.fn();
+    const second = jest.fn();
+    act(() => api.showUndoToast("Premier", jest.fn(), first));
+    act(() => api.showUndoToast("Second", jest.fn(), second));
+    act(() => appStateHandler?.("background"));
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(10_000); });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
   });
 
   it("a toast without onExpire is harmless in the background", () => {

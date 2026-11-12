@@ -2,6 +2,7 @@ import { radius, space } from "@/constants/tokens";
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
@@ -21,6 +22,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -118,7 +120,7 @@ const DeleteAction = React.memo(function DeleteAction({
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette mesure"
     >
-      <Ionicons name="trash-outline" size={20} color={neutralColors.white} />
+      <Ionicons name="trash-outline" size={20} color={neutralColors.onDestructive} />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
   );
@@ -282,7 +284,7 @@ export default function GrowthScreen() {
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const [precedingEvent, setPrecedingEvent] = useState<GrowthEventWithId | null>(null);
 
@@ -1149,6 +1151,14 @@ export default function GrowthScreen() {
             ];
           }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Mesure",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette mesure"
         >

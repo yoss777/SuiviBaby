@@ -1,6 +1,7 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
@@ -20,6 +21,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -176,13 +178,13 @@ const DeleteAction = React.memo(function DeleteAction({
   const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette activité"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -332,7 +334,7 @@ export default function ActivitiesScreen() {
     childId: activeChild?.id,
   });
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   // Detect ongoing promenade (iso sommeilEnCours in routines.tsx)
   const promenadeEnCours = useMemo(() => {
@@ -1192,6 +1194,14 @@ export default function ActivitiesScreen() {
             ];
           }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Activité",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette activité"
         >

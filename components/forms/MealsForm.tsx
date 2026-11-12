@@ -1,8 +1,7 @@
-import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { getAccentColors } from "@/components/ui/accentColors";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import {
   ALLERGENES_OPTIONS,
   BIBERON_TYPE_OPTIONS,
@@ -14,6 +13,7 @@ import {
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -62,7 +62,7 @@ import {
   NursingDraftBanner,
   NursingElapsedText,
 } from "@/components/forms/NursingTimerDisplay";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -118,6 +118,7 @@ const MAX_BIBERON_ML = 300;
 const DEFAULT_BIBERON_ML = 100;
 const BIBERON_STEP_ML = 10;
 const BIBERON_PRESETS_ML = [60, 90, 120, 150, 180] as const;
+export const NURSING_PAUSED_CLOSE_TOAST = "Tétée en pause — reprenez-la depuis l'accueil";
 
 // ============================================
 // COMPONENT
@@ -136,7 +137,8 @@ export function MealsForm({
   const ripple = usePressRipple();
   const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
@@ -348,11 +350,16 @@ export function MealsForm({
     saveNursingTimer(childId, timer);
   }, [timer, isEditing, childId]);
 
-  // Feuille fermée avec un côté en cours : le dire, le chrono continue.
+  // Feuille fermée avec une tétée non enregistrée : le dire. En marche, le
+  // chrono continue ; en pause, le brouillon attend sur l'Accueil (bandeau
+  // avec l'heure d'effacement) au lieu de disparaître en silence.
   useEffect(
     () => () => {
-      if (!isEditing && !submittedRef.current && timerRef.current.runningSide) {
+      if (isEditing || submittedRef.current) return;
+      if (timerRef.current.runningSide) {
         showToast("La tétée reste chronométrée : rouvrez Repas pour la terminer.");
+      } else if (hasNursingProgress(timerRef.current)) {
+        showToast(NURSING_PAUSED_CLOSE_TOAST, 4000);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -550,36 +557,25 @@ export function MealsForm({
     onSuccess();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer ce repas ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          const deletedText =
-            editData.type === "tetee"
-              ? "Tétée supprimée"
-              : editData.type === "biberon"
-                ? "Biberon supprimé"
-                : editData.type === "solide"
-                  ? "Repas solide supprimé"
-                  : null;
-          if (outcome === "queued" || deletedText) {
-            showToast(deleteToastMessage(outcome, deletedText ?? ""));
-          }
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "tetee"
+          ? "Tétée supprimée"
+          : editData.type === "biberon"
+            ? "Biberon supprimé"
+            : editData.type === "solide"
+              ? "Repas solide supprimé"
+              : "Repas supprimé",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -597,7 +593,7 @@ export function MealsForm({
             border: accentColors.softBorder,
             text: nc.textStrong,
             actionText: accentColors.softText,
-            mutedText: nc.textLight,
+            mutedText: nc.textNormal, // ≥ 4.5:1 sur softBg (textLight : 4,21:1)
           }}
           onResume={resumePendingDraft}
           onDiscard={discardNursingDraft}
@@ -1461,7 +1457,7 @@ export function MealsForm({
               <FontAwesome
                 name="thumbs-up"
                 size={20}
-                color={aime === true ? "white" : "#22c55e"}
+                color={aime === true ? "white" : nc.successText}
               />
               <Text
                 style={[
@@ -1494,7 +1490,7 @@ export function MealsForm({
               <FontAwesome
                 name="thumbs-down"
                 size={20}
-                color={aime === false ? "white" : "#ef4444"}
+                color={aime === false ? "white" : nc.errorText}
               />
               <Text
                 style={[
@@ -1618,6 +1614,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -1648,6 +1645,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   biberonTypeChip: {
+    ...RIPPLE_CLIP,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
@@ -1682,6 +1680,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
+    ...RIPPLE_CLIP,
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -1712,6 +1711,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   presetChip: {
+    ...RIPPLE_CLIP,
     minWidth: 52,
     minHeight: 44,
     paddingHorizontal: 12,
@@ -1756,6 +1756,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   chronoControlButton: {
+    ...RIPPLE_CLIP,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -1764,6 +1765,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chronoResetButton: {
+    ...RIPPLE_CLIP,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1794,6 +1796,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chronoAdjustButton: {
+    ...RIPPLE_CLIP,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1836,6 +1839,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   solideTypeChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1864,6 +1868,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   momentRepasChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1891,6 +1896,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantiteSolideChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1963,6 +1969,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   allergeneChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -1996,6 +2003,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   reactionChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -2024,6 +2032,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   aimeButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -2034,13 +2043,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
+  // Aplats sous texte blanc : green-700 (5.02:1) et destructive red-600 (4.83:1).
   aimeButtonActiveYes: {
-    backgroundColor: "#22c55e",
-    borderColor: "#16a34a",
+    backgroundColor: "#15803d",
+    borderColor: "#166534",
   },
   aimeButtonActiveNo: {
-    backgroundColor: "#ef4444",
-    borderColor: "#dc2626",
+    backgroundColor: neutralColors.destructive,
+    borderColor: "#b91c1c",
   },
   aimeButtonDisabled: {
     opacity: 0.5,
@@ -2063,6 +2073,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -2076,6 +2087,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

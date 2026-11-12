@@ -1,5 +1,4 @@
 // components/forms/DiapersForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
@@ -7,9 +6,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -20,7 +19,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useState } from "react";
 import { StyleSheet, Text, Pressable, View } from "react-native";
 import { toDateOr } from "@/utils/date";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -80,8 +79,8 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
 }) => {
   const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -219,33 +218,19 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     onSuccess?.();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    const typeLabel =
-      editData.type === "miction" ? "ce pipi" : "cette selle";
-    showConfirm(
-      "Supprimer",
-      `Voulez-vous vraiment supprimer ${typeLabel} ?`,
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(
-            deleteToastMessage(
-              outcome,
-              editData.type === "miction" ? "Pipi supprimé" : "Selle supprimée",
-            ),
-          );
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "miction" ? "Pipi supprimé" : "Selle supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -651,6 +636,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -682,6 +668,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   optionButton: {
+    ...RIPPLE_CLIP,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
@@ -715,6 +702,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -728,6 +716,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

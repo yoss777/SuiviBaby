@@ -9,7 +9,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, Pressable, View } from "react-native";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface MilestoneTimelineCardProps {
   milestones: MilestoneRef[];
@@ -159,6 +159,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
 
 const styles = StyleSheet.create({
   card: {
+    ...RIPPLE_CLIP,
     borderRadius: radius.md,
     borderWidth: 1,
     padding: space.sm,

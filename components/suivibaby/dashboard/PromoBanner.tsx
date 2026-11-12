@@ -15,7 +15,7 @@ import {
   Pressable,
   View,
 } from "react-native";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface PromoBannerProps {
   promo: Promotion;
@@ -228,6 +228,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   codeContainer: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

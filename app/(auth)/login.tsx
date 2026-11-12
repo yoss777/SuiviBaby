@@ -880,7 +880,10 @@ export default function LoginScreen() {
               (loading || isCoolingDown) && styles.mainButtonDisabled,
               !isLogin &&
                 (!hasConsented || !hasHealthConsent) &&
-                showConsentError && { backgroundColor: nc.error },
+                // Erreur de consentement : liseré rouge plutôt qu'un aplat
+                // #ef4444 sous texte blanc (3,76:1) ; le message d'erreur
+                // détaillé s'affiche sous les cases à cocher.
+                showConsentError && { borderWidth: 2, borderColor: nc.errorText },
             ]}
             onPress={handleAuth}
             disabled={loading || isCoolingDown}

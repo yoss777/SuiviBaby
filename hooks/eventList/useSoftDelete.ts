@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useState } from "react";
 
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { supprimerEvenement } from "@/services/eventsService";
 import { batchDeleteRun, type RunDeleteOptions } from "@/utils/deleteWithRetry";
 
@@ -42,7 +43,7 @@ export function useSoftDelete<T extends { id: string }>({
   onBatchStart,
 }: Options<T>) {
   const scheduleDelete = useDeleteWithUndo();
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({
     visible: false,
     ids: [],

@@ -10,7 +10,7 @@ import {
   hasAllergy,
   removeAllergy,
 } from "@/utils/childAllergies";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface Props {
   value: string[];
@@ -177,6 +177,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, lineHeight: 18, marginBottom: 8 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
   chip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -198,6 +199,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   addButton: {
+    ...RIPPLE_CLIP,
     minHeight: 44,
     minWidth: 44,
     paddingHorizontal: 16,

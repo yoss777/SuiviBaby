@@ -4,7 +4,12 @@ import { flatInDark, getReadableTextColor } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { PhotoImage } from "@/components/ui/PhotoImage";
-import { buildRowAccessibilityActions, handleRowAccessibilityAction, showRowActionMenu } from "@/utils/rowActions";
+import {
+  ROW_LONG_PRESS_HINT,
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
 import { softDeleteNow } from "@/utils/softDeleteNow";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -24,6 +29,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -65,7 +71,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
-import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -513,6 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rangeChip: {
+    ...RIPPLE_CLIP,
     paddingHorizontal: 14,
     paddingVertical: 8,
     minHeight: 44,
@@ -549,6 +556,7 @@ const styles = StyleSheet.create({
     width: 32,
   },
   filterChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -657,6 +665,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   card: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderRadius: 14,
     padding: 12,
@@ -1153,10 +1162,11 @@ const TimelineCard = React.memo(
           solideLikeTarget ? ` : ${solideLikeTarget}` : ""
         }`
       : null;
+    const likeNc = getNeutralColors(colorScheme);
     const solideLikeColor = hasSolideLike
       ? event.aime
-        ? "#22c55e"
-        : "#ef4444"
+        ? likeNc.successText
+        : likeNc.errorText
       : undefined;
     const visibleSolideIngredientsLabel =
       solideIngredientsLabel &&
@@ -1311,6 +1321,7 @@ const TimelineCard = React.memo(
           disabled={!onPress && !onDelete}
           accessibilityRole="button"
           accessibilityLabel={`${displayLabel}, ${formatTime(date)}${details ? `, ${details}` : ""}`}
+          accessibilityHint={onPress || onDelete ? ROW_LONG_PRESS_HINT : undefined}
           accessibilityActions={buildRowAccessibilityActions({
             canEdit: !!onPress,
             canDelete: !!onDelete,
@@ -1747,7 +1758,7 @@ export default function ChronoScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // P5: Soft-delete state
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const openSheet = useCallback(
     (props: Parameters<typeof openSheetRaw>[0]) => {

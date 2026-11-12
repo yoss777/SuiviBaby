@@ -4,6 +4,7 @@
 // chaque seconde, seuls ces petits textes se mettent à jour.
 import React, { memo, useEffect, useState } from "react";
 import {
+  AccessibilityInfo,
   StyleSheet,
   Text,
   Pressable,
@@ -106,12 +107,20 @@ export const NursingDraftBanner = memo(function NursingDraftBanner({
   const ripple = usePressRipple();
   const now = useTickingNow(draft.runningSide !== null, 15_000);
   const label = nursingDraftLabel(draft, now);
+  // Annonce à l'apparition et au changement d'état (en cours ↔ en pause)
+  // seulement : plus de région live, que TalkBack relisait à chaque minute.
+  const running = draft.runningSide !== null;
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility(label);
+    // Le libellé change à chaque minute : seul l'état déclenche l'annonce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
   return (
     <View
       style={[styles.banner, { backgroundColor: colors.background, borderColor: colors.border }]}
       accessibilityRole="summary"
     >
-      <Text style={[styles.bannerText, { color: colors.text }]} accessibilityLiveRegion="polite">
+      <Text style={[styles.bannerText, { color: colors.text }]}>
         {label}
       </Text>
       <View style={styles.bannerActions}>
