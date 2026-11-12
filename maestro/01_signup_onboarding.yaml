@@ -1,5 +1,5 @@
 # 01 — Onboarding + Signup Flow
-# Validates: 5 onboarding slides, biometric prompt, signup form
+# Validates: 3 onboarding slides, biometric prompt, signup form
 appId: com.tesfa.suivibaby
 
 ---
@@ -11,7 +11,7 @@ appId: com.tesfa.suivibaby
 # Slide 1 — Bienvenue
 - assertVisible: "Bienvenue sur Suivi Baby"
 
-# Swipe through slides 2-5
+# Swipe through slides 2-3
 - swipe:
     direction: LEFT
     duration: 400
@@ -20,17 +20,7 @@ appId: com.tesfa.suivibaby
 - swipe:
     direction: LEFT
     duration: 400
-- assertVisible: "Toute la famille connectée"
-
-- swipe:
-    direction: LEFT
-    duration: 400
-- assertVisible: "Données sécurisées"
-
-- swipe:
-    direction: LEFT
-    duration: 400
-- assertVisible: "Insights intelligents"
+- assertVisible: "Partagé et protégé"
 
 # Derniere slide — le bouton affiche "Commencer"
 - assertVisible: "Commencer"

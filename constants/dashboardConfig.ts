@@ -262,6 +262,18 @@ export const MOOD_EMOJIS: Record<number, string> = {
   5: "🥰",
 };
 
+/**
+ * Libellés en mots des humeurs (lus par VoiceOver/TalkBack à la place de
+ * « Humeur 1 sur 5 »). Même vocabulaire que Moments et le formulaire Jalons.
+ */
+export const MOOD_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: "Difficile",
+  2: "Mitigé",
+  3: "OK",
+  4: "Content",
+  5: "Rayonnant",
+};
+
 export const MOOD_OPTIONS: { value: 1 | 2 | 3 | 4 | 5; emoji: string }[] = [
   { value: 1, emoji: "😢" },
   { value: 2, emoji: "😐" },

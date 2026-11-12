@@ -1229,9 +1229,10 @@ export default function GrowthScreen() {
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1250,9 +1251,10 @@ export default function GrowthScreen() {
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1271,9 +1273,10 @@ export default function GrowthScreen() {
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>

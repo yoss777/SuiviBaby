@@ -27,8 +27,9 @@ export const homeStyles = StyleSheet.create({
     padding: 20,
     paddingBottom: 10,
   },
+  // Salutation réduite (28 → 22) : le résumé du jour reste le premier repère.
   greeting: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
     marginBottom: 4,
   },
@@ -79,7 +80,9 @@ export const homeStyles = StyleSheet.create({
   },
   moodEmojiButton: {
     flex: 1,
-    height: 44,
+    // minHeight et non height : l'emoji n'est pas coupé en grande taille de texte.
+    minHeight: 44,
+    paddingVertical: 4,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,

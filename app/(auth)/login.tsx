@@ -1,5 +1,4 @@
 // app/(auth)/login.tsx
-import { InfoModal } from "@/components/ui/InfoModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -47,6 +46,8 @@ import {
   View,
 } from "react-native";
 import { announceError } from "@/utils/a11yAnnounce";
+import { getAuthErrorInfo } from "@/utils/authErrors";
+import { validateNickname } from "@/utils/nickname";
 import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consentMessage";
 import { auth } from "../../config/firebase";
 import { configureLayoutAnimation } from "@/utils/motion";
@@ -79,6 +80,23 @@ const PASSWORD_RULES = [
     test: (value: string) => /[^A-Za-z0-9]/.test(value),
   },
 ];
+
+type FieldErrors = Partial<
+  Record<"email" | "userName" | "password" | "confirmPassword", string>
+>;
+
+/** Message d'erreur sous un champ : persistant, annoncé (alert + live region). */
+function FieldErrorText({ message, color }: { message: string; color: string }) {
+  return (
+    <Text
+      accessibilityRole="alert"
+      accessibilityLiveRegion="assertive"
+      style={[styles.inlineHint, { color }]}
+    >
+      {message}
+    </Text>
+  );
+}
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? "light";
@@ -129,11 +147,10 @@ export default function LoginScreen() {
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const scrollViewRef = useRef<ScrollViewInstance>(null);
-  const [infoModal, setInfoModal] = useState({
-    visible: false,
-    title: "",
-    message: "",
-  });
+  // Erreurs affichées en ligne sous le champ concerné (plus de modale) :
+  // le message reste visible pendant la correction et il est annoncé.
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   const emailValid = useMemo(() => EMAIL_REGEX.test(email.trim()), [email]);
 
@@ -156,6 +173,8 @@ export default function LoginScreen() {
   }, []);
 
   const resetAllFields = useCallback(() => {
+    setFieldErrors({});
+    setFormError(null);
     setEmail("");
     setUserName("");
     setHasConsented(false);
@@ -164,8 +183,26 @@ export default function LoginScreen() {
     resetPasswordFields();
   }, [resetPasswordFields]);
 
-  const showModal = useCallback((title: string, message: string) => {
-    setInfoModal({ visible: true, title, message });
+  const showFieldError = useCallback(
+    (field: keyof FieldErrors | "form", message: string) => {
+      if (field === "form") {
+        setFormError(message);
+      } else {
+        setFieldErrors((prev) => ({ ...prev, [field]: message }));
+      }
+      announceError(message);
+    },
+    [],
+  );
+
+  const clearFieldError = useCallback((field: keyof FieldErrors) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+    setFormError(null);
   }, []);
 
   // Charger le dernier email (#6), check biométrie (#1)
@@ -210,11 +247,11 @@ export default function LoginScreen() {
       const code = error?.code || "";
       if (code === "SIGN_IN_CANCELLED" || code === "12501" || code === "ERR_REQUEST_CANCELED") return;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal("Erreur", "La connexion avec Google a échoué. Veuillez réessayer.");
+      showFieldError("form", "La connexion avec Google a échoué. Réessayez, ou utilisez votre email.");
     } finally {
       setSocialLoading(false);
     }
-  }, [showModal]);
+  }, [showFieldError]);
 
   const handleAppleSignIn = useCallback(async () => {
     setSocialLoading(true);
@@ -227,11 +264,11 @@ export default function LoginScreen() {
       const code = error?.code || "";
       if (code === "ERR_REQUEST_CANCELED" || code === "ERR_CANCELED") return;
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal("Erreur", "La connexion avec Apple a échoué. Veuillez réessayer.");
+      showFieldError("form", "La connexion avec Apple a échoué. Réessayez, ou utilisez votre email.");
     } finally {
       setSocialLoading(false);
     }
-  }, [showModal]);
+  }, [showFieldError]);
 
   // Détection caps lock (#10)
   const handlePasswordKeyPress = useCallback((e: any) => {
@@ -355,30 +392,35 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!email.trim() || !password.trim()) {
-      showModal("Erreur", "Veuillez remplir tous les champs");
-      return;
+    setFormError(null);
+    const errors: FieldErrors = {};
+    if (!email.trim()) {
+      errors.email = "Entrez votre adresse email.";
+    } else if (!EMAIL_REGEX.test(email.trim())) {
+      errors.email = "Adresse email invalide. Vérifiez le format (ex. prenom@exemple.fr).";
     }
-
-    if (!isLogin && !userName.trim()) {
-      showModal("Erreur", "Veuillez entrer votre pseudo");
-      return;
-    }
-
     if (!isLogin) {
-      if (unmetRules.length > 0) {
-        showModal(
-          "Erreur",
-          "Mot de passe trop faible. Utilisez 8+ caractères, 1 chiffre, 1 caractère spécial.",
-        );
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        showModal("Erreur", "Les mots de passe ne correspondent pas");
-        return;
-      }
+      const nicknameError = validateNickname(userName);
+      if (nicknameError) errors.userName = nicknameError;
     }
+    if (!password.trim()) {
+      errors.password = "Entrez votre mot de passe.";
+    } else if (!isLogin && unmetRules.length > 0) {
+      errors.password = `Mot de passe trop faible. Il manque : ${unmetRules
+        .map((rule) => rule.label)
+        .join(", ")}.`;
+    }
+    if (!isLogin && !errors.password && password !== confirmPassword) {
+      errors.confirmPassword = "Les deux mots de passe ne correspondent pas.";
+    }
+    const firstError = Object.values(errors)[0];
+    if (firstError) {
+      setFieldErrors(errors);
+      announceError(firstError);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    setFieldErrors({});
 
     setLoading(true);
 
@@ -462,47 +504,19 @@ export default function LoginScreen() {
         }
       }
 
-      let errorMessage = "Une erreur est survenue";
-
-      switch (error.code) {
-        case "auth/invalid-email":
-          errorMessage = "Adresse email invalide";
-          break;
-        case "auth/user-disabled":
-          errorMessage = "Ce compte a été désactivé";
-          break;
-        case "auth/user-not-found":
-        case "auth/wrong-password":
-        case "auth/invalid-credential":
-          errorMessage = "Email ou mot de passe incorrect";
-          break;
-        case "auth/email-already-in-use":
-          errorMessage = "Cet email est déjà utilisé";
-          break;
-        case "auth/weak-password":
-          errorMessage = "Le mot de passe est trop faible";
-          break;
-        case "auth/network-request-failed":
-          errorMessage = "Erreur de connexion réseau";
-          break;
-        case "auth/too-many-requests":
-          errorMessage = "Trop de tentatives. Réessayez dans quelques minutes.";
-          break;
-        default:
-          errorMessage = "Une erreur est survenue. Veuillez réessayer.";
-      }
-
-      showModal("Erreur", errorMessage);
+      const info = getAuthErrorInfo(error?.code, isLogin ? "login" : "signup");
+      showFieldError(info.field, info.message);
     } finally {
       setLoading(false);
     }
-  }, [isLogin, hasConsented, hasHealthConsent, consentErrorMessage, email, password, userName, confirmPassword, unmetRules, showModal, resetAllFields, isCoolingDown, failedAttempts]);
+  }, [isLogin, hasConsented, hasHealthConsent, consentErrorMessage, email, password, userName, confirmPassword, unmetRules, showFieldError, resetAllFields, isCoolingDown, failedAttempts]);
 
 
   const handleEmailChange = useCallback((text: string) => {
     setEmail(text);
+    clearFieldError("email");
     if (!emailTouched && text.length > 0) setEmailTouched(true);
-  }, [emailTouched]);
+  }, [emailTouched, clearFieldError]);
 
   // Auto-scroll vers le champ actif (#4 Keyboard-aware)
   const handleInputFocus = useCallback((yOffset: number) => {
@@ -558,14 +572,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={[styles.container, { backgroundColor: nc.background }]}
     >
-      <InfoModal
-        visible={infoModal.visible}
-        title={infoModal.title}
-        message={infoModal.message}
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        onClose={() => setInfoModal({ visible: false, title: "", message: "" })}
-      />
       <ScrollView
         ref={scrollViewRef}
         contentContainerStyle={styles.scrollContent}
@@ -589,6 +595,58 @@ export default function LoginScreen() {
 
         {/* Formulaire */}
         <View style={styles.formContainer}>
+          {/* P1-22 : Apple / Google d'abord (un geste au lieu de 4 champs) */}
+          {/* Boutons de connexion sociale */}
+          <TouchableOpacity
+            style={[styles.socialButton, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}
+            onPress={handleGoogleSignIn}
+            disabled={loading || socialLoading}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Continuer avec Google"
+            accessibilityHint="Se connecter ou créer un compte avec Google"
+          >
+            {socialLoading ? (
+              <ActivityIndicator size="small" color={nc.textMuted} />
+            ) : (
+              <>
+                <FontAwesome name="google" size={20} color="#4285F4" />
+                <Text style={[styles.socialButtonText, { color: nc.textStrong }]}>
+                  Continuer avec Google
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {appleAvailable && (
+            <TouchableOpacity
+              style={[styles.socialButton, { backgroundColor: nc.textStrong }]}
+              onPress={handleAppleSignIn}
+              disabled={loading || socialLoading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Apple"
+              accessibilityHint="Se connecter ou créer un compte avec Apple"
+            >
+              <FontAwesome name="apple" size={22} color={nc.background} />
+              <Text style={[styles.socialButtonText, { color: nc.background }]}>
+                Continuer avec Apple
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Note légale pour connexion sociale */}
+          <Text style={[styles.socialLegalText, { color: nc.textLight }]}>
+            En continuant, vous acceptez les conditions et la politique de confidentialité.
+          </Text>
+
+          {/* Séparateur social */}
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
+            <Text style={[styles.dividerText, { color: nc.textLight }]}>ou</Text>
+            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
+          </View>
+
           {/* Champ Email */}
           <View>
             <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
@@ -619,15 +677,20 @@ export default function LoginScreen() {
                 />
               )}
             </View>
-            {emailTouched && email.trim().length > 0 && !emailValid && (
-              <Text style={[styles.inlineHint, { color: nc.errorText }]}>
-                Format d&apos;email invalide
-              </Text>
+            {fieldErrors.email ? (
+              <FieldErrorText message={fieldErrors.email} color={nc.errorText} />
+            ) : (
+              emailTouched && email.trim().length > 0 && !emailValid && (
+                <Text style={[styles.inlineHint, { color: nc.errorText }]}>
+                  Format d&apos;email invalide
+                </Text>
+              )
             )}
           </View>
 
           {/* Champ Pseudo (seulement en mode inscription) */}
           {!isLogin && (
+            <View>
             <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.inputIconContainer}>
                 <FontAwesome name="user" size={20} color={nc.textMuted} />
@@ -637,12 +700,22 @@ export default function LoginScreen() {
                 placeholder="Pseudo"
                 placeholderTextColor={nc.textLight}
                 value={userName}
-                onChangeText={setUserName}
+                onChangeText={(text) => {
+                  setUserName(text);
+                  clearFieldError("userName");
+                }}
                 autoCapitalize="words"
+                autoComplete="nickname"
+                textContentType="nickname"
                 editable={!loading}
                 accessibilityLabel="Pseudo"
+                accessibilityHint="2 caractères minimum, votre prénom suffit"
                 onFocus={() => handleInputFocus(150)}
               />
+            </View>
+            {fieldErrors.userName && (
+              <FieldErrorText message={fieldErrors.userName} color={nc.errorText} />
+            )}
             </View>
           )}
 
@@ -657,12 +730,23 @@ export default function LoginScreen() {
                 placeholder="Mot de passe"
                 placeholderTextColor={nc.textLight}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  clearFieldError("password");
+                }}
                 onKeyPress={handlePasswordKeyPress}
                 onFocus={() => handleInputFocus(200)}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
-                autoComplete="password"
+                // Inscription : « new-password » pour que iOS / Android
+                // proposent un mot de passe fort et l'enregistrent.
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                textContentType={isLogin ? "password" : "newPassword"}
+                passwordRules={
+                  isLogin
+                    ? undefined
+                    : "minlength: 8; required: digit; required: special;"
+                }
                 editable={!loading}
                 accessibilityLabel="Mot de passe"
               />
@@ -681,6 +765,9 @@ export default function LoginScreen() {
                 />
               </TouchableOpacity>
             </View>
+            {fieldErrors.password && (
+              <FieldErrorText message={fieldErrors.password} color={nc.errorText} />
+            )}
             {capsLockOn && (
               <View style={styles.capsLockRow}>
                 <FontAwesome name="triangle-exclamation" size={12} color={nc.todayAccent} />
@@ -726,6 +813,7 @@ export default function LoginScreen() {
           )}
 
           {!isLogin && (
+            <View>
             <View style={[styles.inputContainer, { backgroundColor: nc.backgroundCard }]}>
               <View style={styles.inputIconContainer}>
                 <FontAwesome name="lock" size={20} color={nc.textMuted} />
@@ -735,11 +823,15 @@ export default function LoginScreen() {
                 placeholder="Confirmer le mot de passe"
                 placeholderTextColor={nc.textLight}
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(text) => {
+                  setConfirmPassword(text);
+                  clearFieldError("confirmPassword");
+                }}
                 onFocus={() => handleInputFocus(300)}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
-                autoComplete="password"
+                autoComplete="new-password"
+                textContentType="newPassword"
                 editable={!loading}
                 accessibilityLabel="Confirmer le mot de passe"
               />
@@ -758,6 +850,25 @@ export default function LoginScreen() {
                 />
               </TouchableOpacity>
             </View>
+            {fieldErrors.confirmPassword && (
+              <FieldErrorText
+                message={fieldErrors.confirmPassword}
+                color={nc.errorText}
+              />
+            )}
+            </View>
+          )}
+
+          {/* Erreur générale (identifiants, réseau, compte social) : en ligne, annoncée */}
+          {formError && (
+            <Text
+              testID="auth-form-error"
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+              style={[styles.consentErrorText, { color: nc.errorText }]}
+            >
+              {formError}
+            </Text>
           )}
 
           {/* Bouton principal */}
@@ -793,57 +904,6 @@ export default function LoginScreen() {
               </>
             )}
           </TouchableOpacity>
-
-          {/* Séparateur social */}
-          <View style={styles.dividerRow}>
-            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
-            <Text style={[styles.dividerText, { color: nc.textLight }]}>ou</Text>
-            <View style={[styles.dividerLine, { backgroundColor: nc.borderLight }]} />
-          </View>
-
-          {/* Boutons de connexion sociale */}
-          <TouchableOpacity
-            style={[styles.socialButton, { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight }]}
-            onPress={handleGoogleSignIn}
-            disabled={loading || socialLoading}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Continuer avec Google"
-            accessibilityHint="Se connecter ou créer un compte avec Google"
-          >
-            {socialLoading ? (
-              <ActivityIndicator size="small" color={nc.textMuted} />
-            ) : (
-              <>
-                <FontAwesome name="google" size={20} color="#4285F4" />
-                <Text style={[styles.socialButtonText, { color: nc.textStrong }]}>
-                  Continuer avec Google
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {appleAvailable && (
-            <TouchableOpacity
-              style={[styles.socialButton, { backgroundColor: nc.textStrong }]}
-              onPress={handleAppleSignIn}
-              disabled={loading || socialLoading}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Continuer avec Apple"
-              accessibilityHint="Se connecter ou créer un compte avec Apple"
-            >
-              <FontAwesome name="apple" size={22} color={nc.background} />
-              <Text style={[styles.socialButtonText, { color: nc.background }]}>
-                Continuer avec Apple
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Note légale pour connexion sociale */}
-          <Text style={[styles.socialLegalText, { color: nc.textLight }]}>
-            En continuant, vous acceptez les conditions et la politique de confidentialité.
-          </Text>
 
           {/* Consentement aux conditions et politique de confidentialité */}
           {!isLogin && (

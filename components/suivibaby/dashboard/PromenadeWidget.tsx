@@ -5,6 +5,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { flatInDark } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useAnnounceActiveChange } from "@/hooks/useAnnounceActiveChange";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef } from "react";
@@ -60,6 +61,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     startTimestamp !== undefined
       ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
       : elapsedMinutesProp;
+  useAnnounceActiveChange(isActive, "Promenade démarrée", "Promenade terminée");
   const nc = getNeutralColors(colorScheme);
   const accentColor = eventColors.activite.dark;
   const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46";
@@ -172,6 +174,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           <TouchableOpacity
             onPress={handleStart}
             style={styles.playButton}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             accessibilityRole="button"
             accessibilityLabel="Démarrer une promenade"
           >
@@ -185,7 +188,8 @@ export const PromenadeWidget = memo(function PromenadeWidget({
         <>
           <Text
             style={[styles.timerValue, { color: textColor }]}
-            accessibilityLiveRegion="polite"
+            // Pas de live region : le minuteur change chaque minute et TalkBack
+            // l'annoncerait en continu. L'annonce se fait au démarrage/à l'arrêt.
           >
             {formatDuration(elapsedMinutes)}
           </Text>

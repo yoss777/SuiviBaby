@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { NICKNAME_MIN_LENGTH, validateNickname } from "@/utils/nickname";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,11 +53,12 @@ export default function ProfileScreen() {
   const handleSave = useCallback(async () => {
     const trimmedName = displayName.trim();
     setErrorMessage("");
-    if (trimmedName.length < 6) {
+    const nicknameError = validateNickname(trimmedName);
+    if (nicknameError) {
       setModalConfig({
         visible: true,
         title: "Pseudo invalide",
-        message: "Le pseudo doit contenir au moins 6 caractères.",
+        message: nicknameError,
       });
       return;
     }
@@ -88,7 +90,10 @@ export default function ProfileScreen() {
   }, [displayName, refreshUser, showToast, showActionToast]);
 
   const trimmedName = useMemo(() => displayName.trim(), [displayName]);
-  const isInvalid = useMemo(() => trimmedName.length < 6, [trimmedName]);
+  const isInvalid = useMemo(
+    () => validateNickname(trimmedName) !== null,
+    [trimmedName],
+  );
   const isUnchanged = useMemo(
     () => trimmedName === (userName ?? "").trim(),
     [trimmedName, userName],
@@ -136,7 +141,7 @@ export default function ProfileScreen() {
               />
               {isInvalid && (
                 <Text style={[styles.helperText, { color: nc.textLight }]}>
-                  6 caractères minimum.
+                  {NICKNAME_MIN_LENGTH} caractères minimum.
                 </Text>
               )}
             </View>

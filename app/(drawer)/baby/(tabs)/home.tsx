@@ -17,12 +17,17 @@ import {
   getNeutralColors,
   itemColors,
 } from "@/constants/dashboardColors";
-import { MOMENT_REPAS_LABELS, MOOD_EMOJIS } from "@/constants/dashboardConfig";
+import {
+  MOMENT_REPAS_LABELS,
+  MOOD_EMOJIS,
+  MOOD_LABELS,
+} from "@/constants/dashboardConfig";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useNightMode } from "@/hooks/useNightMode";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -182,6 +187,8 @@ export default function HomeDashboard() {
   const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
   const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
   const colorScheme = useColorScheme() ?? "light";
+  // La nuit (22 h – 7 h), l'Accueil va à l'essentiel : pas de conseils éditoriaux.
+  const { isNightMode } = useNightMode();
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
@@ -738,7 +745,7 @@ export default function HomeDashboard() {
 
   // Alimentation Group
   const alimentationGroup = useMemo((): {
-    summary: React.ReactNode;
+    summary: string;
     timeSinceTimestamp?: number;
     timeSinceLabel?: string;
     lastTime?: string;
@@ -813,8 +820,8 @@ export default function HomeDashboard() {
         : undefined;
 
     const summaryParts = [`${mealCount} repas`];
-    if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib`);
-    if (pompageQty > 0) summaryParts.push(`${pompageQty}ml pomp`);
+    if (biberonQty > 0) summaryParts.push(`${biberonQty}\u00A0ml biberon`);
+    if (pompageQty > 0) summaryParts.push(`${pompageQty}\u00A0ml tiré`);
     const summaryNode = summaryParts.join(" · ");
 
     return {
@@ -1682,7 +1689,10 @@ export default function HomeDashboard() {
         {/* En-tête avec salutation */}
         <View style={styles.headerRow}>
           <View style={styles.header}>
-            <Text style={[styles.greeting, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.greeting, { color: nc.textStrong }]}
+              accessibilityRole="header"
+            >
               {getGreeting()}
             </Text>
             <Text style={[styles.date, { color: nc.textLight }]}>
@@ -1700,53 +1710,12 @@ export default function HomeDashboard() {
           <FirstTrackGuide onDismiss={() => setShowFirstTrackGuide(false)} />
         )}
 
-        {/* Tips carousel — skeleton while loading (P1) */}
-        {isDataLoaded && smartContent.isLoading && (
-          <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
-            <View
-              style={{
-                height: 140,
-                borderRadius: 12,
-                backgroundColor: nc.borderLight,
-              }}
-              accessibilityLabel="Chargement des conseils"
-            />
-          </View>
-        )}
-
-        {/* Tips carousel — hero position */}
-        {isDataLoaded &&
-          !smartContent.isLoading &&
-          smartContent.availableTips.length > 0 && (
-            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-              <TipsCarousel
-                tips={smartContent.availableTips}
-                bookmarkedIds={smartContent.userContent.bookmarks}
-                onRead={(tip) => {
-                  openSheetRaw({
-                    ownerId: activeChild?.id ?? "",
-                    formType: "content" as const,
-                    tipId: tip.id,
-                  });
-                }}
-                onDismiss={smartContent.dismissTip}
-                onBookmark={(tipId) => {
-                  if (smartContent.userContent.bookmarks.includes(tipId)) {
-                    smartContent.removeBookmark(tipId);
-                  } else {
-                    smartContent.bookmarkTip(tipId);
-                  }
-                }}
-                colorScheme={colorScheme}
-              />
-            </View>
-          )}
-
         {/* Résumé du jour */}
         <View style={styles.section}>
           <View>
             <Text
               style={[styles.sectionTitle, { color: nc.textStrong }]}
+              accessibilityRole="header"
             >{`Résumé d'aujourd'hui`}</Text>
           </View>
 
@@ -1853,7 +1822,11 @@ export default function HomeDashboard() {
                   <Text style={[styles.moodLabel, { color: nc.textLight }]}>
                     Humeur du jour
                   </Text>
-                  <View style={styles.moodEmojisRow}>
+                  <View
+                    style={styles.moodEmojisRow}
+                    accessibilityRole="radiogroup"
+                    accessibilityLabel="Humeur du jour"
+                  >
                     {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
                       const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
                       const isSelected = todayMoodEvent?.humeur === moodValue;
@@ -1873,10 +1846,16 @@ export default function HomeDashboard() {
                           ]}
                           onPress={() => handleSetMood(moodValue)}
                           activeOpacity={0.7}
-                          accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                          accessibilityState={{ selected: isSelected }}
+                          accessibilityRole="radio"
+                          accessibilityLabel={MOOD_LABELS[moodValue]}
+                          accessibilityState={{ checked: isSelected }}
                         >
-                          <Text style={styles.moodEmojiText}>{emoji}</Text>
+                          <Text
+                            style={styles.moodEmojiText}
+                            maxFontSizeMultiplier={1.5}
+                          >
+                            {emoji}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -1886,6 +1865,37 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
         </View>
+
+        {/* Conseils : sous le résumé du jour (la question de 3 h du matin est
+            « à quelle heure était le dernier repas ? »), masqués la nuit. Pas de
+            squelette réservé : il disparaissait sans conseil et décalait l'écran. */}
+        {isDataLoaded &&
+          !isNightMode &&
+          !smartContent.isLoading &&
+          smartContent.availableTips.length > 0 && (
+            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+              <TipsCarousel
+                tips={smartContent.availableTips}
+                bookmarkedIds={smartContent.userContent.bookmarks}
+                onRead={(tip) => {
+                  openSheetRaw({
+                    ownerId: activeChild?.id ?? "",
+                    formType: "content" as const,
+                    tipId: tip.id,
+                  });
+                }}
+                onDismiss={smartContent.dismissTip}
+                onBookmark={(tipId) => {
+                  if (smartContent.userContent.bookmarks.includes(tipId)) {
+                    smartContent.removeBookmark(tipId);
+                  } else {
+                    smartContent.bookmarkTip(tipId);
+                  }
+                }}
+                colorScheme={colorScheme}
+              />
+            </View>
+          )}
 
         {/* Smart Content: Insights + Correlations + Milestones */}
         {isDataLoaded && !smartContent.isLoading && (

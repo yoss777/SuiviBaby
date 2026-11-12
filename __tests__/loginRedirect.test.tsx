@@ -236,3 +236,54 @@ describe("login.tsx : l inscription garde son propre parcours", () => {
     expect(mockRecordConsent).not.toHaveBeenCalled();
   });
 });
+
+describe("login.tsx : formulaire d inscription (P1-23)", () => {
+  async function fillSignup(
+    getByLabelText: (label: string) => any,
+    { nickname, confirm = "Passw0rd!" }: { nickname: string; confirm?: string },
+  ) {
+    fireEvent.press(getByLabelText("Créer un compte"));
+    fireEvent.changeText(getByLabelText("Adresse email"), "a@b.fr");
+    fireEvent.changeText(getByLabelText("Pseudo"), nickname);
+    fireEvent.changeText(getByLabelText("Mot de passe"), "Passw0rd!");
+    fireEvent.changeText(getByLabelText("Confirmer le mot de passe"), confirm);
+    fireEvent.press(getByLabelText("Accepter les conditions et la politique de confidentialité"));
+    fireEvent.press(
+      getByLabelText("Consentir au traitement des données de santé de mon enfant"),
+    );
+    fireEvent.press(getByLabelText("Créer mon compte"));
+    await flush();
+  }
+
+  it("accepte un pseudo court comme « Léa »", async () => {
+    setAuth(null);
+    (createUserWithEmailAndPassword as jest.Mock).mockResolvedValue({ user: { uid: "n2" } });
+    const { getByLabelText } = render(<LoginScreen />);
+    await flush();
+    await fillSignup(getByLabelText, { nickname: "Léa" });
+    expect(createUserWithEmailAndPassword).toHaveBeenCalledTimes(1);
+  });
+
+  it("affiche les erreurs en ligne sous le champ, sans créer le compte", async () => {
+    setAuth(null);
+    const { getByLabelText, getByText } = render(<LoginScreen />);
+    await flush();
+    await fillSignup(getByLabelText, { nickname: "L", confirm: "Autre1!" });
+    expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+    expect(getByText("Le pseudo doit contenir au moins 2 caractères.")).toBeTruthy();
+    expect(getByText("Les deux mots de passe ne correspondent pas.")).toBeTruthy();
+  });
+
+  it("propose un mot de passe fort à l inscription (new-password)", async () => {
+    setAuth(null);
+    const { getByLabelText } = render(<LoginScreen />);
+    await flush();
+    expect(getByLabelText("Mot de passe").props.autoComplete).toBe("current-password");
+    fireEvent.press(getByLabelText("Créer un compte"));
+    expect(getByLabelText("Mot de passe").props.autoComplete).toBe("new-password");
+    expect(getByLabelText("Mot de passe").props.textContentType).toBe("newPassword");
+    expect(getByLabelText("Confirmer le mot de passe").props.autoComplete).toBe(
+      "new-password",
+    );
+  });
+});

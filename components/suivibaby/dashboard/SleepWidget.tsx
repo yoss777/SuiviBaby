@@ -4,6 +4,7 @@ import {
   getNeutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useAnnounceActiveChange } from "@/hooks/useAnnounceActiveChange";
 import { flatInDark } from "@/constants/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -62,6 +63,11 @@ export const SleepWidget = memo(function SleepWidget({
     startTimestamp !== undefined
       ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
       : elapsedMinutesProp;
+  useAnnounceActiveChange(
+    isActive,
+    isNap ? "Sieste démarrée" : "Nuit démarrée",
+    "Sommeil terminé",
+  );
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
 
@@ -191,7 +197,8 @@ export const SleepWidget = memo(function SleepWidget({
         <>
           <Text
             style={[styles.timerValue, { color: sleepColors.textDark }]}
-            accessibilityLiveRegion="polite"
+            // Pas de live region : le minuteur change chaque minute et TalkBack
+            // l'annoncerait en continu. L'annonce se fait au démarrage/à l'arrêt.
           >
             {formatDuration(elapsedMinutes)}
           </Text>
