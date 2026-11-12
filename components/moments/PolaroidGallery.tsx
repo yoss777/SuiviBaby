@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
@@ -22,6 +23,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SPRING_V3 } from "@/constants/motion";
+import { useNightMode } from "@/hooks/useNightMode";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const POLAROID_WIDTH = (SCREEN_WIDTH - 48 - 12) / 2;
@@ -117,7 +119,16 @@ const PolaroidCard = ({
 
   // Pulse animation for notification badge
   const badgePulse = useSharedValue(1);
+  // Pulsation décorative : coupée la nuit et avec « Réduire les animations »
+  // (le badge reste affiché, statique).
+  const { animations } = useNightMode();
+  const pulseAllowed = animations.decorative;
   useEffect(() => {
+    if (!pulseAllowed) {
+      cancelAnimation(badgePulse);
+      badgePulse.value = 1;
+      return;
+    }
     if (notificationType) {
       badgePulse.value = withRepeat(
         withSequence(
@@ -128,7 +139,7 @@ const PolaroidCard = ({
         true,
       );
     }
-  }, [notificationType, badgePulse]);
+  }, [notificationType, badgePulse, pulseAllowed]);
 
   const badgeAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: badgePulse.value }],

@@ -48,6 +48,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { useNightMode } from "@/hooks/useNightMode";
 import { startLoop } from "@/utils/motion";
 import { toDate } from "@/utils/date";
 
@@ -322,8 +323,14 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
 
   // Pulse animation for notification badge
   const badgePulse = useRef(new RNAnimated.Value(1)).current;
+  // Pulsation décorative : coupée la nuit et avec « Réduire les animations ».
+  const { animations } = useNightMode();
+  const pulseAllowed = animations.decorative;
   useEffect(() => {
-    if (!notificationType) return;
+    if (!notificationType || !pulseAllowed) {
+      badgePulse.setValue(1);
+      return;
+    }
     const loop = RNAnimated.loop(
       RNAnimated.sequence([
         RNAnimated.timing(badgePulse, { toValue: 1.25, duration: 800, useNativeDriver: true }),
@@ -332,7 +339,7 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
     );
     startLoop(loop);
     return () => loop.stop();
-  }, [notificationType, badgePulse]);
+  }, [notificationType, badgePulse, pulseAllowed]);
 
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
