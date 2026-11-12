@@ -8,11 +8,27 @@ import { Platform } from 'react-native';
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#60a5fa'; // blue-400 — cohérent avec stats/charts en dark
 
-export const Colors: Record<string, { text: string; background: string; tint: string; icon: string; tabIconDefault: string; tabIconSelected: string }> = {
+type ThemeColors = {
+  text: string;
+  background: string;
+  tint: string;
+  /**
+   * Texte/icône posé sur un aplat `tint` (bouton plein). Blanc en clair
+   * (4.63:1 sur #0a7ea4), gris-900 en sombre : le blanc n'atteint que 2.54:1
+   * sur #60a5fa, #111827 y fait 6.98:1.
+   */
+  onTint: string;
+  icon: string;
+  tabIconDefault: string;
+  tabIconSelected: string;
+};
+
+export const Colors: Record<string, ThemeColors> = {
   light: {
     text: '#11181C',
     background: '#fff',
     tint: tintColorLight,
+    onTint: '#ffffff',
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
@@ -21,6 +37,7 @@ export const Colors: Record<string, { text: string; background: string; tint: st
     text: '#ECEDEE',
     background: '#111827', // bleu nuit (gray-900) — cohérent avec dashboardColors
     tint: tintColorDark,
+    onTint: '#111827',
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
@@ -61,4 +78,59 @@ export const Fonts = Platform.select({
 const DARK_FLAT = { elevation: 0, shadowOpacity: 0 } as const;
 export function flatInDark(scheme: string | null | undefined) {
   return scheme === "dark" ? DARK_FLAT : null;
+}
+
+// ============================================
+// CONTRASTE (WCAG 2.2)
+// ============================================
+
+function srgbChannel(v: number): number {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function parseHex(color: string): [number, number, number] | null {
+  if (!color || !color.startsWith("#")) return null;
+  let hex = color.slice(1);
+  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+  // #rrggbbaa : on ignore l'alpha (couleur supposée opaque)
+  if (hex.length === 8) hex = hex.slice(0, 6);
+  if (hex.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  return [
+    parseInt(hex.slice(0, 2), 16),
+    parseInt(hex.slice(2, 4), 16),
+    parseInt(hex.slice(4, 6), 16),
+  ];
+}
+
+/** Luminance relative WCAG d'une couleur hexadécimale (null si illisible). */
+export function relativeLuminance(color: string): number | null {
+  const rgb = parseHex(color);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map(srgbChannel);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Ratio de contraste WCAG entre deux couleurs hexadécimales (1 à 21). */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return 1;
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+const READABLE_LIGHT = "#ffffff";
+const READABLE_DARK = "#111827";
+
+/**
+ * Couleur de texte lisible sur un aplat quelconque : blanc ou gris-900,
+ * celui qui contraste le plus (WCAG). Pour les aplats `tint`/`todayAccent`,
+ * préférer les tokens `Colors[scheme].onTint` / `nc.onTodayAccent`.
+ */
+export function getReadableTextColor(background: string, fallback = READABLE_LIGHT): string {
+  if (relativeLuminance(background) === null) return fallback;
+  return contrastRatio(READABLE_LIGHT, background) >= contrastRatio(READABLE_DARK, background)
+    ? READABLE_LIGHT
+    : READABLE_DARK;
 }
