@@ -1,6 +1,8 @@
 // components/forms/DiapersForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -132,6 +134,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     setDateHeureDirty(true);
   }, []);
 
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ includeMiction, includeSelle, dateHeure, mictionCouleur, selleConsistance, selleQuantite });
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
@@ -139,7 +144,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     if (!includeMiction && !includeSelle) {
       showAlert(
         "Attention",
-        "Veuillez sélectionner au moins un type (miction ou selle)",
+        "Sélectionnez au moins un type : pipi ou selle.",
       );
       return;
     }
@@ -163,7 +168,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           mictionData,
           editData,
         );
-        successMessage = "Miction modifiée";
+        successMessage = "Pipi modifié";
       } else {
         const selleData = removeUndefined({
           type: "selle" as const,
@@ -200,9 +205,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
       }
       successMessage =
         includeMiction && includeSelle
-          ? "Miction et selle ajoutées"
+          ? "Pipi et selle ajoutés"
           : includeMiction
-            ? "Miction ajoutée"
+            ? "Pipi ajouté"
             : "Selle ajoutée";
     }
 
@@ -217,7 +222,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
     if (!editData || !activeChild?.id || isSubmitting) return;
 
     const typeLabel =
-      editData.type === "miction" ? "cette miction" : "cette selle";
+      editData.type === "miction" ? "ce pipi" : "cette selle";
     showConfirm(
       "Supprimer",
       `Voulez-vous vraiment supprimer ${typeLabel} ?`,
@@ -228,7 +233,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
           showToast(
             deleteToastMessage(
               outcome,
-              editData.type === "miction" ? "Miction supprimée" : "Selle supprimée",
+              editData.type === "miction" ? "Pipi supprimé" : "Selle supprimée",
             ),
           );
           onDelete?.();
@@ -271,7 +276,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               onPress={() => setIncludeMiction((prev) => !prev)}
               disabled={isSubmitting}
               activeOpacity={0.7}
-              accessibilityLabel="Miction"
+              accessibilityLabel="Pipi"
               accessibilityRole="button"
               accessibilityState={{
                 selected: includeMiction,
@@ -297,7 +302,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   isSubmitting && { color: nc.textLight },
                 ]}
               >
-                Miction
+                Pipi
               </Text>
             </TouchableOpacity>
 
@@ -536,10 +541,15 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
+        // Un repas, une couche ou un tirage ne se saisit pas au futur : évite
+        // un mauvais jour choisi d'un pouce ensommeillé.
+        maximumDate={new Date()}
       />
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -578,6 +588,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && (
           <TouchableOpacity

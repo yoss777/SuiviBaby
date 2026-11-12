@@ -56,6 +56,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 import { getDateTime, toDate } from "@/utils/date";
+import { formatDecimalFr, toDecimalInputFr } from "@/utils/frenchNumber";
 import { runAfterInteractions } from "@/utils/afterInteractions";
 
 // Enable LayoutAnimation on Android
@@ -353,7 +354,7 @@ export default function GrowthScreen() {
         const diff = current.poidsKg - prev.poidsKg;
         deltas.push({
           label: "kg",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -361,7 +362,7 @@ export default function GrowthScreen() {
         const diff = current.tailleCm - prev.tailleCm;
         deltas.push({
           label: "cm",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -369,7 +370,7 @@ export default function GrowthScreen() {
         const diff = current.teteCm - prev.teteCm;
         deltas.push({
           label: "PC",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -1016,9 +1017,9 @@ export default function GrowthScreen() {
   // ============================================
   const buildDetailParts = (event: GrowthEventWithId) => {
     const parts: { value: string; unit: string }[] = [];
-    if (event.poidsKg) parts.push({ value: `${event.poidsKg}`, unit: "kg" });
-    if (event.tailleCm) parts.push({ value: `${event.tailleCm}`, unit: "cm" });
-    if (event.teteCm) parts.push({ value: `${event.teteCm}`, unit: "cm PC" });
+    if (event.poidsKg) parts.push({ value: toDecimalInputFr(event.poidsKg), unit: "kg" });
+    if (event.tailleCm) parts.push({ value: toDecimalInputFr(event.tailleCm), unit: "cm" });
+    if (event.teteCm) parts.push({ value: toDecimalInputFr(event.teteCm), unit: "cm PC" });
     return parts;
   };
 
@@ -1225,7 +1226,7 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#7c3aed", 0.1) }]}>
                         <FontAwesome name="weight-scale" size={10} color="#7c3aed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.poidsKg} kg
+                          {toDecimalInputFr(event.poidsKg)} kg
                         </Text>
                       </View>
                       {delta && (
@@ -1246,7 +1247,7 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#2f80ed", 0.1) }]}>
                         <FontAwesome name="ruler-vertical" size={10} color="#2f80ed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.tailleCm} cm
+                          {toDecimalInputFr(event.tailleCm)} cm
                         </Text>
                       </View>
                       {delta && (
@@ -1267,7 +1268,7 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint(nc.warning, 0.1) }]}>
                         <MaterialCommunityIcons name="baby-face-outline" size={12} color={nc.warning} />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.teteCm} cm
+                          {toDecimalInputFr(event.teteCm)} cm
                         </Text>
                       </View>
                       {delta && (

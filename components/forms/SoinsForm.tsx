@@ -1,4 +1,8 @@
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { formatTemperatureFr } from "@/utils/frenchNumber";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -19,7 +23,7 @@ import {
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -331,27 +335,8 @@ export function SoinsForm({
     return 3;
   });
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -384,7 +369,7 @@ export function SoinsForm({
 
     const temperatureItems = [
       {
-        label: "36.8° axillaire",
+        label: "36,8 °C axillaire",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -394,7 +379,7 @@ export function SoinsForm({
         },
       },
       {
-        label: "38.5° rectale",
+        label: "38,5 °C rectale",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -404,7 +389,7 @@ export function SoinsForm({
         },
       },
       {
-        label: "37.5° frontale",
+        label: "37,5 °C frontale",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -598,6 +583,9 @@ export function SoinsForm({
     });
     if (alert) showTemperatureAlertDialog(showAlert, alert);
   };
+
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ includeTemperature, includeSymptome, dateHeure, note, temperatureValue, temperatureMode, medicamentName, medicamentDosage, medicamentVoie, symptomes, symptomeAutre, symptomeIntensite, vaccinName, vaccinDosage, vaccinCustomName, vitamineName, vitamineDosage, vitamineCustomName, gouttesCount });
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -1282,14 +1270,10 @@ export function SoinsForm({
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
+                {...repeatPress(() =>
                     setTemperatureValue((value) =>
                       Math.max(TEMP_BOUNDS.min, Math.round((value - 0.1) * 10) / 10),
-                    ),
-                  )
-                }
-                onPressOut={handlePressOut}
+                    ))}
                 disabled={isSubmitting || temperatureValue <= TEMP_BOUNDS.min}
                 accessibilityLabel="Diminuer la température"
               >
@@ -1306,7 +1290,7 @@ export function SoinsForm({
               <Text
                 style={[styles.quantityPickerValue, { color: nc.textStrong }]}
               >
-                {temperatureValue.toFixed(1)}°C
+                {formatTemperatureFr(temperatureValue)}
               </Text>
               <TouchableOpacity
                 style={[
@@ -1314,16 +1298,12 @@ export function SoinsForm({
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
                 ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
+                {...repeatPress(() =>
                     setTemperatureValue((value) =>
                       // Borné à TEMP_BOUNDS.max (43 °C, parité CF validateEventData). Au-delà,
                       // valeur non médicale + rejet serveur tardif.
                       Math.min(TEMP_BOUNDS.max, Math.round((value + 0.1) * 10) / 10),
-                    ),
-                  )
-                }
-                onPressOut={handlePressOut}
+                    ))}
                 disabled={isSubmitting || temperatureValue >= TEMP_BOUNDS.max}
                 accessibilityLabel="Augmenter la température"
               >
@@ -1741,12 +1721,8 @@ export function SoinsForm({
                     { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
                   ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
-                      setGouttesCount((value) => Math.max(0, value - 1)),
-                    )
-                  }
-                  onPressOut={handlePressOut}
+                  {...repeatPress(() =>
+                      setGouttesCount((value) => Math.max(0, value - 1)))}
                   disabled={isSubmitting}
                   accessibilityLabel="Diminuer les gouttes"
                 >
@@ -1772,14 +1748,10 @@ export function SoinsForm({
                     (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
                       styles.quantityButtonDisabled,
                   ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
+                  {...repeatPress(() =>
                       setGouttesCount((value) =>
                         Math.min(MAX_GOUTTES_COUNT, value + 1),
-                      ),
-                    )
-                  }
-                  onPressOut={handlePressOut}
+                      ))}
                   disabled={isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT}
                   accessibilityLabel="Augmenter les gouttes"
                 >
@@ -1847,6 +1819,8 @@ export function SoinsForm({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -1889,6 +1863,7 @@ export function SoinsForm({
             )}
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
           <TouchableOpacity
@@ -2131,9 +2106,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },

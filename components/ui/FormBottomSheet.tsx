@@ -6,6 +6,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetFooterProps,
   BottomSheetHandle,
   BottomSheetHandleProps,
   BottomSheetScrollView,
@@ -43,6 +44,13 @@ export interface FormBottomSheetProps {
   onClose?: () => void;
   snapPoints?: string[];
   initialIndex?: number;
+  /**
+   * Fourni quand la saisie doit être protégée : le fond ne ferme plus la
+   * feuille directement, il appelle ce rappel (qui peut demander confirmation).
+   */
+  onRequestDismiss?: () => void;
+  /** Pied collant (boutons d'action toujours visibles). */
+  footerComponent?: React.FC<BottomSheetFooterProps>;
 }
 
 // ============================================
@@ -68,6 +76,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       onClose,
       snapPoints: customSnapPoints,
       initialIndex = -1,
+      onRequestDismiss,
+      footerComponent,
     },
     ref,
   ) => {
@@ -98,13 +108,16 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
-          pressBehavior="close"
+          // Saisie protégée : le fond garde la feuille ouverte (retour au cran
+          // d'ouverture) et délègue la décision à onRequestDismiss.
+          pressBehavior={onRequestDismiss ? Math.max(0, initialIndex) : "close"}
+          onPress={onRequestDismiss}
           // Libellés français (défauts anglais de @gorhom/bottom-sheet)
           accessibilityLabel="Fermer le formulaire"
           accessibilityHint="Touchez deux fois pour fermer sans enregistrer"
         />
       ),
-      [],
+      [onRequestDismiss, initialIndex],
     );
 
     const renderHandle = useCallback(
@@ -133,6 +146,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         enableHandlePanningGesture={enablePanDownToClose}
         enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
+        footerComponent={footerComponent}
         onClose={onClose}
         backgroundStyle={{ backgroundColor: nc.backgroundCard }}
         handleComponent={renderHandle}

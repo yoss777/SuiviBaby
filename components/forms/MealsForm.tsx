@@ -1,5 +1,6 @@
 import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
@@ -37,6 +38,24 @@ import {
   View,
 } from "react-native";
 import { toDateOr } from "@/utils/date";
+import * as Haptics from "expo-haptics";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import {
+  adjustSide,
+  clearNursingTimer,
+  EMPTY_NURSING_TIMER,
+  hasNursingProgress,
+  loadLastBottle,
+  loadNursingTimer,
+  type NursingSide,
+  type NursingTimerState,
+  resetSide,
+  saveLastBottle,
+  saveNursingTimer,
+  sideSeconds,
+  toggleSide,
+} from "@/components/forms/nursingTimer";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -89,6 +108,16 @@ export interface MealsFormProps {
 // ============================================
 
 const MAX_BIBERON_ML = 300;
+const DEFAULT_BIBERON_ML = 100;
+const BIBERON_STEP_ML = 10;
+const BIBERON_PRESETS_ML = [60, 90, 120, 150, 180] as const;
+
+function formatDurationA11y(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const m = `${minutes} minute${minutes > 1 ? "s" : ""}`;
+  return seconds > 0 ? `${m} ${seconds} seconde${seconds > 1 ? "s" : ""}` : m;
+}
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -129,19 +158,36 @@ export function MealsForm({
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
-  // Tetee state
-  const [leftSeconds, setLeftSeconds] = useState(
-    editData?.dureeGauche ? editData.dureeGauche * 60 : 0,
-  );
-  const [rightSeconds, setRightSeconds] = useState(
-    editData?.dureeDroite ? editData.dureeDroite * 60 : 0,
-  );
-  const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
+  // Tetee state : chrono basé sur des horodatages, persisté par enfant (la
+  // tétée continue d'être chronométrée si la feuille se ferme).
+  const childId = activeChild?.id;
+  const [timer, setTimer] = useState<NursingTimerState>(() => ({
+    ...EMPTY_NURSING_TIMER,
+    leftSeconds: editData?.dureeGauche ? editData.dureeGauche * 60 : 0,
+    rightSeconds: editData?.dureeDroite ? editData.dureeDroite * 60 : 0,
+  }));
+  const [now, setNow] = useState(() => Date.now());
+  const runningSide = timer.runningSide;
+  const leftSeconds = sideSeconds(timer, "left", now);
+  const rightSeconds = sideSeconds(timer, "right", now);
+  const timerRef = useRef(timer);
+  useEffect(() => {
+    timerRef.current = timer;
+  }, [timer]);
+  const timerLoadedRef = useRef(isEditing);
+  const submittedRef = useRef(false);
 
   // Biberon state
   const [quantite, setQuantite] = useState<number>(
-    Math.min(editData?.quantite ?? 100, MAX_BIBERON_ML),
+    Math.min(editData?.quantite ?? DEFAULT_BIBERON_ML, MAX_BIBERON_ML),
   );
+  // Tant que la quantité n'a pas été touchée, elle peut être préremplie avec
+  // celle du dernier biberon de l'enfant (chargée de façon asynchrone).
+  const initialQuantiteRef = useRef(quantite);
+  const quantiteTouchedRef = useRef(isEditing);
+  useEffect(() => {
+    if (quantite !== initialQuantiteRef.current) quantiteTouchedRef.current = true;
+  }, [quantite]);
   const [typeBiberon, setTypeBiberon] = useState<BiberonEvent["typeBiberon"]>(
     editData?.typeBiberon ?? "lait_maternel",
   );
@@ -177,27 +223,8 @@ export function MealsForm({
     typeof editData?.aime === "boolean" ? editData.aime : undefined,
   );
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerTickRef = useRef<number | null>(null);
-
-  // ============================================
-  // HANDLERS - Long press acceleration
-  // ============================================
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback(
     (nextDate: Date) => {
@@ -214,56 +241,150 @@ export function MealsForm({
   // HANDLERS - Chronomètre tétée
   // ============================================
 
-  const toggleChrono = (side: "left" | "right") => {
-    setRunningSide((prev) => (prev === side ? null : side));
+  const updateTimer = useCallback(
+    (fn: (state: NursingTimerState, at: number) => NursingTimerState) => {
+      const at = Date.now();
+      setNow(at);
+      setTimer((prev) => fn(prev, at));
+    },
+    [],
+  );
+
+  const toggleChrono = (side: NursingSide) => {
+    const willRun = timer.runningSide !== side;
+    Haptics.impactAsync(
+      willRun ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+    ).catch(() => {});
+    updateTimer((state, at) => toggleSide(state, side, at));
   };
 
-  const resetChrono = (side: "left" | "right") => {
-    if (side === "left") setLeftSeconds(0);
-    else setRightSeconds(0);
-    setRunningSide((prev) => (prev === side ? null : prev));
+  // Remise à zéro : jamais d'un seul geste (bouton écarté de lecture/pause et
+  // confirmation), pour ne pas perdre un minutage en visant la pause.
+  const resetChrono = (side: NursingSide) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    showAlert(
+      side === "left" ? "Remettre à zéro le côté gauche ?" : "Remettre à zéro le côté droit ?",
+      "Le temps compté pour ce côté sera effacé.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Remettre à zéro",
+          style: "destructive",
+          onPress: () => updateTimer((state, at) => resetSide(state, side, at)),
+        },
+      ],
+    );
   };
 
-  // Stop chrono when changing meal type
+  const adjustChrono = (side: NursingSide, deltaSeconds: number) =>
+    updateTimer((state, at) => adjustSide(state, side, deltaSeconds, at));
+
+  const pauseChrono = useCallback(() => {
+    updateTimer((state, at) =>
+      state.runningSide ? toggleSide(state, state.runningSide, at) : state,
+    );
+  }, [updateTimer]);
+
+  // Quitter la tétée pour un autre type met le chrono en pause (temps conservé).
   useEffect(() => {
-    if (mealType !== "tetee") {
-      setRunningSide(null);
+    if (mealType !== "tetee" && timerRef.current.runningSide) {
+      pauseChrono();
     }
-  }, [mealType]);
+  }, [mealType, pauseChrono]);
 
-  // Chrono timer effect
+  // Rafraîchit l'affichage tant qu'un côté tourne (le temps vient des horodatages).
   useEffect(() => {
-    if (!runningSide || mealType !== "tetee" || isEditing) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      timerTickRef.current = null;
+    if (!runningSide) return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [runningSide]);
+
+  // Reprise d'un chrono laissé en cours (feuille fermée, app relancée) et
+  // préremplissage du biberon avec la dernière quantité donnée.
+  const [restoredVersion, setRestoredVersion] = useState(0);
+  const dateHeureDirtyRef = useRef(dateHeureDirty);
+  useEffect(() => {
+    dateHeureDirtyRef.current = dateHeureDirty;
+  }, [dateHeureDirty]);
+  useEffect(() => {
+    if (isEditing || !childId) {
+      timerLoadedRef.current = true;
       return;
     }
-
-    timerTickRef.current = Date.now();
-    timerIntervalRef.current = setInterval(() => {
-      const now = Date.now();
-      const lastTick = timerTickRef.current ?? now;
-      const deltaSeconds = Math.floor((now - lastTick) / 1000);
-      if (deltaSeconds <= 0) return;
-      timerTickRef.current = lastTick + deltaSeconds * 1000;
-      if (runningSide === "left") {
-        setLeftSeconds((prev) => prev + deltaSeconds);
-      } else {
-        setRightSeconds((prev) => prev + deltaSeconds);
-      }
-    }, 500);
-
+    let cancelled = false;
+    Promise.all([loadNursingTimer(childId), loadLastBottle(childId)]).then(
+      ([draft, lastBottle]) => {
+        if (cancelled) return;
+        timerLoadedRef.current = true;
+        let restored = false;
+        if (draft && !hasNursingProgress(timerRef.current)) {
+          setTimer(draft);
+          setNow(Date.now());
+          if (draft.runningSide) setMealType("tetee");
+          if (draft.startedAt && !dateHeureDirtyRef.current) {
+            setDateHeure(new Date(draft.startedAt));
+          }
+          restored = true;
+        } else {
+          // Un chrono démarré avant la fin du chargement est enregistré tout de suite.
+          saveNursingTimer(childId, timerRef.current);
+        }
+        if (lastBottle && !quantiteTouchedRef.current) {
+          setQuantite(Math.min(MAX_BIBERON_ML, Math.max(0, lastBottle.quantite)));
+          const lastType = lastBottle.typeBiberon;
+          if (lastType && BIBERON_TYPE_OPTIONS.some((o) => o.value === lastType)) {
+            setTypeBiberon(lastType as BiberonEvent["typeBiberon"]);
+          }
+          restored = true;
+        }
+        if (restored) setRestoredVersion((v) => v + 1);
+      },
+    );
     return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      timerTickRef.current = null;
+      cancelled = true;
     };
-  }, [runningSide, mealType, isEditing]);
+    // Chargé une seule fois par montage (la feuille est remontée à chaque ouverture).
+  }, [isEditing, childId]);
+
+  // Persistance du chrono à chaque changement (nouvelle tétée uniquement).
+  useEffect(() => {
+    if (isEditing || !childId || !timerLoadedRef.current || submittedRef.current) return;
+    saveNursingTimer(childId, timer);
+  }, [timer, isEditing, childId]);
+
+  // Feuille fermée avec un côté en cours : le dire, le chrono continue.
+  useEffect(
+    () => () => {
+      if (!isEditing && !submittedRef.current && timerRef.current.runningSide) {
+        showToast("La tétée reste chronométrée : rouvrez Repas pour la terminer.");
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Garde-fou de saisie. En création, le chrono n'en fait pas partie : il est
+  // déjà sauvegardé et repris à la réouverture, rien n'est perdu.
+  const { resetBaseline } = useFormDirtyGuard({
+    mealType,
+    dateHeure,
+    quantite,
+    typeBiberon,
+    typeSolide,
+    momentRepas,
+    ingredients,
+    quantiteSolide,
+    nouveauAliment,
+    nomNouvelAliment,
+    allergenes,
+    reaction,
+    aime,
+    leftSeconds: isEditing ? timer.leftSeconds : 0,
+    rightSeconds: isEditing ? timer.rightSeconds : 0,
+  });
+  useEffect(() => {
+    if (restoredVersion > 0) resetBaseline();
+  }, [restoredVersion, resetBaseline]);
 
   // ============================================
   // SUBMIT / DELETE
@@ -277,13 +398,17 @@ export function MealsForm({
     const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
 
     if (mealType === "tetee") {
-      const leftMinutes = Math.round(leftSeconds / 60);
-      const rightMinutes = Math.round(rightSeconds / 60);
+      // Temps figé à l'instant de l'envoi (le côté en cours compris).
+      const at = Date.now();
+      const finalLeft = sideSeconds(timer, "left", at);
+      const finalRight = sideSeconds(timer, "right", at);
+      const leftMinutes = Math.round(finalLeft / 60);
+      const rightMinutes = Math.round(finalRight / 60);
       const dataToSave = removeUndefined({
         type: mealType,
         quantite: null,
-        coteGauche: leftSeconds > 0,
-        coteDroit: rightSeconds > 0,
+        coteGauche: finalLeft > 0,
+        coteDroit: finalRight > 0,
         dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
         dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
         date: dateToSave,
@@ -300,6 +425,8 @@ export function MealsForm({
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
         showSuccess("meal", "Tétée enregistrée");
+        submittedRef.current = true;
+        clearNursingTimer(activeChild.id);
       }
     } else if (mealType === "biberon") {
       const dataToSave = removeUndefined({
@@ -320,6 +447,7 @@ export function MealsForm({
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
         showSuccess("meal", "Biberon enregistré");
+        saveLastBottle(activeChild.id, { quantite, typeBiberon });
       }
     } else if (mealType === "solide") {
       const trimmedIngredients = ingredients.trim();
@@ -470,7 +598,6 @@ export function MealsForm({
           ]}
           onPress={() => {
             setMealType("biberon");
-            setRunningSide(null);
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type biberon"
@@ -509,7 +636,6 @@ export function MealsForm({
           ]}
           onPress={() => {
             setMealType("solide");
-            setRunningSide(null);
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type solide"
@@ -591,22 +717,41 @@ export function MealsForm({
               style={[
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
-                isSubmitting && styles.buttonDisabled,
+                (isSubmitting || quantite <= 0) && styles.buttonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-              accessibilityLabel="Diminuer la quantité"
+              {...repeatPress(() =>
+                setQuantite((q) => Math.max(0, q - BIBERON_STEP_ML)),
+              )}
+              disabled={isSubmitting || quantite <= 0}
+              accessibilityRole="button"
+              accessibilityLabel={`Retirer ${BIBERON_STEP_ML} ml`}
+              accessibilityState={{ disabled: isSubmitting || quantite <= 0 }}
             >
               <Text
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
               >
-                -
+                −
               </Text>
             </TouchableOpacity>
-            <Text style={[styles.quantityValue, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.quantityValue, { color: nc.textStrong }]}
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel="Quantité du biberon"
+              accessibilityValue={{ text: `${quantite} millilitres` }}
+              accessibilityActions={[
+                { name: "increment", label: "Augmenter" },
+                { name: "decrement", label: "Diminuer" },
+              ]}
+              onAccessibilityAction={(event) => {
+                if (isSubmitting) return;
+                if (event.nativeEvent.actionName === "increment") {
+                  setQuantite((q) => Math.min(MAX_BIBERON_ML, q + BIBERON_STEP_ML));
+                } else if (event.nativeEvent.actionName === "decrement") {
+                  setQuantite((q) => Math.max(0, q - BIBERON_STEP_ML));
+                }
+              }}
+            >
               {quantite} ml
             </Text>
             <TouchableOpacity
@@ -616,14 +761,15 @@ export function MealsForm({
                 quantite >= MAX_BIBERON_ML && styles.quantityButtonDisabled,
                 isSubmitting && styles.buttonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantite((q) => Math.min(MAX_BIBERON_ML, q + 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                setQuantite((q) => Math.min(MAX_BIBERON_ML, q + BIBERON_STEP_ML)),
+              )}
               disabled={isSubmitting || quantite >= MAX_BIBERON_ML}
-              accessibilityLabel="Augmenter la quantité"
+              accessibilityRole="button"
+              accessibilityLabel={`Ajouter ${BIBERON_STEP_ML} ml`}
+              accessibilityState={{
+                disabled: isSubmitting || quantite >= MAX_BIBERON_ML,
+              }}
             >
               <Text
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
@@ -631,6 +777,40 @@ export function MealsForm({
                 +
               </Text>
             </TouchableOpacity>
+          </View>
+          {/* Quantités courantes : un seul toucher au lieu de dix appuis. */}
+          <View style={styles.presetRow}>
+            {BIBERON_PRESETS_ML.map((preset) => {
+              const selected = quantite === preset;
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetChip,
+                    { backgroundColor: nc.background, borderColor: nc.border },
+                    selected && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
+                    isSubmitting && styles.chipDisabled,
+                  ]}
+                  onPress={() => setQuantite(preset)}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${preset} ml`}
+                  accessibilityState={{ selected, disabled: isSubmitting }}
+                >
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      { color: selected ? accentColors.softText : nc.textNormal },
+                    ]}
+                  >
+                    {preset}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </>
       )}
@@ -642,233 +822,148 @@ export function MealsForm({
             Chronomètre tétée
           </Text>
           <View style={styles.chronoContainer}>
-            {/* Left side */}
-            <View
-              style={[
-                styles.chronoCard,
-                { backgroundColor: nc.background, borderColor: nc.border },
-              ]}
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-                Gauche
-              </Text>
-              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>
-                {formatDuration(leftSeconds)}
-              </Text>
-              {isEditing ? (
-                <View style={styles.chronoAdjustRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setLeftSeconds((prev) => Math.max(0, prev - 60)),
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text
-                    style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
-                  >
-                    {Math.round(leftSeconds / 60)} min
+            {(["left", "right"] as const).map((side) => {
+              const sideLabel = side === "left" ? "gauche" : "droit";
+              const seconds = side === "left" ? leftSeconds : rightSeconds;
+              const isRunning = runningSide === side;
+              const minutes = Math.round(seconds / 60);
+              return (
+                <View
+                  key={side}
+                  style={[
+                    styles.chronoCard,
+                    { backgroundColor: nc.background, borderColor: nc.border },
+                    isRunning && { borderColor: accentColors.softBorder },
+                  ]}
+                >
+                  <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
+                    {side === "left" ? "Gauche" : "Droit"}
                   </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setLeftSeconds((prev) => prev + 60))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.chronoControlRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      runningSide === "left" &&
-                        styles.chronoControlButtonActive,
-                    ]}
-                    onPress={() => toggleChrono("left")}
-                    disabled={isSubmitting}
-                  >
-                    <Ionicons
-                      name={runningSide === "left" ? "pause" : "play"}
-                      size={16}
-                      color={runningSide === "left" ? "white" : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      leftSeconds === 0 && styles.chronoControlButtonDisabled,
-                    ]}
-                    onPress={() => resetChrono("left")}
-                    disabled={isSubmitting || leftSeconds === 0}
-                  >
-                    <Ionicons
-                      name="refresh"
-                      size={16}
-                      color={leftSeconds === 0 ? nc.textMuted : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* Right side */}
-            <View
-              style={[
-                styles.chronoCard,
-                { backgroundColor: nc.background, borderColor: nc.border },
-              ]}
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-                Droit
-              </Text>
-              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>
-                {formatDuration(rightSeconds)}
-              </Text>
-              {isEditing ? (
-                <View style={styles.chronoAdjustRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setRightSeconds((prev) => Math.max(0, prev - 60)),
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
                   <Text
-                    style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
+                    style={[styles.chronoTime, { color: nc.textStrong }]}
+                    accessibilityLabel={`Côté ${sideLabel} : ${formatDurationA11y(seconds)}`}
                   >
-                    {Math.round(rightSeconds / 60)} min
+                    {formatDuration(seconds)}
                   </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setRightSeconds((prev) => prev + 60))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
+                  {isEditing ? (
+                    <View style={styles.chronoAdjustRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.chronoAdjustButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isSubmitting && styles.buttonDisabled,
+                        ]}
+                        {...repeatPress(() => adjustChrono(side, -60))}
+                        disabled={isSubmitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retirer une minute au côté ${sideLabel}`}
+                        accessibilityState={{ disabled: isSubmitting }}
+                      >
+                        <Text
+                          style={[
+                            styles.chronoAdjustButtonText,
+                            { color: nc.textStrong },
+                          ]}
+                        >
+                          −
+                        </Text>
+                      </TouchableOpacity>
+                      <Text
+                        style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
+                      >
+                        {minutes} min
+                      </Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.chronoAdjustButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isSubmitting && styles.buttonDisabled,
+                        ]}
+                        {...repeatPress(() => adjustChrono(side, 60))}
+                        disabled={isSubmitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ajouter une minute au côté ${sideLabel}`}
+                        accessibilityState={{ disabled: isSubmitting }}
+                      >
+                        <Text
+                          style={[
+                            styles.chronoAdjustButtonText,
+                            { color: nc.textStrong },
+                          ]}
+                        >
+                          +
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.chronoControlRow}>
+                      {/* Lecture / pause : grande cible, seule action principale. */}
+                      <TouchableOpacity
+                        style={[
+                          styles.chronoControlButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isRunning && {
+                            backgroundColor: accentColors.softBg,
+                            borderColor: accentColors.softBorder,
+                          },
+                        ]}
+                        onPress={() => toggleChrono(side)}
+                        disabled={isSubmitting}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isRunning
+                            ? `Mettre en pause le côté ${sideLabel}`
+                            : seconds > 0
+                              ? `Reprendre le côté ${sideLabel}`
+                              : `Démarrer le côté ${sideLabel}`
+                        }
+                        accessibilityState={{
+                          selected: isRunning,
+                          disabled: isSubmitting,
+                        }}
+                      >
+                        <Ionicons
+                          name={isRunning ? "pause" : "play"}
+                          size={24}
+                          color={isRunning ? accentColors.softText : nc.textStrong}
+                        />
+                      </TouchableOpacity>
+                      {/* Remise à zéro : petite, écartée, et confirmée. */}
+                      <TouchableOpacity
+                        style={[
+                          styles.chronoResetButton,
+                          seconds === 0 && styles.chronoControlButtonDisabled,
+                        ]}
+                        onPress={() => resetChrono(side)}
+                        disabled={isSubmitting || seconds === 0}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remettre à zéro le côté ${sideLabel}`}
+                        accessibilityHint="Demande une confirmation"
+                        accessibilityState={{
+                          disabled: isSubmitting || seconds === 0,
+                        }}
+                      >
+                        <Ionicons
+                          name="refresh"
+                          size={18}
+                          color={seconds === 0 ? nc.textMuted : nc.textLight}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-              ) : (
-                <View style={styles.chronoControlRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      runningSide === "right" &&
-                        styles.chronoControlButtonActive,
-                    ]}
-                    onPress={() => toggleChrono("right")}
-                    disabled={isSubmitting}
-                  >
-                    <Ionicons
-                      name={runningSide === "right" ? "pause" : "play"}
-                      size={16}
-                      color={runningSide === "right" ? "white" : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      rightSeconds === 0 && styles.chronoControlButtonDisabled,
-                    ]}
-                    onPress={() => resetChrono("right")}
-                    disabled={isSubmitting || rightSeconds === 0}
-                  >
-                    <Ionicons
-                      name="refresh"
-                      size={16}
-                      color={rightSeconds === 0 ? nc.textMuted : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+              );
+            })}
           </View>
 
           <View style={styles.chronoTotalRow}>
@@ -879,6 +974,11 @@ export function MealsForm({
               {formatDuration(totalSeconds)}
             </Text>
           </View>
+          {!isEditing && runningSide && (
+            <Text style={[styles.chronoHint, { color: nc.textLight }]}>
+              Le chrono continue même si vous fermez cette fenêtre.
+            </Text>
+          )}
         </>
       )}
 
@@ -1298,10 +1398,15 @@ export function MealsForm({
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
+        // Un repas, une couche ou un tirage ne se saisit pas au futur : évite
+        // un mauvais jour choisi d'un pouce ensommeillé.
+        maximumDate={new Date()}
       />
 
       {/* ACTION BUTTONS */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -1344,6 +1449,7 @@ export function MealsForm({
             )}
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
           <TouchableOpacity
@@ -1449,9 +1555,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1466,7 +1572,29 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   quantityValue: {
-    fontSize: 16,
+    fontSize: 20,
+    fontWeight: "700",
+    minWidth: 80,
+    textAlign: "center",
+  },
+  presetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  presetChip: {
+    minWidth: 52,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  presetChipText: {
+    fontSize: 15,
     fontWeight: "600",
   },
 
@@ -1496,19 +1624,28 @@ const styles = StyleSheet.create({
   },
   chronoControlRow: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    // Remise à zéro écartée du bouton lecture/pause.
+    gap: 20,
   },
   chronoControlButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  chronoControlButtonActive: {
-    backgroundColor: eventColors.meal.dark,
-    borderColor: eventColors.meal.dark,
+  chronoResetButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chronoHint: {
+    fontSize: 13,
+    textAlign: "center",
   },
   chronoControlButtonDisabled: {
     opacity: 0.5,
@@ -1519,9 +1656,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chronoAdjustButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
