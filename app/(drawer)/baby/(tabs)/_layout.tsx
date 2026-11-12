@@ -81,14 +81,14 @@ export default function BabyTabLayout() {
   const showPlusTab = canManageContent;
   const showStatsTab = !canManageContent;
 
-  // Onglets visibles, dans l'ordre : Accueil, Croissance, Moments, Journal,
+  // Onglets visibles, dans l'ordre : Accueil, Journal, Moments, Croissance,
   // puis Plus (gestionnaires) ou Stats (lecture seule). Le libellé annonce la
   // position (« Accueil, onglet 1 sur 5 ») ; iOS ne la donne pas toujours.
   const visibleTabs = [
     "home",
-    "croissance",
-    "moments",
     "chrono",
+    "moments",
+    "croissance",
     showPlusTab ? "plus" : "stats",
   ];
   const tabA11yLabel = (name: string, label: string) =>
@@ -127,14 +127,13 @@ export default function BabyTabLayout() {
             ),
           }}
         />
-
         <Tabs.Screen
-          name="croissance"
+          name="chrono"
           options={{
-            title: "Croissance",
-            tabBarAccessibilityLabel: tabA11yLabel("croissance", "Croissance"),
+            title: "Journal",
+            tabBarAccessibilityLabel: tabA11yLabel("chrono", "Journal"),
             tabBarIcon: ({ color }) => (
-              <FontAwesome size={TAB_ICON_SIZE} name="seedling" color={color} />
+              <FontAwesome size={TAB_ICON_SIZE} name="clock" color={color} />
             ),
           }}
         />
@@ -166,14 +165,13 @@ export default function BabyTabLayout() {
             ),
           }}
         />
-
         <Tabs.Screen
-          name="chrono"
+          name="croissance"
           options={{
-            title: "Journal",
-            tabBarAccessibilityLabel: tabA11yLabel("chrono", "Journal"),
+            title: "Croissance",
+            tabBarAccessibilityLabel: tabA11yLabel("croissance", "Croissance"),
             tabBarIcon: ({ color }) => (
-              <FontAwesome size={TAB_ICON_SIZE} name="clock" color={color} />
+              <FontAwesome size={TAB_ICON_SIZE} name="seedling" color={color} />
             ),
           }}
         />
@@ -236,6 +234,11 @@ export default function BabyTabLayout() {
         />
         <Tabs.Screen
           name="growth"
+          options={hiddenTabOptions}
+        />
+        {/* APERÇU TEMPORAIRE : écran Croissance fusionné (à supprimer après décision) */}
+        <Tabs.Screen
+          name="croissance-fusion"
           options={hiddenTabOptions}
         />
         {/* Galerie et gestion des accès : dans les onglets pour garder la barre

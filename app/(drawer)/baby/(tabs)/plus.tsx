@@ -107,6 +107,15 @@ const SECTIONS: Section[] = [
         route: "/baby/growth",
       },
       {
+        // APERÇU TEMPORAIRE (décision produit en attente) — à supprimer.
+        title: "Croissance (aperçu fusion)",
+        subtitle: "Courbe et mesures sur un seul écran",
+        icon: "flask",
+        color: "#8BCF9B",
+        darkColor: "#A8E6B8",
+        route: "/baby/croissance-fusion",
+      },
+      {
         title: "Activités",
         subtitle: "Tummy time, jeux, lecture, promenade...",
         icon: "play-circle",
