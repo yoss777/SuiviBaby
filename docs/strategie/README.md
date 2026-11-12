@@ -19,3 +19,4 @@ Travail produit avec les skills founder (board, competitors, offer, pricing, con
 ## UI/UX
 - [ux/UI_UX_AUDIT.md](ux/UI_UX_AUDIT.md) : audit initial (12/20).
 - [ux/UI_UX_AUDIT_V2.md](ux/UI_UX_AUDIT_V2.md) : après le premier tour de corrections (13/20).
+- [ux/UI_UX_AUDIT_V3.md](ux/UI_UX_AUDIT_V3.md) : après les trois tours de corrections (14/20, aucun P0).
