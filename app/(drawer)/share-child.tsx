@@ -11,7 +11,7 @@ import {
   deleteShareCode,
   listenToActiveShareCode,
 } from "@/services/childSharingService";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
@@ -429,7 +429,7 @@ export default function ShareChildScreen() {
             contentContainerStyle={styles.scrollContent}
           >
             <View style={dynamicStyles.header}>
-              <FontAwesome name="share-alt" size={48} color={nc.todayAccent} />
+              <FontAwesome name="share-nodes" size={48} color={nc.todayAccent} />
               <Text style={dynamicStyles.title}>Partager {childName}</Text>
               <Text style={dynamicStyles.subtitle}>
                 Invitez un proche à suivre votre enfant : il pourra tout consulter, aimer et commenter les photos
@@ -464,7 +464,7 @@ export default function ShareChildScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Supprimer le code de partage"
                     >
-                      <FontAwesome name="trash-alt" size={16} color={nc.error} />
+                      <FontAwesome name="trash-can" size={16} color={nc.error} />
                     </TouchableOpacity>
                   </View>
 
@@ -522,7 +522,7 @@ export default function ShareChildScreen() {
                   ) : (
                     <>
                       <FontAwesome
-                        name="plus-circle"
+                        name="circle-plus"
                         size={18}
                         color={nc.onTodayAccent}
                       />
@@ -604,7 +604,7 @@ export default function ShareChildScreen() {
               accessibilityRole="text"
               accessibilityLabel="Information de sécurité : un code ou une invitation donne toujours le rôle Proche, seul le propriétaire peut passer un proche en Parent"
             >
-              <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
+              <FontAwesome name="shield-halved" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
                 Un code ou une invitation donne toujours le rôle Proche : il lit
                 tout, aime et commente les photos. Vous pourrez le passer en

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
 import { listenToOwnerDeletionRequests } from "@/services/deletionRequestRepository";
@@ -381,7 +381,7 @@ export default function DeletionRequestsScreen() {
                     {/* Header */}
                     <View style={styles.requestHeader}>
                       <FontAwesome
-                        name="trash-alt"
+                        name="trash-can"
                         size={16}
                         color={getStatusColor(req.status)}
                       />

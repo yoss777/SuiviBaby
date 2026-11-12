@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
@@ -303,7 +303,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                     accessibilityRole="button"
                     accessibilityLabel={`Partager ${child.name}`}
                   >
-                    <FontAwesome name="share-alt" size={16} color={nc.todayAccent} />
+                    <FontAwesome name="share-nodes" size={16} color={nc.todayAccent} />
                   </TouchableOpacity>
                 )}
 
@@ -400,7 +400,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel="Ouvrir les paramètres"
         >
           <View style={styles.buttonContent}>
-            <FontAwesome name="cog" size={14} color={Colors[colorScheme].tint} />
+            <FontAwesome name="gear" size={14} color={Colors[colorScheme].tint} />
             <Text
               style={[styles.settingsText, { color: colorScheme === "dark" ? nc.white : Colors[colorScheme].tint }]}
             >
@@ -416,7 +416,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel="Déconnexion"
         >
           <View style={styles.buttonContent}>
-            <FontAwesome name="sign-out-alt" size={14} color={nc.error} />
+            <FontAwesome name="right-from-bracket" size={14} color={nc.error} />
             <Text style={[styles.signOutText, { color: nc.errorText }]}>
               Déconnexion
             </Text>

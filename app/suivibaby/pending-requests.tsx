@@ -1,6 +1,6 @@
 import { Colors } from "@/constants/theme";
 import { getPendingRequests } from "@/services/babyAttachmentService";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -100,7 +100,7 @@ export default function PendingRequestsScreen() {
         </View>
 
         <View style={styles.infoBox}>
-          <FontAwesome name="info-circle" size={14} color="#0c5460" />
+          <FontAwesome name="circle-info" size={14} color="#0c5460" />
           <Text style={styles.infoText}>
             Vérifiez votre email et cliquez sur le lien de validation pour
             confirmer le rattachement
@@ -145,7 +145,7 @@ export default function PendingRequestsScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <FontAwesome name="check-circle" size={64} color={neutralColors.successText} />
+            <FontAwesome name="circle-check" size={64} color={neutralColors.successText} />
             <Text style={styles.emptyTitle}>Aucune demande en attente</Text>
             <Text style={styles.emptyText}>
               Toutes vos demandes de rattachement ont été traitées

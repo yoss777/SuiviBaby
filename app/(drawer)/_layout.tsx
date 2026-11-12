@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { BabySwitcherModal } from "@/components/ui/BabySwitcherModal";
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";

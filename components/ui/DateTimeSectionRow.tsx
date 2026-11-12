@@ -3,7 +3,6 @@
 
 import { space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { memo, useMemo } from "react";
@@ -336,7 +335,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
       {/* Durée calculée */}
       {!isOngoing && showDuration && computedDuration != null && (
         <View style={styles.durationRow}>
-          <FontAwesome5 name="clock" size={12} color={nc.textMuted} />
+          <FontAwesome name="clock" size={12} color={nc.textMuted} />
           <Text style={[styles.durationText, { color: nc.textLight }]}>
             {`Durée : ${formatDuration(computedDuration)}`}
           </Text>

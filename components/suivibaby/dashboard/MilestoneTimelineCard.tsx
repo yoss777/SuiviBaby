@@ -8,7 +8,8 @@ import { MILESTONE_CATEGORY_COLORS } from "@/types/content";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, Pressable, View } from "react-native";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface MilestoneTimelineCardProps {
   milestones: MilestoneRef[];
@@ -33,6 +34,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
   onViewAll,
   colorScheme = "light",
 }: MilestoneTimelineCardProps) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
 
   const upcoming = useMemo(
@@ -52,13 +54,14 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
   if (upcoming.length === 0) return null;
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      android_ripple={ripple}
+      style={({ pressed }) => [
         styles.card,
         { backgroundColor: nc.backgroundCard, borderColor: nc.borderLight },
+        pressedOpacity(pressed),
       ]}
       onPress={handleViewAll}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel="Prochains jalons de développement"
       accessibilityHint="Appuyez pour voir tous les jalons"
@@ -150,7 +153,7 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
           );
         })}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 });
 

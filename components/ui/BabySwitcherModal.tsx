@@ -1,5 +1,5 @@
 import { radius, space } from "@/constants/tokens";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React from "react";
 import {
   Modal,

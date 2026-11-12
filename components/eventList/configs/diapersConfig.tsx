@@ -1,7 +1,7 @@
 // Config de l'écran Couches (mictions + selles) : deux écouteurs, ligne avec
 // icône/couleur par type et compteurs du jour.
 import { space } from "@/constants/tokens";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -202,7 +202,7 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   layout: { paddedFilterRow: true, calendarButtonInset: true, growList: true },
 
   empty: {
-    renderIcon: (color) => <FontAwesome name="tint" size={36} color={color} />,
+    renderIcon: (color) => <FontAwesome name="droplet" size={36} color={color} />,
     titleNone: "Aucune couche enregistrée",
     titleFiltered: "Aucune couche pour ce filtre",
     subtitle: "Suivez les changes de bébé",

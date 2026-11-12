@@ -1,7 +1,8 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { memo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, Pressable, View } from "react-native";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 export type Gender = "male" | "female";
 
@@ -46,6 +47,7 @@ export const GenderRadioGroup = memo(function GenderRadioGroup({
   disabled = false,
   accessibilityLabel = "Sexe",
 }: Props) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
 
   return (
@@ -58,16 +60,17 @@ export const GenderRadioGroup = memo(function GenderRadioGroup({
         const checked = value === option.value;
         const accent = GENDER_COLORS[option.value];
         return (
-          <TouchableOpacity
+          <Pressable
+            android_ripple={ripple}
             key={option.value}
-            style={[
+            style={({ pressed }) => [
               styles.button,
               { borderColor: nc.border, backgroundColor: nc.backgroundCard },
               checked && { borderColor: accent, backgroundColor: accent },
+              pressedOpacity(pressed),
             ]}
             onPress={() => onChange(option.value)}
             disabled={disabled}
-            activeOpacity={0.7}
             accessibilityRole="radio"
             accessibilityLabel={option.label}
             accessibilityState={{ checked, disabled }}
@@ -86,7 +89,7 @@ export const GenderRadioGroup = memo(function GenderRadioGroup({
             >
               {option.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>

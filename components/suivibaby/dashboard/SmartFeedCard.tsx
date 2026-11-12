@@ -11,9 +11,10 @@ import React, { memo, useCallback } from "react";
 import {
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface SmartFeedCardProps {
   tip: Tip;
@@ -32,6 +33,8 @@ export const SmartFeedCard = memo(function SmartFeedCard({
   onBookmark,
   colorScheme = "light",
 }: SmartFeedCardProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const nc = getNeutralColors(colorScheme);
   const accentColor = getTipCategoryColor(tip.category, colorScheme);
 
@@ -53,16 +56,17 @@ export const SmartFeedCard = memo(function SmartFeedCard({
   const catLabel = TIP_CATEGORY_LABELS[tip.category] ?? tip.category;
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      android_ripple={ripple}
+      style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: nc.backgroundCard,
           borderColor: accentColor + "30",
         },
+        pressedOpacity(pressed),
       ]}
       onPress={handleRead}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Conseil : ${tip.title}`}
       accessibilityHint="Appuyez pour lire l'article complet"
@@ -104,7 +108,9 @@ export const SmartFeedCard = memo(function SmartFeedCard({
 
           {/* Actions */}
           <View style={styles.actions}>
-            <TouchableOpacity
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={handleBookmark}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
@@ -120,8 +126,10 @@ export const SmartFeedCard = memo(function SmartFeedCard({
                 size={14}
                 color={isBookmarked ? accentColor : nc.textMuted}
               />
-            </TouchableOpacity>
-            <TouchableOpacity
+            </Pressable>
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={handleDismiss}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
@@ -129,7 +137,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
               accessibilityHint="Ce conseil ne sera plus affiché"
             >
               <FontAwesome name="xmark" size={14} color={nc.textMuted} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -176,7 +184,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 });
 

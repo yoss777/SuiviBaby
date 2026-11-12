@@ -1,7 +1,7 @@
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import {
   Modal,
@@ -67,7 +67,7 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>
-                <FontAwesome name="plus-circle" size={32} color={eventColors.pumping.dark} />
+                <FontAwesome name="circle-plus" size={32} color={eventColors.pumping.dark} />
               </View>
               <View style={styles.optionContent}>
                 <Text style={styles.optionTitle}>Créer un nouvel enfant</Text>

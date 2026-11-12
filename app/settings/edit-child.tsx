@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
@@ -538,7 +538,7 @@ export default function EditChildScreen() {
                           disabled={isDeleting}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <FontAwesome name="trash-alt" size={14} color={nc.error} />
+                          <FontAwesome name="trash-can" size={14} color={nc.error} />
                           <Text style={[styles.dangerButtonText, { color: nc.errorText }]}>{isDeleting ? "..." : "Supprimer"}</Text>
                         </TouchableOpacity>
                       </View>

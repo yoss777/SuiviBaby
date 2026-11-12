@@ -57,7 +57,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   UIManager,
   View,
 } from "react-native";
@@ -66,6 +65,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -878,16 +878,18 @@ interface FilterChipProps {
 
 const FilterChip = React.memo(
   ({ type, isActive, textColor, count, onPress }: FilterChipProps) => {
+    const ripple = usePressRipple();
     const config = FILTER_CONFIG[type];
     return (
-      <TouchableOpacity
-        style={[
+      <Pressable
+        android_ripple={ripple}
+        style={({ pressed }) => [
           styles.filterChip,
           { borderColor: config.color, borderWidth: 0 },
           isActive && { backgroundColor: `${config.color}1A` },
+          pressedOpacity(pressed, 0.8),
         ]}
         onPress={onPress}
-        activeOpacity={0.8}
         accessibilityRole="button"
         accessibilityLabel={`Filtre ${config.label}${count ? `, ${count} événements` : ""}`}
         accessibilityState={{ selected: isActive }}
@@ -929,7 +931,7 @@ const FilterChip = React.memo(
             </Text>
           </View>
         )}
-      </TouchableOpacity>
+      </Pressable>
     );
   },
 );
@@ -952,25 +954,32 @@ const RangeChip = React.memo(
     mutedColor,
     activeBg,
     onPress,
-  }: RangeChipProps) => (
-    <TouchableOpacity
-      style={[styles.rangeChip, isActive && { backgroundColor: activeBg }]}
-      onPress={onPress}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-      accessibilityLabel={`Afficher ${value} jours`}
-      accessibilityState={{ selected: isActive }}
-    >
-      <Text
-        style={[
-          styles.rangeChipText,
-          { color: isActive ? tintColor : mutedColor },
+  }: RangeChipProps) => {
+    const ripple = usePressRipple();
+    return (
+      <Pressable
+        android_ripple={ripple}
+        style={({ pressed }) => [
+          styles.rangeChip,
+          isActive && { backgroundColor: activeBg },
+          pressedOpacity(pressed, 0.8),
         ]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Afficher ${value} jours`}
+        accessibilityState={{ selected: isActive }}
       >
-        {value}j
-      </Text>
-    </TouchableOpacity>
-  ),
+        <Text
+          style={[
+            styles.rangeChipText,
+            { color: isActive ? tintColor : mutedColor },
+          ]}
+        >
+          {value}j
+        </Text>
+      </Pressable>
+    );
+  },
 );
 RangeChip.displayName = "RangeChip";
 
@@ -1088,6 +1097,7 @@ const TimelineCard = React.memo(
   }: TimelineCardProps) => {
     // S7.7 : abonnement à l'horloge seulement pour les événements en cours ;
     // un tick de minute ne re-rend plus les autres lignes.
+    const ripple = usePressRipple();
     const nowMs = useOngoingClock(isOngoingEvent(event));
     const colorScheme = useColorScheme() ?? "light";
     const date = toDate(event.date);
@@ -1281,9 +1291,12 @@ const TimelineCard = React.memo(
             </Text>
           )}
         </View>
-        <TouchableOpacity
-          style={[styles.card, flatInDark(colorScheme), { backgroundColor, borderColor }]}
-          activeOpacity={0.85}
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
+            styles.card, flatInDark(colorScheme), { backgroundColor, borderColor },
+            pressedOpacity(pressed, 0.85),
+          ]}
           onPress={onPress}
           onLongPress={
             onPress || onDelete
@@ -1399,7 +1412,7 @@ const TimelineCard = React.memo(
               </Text>
             </View>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   },
@@ -1668,6 +1681,7 @@ const ChronoSkeleton = React.memo(function ChronoSkeleton({
 // ============================================
 
 export default function ChronoScreen() {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { firebaseUser } = useAuth();
   const { openSheet: openSheetRaw } = useSheet();
@@ -2637,16 +2651,17 @@ export default function ChronoScreen() {
                         contentContainerStyle={styles.filterRow}
                       >
                         {/* "Tous" toggle chip */}
-                        <TouchableOpacity
-                          style={[
+                        <Pressable
+                          android_ripple={ripple}
+                          style={({ pressed }) => [
                             styles.filterChip,
                             { borderColor: colors.tint, borderWidth: 0 },
                             allSelected && {
                               backgroundColor: `${colors.tint}1A`,
                             },
+                            pressedOpacity(pressed, 0.8),
                           ]}
                           onPress={handleToggleAll}
-                          activeOpacity={0.8}
                           accessibilityRole="button"
                           accessibilityLabel={
                             allSelected
@@ -2676,7 +2691,7 @@ export default function ChronoScreen() {
                           >
                             Tous
                           </Text>
-                        </TouchableOpacity>
+                        </Pressable>
 
                         {ALL_FILTERS.map((type) => (
                           <FilterChip
