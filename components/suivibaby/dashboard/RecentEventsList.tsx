@@ -20,7 +20,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -30,6 +29,7 @@ import {
   showRowActionMenu,
 } from "@/utils/rowActions";
 import { getDateTime, isValidDate } from "@/utils/date";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // ============================================
 // TYPES
@@ -338,6 +338,7 @@ const EventRow = memo(function EventRow({
   buildDetails,
   getDayLabel,
 }: EventRowProps) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
   const borderColor = nc.borderLightAlpha;
   const textColor = nc.textLight;
@@ -528,15 +529,16 @@ const EventRow = memo(function EventRow({
                 textColor={textColor}
               />
             </View>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.recentCard, flatInDark(colorScheme),
                 {
                   borderColor,
                   backgroundColor: nc.backgroundCard,
                 },
+                pressedOpacity(pressed, 0.85),
               ]}
-              activeOpacity={0.85}
               onPress={onEventPress ? handlePress : undefined}
               // Alternative au glissement : appui long et actions d'accessibilité.
               onLongPress={
@@ -649,7 +651,7 @@ const EventRow = memo(function EventRow({
                   )}
                 </View>
               )}
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </ReanimatedSwipeable>
       </StaggeredRow>
@@ -678,6 +680,7 @@ function RecentEventsListComponent({
   buildDetails,
   getDayLabel,
 }: RecentEventsListProps) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
   const { currentTime: tickTime } = useMinuteTick(currentTimeProp === undefined);
   const currentTime = currentTimeProp ?? tickTime;
@@ -709,9 +712,10 @@ function RecentEventsListComponent({
         >
           Évènements récents
         </Text>
-        <TouchableOpacity
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => pressedOpacity(pressed, 0.8)}
           onPress={onViewAllPress}
-          activeOpacity={0.8}
           accessibilityRole="link"
           accessibilityLabel="Voir tous les événements"
         >
@@ -720,7 +724,7 @@ function RecentEventsListComponent({
           >
             Voir tout
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {showHint && events.length > 0 && (

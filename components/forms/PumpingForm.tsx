@@ -1,4 +1,5 @@
 import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -27,7 +28,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 
@@ -67,6 +68,7 @@ export function PumpingForm({
   editData,
   onDelete,
 }: PumpingFormProps) {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -205,14 +207,16 @@ export function PumpingForm({
       {/* Breast selection */}
       <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Seins</Text>
       <View style={styles.breastToggleRow}>
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useLeftBreast && {
               backgroundColor: accentColors.softBg,
               borderColor: accentColors.softBorder,
             },
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={toggleLeftBreast}
           disabled={isSubmitting}
@@ -234,15 +238,17 @@ export function PumpingForm({
           >
             Gauche
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
+        </Pressable>
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useRightBreast && {
               backgroundColor: accentColors.softBg,
               borderColor: accentColors.softBorder,
             },
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={toggleRightBreast}
           disabled={isSubmitting}
@@ -264,7 +270,7 @@ export function PumpingForm({
           >
             Droit
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Left breast quantity */}
@@ -274,11 +280,13 @@ export function PumpingForm({
             Quantité Sein Gauche
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() =>
                   setQuantiteGauche((q) => Math.max(0, q - 5)))}
@@ -294,17 +302,19 @@ export function PumpingForm({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {quantiteGauche} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
@@ -319,7 +329,7 @@ export function PumpingForm({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -331,11 +341,13 @@ export function PumpingForm({
             Quantité Sein Droit
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() =>
                   setQuantiteDroite((q) => Math.max(0, q - 5)))}
@@ -351,17 +363,19 @@ export function PumpingForm({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {quantiteDroite} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
@@ -376,7 +390,7 @@ export function PumpingForm({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -398,11 +412,13 @@ export function PumpingForm({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -411,12 +427,14 @@ export function PumpingForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
+          </Pressable>
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -439,20 +457,24 @@ export function PumpingForm({
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
             <FontAwesome6 name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

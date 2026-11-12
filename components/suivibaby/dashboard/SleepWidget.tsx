@@ -16,11 +16,12 @@ import {
   Easing,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
 import { isNightHour } from "@/utils/decorativeMotion";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -61,6 +62,7 @@ export const SleepWidget = memo(function SleepWidget({
   sharedPulseAnim,
 }: SleepWidgetProps) {
   // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const ripple = usePressRipple();
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
@@ -221,8 +223,12 @@ export const SleepWidget = memo(function SleepWidget({
       {isActive ? (
         showStopButton && (
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: sleepColors.primary }]}
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
+                styles.actionButton, { backgroundColor: sleepColors.primary },
+                pressedOpacity(pressed, 0.2),
+              ]}
               onPress={handleStop}
               accessibilityRole="button"
               accessibilityLabel="Terminer le sommeil"
@@ -236,18 +242,19 @@ export const SleepWidget = memo(function SleepWidget({
               >
                 Terminer
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             {onEditSleep && (
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.editButton,
                   {
                     backgroundColor: sleepColors.buttonSecondaryBg,
                     borderColor: `${sleepColors.primary}40`,
                   },
+                  pressedOpacity(pressed),
                 ]}
                 onPress={handleEdit}
-                activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="Ajuster le sommeil avant d'enregistrer"
               >
@@ -256,20 +263,22 @@ export const SleepWidget = memo(function SleepWidget({
                   size={15}
                   color={sleepColors.primary}
                 />
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
         )
       ) : (
         <View style={styles.buttonsRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.startButton,
               {
                 backgroundColor: preferNight
                   ? sleepColors.buttonSecondaryBg
                   : sleepColors.primary,
               },
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={() => handleStart(true)}
             accessibilityRole="button"
@@ -291,15 +300,17 @@ export const SleepWidget = memo(function SleepWidget({
             >
               Sieste
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
+          </Pressable>
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.startButton,
               {
                 backgroundColor: preferNight
                   ? sleepColors.primary
                   : sleepColors.buttonSecondaryBg,
               },
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={() => handleStart(false)}
             accessibilityRole="button"
@@ -321,7 +332,7 @@ export const SleepWidget = memo(function SleepWidget({
             >
               Nuit
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       )}
     </Animated.View>

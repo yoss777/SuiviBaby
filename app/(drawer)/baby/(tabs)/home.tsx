@@ -71,7 +71,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
@@ -79,6 +79,7 @@ import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
 import { HomeMilestoneCelebration } from "@/components/suivibaby/home/HomeMilestoneCelebration";
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 import { startLoop } from "@/utils/motion";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -183,6 +184,8 @@ interface TodayStats {
 // ============================================
 
 export default function HomeDashboard() {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { push: guardedPush } = useGuardedNavigation();
   const { activeChild, reminderPreferences } = useBaby();
   const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
@@ -1819,9 +1822,10 @@ export default function HomeDashboard() {
                       const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
                       const isSelected = todayMoodEvent?.humeur === moodValue;
                       return (
-                        <TouchableOpacity
+                        <Pressable
+                          android_ripple={ripple}
                           key={key}
-                          style={[
+                          style={({ pressed }) => [
                             styles.moodEmojiButton,
                             { backgroundColor: nc.backgroundCard },
                             isSelected && [
@@ -1831,9 +1835,9 @@ export default function HomeDashboard() {
                                 borderColor: cat.moments.primary,
                               },
                             ],
+                            pressedOpacity(pressed),
                           ]}
                           onPress={() => handleSetMood(moodValue)}
-                          activeOpacity={0.7}
                           accessibilityRole="radio"
                           accessibilityLabel={MOOD_LABELS[moodValue]}
                           accessibilityState={{ checked: isSelected }}
@@ -1844,7 +1848,7 @@ export default function HomeDashboard() {
                           >
                             {emoji}
                           </Text>
-                        </TouchableOpacity>
+                        </Pressable>
                       );
                     })}
                   </View>
@@ -1947,14 +1951,16 @@ export default function HomeDashboard() {
             <Text style={[styles.milestonesModalTitle, { color: nc.textStrong }]}>
               {"Jalons de développement"}
             </Text>
-            <TouchableOpacity
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={() => setShowMilestonesModal(false)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
             >
               <Ionicons name="close" size={24} color={nc.textStrong} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <MilestoneTimeline
             milestones={smartContent.allMilestones}

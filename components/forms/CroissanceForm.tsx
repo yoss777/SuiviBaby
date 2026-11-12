@@ -1,5 +1,6 @@
 // components/forms/CroissanceForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { parseDecimalFr, toDecimalInputFr } from "@/utils/frenchNumber";
 import { SheetFooter } from "@/components/forms/SheetFooter";
@@ -29,7 +30,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { toDateOr } from "@/utils/date";
@@ -84,6 +85,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   editData,
   onDelete,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -290,11 +292,13 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -303,13 +307,15 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -325,15 +331,17 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.deleteButton,
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
@@ -341,7 +349,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

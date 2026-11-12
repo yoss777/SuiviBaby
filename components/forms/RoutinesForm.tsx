@@ -1,5 +1,6 @@
 // components/forms/RoutinesForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
 import { SheetFooter } from "@/components/forms/SheetFooter";
@@ -31,7 +32,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 
@@ -172,6 +173,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   sommeilEnCours,
   onSheetTypeChange,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -572,18 +574,19 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               ? item.key === "bain" || item.key === "nez"
               : false;
         return (
-          <TouchableOpacity
+          <Pressable
+            android_ripple={ripple}
             key={item.key}
-            style={[
+            style={({ pressed }) => [
               styles.typeChip,
               {
                 backgroundColor: active ? chipActiveColors.bg : nc.background,
                 borderColor: active ? chipActiveColors.border : nc.border,
               },
               isDisabled && styles.typeChipDisabled,
+              pressedOpacity(pressed),
             ]}
             disabled={isDisabled || isSubmitting}
-            activeOpacity={0.7}
             onPress={() => handleSelectType(item.key as any)}
             accessibilityLabel={item.label}
             accessibilityRole="button"
@@ -599,7 +602,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               {item.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -615,9 +618,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         <Text style={[styles.chipLabel, { color: nc.textLight }]}>Lieu</Text>
         <View style={styles.chipRow}>
           {LOCATION_OPTIONS.map((option) => (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={option}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
                   backgroundColor:
@@ -625,6 +629,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
                   borderColor:
                     location === option ? chipActiveColors.border : nc.border,
                 },
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() =>
                 setLocation(location === option ? undefined : option)
@@ -648,7 +653,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               >
                 {option}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -657,9 +662,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         <Text style={[styles.chipLabel, { color: nc.textLight }]}>Qualité</Text>
         <View style={styles.chipRow}>
           {QUALITY_OPTIONS.map((option) => (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={option}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
                   backgroundColor:
@@ -667,6 +673,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
                   borderColor:
                     quality === option ? chipActiveColors.border : nc.border,
                 },
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() =>
                 setQuality(quality === option ? undefined : option)
@@ -688,7 +695,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               >
                 {option}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -745,9 +752,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         <Text style={[styles.chipLabel, { color: nc.textLight }]}>Méthode</Text>
         <View style={styles.chipRow}>
           {METHODE_NEZ_OPTIONS.map((option) => (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={option.value}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
                   backgroundColor:
@@ -759,6 +767,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
                       ? chipActiveColors.border
                       : nc.border,
                 },
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() =>
                 setMethodeNez(
@@ -784,7 +793,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               >
                 {option.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -795,9 +804,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         </Text>
         <View style={styles.chipRow}>
           {RESULTAT_NEZ_OPTIONS.map((option) => (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={option.value}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
                   backgroundColor:
@@ -809,6 +819,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
                       ? chipActiveColors.border
                       : nc.border,
                 },
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() =>
                 setResultatNez(
@@ -834,7 +845,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               >
                 {option.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </View>
@@ -877,11 +888,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           Durée (minutes)
         </Text>
         <View style={styles.quantityPickerRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.quantityButton,
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             {...repeatPress(() =>
                 setDureeBain((value) => Math.max(0, value - 5)))}
@@ -897,15 +910,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               -
             </Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
             {dureeBain} min
           </Text>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.quantityButton,
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             {...repeatPress(() => setDureeBain((value) => Math.min(BAIN_DUREE_MAX, value + 5)))}
             disabled={isSubmitting}
@@ -920,7 +935,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               +
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
 
@@ -929,11 +944,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
           {`Température de l'eau (°C)`}
         </Text>
         <View style={styles.quantityPickerRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.quantityButton,
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             {...repeatPress(() =>
                 // Borne UI 32-42°C : couvre les usages réels (chauffe-eau
@@ -951,15 +968,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               -
             </Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
             {formatTemperatureFr(temperatureEau)}
           </Text>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.quantityButton,
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             {...repeatPress(() =>
                 setTemperatureEau((value) => Math.min(42, value + 0.5)))}
@@ -975,7 +994,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               +
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
 
@@ -1042,11 +1061,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -1055,13 +1076,15 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: chipActiveColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -1077,13 +1100,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
@@ -1092,7 +1119,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

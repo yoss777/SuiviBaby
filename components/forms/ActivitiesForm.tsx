@@ -1,5 +1,6 @@
 // components/forms/ActivitiesForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
@@ -31,7 +32,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 
@@ -165,6 +166,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   onDelete,
   promenadeEnCours,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -425,15 +427,17 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             const config = TYPE_CONFIG[type];
             const active = typeActivite === type;
             return (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={type}
-                style={[
+                style={({ pressed }) => [
                   styles.typeChip,
                   { borderColor: nc.border, backgroundColor: nc.background },
                   active && {
                     backgroundColor: chipActiveColors.bg,
                     borderColor: chipActiveColors.border,
                   },
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -460,7 +464,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 >
                   {config.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -495,11 +499,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             {"Durée (minutes)"}
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() =>
                   setDuree((value) => Math.max(0, value - 5)))}
@@ -515,17 +521,19 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {duree} min
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() => setDuree((value) => Math.min(ACTIVITE_DUREE_MAX, value + 5)))}
               disabled={isSubmitting}
@@ -540,7 +548,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       )}
@@ -580,11 +588,13 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -593,13 +603,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: chipActiveColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -615,15 +627,17 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.deleteButton,
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
@@ -633,7 +647,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

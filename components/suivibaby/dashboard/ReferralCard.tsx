@@ -14,9 +14,10 @@ import {
   Share,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface ReferralCardProps {
   referralCode: string;
@@ -33,6 +34,7 @@ export const ReferralCard = memo(function ReferralCard({
   colorScheme = "light",
   transparent = false,
 }: ReferralCardProps) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
   const currentTier = getReferralTier(referralCount);
@@ -128,10 +130,13 @@ export const ReferralCard = memo(function ReferralCard({
 
       {/* Code + actions */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.codeBtn, { backgroundColor: nc.borderLight + "50" }]}
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
+            styles.codeBtn, { backgroundColor: nc.borderLight + "50" },
+            pressedOpacity(pressed),
+          ]}
           onPress={handleCopy}
-          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`Code parrainage : ${referralCode}. Appuyez pour copier`}
           accessibilityHint="Copie le code dans le presse-papier"
@@ -141,12 +146,15 @@ export const ReferralCard = memo(function ReferralCard({
           <Text style={[styles.codeText, { color: nc.textStrong }]}>
             {referralCode}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[styles.shareBtn, { backgroundColor: tint }]}
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
+            styles.shareBtn, { backgroundColor: tint },
+            pressedOpacity(pressed),
+          ]}
           onPress={handleShare}
-          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Partager le code de parrainage"
           accessibilityHint="Ouvre le menu de partage"
@@ -156,7 +164,7 @@ export const ReferralCard = memo(function ReferralCard({
           <Text style={[styles.shareText, { color: Colors[colorScheme].onTint }]}>
             {"Partager"}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
       </View>
     </View>

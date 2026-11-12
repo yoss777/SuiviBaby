@@ -16,6 +16,12 @@ export function usePressRipple(): PressableAndroidRippleConfig {
 
 const PRESSED_IOS: ViewStyle = { opacity: 0.7 };
 
-export function pressedOpacity(pressed: boolean): ViewStyle | null {
-  return pressed && Platform.OS !== "android" ? PRESSED_IOS : null;
+/**
+ * Opacité au toucher hors Android (où le ripple prend le relais). `opacity`
+ * reprend l'ancien `activeOpacity` d'un TouchableOpacity migré (0.2 par
+ * défaut côté RN) pour garder le même rendu iOS.
+ */
+export function pressedOpacity(pressed: boolean, opacity = 0.7): ViewStyle | null {
+  if (!pressed || Platform.OS === "android") return null;
+  return opacity === 0.7 ? PRESSED_IOS : { opacity };
 }

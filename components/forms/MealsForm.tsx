@@ -34,7 +34,7 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { toDateOr } from "@/utils/date";
@@ -62,6 +62,7 @@ import {
   NursingDraftBanner,
   NursingElapsedText,
 } from "@/components/forms/NursingTimerDisplay";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -132,6 +133,8 @@ export function MealsForm({
   editData,
   onDelete,
 }: MealsFormProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -607,8 +610,9 @@ export function MealsForm({
         Type de repas
       </Text>
       <View style={styles.typeRow}>
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "tetee" && {
@@ -616,6 +620,7 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={() => selectMealType("tetee")}
           disabled={isSubmitting}
@@ -641,10 +646,11 @@ export function MealsForm({
           >
             Tétée
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "biberon" && {
@@ -652,6 +658,7 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={() => {
             selectMealType("biberon");
@@ -679,10 +686,11 @@ export function MealsForm({
           >
             Biberon
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "solide" && {
@@ -690,6 +698,7 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={() => {
             selectMealType("solide");
@@ -717,7 +726,7 @@ export function MealsForm({
           >
             Solide
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* BIBERON FORM */}
@@ -728,9 +737,10 @@ export function MealsForm({
           </Text>
           <View style={styles.biberonTypeGrid}>
             {BIBERON_TYPE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.biberonTypeChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   typeBiberon === option.value && {
@@ -738,6 +748,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setTypeBiberon(option.value)}
                 disabled={isSubmitting}
@@ -762,7 +773,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -770,11 +781,13 @@ export function MealsForm({
             Quantité
           </Text>
           <View style={styles.quantityRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 (isSubmitting || quantite <= 0) && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() =>
                 setQuantite((q) => Math.max(0, q - BIBERON_STEP_ML)),
@@ -789,7 +802,7 @@ export function MealsForm({
               >
                 −
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityValue, { color: nc.textStrong }]}
               accessible
@@ -811,12 +824,14 @@ export function MealsForm({
             >
               {quantite} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 quantite >= MAX_BIBERON_ML && styles.quantityButtonDisabled,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               {...repeatPress(() =>
                 setQuantite((q) => Math.min(MAX_BIBERON_ML, q + BIBERON_STEP_ML)),
@@ -833,16 +848,17 @@ export function MealsForm({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
           {/* Quantités courantes : un seul toucher au lieu de dix appuis. */}
           <View style={styles.presetRow}>
             {BIBERON_PRESETS_ML.map((preset) => {
               const selected = quantite === preset;
               return (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={preset}
-                  style={[
+                  style={({ pressed }) => [
                     styles.presetChip,
                     { backgroundColor: nc.background, borderColor: nc.border },
                     selected && {
@@ -850,6 +866,7 @@ export function MealsForm({
                       borderColor: accentColors.softBorder,
                     },
                     isSubmitting && styles.chipDisabled,
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() => setQuantite(preset)}
                   disabled={isSubmitting}
@@ -865,7 +882,7 @@ export function MealsForm({
                   >
                     {preset}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -908,14 +925,16 @@ export function MealsForm({
                   />
                   {isEditing ? (
                     <View style={styles.chronoAdjustRow}>
-                      <TouchableOpacity
-                        style={[
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
                           styles.chronoAdjustButton,
                           {
                             backgroundColor: nc.backgroundCard,
                             borderColor: nc.border,
                           },
                           isSubmitting && styles.buttonDisabled,
+                          pressedOpacity(pressed, 0.2),
                         ]}
                         {...repeatPress(() => adjustChrono(side, -60))}
                         disabled={isSubmitting}
@@ -931,20 +950,22 @@ export function MealsForm({
                         >
                           −
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                       <Text
                         style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
                       >
                         {minutes} min
                       </Text>
-                      <TouchableOpacity
-                        style={[
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
                           styles.chronoAdjustButton,
                           {
                             backgroundColor: nc.backgroundCard,
                             borderColor: nc.border,
                           },
                           isSubmitting && styles.buttonDisabled,
+                          pressedOpacity(pressed, 0.2),
                         ]}
                         {...repeatPress(() => adjustChrono(side, 60))}
                         disabled={isSubmitting}
@@ -960,13 +981,14 @@ export function MealsForm({
                         >
                           +
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     </View>
                   ) : (
                     <View style={styles.chronoControlRow}>
                       {/* Lecture / pause : grande cible, seule action principale. */}
-                      <TouchableOpacity
-                        style={[
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
                           styles.chronoControlButton,
                           {
                             backgroundColor: nc.backgroundCard,
@@ -976,6 +998,7 @@ export function MealsForm({
                             backgroundColor: accentColors.softBg,
                             borderColor: accentColors.softBorder,
                           },
+                          pressedOpacity(pressed, 0.2),
                         ]}
                         onPress={() => toggleChrono(side)}
                         disabled={isSubmitting}
@@ -998,12 +1021,14 @@ export function MealsForm({
                           size={24}
                           color={isRunning ? accentColors.softText : nc.textStrong}
                         />
-                      </TouchableOpacity>
+                      </Pressable>
                       {/* Remise à zéro : petite, écartée, et confirmée. */}
-                      <TouchableOpacity
-                        style={[
+                      <Pressable
+                        android_ripple={rippleBorderless}
+                        style={({ pressed }) => [
                           styles.chronoResetButton,
                           !hasTime && styles.chronoControlButtonDisabled,
+                          pressedOpacity(pressed, 0.2),
                         ]}
                         onPress={() => resetChrono(side)}
                         disabled={isSubmitting || !hasTime}
@@ -1019,7 +1044,7 @@ export function MealsForm({
                           size={18}
                           color={!hasTime ? nc.textMuted : nc.textLight}
                         />
-                      </TouchableOpacity>
+                      </Pressable>
                     </View>
                   )}
                 </View>
@@ -1044,8 +1069,9 @@ export function MealsForm({
           )}
           {/* Tétée lancée par erreur : on peut l'abandonner (confirmé). */}
           {!isEditing && hasNursingProgress(timer) && (
-            <TouchableOpacity
-              style={styles.chronoDiscardButton}
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [styles.chronoDiscardButton, pressedOpacity(pressed, 0.2)]}
               onPress={discardNursingDraft}
               disabled={isSubmitting}
               accessibilityRole="button"
@@ -1056,7 +1082,7 @@ export function MealsForm({
               <Text style={[styles.chronoDiscardText, { color: nc.textLight }]}>
                 Abandonner la tétée
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           )}
         </>
       )}
@@ -1070,9 +1096,10 @@ export function MealsForm({
           </Text>
           <View style={styles.solideTypeGrid}>
             {SOLIDE_TYPE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.solideTypeChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   typeSolide === option.value && {
@@ -1080,6 +1107,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setTypeSolide(option.value)}
                 disabled={isSubmitting}
@@ -1112,7 +1140,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -1122,9 +1150,10 @@ export function MealsForm({
           </Text>
           <View style={styles.momentRepasGrid}>
             {MOMENT_REPAS_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.momentRepasChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   momentRepas === option.value && {
@@ -1132,6 +1161,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => {
                   setMomentRepas(option.value);
@@ -1167,7 +1197,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -1177,9 +1207,10 @@ export function MealsForm({
           </Text>
           <View style={styles.quantiteSolideRow}>
             {QUANTITE_SOLIDE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.quantiteSolideChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   quantiteSolide === option.value && {
@@ -1187,6 +1218,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setQuantiteSolide(option.value)}
                 disabled={isSubmitting}
@@ -1223,7 +1255,7 @@ export function MealsForm({
                 >
                   {option.description}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -1312,9 +1344,10 @@ export function MealsForm({
                 {ALLERGENES_OPTIONS.map((option) => {
                   const isSelected = allergenes.includes(option.value);
                   return (
-                    <TouchableOpacity
+                    <Pressable
+                      android_ripple={ripple}
                       key={option.value}
-                      style={[
+                      style={({ pressed }) => [
                         styles.allergeneChip,
                         {
                           backgroundColor: nc.backgroundPressed,
@@ -1322,6 +1355,7 @@ export function MealsForm({
                         },
                         isSelected && styles.allergeneChipActive,
                         isSubmitting && styles.chipDisabled,
+                        pressedOpacity(pressed, 0.2),
                       ]}
                       onPress={() => {
                         if (isSelected) {
@@ -1350,7 +1384,7 @@ export function MealsForm({
                       >
                         {option.label}
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -1360,9 +1394,10 @@ export function MealsForm({
               </Text>
               <View style={styles.reactionRow}>
                 {REACTION_OPTIONS.map((option) => (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={option.value}
-                    style={[
+                    style={({ pressed }) => [
                       styles.reactionChip,
                       {
                         backgroundColor: nc.backgroundPressed,
@@ -1373,6 +1408,7 @@ export function MealsForm({
                         borderColor: option.color,
                       },
                       isSubmitting && styles.chipDisabled,
+                      pressedOpacity(pressed, 0.2),
                     ]}
                     onPress={() => setReaction(option.value)}
                     disabled={isSubmitting}
@@ -1393,7 +1429,7 @@ export function MealsForm({
                     >
                       {option.label}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             </>
@@ -1404,12 +1440,14 @@ export function MealsForm({
             A aimé ?
           </Text>
           <View style={styles.aimeRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.aimeButton,
                 { backgroundColor: nc.backgroundPressed },
                 aime === true && styles.aimeButtonActiveYes,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => setAime(aime === true ? undefined : true)}
               disabled={isSubmitting}
@@ -1434,13 +1472,15 @@ export function MealsForm({
               >
                 Oui
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
+            </Pressable>
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.aimeButton,
                 { backgroundColor: nc.backgroundPressed },
                 aime === false && styles.aimeButtonActiveNo,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => setAime(aime === false ? undefined : false)}
               disabled={isSubmitting}
@@ -1465,7 +1505,7 @@ export function MealsForm({
               >
                 Non
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -1487,11 +1527,13 @@ export function MealsForm({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -1500,13 +1542,15 @@ export function MealsForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -1526,13 +1570,17 @@ export function MealsForm({
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
@@ -1541,7 +1589,7 @@ export function MealsForm({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

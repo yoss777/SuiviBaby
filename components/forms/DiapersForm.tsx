@@ -18,8 +18,9 @@ import {
 } from "@/services/eventsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, Pressable, View } from "react-native";
 import { toDateOr } from "@/utils/date";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -77,6 +78,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
   editData,
   onDelete,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -262,8 +264,9 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             Vous pouvez sélectionner les deux si nécessaire
           </Text>
           <View style={styles.typeRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.typeButton,
                 { backgroundColor: nc.background, borderColor: nc.border },
                 includeMiction && {
@@ -271,10 +274,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   borderColor: mictionAccentColors.softBorder,
                 },
                 isSubmitting && styles.typeButtonDisabled,
+                pressedOpacity(pressed),
               ]}
               onPress={() => setIncludeMiction((prev) => !prev)}
               disabled={isSubmitting}
-              activeOpacity={0.7}
               accessibilityLabel="Pipi"
               accessibilityRole="button"
               accessibilityState={{
@@ -303,10 +306,11 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               >
                 Pipi
               </Text>
-            </TouchableOpacity>
+            </Pressable>
 
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.typeButton,
                 { backgroundColor: nc.background, borderColor: nc.border },
                 includeSelle && {
@@ -314,10 +318,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   borderColor: selleAccentColors.softBorder,
                 },
                 isSubmitting && styles.typeButtonDisabled,
+                pressedOpacity(pressed),
               ]}
               onPress={() => setIncludeSelle((prev) => !prev)}
               disabled={isSubmitting}
-              activeOpacity={0.7}
               accessibilityLabel="Selle"
               accessibilityRole="button"
               accessibilityState={{
@@ -346,7 +350,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               >
                 Selle
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -369,9 +373,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 { value: "autre", label: "Autre", color: "#e0e0e0" },
               ] as const
             ).map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.optionButton,
                   styles.optionButtonSelle,
                   { backgroundColor: nc.background, borderColor: nc.border },
@@ -380,6 +385,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                     borderColor: mictionAccentColors.softBorder,
                   },
                   isSubmitting && styles.optionButtonDisabled,
+                  pressedOpacity(pressed),
                 ]}
                 onPress={() =>
                   setMictionCouleur((prev) =>
@@ -387,7 +393,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   )
                 }
                 disabled={isSubmitting}
-                activeOpacity={0.7}
                 accessibilityLabel={option.label}
                 accessibilityRole="button"
                 accessibilityState={{
@@ -408,7 +413,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
         </>
@@ -432,9 +437,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 { value: "dure", label: "Dure" },
               ] as const
             ).map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.optionButton,
                   styles.optionButtonSelle,
                   { backgroundColor: nc.background, borderColor: nc.border },
@@ -443,6 +449,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                     borderColor: selleAccentColors.softBorder,
                   },
                   isSubmitting && styles.optionButtonDisabled,
+                  pressedOpacity(pressed),
                 ]}
                 onPress={() =>
                   setSelleConsistance((prev) =>
@@ -450,7 +457,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   )
                 }
                 disabled={isSubmitting}
-                activeOpacity={0.7}
                 accessibilityLabel={option.label}
                 accessibilityRole="button"
                 accessibilityState={{
@@ -471,7 +477,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -489,9 +495,10 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 { value: "beaucoup", label: "Beaucoup" },
               ] as const
             ).map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.optionButton,
                   styles.optionButtonSelle,
                   { backgroundColor: nc.background, borderColor: nc.border },
@@ -500,6 +507,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                     borderColor: selleAccentColors.softBorder,
                   },
                   isSubmitting && styles.optionButtonDisabled,
+                  pressedOpacity(pressed),
                 ]}
                 onPress={() =>
                   setSelleQuantite((prev) =>
@@ -507,7 +515,6 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                   )
                 }
                 disabled={isSubmitting}
-                activeOpacity={0.7}
                 accessibilityLabel={option.label}
                 accessibilityRole="button"
                 accessibilityState={{
@@ -527,7 +534,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
         </>
@@ -550,11 +557,13 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -563,13 +572,15 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -585,13 +596,17 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
@@ -600,7 +615,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

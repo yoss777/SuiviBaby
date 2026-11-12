@@ -6,7 +6,7 @@ import React, { memo, useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
   type StyleProp,
   type TextStyle,
@@ -19,6 +19,7 @@ import {
   type NursingSide,
   type NursingTimerState,
 } from "@/components/forms/nursingTimer";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 /**
  * Horloge locale : rafraîchie seulement tant que `active` est vrai. Une valeur
@@ -102,6 +103,7 @@ export const NursingDraftBanner = memo(function NursingDraftBanner({
   disabled?: boolean;
 }) {
   // Le libellé est à la minute : un rafraîchissement toutes les 15 s suffit.
+  const ripple = usePressRipple();
   const now = useTickingNow(draft.runningSide !== null, 15_000);
   const label = nursingDraftLabel(draft, now);
   return (
@@ -113,27 +115,29 @@ export const NursingDraftBanner = memo(function NursingDraftBanner({
         {label}
       </Text>
       <View style={styles.bannerActions}>
-        <TouchableOpacity
+        <Pressable
+          android_ripple={ripple}
           onPress={onResume}
           disabled={disabled}
-          style={styles.bannerButton}
+          style={({ pressed }) => [styles.bannerButton, pressedOpacity(pressed, 0.2)]}
           accessibilityRole="button"
           accessibilityLabel="Reprendre la tétée"
           accessibilityState={{ disabled: !!disabled }}
         >
           <Text style={[styles.bannerButtonText, { color: colors.actionText }]}>Reprendre</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </Pressable>
+        <Pressable
+          android_ripple={ripple}
           onPress={onDiscard}
           disabled={disabled}
-          style={styles.bannerButton}
+          style={({ pressed }) => [styles.bannerButton, pressedOpacity(pressed, 0.2)]}
           accessibilityRole="button"
           accessibilityLabel="Abandonner la tétée"
           accessibilityHint="Demande une confirmation"
           accessibilityState={{ disabled: !!disabled }}
         >
           <Text style={[styles.bannerButtonText, { color: colors.mutedText }]}>Abandonner</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );

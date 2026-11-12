@@ -31,10 +31,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { toDate } from "@/utils/date";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -215,6 +215,8 @@ export function SoinsForm({
   editData,
   onDelete,
 }: SoinsFormProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
   const { showAlert, showConfirm } = useModal();
   const { showToast } = useToast();
@@ -888,8 +890,9 @@ export function SoinsForm({
             autoFocus={true}
           />
           {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => [styles.clearButton, pressedOpacity(pressed, 0.2)]}
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
@@ -898,7 +901,7 @@ export function SoinsForm({
                 size={16}
                 color={nc.textMuted}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
         <ScrollView style={styles.pickerList}>
@@ -908,14 +911,16 @@ export function SoinsForm({
                 vaccinName === vaccin.nomVaccin &&
                 (vaccinDosage || "") === (vaccin.dosage ?? "");
               return (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={`${vaccin.nomVaccin}-${index}`}
-                  style={[
+                  style={({ pressed }) => [
                     styles.pickerItem,
                     { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
                       backgroundColor: accentColors.softBg,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={() => {
                     setVaccinName(vaccin.nomVaccin);
@@ -926,7 +931,6 @@ export function SoinsForm({
                     setFormStep("form");
                     setSearchQuery("");
                   }}
-                  activeOpacity={0.7}
                   accessibilityLabel={getVaccinDisplay(
                     vaccin.nomVaccin,
                     vaccin.dosage,
@@ -966,7 +970,7 @@ export function SoinsForm({
                       color={accentColors.softText}
                     />
                   )}
-                </TouchableOpacity>
+                </Pressable>
               );
             })
           ) : (
@@ -1021,8 +1025,9 @@ export function SoinsForm({
             autoFocus={true}
           />
           {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => [styles.clearButton, pressedOpacity(pressed, 0.2)]}
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
@@ -1031,20 +1036,22 @@ export function SoinsForm({
                 size={16}
                 color={nc.textMuted}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
         <ScrollView style={styles.pickerList}>
           {filteredVitamines.length > 0 ? (
             filteredVitamines.map((vitamine) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={vitamine}
-                style={[
+                style={({ pressed }) => [
                   styles.pickerItem,
                   { borderBottomColor: nc.backgroundPressed },
                   vitamineName === vitamine && {
                     backgroundColor: accentColors.softBg,
                   },
+                  pressedOpacity(pressed),
                 ]}
                 onPress={() => {
                   setVitamineName(vitamine);
@@ -1054,7 +1061,6 @@ export function SoinsForm({
                   setFormStep("form");
                   setSearchQuery("");
                 }}
-                activeOpacity={0.7}
                 accessibilityLabel={vitamine}
               >
                 <FontAwesome6
@@ -1083,7 +1089,7 @@ export function SoinsForm({
                     color={accentColors.softText}
                   />
                 )}
-              </TouchableOpacity>
+              </Pressable>
             ))
           ) : (
             <Text style={[styles.noResultsText, { color: nc.textLight }]}>
@@ -1127,7 +1133,7 @@ export function SoinsForm({
             colorScheme,
           );
           return (
-            <TouchableOpacity
+            <Pressable
               key={type}
               style={[
                 styles.typeChip,
@@ -1139,7 +1145,6 @@ export function SoinsForm({
                 isDisabled && styles.typeChipDisabled,
               ]}
               disabled={isDisabled || isSubmitting}
-              activeOpacity={1}
               accessibilityLabel={`Type ${TYPE_CONFIG[type].label}`}
               accessibilityRole="button"
               accessibilityState={{
@@ -1193,7 +1198,7 @@ export function SoinsForm({
               >
                 {TYPE_CONFIG[type].label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -1229,14 +1234,15 @@ export function SoinsForm({
               )}
               <View style={styles.templatesRow}>
                 {section.items.map((template) => (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={template.label}
-                    style={[
+                    style={({ pressed }) => [
                       styles.templateChip,
                       { backgroundColor: nc.backgroundPressed },
+                      pressedOpacity(pressed, 0.8),
                     ]}
                     onPress={template.onPress}
-                    activeOpacity={0.8}
                     accessibilityLabel={`Template ${template.label}`}
                     hitSlop={8}
                   >
@@ -1248,7 +1254,7 @@ export function SoinsForm({
                     >
                       {template.label}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -1264,11 +1270,13 @@ export function SoinsForm({
               Température (°C)
             </Text>
             <View style={styles.quantityPickerRow}>
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.quantityButton,
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 {...repeatPress(() =>
                     setTemperatureValue((value) =>
@@ -1286,17 +1294,19 @@ export function SoinsForm({
                 >
                   -
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
               <Text
                 style={[styles.quantityPickerValue, { color: nc.textStrong }]}
               >
                 {formatTemperatureFr(temperatureValue)}
               </Text>
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.quantityButton,
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 {...repeatPress(() =>
                     setTemperatureValue((value) =>
@@ -1316,7 +1326,7 @@ export function SoinsForm({
                 >
                   +
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
           <View style={styles.chipSection}>
@@ -1325,15 +1335,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {MODE_TEMPERATURE.map((mode) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={mode}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     temperatureMode === mode && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() => setTemperatureMode(mode)}
                   accessibilityLabel={`Mode ${mode}`}
@@ -1351,7 +1363,7 @@ export function SoinsForm({
                   >
                     {mode}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1399,15 +1411,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {VOIES_MEDICAMENT.map((voie) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={voie}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     medicamentVoie === voie && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() =>
                     setMedicamentVoie(
@@ -1429,7 +1443,7 @@ export function SoinsForm({
                   >
                     {voie}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1447,9 +1461,10 @@ export function SoinsForm({
               {SYMPTOMES_OPTIONS.map((symptome) => {
                 const active = symptomes.includes(symptome);
                 return (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={symptome}
-                    style={[
+                    style={({ pressed }) => [
                       styles.chip,
                       {
                         borderColor: nc.border,
@@ -1459,6 +1474,7 @@ export function SoinsForm({
                         backgroundColor: accentColors.softBg,
                         borderColor: accentColors.softBorder,
                       },
+                      pressedOpacity(pressed, 0.2),
                     ]}
                     accessibilityLabel={`Symptôme ${symptome}`}
                     hitSlop={8}
@@ -1484,7 +1500,7 @@ export function SoinsForm({
                     >
                       {symptome}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 );
               })}
             </View>
@@ -1512,15 +1528,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {INTENSITES.map((item) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={item}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     symptomeIntensite === item && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={() =>
                     setSymptomeIntensite(
@@ -1532,7 +1550,6 @@ export function SoinsForm({
                     )
                   }
                   disabled={symptomes.length === 0}
-                  activeOpacity={symptomes.length === 0 ? 1 : 0.7}
                   accessibilityLabel={`Intensité ${item}`}
                   hitSlop={8}
                 >
@@ -1549,7 +1566,7 @@ export function SoinsForm({
                   >
                     {item}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1559,18 +1576,19 @@ export function SoinsForm({
       {/* Vaccin form */}
       {selectedType === "vaccin" && (
         <>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.selectorButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
+              pressedOpacity(pressed),
             ]}
             onPress={() => {
               if (isSubmitting) return;
               setSearchQuery("");
               setFormStep("vaccinPicker");
             }}
-            activeOpacity={0.7}
             accessibilityLabel="Sélectionner un vaccin"
           >
             <FontAwesome6
@@ -1593,7 +1611,7 @@ export function SoinsForm({
               {vaccinName ? vaccinName : "Sélectionner un vaccin"}
             </Text>
             <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
-          </TouchableOpacity>
+          </Pressable>
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: nc.textLight }]}>
@@ -1656,18 +1674,19 @@ export function SoinsForm({
       {/* Vitamine form */}
       {selectedType === "vitamine" && (
         <>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.selectorButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
+              pressedOpacity(pressed),
             ]}
             onPress={() => {
               if (isSubmitting) return;
               setSearchQuery("");
               setFormStep("vitaminePicker");
             }}
-            activeOpacity={0.7}
             accessibilityLabel="Sélectionner une vitamine"
           >
             <FontAwesome6
@@ -1690,7 +1709,7 @@ export function SoinsForm({
               {vitamineName ? vitamineName : "Sélectionner une vitamine"}
             </Text>
             <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
-          </TouchableOpacity>
+          </Pressable>
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: nc.textLight }]}>
@@ -1715,11 +1734,13 @@ export function SoinsForm({
                 Quantité
               </Text>
               <View style={styles.quantityPickerRow}>
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.quantityButton,
                     { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   {...repeatPress(() =>
                       setGouttesCount((value) => Math.max(0, value - 1)))}
@@ -1735,19 +1756,21 @@ export function SoinsForm({
                   >
                     -
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
                 <Text
                   style={[styles.quantityPickerValue, { color: nc.textStrong }]}
                 >
                   {gouttesCount} goutte{gouttesCount > 1 ? "s" : ""}
                 </Text>
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.quantityButton,
                     { backgroundColor: nc.backgroundPressed },
                     (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
                       styles.quantityButtonDisabled,
-                  ]}
+                      pressedOpacity(pressed, 0.2),
+                    ]}
                   {...repeatPress(() =>
                       setGouttesCount((value) =>
                         Math.min(MAX_GOUTTES_COUNT, value + 1),
@@ -1765,7 +1788,7 @@ export function SoinsForm({
                   >
                     +
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
           )}
@@ -1822,11 +1845,13 @@ export function SoinsForm({
         {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
         <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -1835,13 +1860,15 @@ export function SoinsForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -1861,13 +1888,17 @@ export function SoinsForm({
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
         </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
@@ -1876,7 +1907,7 @@ export function SoinsForm({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>

@@ -15,11 +15,12 @@ import {
   Easing,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
 import { isNightHour } from "@/utils/decorativeMotion";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
@@ -58,6 +59,8 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   sharedPulseAnim,
 }: PromenadeWidgetProps) {
   // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
@@ -175,15 +178,16 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           {isActive ? "Promenade en cours" : "Démarrer une promenade"}
         </Text>
         {!isActive && (
-          <TouchableOpacity
+          <Pressable
+            android_ripple={rippleBorderless}
             onPress={handleStart}
-            style={styles.playButton}
+            style={({ pressed }) => [styles.playButton, pressedOpacity(pressed, 0.2)]}
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             accessibilityRole="button"
             accessibilityLabel="Démarrer une promenade"
           >
             <FontAwesome name="play" size={12} color={accentColor} />
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
 
@@ -204,8 +208,12 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           )}
           {showStopButton && (
             <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: accentColor }]}
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
+                  styles.actionButton, { backgroundColor: accentColor },
+                  pressedOpacity(pressed, 0.2),
+                ]}
                 onPress={handleStop}
                 accessibilityRole="button"
                 accessibilityLabel="Terminer la promenade"
@@ -219,23 +227,24 @@ export const PromenadeWidget = memo(function PromenadeWidget({
                 >
                   Terminer
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
               {onEdit && (
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.editButton,
                     {
                       backgroundColor: colorScheme === "dark" ? `${accentColor}15` : bgColor,
                       borderColor: `${accentColor}40`,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={handleEdit}
-                  activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel="Ajuster la promenade avant d'enregistrer"
                 >
                   <FontAwesome name="pen-to-square" size={15} color={accentColor} />
-                </TouchableOpacity>
+                </Pressable>
               )}
             </View>
           )}
