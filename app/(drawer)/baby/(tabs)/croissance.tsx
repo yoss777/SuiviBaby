@@ -2,7 +2,6 @@ import { canManageEvents } from "@/utils/eventPermissions";
 import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { OMSMetric, OMSSex } from "@/constants/omsPercentiles";
 import {
@@ -17,6 +16,12 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import {
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -540,7 +545,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#ef4444",
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    minHeight: 44,
     borderRadius: 14,
     marginHorizontal: 4,
     marginVertical: 7,
@@ -682,6 +688,27 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
               accessibilityRole="button"
               accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
               accessibilityHint={canManageContent ? "Appuyer pour modifier" : undefined}
+              // Alternative au glissement : actions d'accessibilité et appui long.
+              accessibilityActions={buildRowAccessibilityActions({
+                canEdit: canManageContent,
+                canDelete,
+              })}
+              onAccessibilityAction={(e) =>
+                handleRowAccessibilityAction(e, {
+                  onEdit: canManageContent ? handlePress : undefined,
+                  onDelete: canDelete ? handleDelete : undefined,
+                })
+              }
+              onLongPress={
+                canManageContent
+                  ? () =>
+                      showRowActionMenu({
+                        title: `Mesure du ${currentDayLabel}`,
+                        onEdit: handlePress,
+                        onDelete: canDelete ? handleDelete : undefined,
+                      })
+                  : undefined
+              }
               style={[styles.card, flatInDark(colorScheme), { borderColor: palette.border, backgroundColor: palette.surface }]}
             >
               <View style={styles.cardHeader}>
@@ -838,10 +865,6 @@ export default function CroissanceScreen() {
   const [loadError, setLoadError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: CroissanceEntry | null;
-  }>({ visible: false, event: null });
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [metric, setMetric] = useState<MetricKey>("poids");
   const metricKeys: MetricKey[] = ["taille", "poids", "tete"];
@@ -1068,49 +1091,19 @@ export default function CroissanceScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Mesure supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerCroissance(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -2145,17 +2138,6 @@ export default function CroissanceScreen() {
         </GestureHandlerRootView>
       </SafeAreaView>
 
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Supprimer cette mesure ?"
-        message="Cette action est irréversible."
-        confirmText="Supprimer"
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmButtonColor={nc.error}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
-      />
     </ThemedView>
   );
 }

@@ -20,6 +20,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
@@ -326,11 +327,6 @@ export default function MilestonesScreen() {
   } = useMergedOptimisticEvents<MilestoneEventWithId>({
     childId: activeChild?.id,
   });
-
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: MilestoneEventWithId | null;
-  }>({ visible: false, event: null });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
@@ -1158,9 +1154,19 @@ export default function MilestonesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
+    const childId = activeChild.id;
+    softDeleteNow({
+      id: eventId,
+      message: "Jalon supprimé",
+      run: () => supprimerJalon(childId, eventId),
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
+    });
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1214,45 +1220,6 @@ export default function MilestonesScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
-      message: "Jalon supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      run: () => supprimerJalon(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
-    });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderDayGroup = ({ item, index }: { item: MilestoneGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
@@ -1477,17 +1444,6 @@ export default function MilestonesScreen() {
           <MilestoneSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer ce jalon ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
       <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"

@@ -81,7 +81,9 @@ function BabyHeaderTitle() {
         onPress={() => setShowSwitcher(true)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityRole="button"
-        accessibilityLabel="Changer d'enfant"
+        accessibilityLabel={
+          activeChild?.name ? `${activeChild.name}, changer d'enfant` : "Changer d'enfant"
+        }
       >
         {titleContent}
       </Pressable>

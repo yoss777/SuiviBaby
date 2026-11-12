@@ -215,8 +215,6 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   },
   texts: {
     expandMore: (extra) => `${extra} autre${extra > 1 ? "s" : ""} excrétion${extra > 1 ? "s" : ""}`,
-    deleteTitle: "Suppression",
-    deleteMessage: "Voulez-vous vraiment supprimer cette couche ?",
     batchDeleteMessage: (n) => `Voulez-vous vraiment supprimer ${n} élément${n > 1 ? "s" : ""} ?`,
     deleted: "Couche supprimée",
     batchDeleted: (n) => `${n} élément${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""}`,

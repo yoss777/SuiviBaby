@@ -15,6 +15,7 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -273,11 +274,6 @@ export default function GrowthScreen() {
     eventTypes: GROWTH_EVENT_TYPES,
     transformMerged: sortMergedEvents,
   });
-
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: GrowthEventWithId | null;
-  }>({ visible: false, event: null });
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
@@ -1042,45 +1038,19 @@ export default function GrowthScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Mesure supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerCroissance(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1133,9 +1103,6 @@ export default function GrowthScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderEventItem = (event: GrowthEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
@@ -1514,17 +1481,6 @@ export default function GrowthScreen() {
         )}
       </SafeAreaView>
 
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer cette mesure ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
 
       <ConfirmModal
         visible={batchDeleteConfirm.visible}

@@ -1,4 +1,5 @@
 import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
+import { formatTemperatureFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -17,6 +18,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -267,7 +269,7 @@ const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const formatTemperature = (value?: number) =>
-  typeof value === "number" ? `${value}°C` : "";
+  typeof value === "number" ? formatTemperatureFr(value) : "";
 
 // ============================================
 // COMPONENT
@@ -343,11 +345,6 @@ export default function SoinsScreen() {
   const latestSymptomesRef = useRef<HealthEvent[]>([]);
   const latestVaccinsRef = useRef<HealthEvent[]>([]);
   const latestVitaminesRef = useRef<HealthEvent[]>([]);
-
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: HealthEvent | null;
-  }>({ visible: false, event: null });
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
@@ -1108,50 +1105,20 @@ export default function SoinsScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const eventType = deleteConfirm.event.type;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Soin supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete, showToast]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1544,17 +1511,6 @@ export default function SoinsScreen() {
             <SoinsSkeleton colorScheme={colorScheme} />
           )}
         </SafeAreaView>
-        <ConfirmModal
-          visible={deleteConfirm.visible}
-          title="Suppression"
-          message="Voulez-vous vraiment supprimer ce soin ?"
-          confirmText="Supprimer"
-          cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
-          onCancel={cancelDelete}
-          onConfirm={confirmDelete}
-        />
         <ConfirmModal
           visible={batchDeleteConfirm.visible}
           title="Suppression groupée"

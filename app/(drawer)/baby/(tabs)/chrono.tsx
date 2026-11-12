@@ -1,9 +1,11 @@
 import { canManageEvents } from "@/utils/eventPermissions";
-import { flatInDark } from "@/constants/theme";
+import { formatTemperatureFr, toDecimalInputFr } from "@/utils/frenchNumber";
+import { flatInDark, getReadableTextColor } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { PhotoImage } from "@/components/ui/PhotoImage";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { buildRowAccessibilityActions, handleRowAccessibilityAction, showRowActionMenu } from "@/utils/rowActions";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -93,6 +95,12 @@ const CALENDAR_DAY_FORMAT = new Intl.DateTimeFormat("fr-FR", {
   weekday: "short",
   day: "numeric",
   month: "short",
+});
+// Lecture complète au lecteur d'écran (« mardi 12 novembre » et non « mar. 12 nov. »).
+const CALENDAR_A11Y_FORMAT = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
 });
 
 // P10: Format selected date label for date chip
@@ -361,7 +369,7 @@ function buildDetails(event: Event) {
     case "bain": {
       const parts = [
         event.duree ? `${event.duree} min` : null,
-        event.temperatureEau ? `${event.temperatureEau}°C` : null,
+        event.temperatureEau ? `${toDecimalInputFr(event.temperatureEau)}\u00a0°C` : null,
       ].filter(Boolean);
       return parts.length > 0 ? parts.join(" · ") : undefined;
     }
@@ -382,7 +390,7 @@ function buildDetails(event: Event) {
 
     case "temperature": {
       const value =
-        typeof event.valeur === "number" ? `${event.valeur}°C` : undefined;
+        typeof event.valeur === "number" ? formatTemperatureFr(event.valeur) : undefined;
       return [value, event.modePrise].filter(Boolean).join(" · ") || undefined;
     }
     case "medicament": {
@@ -507,6 +515,8 @@ const styles = StyleSheet.create({
   rangeChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 16,
   },
   rangeChipText: {
@@ -544,6 +554,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 44,
     borderRadius: 16,
     borderWidth: 1,
   },
@@ -741,7 +752,8 @@ const styles = StyleSheet.create({
   deleteAction: {
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    minHeight: 44,
     marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: 4,
@@ -795,6 +807,10 @@ const styles = StyleSheet.create({
   calendarDayButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: 12,
     borderWidth: 1,
   },
@@ -901,7 +917,16 @@ const FilterChip = React.memo(
               },
             ]}
           >
-            <Text style={styles.filterChipBadgeText}>{count}</Text>
+            <Text
+              style={[
+                styles.filterChipBadgeText,
+                // Pastille pleine : texte lisible sur la couleur ; pastille
+                // translucide : couleur du texte de la ligne.
+                { color: isActive ? getReadableTextColor(config.color) : textColor },
+              ]}
+            >
+              {count}
+            </Text>
           </View>
         )}
       </TouchableOpacity>
@@ -1032,6 +1057,8 @@ interface TimelineCardProps {
   secondaryTextColor: string;
   isLastInSection: boolean;
   onPress?: () => void;
+  /** Supprimer sans glisser (appui long, actions d'accessibilité). */
+  onDelete?: () => void;
 }
 
 /**
@@ -1057,6 +1084,7 @@ const TimelineCard = React.memo(
     secondaryTextColor,
     isLastInSection,
     onPress,
+    onDelete,
   }: TimelineCardProps) => {
     // S7.7 : abonnement à l'horloge seulement pour les événements en cours ;
     // un tick de minute ne re-rend plus les autres lignes.
@@ -1257,9 +1285,26 @@ const TimelineCard = React.memo(
           style={[styles.card, flatInDark(colorScheme), { backgroundColor, borderColor }]}
           activeOpacity={0.85}
           onPress={onPress}
-          disabled={!onPress}
+          onLongPress={
+            onPress || onDelete
+              ? () =>
+                  showRowActionMenu({
+                    title: `${displayLabel}, ${formatTime(date)}`,
+                    onEdit: onPress,
+                    onDelete,
+                  })
+              : undefined
+          }
+          disabled={!onPress && !onDelete}
           accessibilityRole="button"
           accessibilityLabel={`${displayLabel}, ${formatTime(date)}${details ? `, ${details}` : ""}`}
+          accessibilityActions={buildRowAccessibilityActions({
+            canEdit: !!onPress,
+            canDelete: !!onDelete,
+          })}
+          onAccessibilityAction={(e) =>
+            handleRowAccessibilityAction(e, { onEdit: onPress, onDelete })
+          }
         >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
@@ -1439,6 +1484,7 @@ const ChronoEventRow = React.memo(function ChronoEventRow({
         secondaryTextColor={secondaryTextColor}
         isLastInSection={isLastInSection}
         onPress={canManageContent ? handlePress : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
       />
     </ReanimatedSwipeable>
   );
@@ -1681,10 +1727,6 @@ export default function ChronoScreen() {
   const canManageContent = canManageEvents(permissions.role);
   const { showToast } = useToast();
   const scheduleDelete = useDeleteWithUndo();
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: Event | null;
-  }>({ visible: false, event: null });
 
   // P4: Calendar date picker state
   const [showCalendar, setShowCalendar] = useState(false);
@@ -2364,50 +2406,19 @@ export default function ChronoScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // P5 : suppression immédiate, annulable par le toast (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // P5: Soft-delete — hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    // P5: Show undo toast
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Événement supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const closeInfoModal = useCallback(() => {
     setInfoModalMessage(null);
@@ -2587,6 +2598,9 @@ export default function ChronoScreen() {
                                       },
                                     ]}
                                     onPress={() => handleDateSelect(dateKey)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={CALENDAR_A11Y_FORMAT.format(date)}
+                                    accessibilityState={{ selected: isSelected }}
                                   >
                                     <Text
                                       style={[
@@ -2719,17 +2733,6 @@ export default function ChronoScreen() {
         backgroundColor={colors.background}
         textColor={colors.text}
         onClose={closeInfoModal}
-      />
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Supprimer cet événement ?"
-        message="Cette action est irréversible."
-        confirmText="Supprimer"
-        backgroundColor={colors.background}
-        textColor={colors.text}
-        confirmButtonColor={nc.error}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
       />
     </ThemedView>
   );

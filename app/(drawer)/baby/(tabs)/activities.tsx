@@ -19,6 +19,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -330,11 +331,6 @@ export default function ActivitiesScreen() {
   } = useMergedOptimisticEvents<ActivityEventWithId>({
     childId: activeChild?.id,
   });
-
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: ActivityEventWithId | null;
-  }>({ visible: false, event: null });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
 
@@ -1057,45 +1053,19 @@ export default function ActivitiesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Activité supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1181,9 +1151,6 @@ export default function ActivitiesScreen() {
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderEventItem = (event: ActivityEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
@@ -1590,17 +1557,6 @@ export default function ActivitiesScreen() {
           <ActivitySkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer cette activité ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
       <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"

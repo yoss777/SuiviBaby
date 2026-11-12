@@ -29,6 +29,11 @@ import { Colors } from "@/constants/theme";
 import { useEventList } from "@/hooks/eventList/useEventList";
 import { isOptimisticId } from "@/hooks/eventList/useSoftDelete";
 import { formatDayLabel, formatSelectedDateLabel } from "@/utils/dayLabel";
+import {
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
 import type { EventGroup } from "@/utils/eventListGrouping";
 
 import { EventListSkeleton } from "./EventListSkeleton";
@@ -134,6 +139,28 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
           <Pressable
             accessibilityRole={canManage ? "button" : undefined}
             accessibilityLabel={canManage ? config.a11y.row : undefined}
+            // Alternative au glissement : actions d'accessibilité et appui long.
+            accessibilityActions={
+              selectionMode
+                ? undefined
+                : buildRowAccessibilityActions({ canEdit: canManage, canDelete: deletable })
+            }
+            onAccessibilityAction={(e) =>
+              handleRowAccessibilityAction(e, {
+                onEdit: canManage ? () => openEdit(item) : undefined,
+                onDelete: deletable ? () => requestDelete(item) : undefined,
+              })
+            }
+            onLongPress={
+              canManage && !selectionMode
+                ? () =>
+                    showRowActionMenu({
+                      title: "Actions",
+                      onEdit: () => openEdit(item),
+                      onDelete: deletable ? () => requestDelete(item) : undefined,
+                    })
+                : undefined
+            }
             disabled={!canManage}
             style={({ pressed }) => [
               eventListStyles.sessionCard,
@@ -372,16 +399,6 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
         )}
       </SafeAreaView>
       <ConfirmModal
-        visible={softDelete.deleteConfirm.visible}
-        title={config.texts.deleteTitle}
-        message={config.texts.deleteMessage}
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        {...modalColors}
-        onCancel={softDelete.cancelDelete}
-        onConfirm={softDelete.confirmDelete}
-      />
-      <ConfirmModal
         visible={softDelete.batchDeleteConfirm.visible}
         title="Suppression groupée"
         message={config.texts.batchDeleteMessage(batchCount)}
@@ -478,7 +495,8 @@ const styles = StyleSheet.create({
   deleteAction: {
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    minHeight: 44,
     borderRadius: 14,
     marginHorizontal: 4,
     marginVertical: 1,

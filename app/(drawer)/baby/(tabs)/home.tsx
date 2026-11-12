@@ -8,10 +8,10 @@ import {
   TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { NursingInProgressBanner } from "@/components/suivibaby/dashboard/NursingInProgressBanner";
 import { ReminderWarningWatcher } from "@/components/suivibaby/dashboard/ReminderWarningWatcher";
 import { flatInDark } from "@/constants/theme";
 import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   getCategoryColors,
   getNeutralColors,
@@ -28,6 +28,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -188,7 +189,7 @@ export default function HomeDashboard() {
   const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
   const colorScheme = useColorScheme() ?? "light";
   // La nuit (22 h – 7 h), l'Accueil va à l'essentiel : pas de conseils éditoriaux.
-  const { isNightMode } = useNightMode();
+  const { isNightMode, animations: nightAnimations } = useNightMode();
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
@@ -216,10 +217,6 @@ export default function HomeDashboard() {
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const lastBackPressRef = useRef(0);
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: any | null;
-  }>({ visible: false, event: null });
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const softDeletedIdsRef = useRef<Set<string>>(new Set());
   // Keep ref in sync with state for use in closures (scheduleMerge)
@@ -369,44 +366,21 @@ export default function HomeDashboard() {
       showToast('Enregistrement en cours...');
       return;
     }
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    setDeleteConfirm({ visible: false, event: null });
-    // P5: soft-delete + undo
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-    const childId = activeChild.id;
+    if (!activeChild?.id || !event?.id) return;
+    // Suppression unitaire immédiate et annulable (toast « Annuler » 8 s), sans
+    // modale préalable : rien n'est perdu tant que le toast est affiché.
     // La suppression part après le délai d'annulation, ou tout de suite si
     // l'app passe en arrière-plan ; « Réessayer » relance sans fermeture périmée.
-    scheduleDelete({
+    const eventId = event.id as string;
+    const childId = activeChild.id;
+    softDeleteNow({
+      id: eventId,
       message: "Événement supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -417,11 +391,6 @@ export default function HomeDashboard() {
       const handleBackPress = () => {
         if (showMilestonesModal) {
           setShowMilestonesModal(false);
-          return true;
-        }
-
-        if (deleteConfirm.visible) {
-          cancelDelete();
           return true;
         }
 
@@ -445,7 +414,7 @@ export default function HomeDashboard() {
         subscription.remove();
         lastBackPressRef.current = 0;
       };
-    }, [cancelDelete, deleteConfirm.visible, showMilestonesModal, showToast]),
+    }, [showMilestonesModal, showToast]),
   );
 
   const formatTime = useCallback((date: Date) => {
@@ -715,7 +684,8 @@ export default function HomeDashboard() {
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const hasActiveWidget = !!sommeilEnCours || !!promenadeEnCours;
-    if (hasActiveWidget) {
+    // Respiration décorative : coupée la nuit et avec « Réduire les animations ».
+    if (hasActiveWidget && nightAnimations.decorative) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(sharedPulseAnim, {
@@ -737,7 +707,7 @@ export default function HomeDashboard() {
     } else {
       sharedPulseAnim.setValue(1);
     }
-  }, [!!sommeilEnCours, !!promenadeEnCours, sharedPulseAnim]);
+  }, [!!sommeilEnCours, !!promenadeEnCours, sharedPulseAnim, nightAnimations.decorative]);
 
   // ============================================
   // STATS GROUPS DATA
@@ -1113,6 +1083,15 @@ export default function HomeDashboard() {
       sommeilEnCours,
     });
   }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
+
+  // Reprise de la tétée en cours : la feuille Repas reprend le brouillon du chrono.
+  const handleResumeNursing = useCallback(() => {
+    openSheetRaw({
+      ownerId: headerOwnerId.current,
+      formType: "meals",
+      mealType: "tetee",
+    });
+  }, [openSheetRaw]);
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {
@@ -1710,6 +1689,15 @@ export default function HomeDashboard() {
           <FirstTrackGuide onDismiss={() => setShowFirstTrackGuide(false)} />
         )}
 
+        {/* Tétée en cours (brouillon du chrono) : un appui la reprend */}
+        {canManageContent && (
+          <NursingInProgressBanner
+            childId={activeChild?.id}
+            onResume={handleResumeNursing}
+            colorScheme={colorScheme}
+          />
+        )}
+
         {/* Résumé du jour */}
         <View style={styles.section}>
           <View>
@@ -1944,18 +1932,7 @@ export default function HomeDashboard() {
         childName={activeChild?.name}
         events={allEventsForInsights}
         weeklyLoaded={weeklyLoaded}
-        blocked={showFirstTrackGuide || showMilestonesModal || deleteConfirm.visible}
-      />
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Supprimer cet événement ?"
-        message="Cette action est irréversible."
-        confirmText="Supprimer"
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmButtonColor={nc.error}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
+        blocked={showFirstTrackGuide || showMilestonesModal}
       />
 
       {/* Milestones Timeline Modal */}
