@@ -350,8 +350,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   // HANDLERS
   // ============================================
 
-  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
-  useFormDirtyGuard({ dateHeure, dureeBain, temperatureEau, produits, noteBain, dateNez, methodeNez, resultatNez, noteNez, heureDebut, heureFin, isOngoing, isNap, location, quality, noteSommeil });
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie
+  // modifiée. Seules les valeurs saisies comptent : le type (sieste, nuit,
+  // bain, nez) n'en fait pas partie en création (en édition, sieste/nuit
+  // change l'événement enregistré), et les heures remises à « maintenant »
+  // par un changement de type ne comptent pas (on suit les drapeaux posés par
+  // les sélecteurs d'heure, pas les dates elles-mêmes).
+  useFormDirtyGuard({ dateHeureDirty, dureeBain, temperatureEau, produits, noteBain, dateNezDirty, methodeNez, resultatNez, noteNez, chronoDirty, location, quality, noteSommeil, isNap: isEditing ? isNap : undefined });
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;

@@ -9,6 +9,7 @@ import { SheetProvider, useSheetActions } from "@/contexts/SheetContext";
 const mockMounts = jest.fn();
 let mockShouldCrash = false;
 let mockSheetCrash = false;
+const mockSheetProps: { current: Record<string, unknown> } = { current: {} };
 
 jest.mock("@/hooks/use-color-scheme", () => ({ useColorScheme: () => "light" }));
 jest.mock("@gorhom/bottom-sheet", () => {
@@ -28,7 +29,8 @@ jest.mock("@/contexts/ModalContext", () => ({
 jest.mock("@/components/ui/FormBottomSheet", () => {
   const R = require("react");
   return {
-    FormBottomSheet: R.forwardRef(({ children, footerComponent: Footer }: any, _ref: any) => {
+    FormBottomSheet: R.forwardRef(({ children, footerComponent: Footer, ...rest }: any, _ref: any) => {
+      mockSheetProps.current = rest;
       if (mockSheetCrash) throw new Error("sheet crash");
       return (
         <>
@@ -190,5 +192,16 @@ describe("GlobalSheetManager", () => {
     const discard = buttons.find((b: any) => b.style === "destructive");
     act(() => discard.onPress());
     expect(screen.queryByText("soins:new")).toBeNull();
+  });
+
+  it("formulaire modifié : seule la fermeture par glissement est bloquée, pas l'agrandissement", () => {
+    setup();
+    act(() => actions.openSheet(soins()));
+    expect(mockSheetProps.current.enablePanDownToClose).toBe(true);
+    expect(mockSheetProps.current.enablePanGestures).toBe(true);
+    fireEvent.press(screen.getByText("saisir"));
+    expect(mockSheetProps.current.enablePanDownToClose).toBe(false);
+    // Glisser entre les crans (agrandir / réduire) reste possible.
+    expect(mockSheetProps.current.enablePanGestures).toBe(true);
   });
 });

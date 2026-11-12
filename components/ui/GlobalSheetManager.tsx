@@ -377,6 +377,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={config.color}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -417,6 +418,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={eventColors.meal.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -457,6 +459,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={eventColors.pumping.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -496,6 +499,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={eventColors.activite.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -543,6 +547,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={eventColors.jalon.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestCancel}
           onClose={handleCancel}
@@ -587,6 +592,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={accentColor}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -655,6 +661,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={accentColor}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}
@@ -698,6 +705,7 @@ const GlobalSheetManagerInner = () => {
           accentColor={eventColors.croissance.dark}
           showActions={false}
           enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
           onCancel={requestClose}
           onClose={closeSheet}

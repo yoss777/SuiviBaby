@@ -36,6 +36,13 @@ export interface FormBottomSheetProps {
   isSubmitting?: boolean;
   showActions?: boolean;
   enablePanDownToClose?: boolean;
+  /**
+   * Glissement du contenu et de la poignée entre les crans (agrandir,
+   * réduire). Indépendant de `enablePanDownToClose` : une saisie protégée
+   * interdit seulement la fermeture par glissement, pas le changement de cran.
+   * Par défaut, suit `enablePanDownToClose` (comportement historique).
+   */
+  enablePanGestures?: boolean;
   enableOverDrag?: boolean;
   children: React.ReactNode;
   onSubmit: () => void | Promise<void>;
@@ -68,6 +75,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       isSubmitting = false,
       showActions = true,
       enablePanDownToClose = true,
+      enablePanGestures,
       enableOverDrag = false,
       children,
       onSubmit,
@@ -87,6 +95,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
     const scrollViewRef = useRef<any>(null);
+    const panGestures = enablePanGestures ?? enablePanDownToClose;
     const [scrollEnabled, setScrollEnabled] = useState(true);
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
@@ -143,8 +152,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         index={initialIndex}
         snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
-        enableContentPanningGesture={enablePanDownToClose}
-        enableHandlePanningGesture={enablePanDownToClose}
+        enableContentPanningGesture={panGestures}
+        enableHandlePanningGesture={panGestures}
         enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
         footerComponent={footerComponent}
