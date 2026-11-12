@@ -6,7 +6,7 @@ import { PhotoImage } from "@/components/ui/PhotoImage";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import {
   ACTIVITY_TYPE_LABELS,
   BIBERON_TYPE_LABELS,
@@ -1368,7 +1368,7 @@ const DeleteAction = React.memo(function DeleteAction({
 }) {
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: "#ef4444" }]}
+      style={[styles.deleteAction, { backgroundColor: neutralColors.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"

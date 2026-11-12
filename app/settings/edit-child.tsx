@@ -573,7 +573,7 @@ export default function EditChildScreen() {
           cancelText="Exporter d'abord"
           backgroundColor={nc.backgroundCard}
           textColor={nc.textStrong}
-          confirmButtonColor={nc.error}
+          confirmButtonColor={nc.destructive}
           confirmTextColor={nc.white}
           allowBackdropDismiss
           onDismiss={() => setDeleteConfirm({ visible: false, child: null })}

@@ -1,6 +1,6 @@
 import { ThemedView } from "@/components/themed-view";
 import { APP_NAME } from "@/constants/app";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: -6,
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
     borderRadius: 12,
     padding: 4,
   },

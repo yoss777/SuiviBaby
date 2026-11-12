@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -85,12 +86,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    padding: 16,
-    marginTop: 8,
+    gap: space.xs,
+    padding: space.md,
+    marginTop: space.xs,
     // marginHorizontal: 16,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.md,
     overflow: "hidden", // borne le ripple Android au bouton
     // backgroundColor applied dynamically via nc.backgroundCard
   },
@@ -100,8 +101,8 @@ const styles = StyleSheet.create({
   },
   endContainer: {
     alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.md,
   },
   endText: {
     fontSize: 14,

@@ -424,7 +424,7 @@ export function PumpingForm({
           >
             {isSubmitting ? (
               <ActivityIndicator
-                color={nc.white}
+                color={accentColors.filledText}
                 size="small"
               />
             ) : (
@@ -432,7 +432,7 @@ export function PumpingForm({
                 style={[
                   styles.validateText,
                   {
-                    color: nc.white,
+                    color: accentColors.filledText,
                   },
                 ]}
               >

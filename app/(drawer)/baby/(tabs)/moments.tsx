@@ -1,4 +1,6 @@
+import { radius, space } from "@/constants/tokens";
 import { canManageEvents } from "@/utils/eventPermissions";
+import { getAccentColors } from "@/components/ui/accentColors";
 import { flatInDark } from "@/constants/theme";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import {
@@ -10,7 +12,7 @@ import {
   VerticalMoodTimeline,
   WeekMoodOverview,
 } from "@/components/moments";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -57,6 +59,8 @@ export default function MomentsScreen() {
   const { newEventIds, newEventTypes, markEventAsSeen, markMomentsAsSeen } = useMomentsNotification();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  // Doré des moments : texte gris-900 (le blanc n'y fait que 2.2:1).
+  const momentsFill = getAccentColors(itemColors.jalon, colorScheme);
   const headerOwnerId = useRef("moments-header");
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const canManageContent = canManageEvents(permissions.role);
@@ -279,13 +283,14 @@ export default function MomentsScreen() {
                     onPress={handleAddPhoto}
                     style={({ pressed }) => [
                       styles.emptyButton,
+                      { backgroundColor: momentsFill.filledBg },
                       pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] },
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel="Ajouter un premier souvenir"
                   >
-                    <FontAwesome6 name="camera" size={16} color="#fff" />
-                    <Text style={styles.emptyButtonText}>
+                    <FontAwesome6 name="camera" size={16} color={momentsFill.filledText} />
+                    <Text style={[styles.emptyButtonText, { color: momentsFill.filledText }]}>
                       Capturer un souvenir
                     </Text>
                   </Pressable>
@@ -382,7 +387,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: space.md,
   },
   heroCardWrapper: {
     position: "relative",
@@ -395,19 +400,19 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   headerButton: {
-    paddingVertical: 8,
-    borderRadius: 8,
-    paddingHorizontal: 8,
+    paddingVertical: space.xs,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.xs,
   },
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
   },
   errorText: {
     flex: 1,
@@ -415,12 +420,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   emptyState: {
-    marginHorizontal: 16,
-    marginTop: 24,
-    borderRadius: 20,
-    padding: 32,
+    marginHorizontal: space.md,
+    marginTop: space.xl,
+    borderRadius: radius.xl,
+    padding: space.xxl,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -428,31 +433,29 @@ const styles = StyleSheet.create({
   },
   emptyEmoji: {
     fontSize: 48,
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 14,
     lineHeight: 20,
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: space.xl,
   },
   emptyButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#E8A85A",
-    paddingHorizontal: 24,
+    gap: space.xs,
+    paddingHorizontal: space.xl,
     paddingVertical: 14,
     borderRadius: 50,
   },
   emptyButtonText: {
-    color: "#fff",
     fontSize: 15,
     fontWeight: "600",
   },

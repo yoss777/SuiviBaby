@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/InsightCard.tsx
 // Displays a data-driven insight on the dashboard — dismissible via X button or swipe
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Insight } from "@/types/content";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -207,9 +208,9 @@ export const InsightCard = memo(function InsightCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    padding: 12,
+    padding: space.sm,
   },
   row: {
     flexDirection: "row",
@@ -230,15 +231,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   typeBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   typeText: {
     fontSize: 12,
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
   learnMore: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     marginTop: 6,
   },
   learnMoreText: {

@@ -1434,13 +1434,13 @@ export function MealsForm({
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={nc.white} />
+              <ActivityIndicator size="small" color={accentColors.filledText} />
             ) : (
               <Text
                 style={[
                   styles.validateText,
                   {
-                    color: nc.white,
+                    color: accentColors.filledText,
                   },
                 ]}
               >

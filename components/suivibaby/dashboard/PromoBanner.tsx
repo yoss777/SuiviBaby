@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/PromoBanner.tsx
 // Contextual promotion banner for the dashboard
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors, promoAccent } from "@/constants/dashboardColors";
 import type { Promotion } from "@/types/promo";
 import { PROMO_TYPE_ICONS, PROMO_TYPE_LABELS } from "@/types/promo";
@@ -162,7 +163,7 @@ export const PromoBanner = memo(function PromoBanner({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -172,18 +173,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 12,
+    padding: space.sm,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   iconCircle: {
     width: 28,
@@ -193,9 +194,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   typeBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: space.xs,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   typeText: {
     fontSize: 12,
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   description: {
     fontSize: 13,
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   codeText: {
     fontSize: 12,
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
   ctaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,

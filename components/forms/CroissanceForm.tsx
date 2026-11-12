@@ -319,7 +319,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: accentColors.filledText,
                 },
               ]}
             >

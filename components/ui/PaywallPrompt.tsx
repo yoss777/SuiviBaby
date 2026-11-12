@@ -2,6 +2,7 @@
 // Composant paywall contextuel réutilisable.
 // S'affiche quand une feature Premium est bloquée, avec un message adapté.
 
+import { space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -104,16 +105,16 @@ export function PaywallPrompt({
 const styles = StyleSheet.create({
   // Banner variant
   banner: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    padding: 16,
+    marginHorizontal: space.md,
+    marginVertical: space.xs,
+    padding: space.md,
     borderRadius: 14,
     borderWidth: 1,
   },
   bannerContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    gap: space.sm,
   },
   bannerText: { flex: 1 },
   bannerTitle: { fontSize: 15, fontWeight: "700", marginBottom: 4 },
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
   bannerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     marginTop: 14,
   },
   upgradeButton: {
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   inline: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,

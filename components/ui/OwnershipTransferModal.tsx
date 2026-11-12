@@ -1,3 +1,4 @@
+import { space } from "@/constants/tokens";
 import {
   DELETE_CHILD_CHOICE,
   LOW_PRIVILEGE_ROLES,
@@ -281,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 20,
+    padding: space.lg,
   },
   content: { width: "100%", maxWidth: 420, maxHeight: "85%", borderRadius: 16, padding: 20 },
   title: { fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 8 },
@@ -292,12 +293,12 @@ const styles = StyleSheet.create({
   option: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.sm,
     minHeight: 48,
-    paddingVertical: 8,
+    paddingVertical: space.xs,
   },
   radio: {
     width: 20,

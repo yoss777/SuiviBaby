@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

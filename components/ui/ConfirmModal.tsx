@@ -1,9 +1,13 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import {
+  getNeutralColors,
+  neutralColors,
+  neutralColorsDark,
+} from "@/constants/dashboardColors";
 import { getReadableTextColor } from "@/constants/theme";
-import { radius } from "@/constants/tokens";
+import { radius, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { pressedOpacity, usePressRipple } from "./pressFeedback";
 
@@ -34,8 +38,21 @@ interface ConfirmModalProps {
   onCancel: () => void;
 }
 
-/** Rouge destructif : texte blanc à 4.53:1. */
-export const DESTRUCTIVE_COLOR = "#dc3545";
+/**
+ * Rouge destructif unique de l'app (token `destructive`, red-600) : texte
+ * blanc à 4.83:1, identique en clair et en sombre.
+ */
+export const DESTRUCTIVE_COLOR = neutralColors.destructive;
+
+/**
+ * Anciens appels qui passent `nc.error` (#ef4444, 3.76:1 sous du blanc) pour
+ * « Supprimer » : ramenés au token destructif pour que le bouton ait le même
+ * aspect sur tous les écrans.
+ */
+const normalizeConfirmColor = (color: string) =>
+  color === neutralColors.error || color === neutralColorsDark.error
+    ? DESTRUCTIVE_COLOR
+    : color;
 const NOOP = () => {};
 
 export function ConfirmModal({
@@ -46,7 +63,7 @@ export function ConfirmModal({
   cancelText = "Annuler",
   backgroundColor,
   textColor,
-  confirmButtonColor = DESTRUCTIVE_COLOR,
+  confirmButtonColor: confirmButtonColorProp = DESTRUCTIVE_COLOR,
   confirmTextColor,
   cancelButtonColor,
   cancelTextColor,
@@ -65,6 +82,7 @@ export function ConfirmModal({
   // au milieu d'un écran sombre.
   const cancelBg = cancelButtonColor ?? nc.backgroundPressed;
   const cancelInk = cancelTextColor ?? nc.textStrong;
+  const confirmButtonColor = normalizeConfirmColor(confirmButtonColorProp);
   const resolvedConfirmTextColor =
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   return (
@@ -136,36 +154,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 20,
+    padding: space.lg,
   },
   modalContent: {
     width: "100%",
     maxWidth: 420,
     borderRadius: radius.lg,
-    padding: 20,
+    padding: space.lg,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   modalMessageContainer: {
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   modalButtons: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   modalButton: {
     flex: 1,
     minHeight: 44,
-    paddingVertical: 12,
+    paddingVertical: space.sm,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",

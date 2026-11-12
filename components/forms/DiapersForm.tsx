@@ -580,7 +580,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: accentColors.filledText,
                 },
               ]}
             >

@@ -1,5 +1,6 @@
 // Config de l'écran Pompages (tire-lait) : ligne gauche/droite en ml et
 // résumé du jour.
+import { space } from "@/constants/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -194,9 +195,9 @@ const styles = StyleSheet.create({
   },
   statsBreakdown: {
     flexDirection: "row",
-    gap: 16,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   sessionContent: {
     flex: 1,
@@ -216,12 +217,12 @@ const styles = StyleSheet.create({
   },
   quantityLabels: {
     flexDirection: "row",
-    gap: 16,
+    gap: space.md,
   },
   quantityLabelItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   quantityDot: {
     width: 6,

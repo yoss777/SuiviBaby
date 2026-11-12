@@ -1469,7 +1469,7 @@ export default function ExportScreen() {
               : modalConfig.message
           }
           confirmText={modalConfig.confirmText}
-          confirmButtonColor={modalConfig.onConfirm ? nc.error : undefined}
+          confirmButtonColor={modalConfig.onConfirm ? nc.destructive : undefined}
           backgroundColor={nc.backgroundCard}
           textColor={nc.textStrong}
           dismissText={

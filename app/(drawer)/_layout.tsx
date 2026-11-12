@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { BabySwitcherModal } from "@/components/ui/BabySwitcherModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -213,8 +213,8 @@ export default function DrawerLayout() {
           ]}
         >
           {isOffline && (
-            <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec" }]}>
-              <Text style={[styles.offlineText, { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" }]} accessibilityRole="alert">Hors ligne</Text>
+            <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : neutralColors.errorBg }]}>
+              <Text style={[styles.offlineText, { color: getNeutralColors(colorScheme).errorText }]} accessibilityRole="alert">Hors ligne</Text>
             </View>
           )}
           {failedWrites > 0 && (
@@ -226,14 +226,14 @@ export default function DrawerLayout() {
                 styles.syncBanner,
                 {
                   paddingTop: isOffline ? 4 : insets.top + 4,
-                  backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec",
+                  backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : neutralColors.errorBg,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.syncText,
-                  { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" },
+                  { color: getNeutralColors(colorScheme).errorText },
                 ]}
               >
                 {failedWrites > 1
@@ -298,14 +298,14 @@ export default function DrawerLayout() {
                     onPress={failed.deleteShown}
                     style={{ marginTop: 12 }}
                   >
-                    <Text style={{ color: "#b42318", fontWeight: "700" }}>Supprimer ces saisies</Text>
+                    <Text style={{ color: getNeutralColors(colorScheme).errorText, fontWeight: "700" }}>Supprimer ces saisies</Text>
                   </Pressable>
                 )}
               </View>
             }
             confirmText="Réessayer"
             dismissText="Fermer"
-            backgroundColor={Colors[colorScheme].background}
+            backgroundColor={Colors[colorScheme].surface}
             textColor={Colors[colorScheme].text}
             allowBackdropDismiss
             onClose={failed.close}

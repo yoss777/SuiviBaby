@@ -717,7 +717,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: accentColors.filledText,
                 },
               ]}
             >

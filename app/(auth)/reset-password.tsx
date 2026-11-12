@@ -1,7 +1,7 @@
 // app/(auth)/reset-password.tsx
 // Reset password screen — same visual language as forgot-password.tsx
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 12,
     paddingHorizontal: 16,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mainButtonText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 18,
     fontWeight: "600",
   },

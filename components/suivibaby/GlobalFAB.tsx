@@ -1,4 +1,5 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import {
   QUICK_ADD_ACTIONS,
   QUICK_ADD_CATEGORIES,
@@ -66,7 +67,7 @@ const ACTIONS: FabAction[] = [
   {
     key: "more",
     label: "Plus",
-    icon: { type: "fa", name: "ellipsis", color: "#4b5563" },
+    icon: { type: "fa", name: "ellipsis", color: neutralColors.textNormal },
     isMore: true,
   },
 ];
@@ -82,11 +83,11 @@ const FAB_ACTION_LABELS: Record<string, string> = {
 
 // La couleur réelle vient de getQuickActionColors (tokens de catégorie).
 const FAB_ACTION_ICONS: Record<string, QuickAddAction["icon"]> = {
-  tetee: { type: "fa", name: "utensils", color: "#E8785A" },
+  tetee: { type: "fa", name: "utensils", color: itemColors.biberon },
   miction: {
     type: "mc",
     name: "human-baby-changing-table",
-    color: "#5BA4A4",
+    color: itemColors.miction,
   },
 };
 
@@ -526,7 +527,7 @@ const styles = StyleSheet.create({
     borderRadius: MAIN_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -552,7 +553,7 @@ const styles = StyleSheet.create({
     borderRadius: ACTION_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -564,10 +565,10 @@ const styles = StyleSheet.create({
   actionLabelContainer: {
     position: "absolute",
     right: ACTION_LABEL_OFFSET,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.sm,
     paddingVertical: 6,
-    borderRadius: 8,
-    shadowColor: "#000",
+    borderRadius: radius.sm,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -579,21 +580,21 @@ const styles = StyleSheet.create({
   },
   quickSheetList: {
     gap: 10,
-    paddingBottom: 8,
+    paddingBottom: space.xs,
   },
   quickSheetItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   quickSheetIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -606,8 +607,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 12,
-    marginBottom: 4,
-    marginLeft: 4,
+    marginTop: space.sm,
+    marginBottom: space.xxs,
+    marginLeft: space.xxs,
   },
 });

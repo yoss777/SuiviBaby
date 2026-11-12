@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/ReferralCard.tsx
 // Referral program card with share functionality
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { REFERRAL_TIERS, getReferralTier } from "@/types/promo";
@@ -163,7 +164,7 @@ export const ReferralCard = memo(function ReferralCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   headerTitle: {
     fontSize: 14,
@@ -193,10 +194,10 @@ const styles = StyleSheet.create({
   tierBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   tierText: {
     fontSize: 12,
@@ -210,8 +211,8 @@ const styles = StyleSheet.create({
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    gap: space.xs,
+    marginBottom: space.sm,
   },
   progressBg: {
     flex: 1,
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
-    gap: 8,
+    gap: space.xs,
   },
   codeBtn: {
     flex: 1,
@@ -254,7 +255,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     minHeight: 44,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
     paddingVertical: 10,
     borderRadius: 10,
   },

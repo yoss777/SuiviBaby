@@ -1,6 +1,7 @@
 // components/ui/ChangelogModal.tsx
 // "What's new" modal displayed after app updates
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import type { ChangelogEntry } from "@/types/content";
@@ -236,41 +237,41 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)", // Overlay requires fixed opacity regardless of theme
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: space.xl,
   },
   container: {
     width: "100%",
     maxHeight: "80%",
-    borderRadius: 20,
+    borderRadius: radius.xl,
     overflow: "hidden",
-    paddingBottom: 20,
+    paddingBottom: space.lg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 20,
-    paddingBottom: 12,
+    padding: space.lg,
+    paddingBottom: space.sm,
   },
   headerTitle: {
     flex: 1,
     fontSize: 20,
     fontWeight: "700",
-    marginLeft: 8,
+    marginLeft: space.xs,
   },
   carousel: {
-    paddingHorizontal: 8,
+    paddingHorizontal: space.xs,
   },
   slide: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
   versionBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: space.xxs,
     borderRadius: 10,
-    marginBottom: 12,
+    marginBottom: space.sm,
   },
   versionText: {
     fontSize: 12,
@@ -280,14 +281,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     lineHeight: 28,
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   slideDate: {
     fontSize: 12,
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   featuresList: {
-    gap: 12,
+    gap: space.sm,
   },
   featureRow: {
     flexDirection: "row",
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   featureIcon: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
@@ -311,7 +312,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: space.sm,
   },
   dot: {
     width: 6,
@@ -323,9 +324,9 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   ctaButton: {
-    marginHorizontal: 24,
+    marginHorizontal: space.xl,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
   },
   ctaText: {

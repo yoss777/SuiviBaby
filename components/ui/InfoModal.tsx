@@ -10,7 +10,7 @@ import {
 
 import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors, getReadableTextColor } from '@/constants/theme';
-import { elevation, radius } from '@/constants/tokens';
+import { elevation, radius, space } from "@/constants/tokens";
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DESTRUCTIVE_COLOR } from './ConfirmModal';
 import { pressedOpacity, usePressRipple } from './pressFeedback';
@@ -170,27 +170,27 @@ const styles = StyleSheet.create({
   modalContent: {
     width: width * 0.85,
     borderRadius: radius.xl,
-    padding: 24,
+    padding: space.xl,
   },
   modalTitle: {
     fontSize: 22,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: 'center',
   },
   modalMessage: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: space.md,
     textAlign: 'center',
     opacity: 0.7,
   },
   modalMessageContainer: {
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: space.sm,
   },
   modalButton: {
     flex: 1,
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dismissLink: {
-    marginTop: 8,
+    marginTop: space.xs,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',

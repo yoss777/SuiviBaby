@@ -1,5 +1,6 @@
 // Écran générique de liste d'événements (repas, pompages, couches), piloté
 // par une config de module (components/eventList/configs).
+import { space } from "@/constants/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback } from "react";
@@ -256,8 +257,8 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
 
   const modalColors =
     config.texts.modalTone === "card"
-      ? { backgroundColor: nc.backgroundCard, textColor: nc.textStrong, confirmButtonColor: nc.error }
-      : { backgroundColor: Colors[colorScheme].background, textColor: Colors[colorScheme].text };
+      ? { backgroundColor: nc.backgroundCard, textColor: nc.textStrong, confirmButtonColor: nc.destructive }
+      : { backgroundColor: Colors[colorScheme].surface, textColor: Colors[colorScheme].text };
 
   const { selectedDate } = filters;
   const batchCount = softDelete.batchDeleteConfirm.ids.length;
@@ -296,8 +297,8 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                 onDayPress={filters.handleDateSelect}
                 markedDates={filters.markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: tint,
                   selectedDayTextColor: Colors[colorScheme].onTint,
@@ -404,20 +405,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   calendarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderBottomWidth: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
     paddingBottom: 80,
   },
   filterRowPadded: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 16,
+    paddingRight: space.md,
   },
 
   // Expand trigger
@@ -425,8 +426,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 12,
+    gap: space.xxs,
+    paddingVertical: space.sm,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -440,7 +441,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: space.xxl,
   },
   emptyIconWrapper: {
     width: 80,
@@ -448,7 +449,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   emptyTitle: {
     fontSize: 18,
@@ -464,10 +465,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
     borderRadius: 24,
-    marginTop: 20,
+    marginTop: space.lg,
   },
   emptyCtaText: {
     fontSize: 15,
@@ -480,9 +481,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: 80,
     borderRadius: 14,
-    marginHorizontal: 4,
+    marginHorizontal: space.xxs,
     marginVertical: 1,
-    gap: 4,
+    gap: space.xxs,
   },
   deleteActionText: {
     fontSize: 12,

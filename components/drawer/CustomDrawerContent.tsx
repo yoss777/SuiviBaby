@@ -22,7 +22,7 @@ import {
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getBackgroundTint, getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getChartColors, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
   modalContent: {
     borderRadius: 20,
     padding: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

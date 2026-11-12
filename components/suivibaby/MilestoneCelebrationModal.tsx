@@ -4,7 +4,7 @@
 // Affichage pur : le jalon est marqué « célébré » par l'appelant, à l'affichage
 // (même si la modale est fermée sans partager).
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { buildShareMessage, type MilestoneCelebration } from "@/services/milestoneCelebrationService";
 import { isReduceMotionEnabled } from "@/utils/motion";
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 28,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,

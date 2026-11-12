@@ -10,7 +10,7 @@ import {
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
-import { radius } from "@/constants/tokens";
+import { radius, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { pressedOpacity, usePressRipple } from "./pressFeedback";
 
@@ -153,49 +153,49 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: space.lg,
   },
   modalContent: {
     width: "100%",
     maxWidth: 420,
     borderRadius: radius.lg,
-    padding: 20,
+    padding: space.lg,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalMessage: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: space.md,
     textAlign: "center",
   },
   input: {
     borderWidth: 1,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: space.md,
     minHeight: 44,
   },
   modalButtons: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   modalButton: {
     flex: 1,
     minHeight: 44,
-    paddingVertical: 12,
+    paddingVertical: space.sm,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",

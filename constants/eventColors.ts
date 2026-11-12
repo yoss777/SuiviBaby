@@ -1,66 +1,37 @@
+/**
+ * Couleur d'identité de chaque type de saisie, dérivée des tokens de
+ * catégorie (`itemColors` / `categoryColors` dans dashboardColors.ts) pour
+ * qu'un même type garde la même couleur sur l'Accueil, le FAB, Plus, les
+ * listes et les formulaires (Repas = corail partout).
+ *
+ * - `dark` : la couleur d'accent (icônes, pastilles, bordures). Pour un aplat
+ *   portant du texte, passer par `getAccentColors(accent, scheme).filledBg`
+ *   + `.filledText` (components/ui/accentColors.ts) : jamais de blanc en dur.
+ * - `light` : fond pâle (thème clair) associé.
+ */
+import { itemColors, neutralColors } from "./dashboardColors";
+
+export type EventColor = { dark: string; light: string };
+
+const c = (dark: string, light: string): EventColor => ({ dark, light });
+
 export const eventColors = {
-  meal: {
-    dark: "#4A90E2", // Blue
-    light: "#e8f4fd",
-  },
-  pumping: {
-    dark: "#28a745", // Green
-    light: "#f0f8f4",
-  },
-  miction: {
-    dark: "#17a2b8", // Cyan
-    light: "#e8f8f9",
-  },
-  selle: {
-    dark: "#dc3545", // Red
-    light: "#fcebec",
-  },
-  vitamine: {
-    dark: "#FF9800", // Orange
-    light: "#fff3e0",
-  },
-  vaccin: {
-    dark: "#9C27B0", // Purple
-    light: "#f3e5f5",
-  },
-  sommeil: {
-    dark: "#6f42c1", // Purple night
-    light: "#f1e9ff",
-  },
-  bain: {
-    dark: "#3b82f6", // Blue
-    light: "#e7f0ff",
-  },
-  temperature: {
-    dark: "#e03131", // Red
-    light: "#fff5f5",
-  },
-  medicament: {
-    dark: "#2f9e44", // Green
-    light: "#ebfbee",
-  },
-  symptome: {
-    dark: "#f59f00", // Amber
-    light: "#fff9db",
-  },
-  activite: {
-    dark: "#10b981", // Emerald green
-    light: "#d1fae5",
-  },
-  jalon: {
-    dark: "#ec4899", // Pink
-    light: "#fde7f3",
-  },
-  croissance: {
-    dark: "#8BCF9B", // Soft green (seedling)
-    light: "#e8f5eb",
-  },
-  nettoyage_nez: {
-    dark: "#06b6d4", // Cyan
-    light: "#e0f7fa",
-  },
-  default: {
-    dark: "#6c757d", // Gray
-    light: "#f8f9fa",
-  },
+  meal: c(itemColors.biberon, "#FEF5F3"),
+  pumping: c(itemColors.pompage, "#F0F6F2"),
+  miction: c(itemColors.miction, "#F0F7F7"),
+  selle: c(itemColors.selle, "#F6F1EC"),
+  vitamine: c(itemColors.vitamine, "#FDF8F0"),
+  vaccin: c(itemColors.vaccin, "#F4F2F8"),
+  sommeil: c(itemColors.sieste, "#F5F3F8"),
+  bain: c(itemColors.bain, "#EEF6FD"),
+  temperature: c(itemColors.temperature, "#FDF0F0"),
+  medicament: c(itemColors.medicament, "#EFF3FD"),
+  symptome: c(itemColors.symptome, "#FDF0F4"),
+  activite: c(itemColors.activite, "#F3F9EF"),
+  jalon: c(itemColors.jalon, "#FDF8F0"),
+  croissance: c(itemColors.croissance, "#FDF9EE"),
+  nettoyage_nez: c(itemColors.nez, "#F0F6F6"),
+  default: c(neutralColors.textLight, neutralColors.backgroundPressed),
 };
+
+export type EventColorKey = Exclude<keyof typeof eventColors, "default">;

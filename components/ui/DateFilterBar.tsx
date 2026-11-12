@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { PropsWithChildren } from "react";
 import {
   Pressable,
@@ -134,14 +135,14 @@ const styles = StyleSheet.create({
   container: {},
   content: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   button: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
     // borderWidth: 1,
   },
   text: {

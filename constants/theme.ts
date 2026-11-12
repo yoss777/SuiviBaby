@@ -5,16 +5,30 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
+import { neutralColors, neutralColorsDark } from './dashboardColors';
+
+// #08739a (et non plus #0a7ea4) : la barre d'onglets est posée sur
+// nc.background (#f9fafb), où #0a7ea4 ne faisait que 4.43:1 ; #08739a y fait
+// 5.11:1 (5.34:1 sur blanc), à l'œil quasi identique.
+const tintColorLight = '#08739a';
 const tintColorDark = '#60a5fa'; // blue-400 — cohérent avec stats/charts en dark
 
 type ThemeColors = {
   text: string;
+  /**
+   * Fond d'écran. Source unique : `nc.background` (dashboardColors.ts), le
+   * même que l'en-tête, la barre d'onglets et les écrans.
+   */
   background: string;
+  /**
+   * Fond des feuilles, calendriers, sélecteurs et listes de modales : blanc en
+   * clair (posé sur `background`), fond nuit en sombre.
+   */
+  surface: string;
   tint: string;
   /**
    * Texte/icône posé sur un aplat `tint` (bouton plein). Blanc en clair
-   * (4.63:1 sur #0a7ea4), gris-900 en sombre : le blanc n'atteint que 2.54:1
+   * (5.34:1 sur #08739a), gris-900 en sombre : le blanc n'atteint que 2.54:1
    * sur #60a5fa, #111827 y fait 6.98:1.
    */
   onTint: string;
@@ -26,7 +40,8 @@ type ThemeColors = {
 export const Colors: Record<string, ThemeColors> = {
   light: {
     text: '#11181C',
-    background: '#fff',
+    background: neutralColors.background,
+    surface: neutralColors.backgroundCard,
     tint: tintColorLight,
     onTint: '#ffffff',
     icon: '#687076',
@@ -35,7 +50,8 @@ export const Colors: Record<string, ThemeColors> = {
   },
   dark: {
     text: '#ECEDEE',
-    background: '#111827', // bleu nuit (gray-900) — cohérent avec dashboardColors
+    background: neutralColorsDark.background, // bleu nuit (gray-900)
+    surface: neutralColorsDark.background,
     tint: tintColorDark,
     onTint: '#111827',
     icon: '#9BA1A6',

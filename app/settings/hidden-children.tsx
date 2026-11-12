@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { formatBirthDate, getAgeLabel } from "@/utils/ageUtils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     width: width * 0.85,
     borderRadius: 20,
     padding: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

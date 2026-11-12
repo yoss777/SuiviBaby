@@ -17,6 +17,7 @@
 //  - boutons désactivés visuellement aux bornes atteintes.
 //  - aria labels sensés pour VoiceOver/TalkBack.
 
+import { radius, space } from "@/constants/tokens";
 import { memo, useCallback, useEffect, useRef } from "react";
 import {
   StyleSheet,
@@ -192,13 +193,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
-    marginBottom: 8,
+    gap: space.md,
+    marginBottom: space.xs,
   },
   button: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     alignItems: "center",
     justifyContent: "center",
   },

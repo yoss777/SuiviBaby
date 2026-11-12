@@ -1,3 +1,4 @@
+import { Colors } from "@/constants/theme";
 import * as Sentry from "@sentry/react-native";
 import React from "react";
 import {
@@ -8,6 +9,7 @@ import {
   Platform,
   DevSettings,
 } from "react-native";
+import { neutralColors } from "@/constants/dashboardColors";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -93,7 +95,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: neutralColors.white,
     padding: 32,
   },
   emoji: {
@@ -103,20 +105,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#212529",
+    color: neutralColors.textStrong,
     textAlign: "center",
     marginBottom: 12,
     fontFamily: Platform.OS === "ios" ? "System" : undefined,
   },
   message: {
     fontSize: 16,
-    color: "#6c757d",
+    color: neutralColors.textLight,
     textAlign: "center",
     lineHeight: 24,
     marginBottom: 24,
   },
   errorBox: {
-    backgroundColor: "#FFF3F3",
+    backgroundColor: neutralColors.errorBg,
     borderRadius: 8,
     padding: 12,
     marginBottom: 24,
@@ -124,17 +126,17 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: "#E74C3C",
+    color: neutralColors.errorText,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   button: {
-    backgroundColor: "#4A90E2",
+    backgroundColor: Colors.light.tint,
     paddingHorizontal: 32,
     paddingVertical: 14,
     borderRadius: 12,
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: Colors.light.onTint,
     fontSize: 16,
     fontWeight: "600",
   },

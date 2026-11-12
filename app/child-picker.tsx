@@ -24,6 +24,7 @@ import {
 import { afficherEnfant, obtenirPreferences } from '@/services/userPreferencesService';
 import { getChildDoc } from '@/services/childRepository';
 import { getAccessibleChildIds } from '@/utils/permissions';
+import { neutralColors } from "@/constants/dashboardColors";
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = Math.min(width * 0.85, 320);
@@ -348,7 +349,7 @@ export default function ChildPicker() {
           onPress={() => setShowUnhideModal(false)}
         >
           <Pressable
-            style={[styles.modalContent, { backgroundColor: Colors[colorScheme].background }]}
+            style={[styles.modalContent, { backgroundColor: Colors[colorScheme].surface }]}
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={[styles.modalTitle, { color: Colors[colorScheme].text }]}>
@@ -381,10 +382,10 @@ export default function ChildPicker() {
                       {
                         backgroundColor: toggledIds.has(child.id) 
                           ? `${Colors[colorScheme].tint}15` 
-                          : Colors[colorScheme].background,
+                          : Colors[colorScheme].surface,
                         borderColor: toggledIds.has(child.id)
                           ? Colors[colorScheme].tint
-                          : '#e0e0e0',
+                          : neutralColors.border,
                       },
                     ]}
                     onPress={() => handleToggleChild(child.id)}
@@ -399,7 +400,7 @@ export default function ChildPicker() {
                     <Ionicons
                       name={toggledIds.has(child.id) ? 'eye' : 'eye-off'}
                       size={24}
-                      color={toggledIds.has(child.id) ? Colors[colorScheme].tint : '#999'}
+                      color={toggledIds.has(child.id) ? Colors[colorScheme].tint : neutralColors.textMuted}
                     />
                   </TouchableOpacity>
                 ))
@@ -445,7 +446,7 @@ export default function ChildPicker() {
         message="Êtes-vous sûr de vouloir vous déconnecter ?"
         confirmText="Déconnexion"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={() => setShowSignOutModal(false)}
         onConfirm={async () => {
@@ -462,7 +463,7 @@ export default function ChildPicker() {
         visible={errorModal.visible}
         title="Erreur"
         message={errorModal.message}
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onClose={() => setErrorModal({ visible: false, message: '' })}
       />
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inviteButtonText: {
-    color: '#fff',
+    color: neutralColors.white,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -578,7 +579,7 @@ const styles = StyleSheet.create({
     maxHeight: '80%',
     borderRadius: 24,
     padding: 24,
-    shadowColor: '#000',
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -656,17 +657,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: neutralColors.backgroundPressed,
   },
   confirmButton: {},
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#666',
+    color: neutralColors.textLight,
   },
   confirmButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: neutralColors.white,
   },
 });

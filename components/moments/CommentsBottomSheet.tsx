@@ -1,4 +1,4 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useChildAccesses } from "@/hooks/useChildPermissions";
@@ -32,7 +32,7 @@ import type { TextInputInstance } from "react-native";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.7;
-const MENTION_COLOR = "#E8A85A";
+const MENTION_COLOR = itemColors.jalon;
 
 type CommentsBottomSheetProps = {
   visible: boolean;
@@ -207,7 +207,7 @@ const CommentItem = ({
           accessibilityRole="button"
           accessibilityLabel="Supprimer ce commentaire"
         >
-          <FontAwesome6 name="trash" size={14} color="#ef4444" />
+          <FontAwesome6 name="trash" size={14} color={neutralColors.destructive} />
         </Pressable>
       )}
     </Pressable>
@@ -768,9 +768,9 @@ export const CommentsBottomSheet = ({
               accessibilityState={{ disabled: !newComment.trim() || isSending }}
             >
               {isSending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={neutralColors.white} />
               ) : (
-                <FontAwesome6 name="paper-plane" size={16} color="#fff" solid />
+                <FontAwesome6 name="paper-plane" size={16} color={neutralColors.white} solid />
               )}
             </Pressable>
           </View>

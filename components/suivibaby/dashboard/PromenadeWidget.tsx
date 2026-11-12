@@ -1,7 +1,8 @@
 // components/suivibaby/dashboard/PromenadeWidget.tsx
 // Unified layout — same container size whether active or inactive
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { flatInDark } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
@@ -243,10 +244,10 @@ export const PromenadeWidget = memo(function PromenadeWidget({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: space.md,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   playButton: {
-    padding: 4,
+    padding: space.xxs,
   },
   timerValue: {
     marginTop: 6,
@@ -271,7 +272,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: space.xxs,
     fontSize: 12,
   },
   actionButton: {
@@ -280,8 +281,8 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -293,13 +294,13 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     marginTop: 10,
   },
   editButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

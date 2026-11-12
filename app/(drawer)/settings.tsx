@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import { SkeletonBlock } from "@/components/ui/Skeleton";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -865,7 +866,7 @@ export default function SettingsScreen() {
         cancelText="Annuler"
         backgroundColor={nc.backgroundCard}
         textColor={nc.textStrong}
-        confirmButtonColor={nc.error}
+        confirmButtonColor={nc.destructive}
         confirmTextColor={nc.white}
         onConfirm={performConsentWithdrawal}
         onCancel={() => {
@@ -879,27 +880,27 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   pendingItem: {
-    padding: 16,
-    gap: 8,
+    padding: space.md,
+    gap: space.xs,
   },
   container: {
     flex: 1,
   },
   scrollContent: {
-    paddingVertical: 16,
+    paddingVertical: space.md,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: space.xl,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingHorizontal: space.lg,
+    marginBottom: space.xs,
   },
   sectionContent: {
-    borderRadius: 12,
-    marginHorizontal: 16,
+    borderRadius: radius.md,
+    marginHorizontal: space.md,
     overflow: "hidden",
   },
   settingItem: {
@@ -907,7 +908,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
     borderBottomWidth: 1,
   },
   settingItemLeft: {
@@ -921,7 +922,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: space.sm,
   },
   settingTextContainer: {
     flex: 1,
@@ -937,15 +938,15 @@ const styles = StyleSheet.create({
   settingItemRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     maxWidth: 160,
   },
   settingValue: {
     fontSize: 14,
   },
   tag: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
+    borderRadius: radius.md,
+    paddingHorizontal: space.xs,
     paddingVertical: 3,
   },
   tagText: {
@@ -955,22 +956,22 @@ const styles = StyleSheet.create({
   },
   footer: {
     alignItems: "center",
-    paddingVertical: 24,
+    paddingVertical: space.xl,
   },
   footerText: {
     fontSize: 12,
   },
   footerSubtext: {
     fontSize: 12,
-    marginTop: 4,
+    marginTop: space.xxs,
   },
   deletionBanner: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
-    marginTop: 8,
+    marginHorizontal: space.md,
+    marginTop: space.xs,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   deletionBannerText: {
@@ -983,9 +984,9 @@ const styles = StyleSheet.create({
   },
   cancelDeletionButton: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
     paddingVertical: 6,
-    marginLeft: 8,
+    marginLeft: space.xs,
   },
 });

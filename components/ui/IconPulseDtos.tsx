@@ -2,6 +2,7 @@ import { FontAwesome6 } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { neutralColors } from "@/constants/dashboardColors";
 
 type IconPulseDotsProps = {
   icons?: React.ComponentProps<typeof FontAwesome6>["name"][];
@@ -19,7 +20,7 @@ type IconPulseDotsProps = {
 export function IconPulseDots({
   icons = ["person-breastfeeding", "pump-medical", "pills", "syringe", "toilet"],
   size = 24,
-  color = "#ffffff",
+  color = neutralColors.white,
   gap = 20,
   cycleDurationMs = 2000,
   minOpacity = 0.35,

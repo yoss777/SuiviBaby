@@ -1066,7 +1066,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: chipActiveColors.filledText,
                 },
               ]}
             >

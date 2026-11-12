@@ -1,4 +1,4 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { NotificationType } from "@/contexts/MomentsNotificationContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
@@ -69,7 +69,7 @@ const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
   like: { name: 'heart', solid: true },
   comment: { name: 'comment', solid: true },
 };
-const NOTIF_COLOR = '#E8A85A'; // Amber warm — matches app accent
+const NOTIF_COLOR = itemColors.jalon; // doré des moments
 
 // Polaroid card component
 const PolaroidCard = ({
@@ -170,7 +170,7 @@ const PolaroidCard = ({
             <FontAwesome6
               name={NOTIF_ICON[notificationType].name}
               size={8}
-              color="#fff"
+              color={neutralColors.white}
               solid={NOTIF_ICON[notificationType].solid}
             />
           </Animated.View>
@@ -195,13 +195,13 @@ const PolaroidCard = ({
             <View style={styles.socialOverlay}>
               {hasLikes && (
                 <>
-                  <FontAwesome6 name="heart" size={9} color="#fff" solid />
+                  <FontAwesome6 name="heart" size={9} color={neutralColors.white} solid />
                   <Text style={styles.socialOverlayText}>{likeCount}</Text>
                 </>
               )}
               {hasComments && (
                 <>
-                  <FontAwesome6 name="comment" size={9} color="#fff" solid />
+                  <FontAwesome6 name="comment" size={9} color={neutralColors.white} solid />
                   <Text style={styles.socialOverlayText}>{commentCount}</Text>
                 </>
               )}
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 8,
     paddingBottom: 12,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   socialOverlayText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 12,
     fontWeight: "600",
     marginRight: 2,

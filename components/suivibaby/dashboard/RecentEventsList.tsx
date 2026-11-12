@@ -1,4 +1,5 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { flatInDark } from "@/constants/theme";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import {
@@ -744,14 +745,14 @@ export const RecentEventsList = memo(RecentEventsListComponent);
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: space.lg,
+    marginBottom: space.md,
   },
   sectionTitle: {
     fontSize: 20,
@@ -764,32 +765,32 @@ const styles = StyleSheet.create({
   sectionLink: {
     fontSize: 13,
     fontWeight: "600",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.xxs,
   },
   recentLoading: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginHorizontal: 20,
+    gap: space.xs,
+    marginHorizontal: space.lg,
   },
   recentLoadingText: {
     fontSize: 13,
   },
   recentHint: {
     marginTop: -2,
-    marginBottom: 8,
-    marginHorizontal: 20,
+    marginBottom: space.xs,
+    marginHorizontal: space.lg,
     fontSize: 12,
     fontWeight: "500",
   },
   swipeableContainer: {
-    marginHorizontal: 20,
+    marginHorizontal: space.lg,
   },
   recentRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 12,
+    gap: space.sm,
     marginBottom: 14,
   },
   recentTimelineColumn: {
@@ -799,13 +800,13 @@ const styles = StyleSheet.create({
   recentDot: {
     width: 10,
     height: 10,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     marginTop: 6,
   },
   recentLine: {
     width: 2,
     flex: 1,
-    marginTop: 4,
+    marginTop: space.xxs,
   },
   recentLineLast: {
     backgroundColor: "transparent",
@@ -834,9 +835,9 @@ const styles = StyleSheet.create({
   recentCard: {
     flex: 1,
     borderRadius: 14,
-    padding: 12,
+    padding: space.sm,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -845,7 +846,7 @@ const styles = StyleSheet.create({
   recentTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   recentTitle: {
     fontSize: 15,
@@ -854,7 +855,7 @@ const styles = StyleSheet.create({
   recentThumb: {
     width: 34,
     height: 34,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginLeft: "auto",
   },
   recentDetails: {
@@ -870,9 +871,9 @@ const styles = StyleSheet.create({
   daySeparator: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 20,
+    marginHorizontal: space.lg,
     marginBottom: 14,
-    gap: 12,
+    gap: space.sm,
   },
   daySeparatorLine: {
     flex: 1,
@@ -885,14 +886,14 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: "center",
-    paddingVertical: 32,
+    paddingVertical: space.xxl,
     paddingHorizontal: 40,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginHorizontal: space.lg,
+    marginBottom: space.lg,
   },
   emptyStateEmoji: {
     fontSize: 40,
-    marginBottom: 12,
+    marginBottom: space.sm,
   },
   emptyStateTitle: {
     fontSize: 16,
@@ -910,9 +911,9 @@ const styles = StyleSheet.create({
     width: 80,
     marginBottom: 15,
     borderRadius: 14,
-    marginHorizontal: 4,
+    marginHorizontal: space.xxs,
     marginVertical: 1,
-    gap: 4,
+    gap: space.xxs,
   },
   deleteActionText: {
     color: "white",

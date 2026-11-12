@@ -1,3 +1,5 @@
+import { space } from "@/constants/tokens";
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -63,7 +65,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       title,
       icon = "edit",
       iconLib = "fa6",
-      accentColor = "#4A90E2",
+      accentColor = eventColors.meal.dark,
       isEditing = false,
       isSubmitting = false,
       showActions = true,
@@ -283,14 +285,14 @@ FormBottomSheet.displayName = "FormBottomSheet";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: space.lg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
+    gap: space.sm,
+    marginBottom: space.lg,
     marginTop: 10,
   },
   title: {
@@ -312,24 +314,24 @@ const styles = StyleSheet.create({
 
   // Boutons d'action
   buttonsContainer: {
-    gap: 12,
+    gap: space.sm,
     paddingBottom: Platform.OS === "ios" ? 20 : 16,
     paddingTop: 10,
   },
   primaryRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   deleteOutlineButton: {
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     minHeight: 44, // cible tactile ≥ 44 pt
     minWidth: 44,
-    gap: 8,
+    gap: space.xs,
   },
   deleteOutlineText: {
     fontSize: 14,
@@ -339,7 +341,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     borderWidth: 1,
-    paddingVertical: 16,
+    paddingVertical: space.md,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -351,7 +353,7 @@ const styles = StyleSheet.create({
   },
   validateButton: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: space.md,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",

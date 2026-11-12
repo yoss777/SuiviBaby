@@ -40,6 +40,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { canInteractWithEvent } from "@/utils/eventPermissions";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
 import { SPRING_V3 } from "@/constants/motion";
+import { neutralColors } from "@/constants/dashboardColors";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const DOUBLE_TAP_HINT_KEY = "gallery_double_tap_hint_shown";
@@ -775,7 +776,7 @@ export const SwipeGallery = ({
                   <Animated.View
                     style={[styles.doubleTapHeart, heartAnimatedStyle]}
                   >
-                    <FontAwesome6 name="heart" size={80} color="#ef4444" solid />
+                    <FontAwesome6 name="heart" size={80} color={neutralColors.error} solid />
                   </Animated.View>
                 )}
               </Pressable>
@@ -797,7 +798,7 @@ export const SwipeGallery = ({
                       <FontAwesome6
                         name="heart"
                         size={22}
-                        color={likeInfo.likedByMe ? "#ef4444" : "#fff"}
+                        color={likeInfo.likedByMe ? neutralColors.error : neutralColors.white}
                         solid={likeInfo.likedByMe}
                       />
                     </Pressable>
@@ -812,7 +813,7 @@ export const SwipeGallery = ({
                       accessibilityRole="button"
                       accessibilityLabel={`Commenter${commentCount > 0 ? ` (${commentCount})` : ""}`}
                     >
-                      <FontAwesome6 name="comment" size={22} color="#fff" />
+                      <FontAwesome6 name="comment" size={22} color={neutralColors.white} />
                       {commentCount > 0 && <View style={styles.commentDot} />}
                     </Pressable>
                   </View>
@@ -917,7 +918,7 @@ export const SwipeGallery = ({
                   accessibilityRole="button"
                   accessibilityLabel="Fermer la galerie"
                 >
-                  <FontAwesome6 name="xmark" size={20} color="#fff" />
+                  <FontAwesome6 name="xmark" size={20} color={neutralColors.white} />
                 </Pressable>
 
                 <View style={styles.headerTitleContainer}>
@@ -944,7 +945,7 @@ export const SwipeGallery = ({
                       accessibilityRole="button"
                       accessibilityLabel="Options photo"
                     >
-                      <FontAwesome6 name="ellipsis-vertical" size={16} color="#fff" />
+                      <FontAwesome6 name="ellipsis-vertical" size={16} color={neutralColors.white} />
                     </Pressable>
                   </View>
                 ) : (
@@ -1046,7 +1047,7 @@ export const SwipeGallery = ({
                 exiting={FadeOut.duration(300)}
                 style={styles.doubleTapHint}
               >
-                <FontAwesome6 name="heart" size={16} color="#ef4444" solid />
+                <FontAwesome6 name="heart" size={16} color={neutralColors.error} solid />
                 <Text style={styles.doubleTapHintText}>
                   Double-tapez une photo pour l&apos;aimer
                 </Text>
@@ -1117,7 +1118,7 @@ export const SwipeGallery = ({
                     ]}
                     onPress={handleEditFromActionSheet}
                   >
-                    <FontAwesome6 name="pen" size={16} color="#1f2937" />
+                    <FontAwesome6 name="pen" size={16} color={neutralColors.textStrong} />
                     <Text style={actionSheetStyles.optionText}>
                       Modifier
                     </Text>
@@ -1134,7 +1135,7 @@ export const SwipeGallery = ({
                     ]}
                     onPress={handleDownloadFromActionSheet}
                   >
-                    <FontAwesome6 name="download" size={16} color="#1f2937" />
+                    <FontAwesome6 name="download" size={16} color={neutralColors.textStrong} />
                     <Text style={actionSheetStyles.optionText}>
                       Télécharger
                     </Text>
@@ -1149,7 +1150,7 @@ export const SwipeGallery = ({
                 ]}
                 onPress={handleHideForMe}
               >
-                <FontAwesome6 name="eye-slash" size={16} color="#4b5563" />
+                <FontAwesome6 name="eye-slash" size={16} color={neutralColors.textNormal} />
                 <Text style={actionSheetStyles.optionText}>
                   Masquer cette photo pour moi
                 </Text>
@@ -1162,8 +1163,8 @@ export const SwipeGallery = ({
                 ]}
                 onPress={handleOpenReport}
               >
-                <FontAwesome6 name="flag" size={16} color="#dc2626" />
-                <Text style={[actionSheetStyles.optionText, { color: "#dc2626" }]}>
+                <FontAwesome6 name="flag" size={16} color={neutralColors.destructive} />
+                <Text style={[actionSheetStyles.optionText, { color: neutralColors.destructive }]}>
                   Signaler un contenu sensible
                 </Text>
               </Pressable>
@@ -1226,7 +1227,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: neutralColors.white,
   },
   headerActions: {
     flexDirection: "row",
@@ -1263,7 +1264,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#1a1a1a",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -1290,7 +1291,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   imageErrorText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 14,
     textAlign: "center",
   },
@@ -1300,7 +1301,7 @@ const styles = StyleSheet.create({
     left: "50%",
     marginTop: -40,
     marginLeft: -40,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1329,7 +1330,7 @@ const styles = StyleSheet.create({
   addCardTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#fff",
+    color: neutralColors.white,
     marginBottom: 8,
   },
   addCardSubtitle: {
@@ -1350,7 +1351,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.3)",
   },
   dotActive: {
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
     width: 24,
   },
   dotAdd: {
@@ -1436,7 +1437,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   doubleTapHintText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1451,7 +1452,7 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
   },
   localToastText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1480,14 +1481,14 @@ const actionSheetStyles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheetContainer: {
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: "hidden",
     minHeight: 220,
   },
   sheet: {
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
   },
   handleContainer: {
     alignItems: "center",
@@ -1498,18 +1499,18 @@ const actionSheetStyles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#d1d5db",
+    backgroundColor: neutralColors.textMuted,
   },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: neutralColors.backgroundPressed,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: neutralColors.textStrong,
   },
   option: {
     flexDirection: "row",
@@ -1519,26 +1520,26 @@ const actionSheetStyles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   optionPressed: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: neutralColors.backgroundPressed,
   },
   optionText: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#1f2937",
+    color: neutralColors.textStrong,
   },
   cancelText: {
     textAlign: "center",
     flex: 1,
     fontWeight: "600",
-    color: "#6b7280",
+    color: neutralColors.textLight,
   },
   separator: {
     height: 1,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: neutralColors.backgroundPressed,
     marginHorizontal: 16,
   },
   separatorLarge: {
     height: 6,
-    backgroundColor: "#f3f4f6",
+    backgroundColor: neutralColors.backgroundPressed,
   },
 });

@@ -3,7 +3,7 @@ import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { OMSMetric, OMSSex } from "@/constants/omsPercentiles";
 import {
   OMS_BAND_LABELS,
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
+    backgroundColor: neutralColors.destructive,
     justifyContent: "center",
     alignItems: "center",
     width: 80,

@@ -1,6 +1,7 @@
 // Config de l'écran Repas (tétées, biberons, solides) : trois écouteurs,
 // suppression réservée aux propriétaires/admins, « Voir plus » par pas de
 // 14 jours.
+import { space } from "@/constants/tokens";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React from "react";
@@ -347,9 +348,9 @@ const styles = StyleSheet.create({
   statsBreakdown: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: space.md,
     marginBottom: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: space.xxs,
   },
   sessionContent: {
     flex: 1,
@@ -373,12 +374,12 @@ const styles = StyleSheet.create({
   durationLabels: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   durationLabelItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   durationDot: {
     width: 6,

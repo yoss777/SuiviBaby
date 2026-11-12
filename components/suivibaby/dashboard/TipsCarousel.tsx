@@ -2,6 +2,7 @@
 // Horizontal carousel of tips with dots indicator and auto-scroll
 // (jamais la nuit, avec « Réduire les animations » ou un lecteur d'écran)
 
+import { space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Tip } from "@/types/content";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-    marginTop: 16,
+    marginTop: space.md,
   },
   dot: {
     width: 6,

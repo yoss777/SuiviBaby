@@ -152,7 +152,7 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
           accessibilityLabel="Ajouter l'allergie"
           accessibilityState={{ disabled: locked || !draft.trim() }}
         >
-          <Text style={[styles.addText, { color: nc.white }]}>Ajouter</Text>
+          <Text style={[styles.addText, { color: nc.onTodayAccent }]}>Ajouter</Text>
         </TouchableOpacity>
       </View>
       {error && (

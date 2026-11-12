@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/MilestoneTimelineCard.tsx
 // Compact dashboard card showing upcoming milestones
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { MilestoneRef } from "@/types/content";
 import { MILESTONE_CATEGORY_COLORS } from "@/types/content";
@@ -155,9 +156,9 @@ export const MilestoneTimelineCard = memo(function MilestoneTimelineCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    padding: 12,
+    padding: space.sm,
   },
   header: {
     flexDirection: "row",
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   viewAll: {
     fontSize: 12,
@@ -192,7 +193,7 @@ const styles = StyleSheet.create({
   milestoneRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   milestoneDot: {
     width: 8,

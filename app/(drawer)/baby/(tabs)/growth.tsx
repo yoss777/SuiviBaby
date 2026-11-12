@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
@@ -9,7 +10,11 @@ import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors, getBackgroundTint } from "@/constants/dashboardColors";
+import {
+  getBackgroundTint,
+  getNeutralColors,
+  neutralColors,
+} from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
@@ -112,7 +117,7 @@ const DeleteAction = React.memo(function DeleteAction({
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette mesure"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Ionicons name="trash-outline" size={20} color={neutralColors.white} />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
   );
@@ -1419,11 +1424,11 @@ export default function GrowthScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1520,7 +1525,7 @@ export default function GrowthScreen() {
         message="Voulez-vous vraiment supprimer cette mesure ?"
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
@@ -1532,7 +1537,7 @@ export default function GrowthScreen() {
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}
@@ -1548,50 +1553,50 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: "row",
     alignItems: "center",
-    paddingRight: 16,
+    paddingRight: space.md,
     gap: 0,
   },
   headerButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: space.xs,
+    paddingVertical: space.xs,
+    borderRadius: radius.sm,
   },
   calendarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderBottomWidth: 1,
   },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 16,
+    paddingRight: space.md,
   },
   dateChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
+    gap: space.xxs,
+    paddingHorizontal: space.sm,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   dateChipText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 13,
     fontWeight: "600",
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
     paddingBottom: 80,
   },
   dayGroup: {
-    marginBottom: 24,
+    marginBottom: space.xl,
   },
   dayHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: space.sm,
   },
   dayLabel: {
     fontSize: 15,
@@ -1600,7 +1605,7 @@ const styles = StyleSheet.create({
   dayStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   dayStatItem: {
     alignItems: "flex-end",
@@ -1622,11 +1627,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: space.md,
+    gap: space.sm,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1645,7 +1650,7 @@ const styles = StyleSheet.create({
   sessionIconWrapper: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1664,7 +1669,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   metricLines: {
-    gap: 4,
+    gap: space.xxs,
   },
   metricLineRow: {
     flexDirection: "row",
@@ -1680,9 +1685,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: space.xs,
+    paddingVertical: space.xxs,
+    borderRadius: radius.sm,
   },
   metricPillText: {
     fontSize: 12,
@@ -1691,7 +1696,7 @@ const styles = StyleSheet.create({
   deltaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: space.xxs,
     marginTop: 2,
   },
   deltaBadge: {
@@ -1710,8 +1715,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 12,
+    gap: space.xxs,
+    paddingVertical: space.sm,
     borderTopWidth: 1,
   },
   expandTriggerText: {
@@ -1719,23 +1724,23 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
+    backgroundColor: neutralColors.destructive,
     justifyContent: "center",
     alignItems: "center",
     width: 80,
     borderRadius: 14,
-    marginHorizontal: 4,
+    marginHorizontal: space.xxs,
     marginVertical: 1,
-    gap: 4,
+    gap: space.xxs,
   },
   deleteActionText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 12,
     fontWeight: "700",
   },
   skeletonContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
   },
   skeletonBlock: {
     borderRadius: 4,
@@ -1750,9 +1755,9 @@ const styles = StyleSheet.create({
   statsBreakdown: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.sm,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   statsBreakdownItem: {
     flexDirection: "row",

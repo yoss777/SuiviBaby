@@ -1,6 +1,7 @@
 // components/ui/UpdateBanner.tsx
 // Dismissible banner prompting user to update the app
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { APP_NAME } from "@/constants/app";
 import { Colors } from "@/constants/theme";
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
     zIndex: 9998,
     borderBottomWidth: 1,
     paddingBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
   },
   content: {
     flexDirection: "row",
@@ -168,14 +169,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   installBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     minHeight: 44,
     justifyContent: "center",
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   installText: {
     fontSize: 12,

@@ -1,6 +1,7 @@
+import { radius, space } from "@/constants/tokens";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { flatInDark } from "@/constants/theme";
-import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -452,8 +453,8 @@ export const StatsGroup = memo(function StatsGroup({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    shadowColor: "#000",
+    borderRadius: radius.lg,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -463,8 +464,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 12,
+    padding: space.md,
+    gap: space.sm,
   },
   iconContainer: {
     width: 48,
@@ -494,10 +495,10 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   expandButton: {
-    padding: 12,
+    padding: space.sm,
     margin: -8,
   },
   itemsContainer: {
@@ -507,9 +508,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 48,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    gap: space.sm,
   },
   itemBorder: {
     borderBottomWidth: 1,
@@ -550,8 +551,8 @@ const styles = StyleSheet.create({
   skeletonRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 12,
+    padding: space.md,
+    gap: space.sm,
   },
   skeletonIcon: {
     width: 48,
@@ -561,7 +562,7 @@ const styles = StyleSheet.create({
   },
   skeletonContent: {
     flex: 1,
-    gap: 8,
+    gap: space.xs,
   },
   skeletonTitle: {
     height: 14,
@@ -572,7 +573,7 @@ const styles = StyleSheet.create({
   skeletonSummary: {
     height: 20,
     width: "70%",
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: "hidden",
   },
   shimmerOverlay: {

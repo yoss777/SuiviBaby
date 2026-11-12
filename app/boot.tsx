@@ -30,6 +30,7 @@ import {
 } from "@/services/todayEventsCache";
 import { router } from "expo-router";
 import { hasCompletedOnboarding } from "./(auth)/onboarding";
+import { neutralColors } from "@/constants/dashboardColors";
 
 const BOOT_NETWORK_TIMEOUT_MS = 8000;
 
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
   feedbackTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#1f2937",
+    color: neutralColors.textStrong,
     textAlign: "center",
   },
   feedbackText: {
@@ -547,7 +548,7 @@ const styles = StyleSheet.create({
   },
   feedbackHint: {
     fontSize: 13,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textAlign: "center",
   },
   retryButton: {
@@ -565,7 +566,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#ffffff",
+    color: neutralColors.white,
   },
 });
 

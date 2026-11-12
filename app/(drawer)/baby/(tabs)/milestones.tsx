@@ -1385,11 +1385,11 @@ export default function MilestonesScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1483,7 +1483,7 @@ export default function MilestonesScreen() {
         message="Voulez-vous vraiment supprimer ce jalon ?"
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
@@ -1494,7 +1494,7 @@ export default function MilestonesScreen() {
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} jalon${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}

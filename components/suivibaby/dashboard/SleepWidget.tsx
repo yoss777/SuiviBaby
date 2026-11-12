@@ -1,7 +1,9 @@
+import { radius, space } from "@/constants/tokens";
 import {
   getCategoryColors,
   getCategoryTextColors,
   getNeutralColors,
+  neutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useAnnounceActiveChange } from "@/hooks/useAnnounceActiveChange";
@@ -325,10 +327,10 @@ export const SleepWidget = memo(function SleepWidget({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: space.md,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -349,7 +351,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: space.xxs,
     fontSize: 12,
   },
   buttonsRow: {
@@ -361,7 +363,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
@@ -376,8 +378,8 @@ const styles = StyleSheet.create({
     minWidth: 96,
     minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -389,13 +391,13 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     marginTop: 10,
   },
   editButton: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

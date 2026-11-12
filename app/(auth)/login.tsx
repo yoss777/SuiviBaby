@@ -1,5 +1,6 @@
 // app/(auth)/login.tsx
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -672,7 +673,7 @@ export default function LoginScreen() {
                 <FontAwesome
                   name={emailValid ? "circle-check" : "circle-xmark"}
                   size={18}
-                  color={emailValid ? "#22c55e" : nc.error}
+                  color={emailValid ? nc.success : nc.error}
                   style={styles.emailValidationIcon}
                 />
               )}
@@ -1089,7 +1090,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 20,
+    padding: space.lg,
   },
   header: {
     alignItems: "center",
@@ -1101,8 +1102,8 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
-    shadowColor: "#000",
+    marginBottom: space.xl,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -1111,29 +1112,29 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   subtitle: {
     fontSize: 16,
     textAlign: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: space.lg,
   },
   formContainer: {
-    gap: 16,
+    gap: space.md,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    shadowColor: "#000",
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   inputIconContainer: {
-    marginRight: 12,
+    marginRight: space.sm,
   },
   input: {
     flex: 1,
@@ -1141,7 +1142,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   eyeIcon: {
-    padding: 12,
+    padding: space.sm,
   },
   strengthRow: {
     gap: 6,
@@ -1162,9 +1163,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: 56,
-    borderRadius: 12,
-    marginTop: 8,
-    gap: 12,
+    borderRadius: radius.md,
+    marginTop: space.xs,
+    gap: space.sm,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1181,8 +1182,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    marginTop: 8,
+    gap: space.xs,
+    marginTop: space.xs,
   },
   switchText: {
     fontSize: 15,
@@ -1195,7 +1196,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: space.xs,
     marginTop: 40,
   },
   footerText: {
@@ -1206,8 +1207,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 16,
-    paddingHorizontal: 12,
+    marginTop: space.md,
+    paddingHorizontal: space.sm,
   },
   legalText: {
     fontSize: 12,
@@ -1217,13 +1218,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   legalErrorBorder: {
-    padding: 8,
-    borderRadius: 8,
+    padding: space.xs,
+    borderRadius: radius.sm,
     borderWidth: 1,
   },
   consentCheckbox: {
-    marginRight: 4,
-    padding: 4,
+    marginRight: space.xxs,
+    padding: space.xxs,
     // Cible tactile réelle ≥ 44 pt
     minWidth: 44,
     minHeight: 44,
@@ -1233,8 +1234,8 @@ const styles = StyleSheet.create({
   consentErrorText: {
     fontSize: 13,
     fontWeight: "600",
-    marginTop: 8,
-    paddingHorizontal: 12,
+    marginTop: space.xs,
+    paddingHorizontal: space.sm,
   },
   forgotPasswordContainer: {
     alignSelf: "flex-end",
@@ -1245,26 +1246,26 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   emailValidationIcon: {
-    marginLeft: 8,
+    marginLeft: space.xs,
   },
   inlineHint: {
     fontSize: 12,
     fontWeight: "500",
-    marginTop: 4,
-    marginLeft: 4,
+    marginTop: space.xxs,
+    marginLeft: space.xxs,
   },
   capsLockRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 4,
-    marginLeft: 4,
+    marginTop: space.xxs,
+    marginLeft: space.xxs,
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginVertical: 4,
+    gap: space.sm,
+    marginVertical: space.xxs,
   },
   dividerLine: {
     flex: 1,
@@ -1279,8 +1280,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: 56,
-    borderRadius: 12,
-    gap: 12,
+    borderRadius: radius.md,
+    gap: space.sm,
     borderWidth: 1,
     borderColor: "transparent",
   },
@@ -1298,9 +1299,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: 56,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 2,
-    gap: 12,
+    gap: space.sm,
   },
   biometricButtonText: {
     fontSize: 16,

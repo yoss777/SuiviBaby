@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/SmartFeedCard.tsx
 // Displays a single contextual tip card on the dashboard
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Tip } from "@/types/content";
 import { TIP_CATEGORY_LABELS, getTipCategoryColor } from "@/types/content";
@@ -181,7 +182,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -192,24 +193,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 12,
+    padding: space.sm,
     justifyContent: "space-between",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   iconCircle: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -227,19 +228,19 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
     alignItems: "center",
   },
   title: {
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   summary: {
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   footer: {
     flexDirection: "row",
@@ -250,15 +251,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontStyle: "italic",
-    marginRight: 8,
+    marginRight: space.xs,
   },
   ctaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: space.xxs,
+    borderRadius: radius.md,
   },
   ctaText: {
     fontSize: 12,

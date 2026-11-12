@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import PompagesChart from "@/components/suivibaby/PompagesChart";
 import RepasChart from "@/components/suivibaby/RepasChart";
 import { SafeBoundary } from "@/components/SafeBoundary";
@@ -1392,18 +1393,18 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginHorizontal: 20,
-    paddingVertical: 8,
+    marginHorizontal: space.lg,
+    paddingVertical: space.xs,
     marginBottom: 10,
     position: "relative",
   },
   tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     flex: 1,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   tabLabel: {
     fontSize: 12,
@@ -1434,12 +1435,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
-    gap: 8,
+    gap: space.xs,
   },
   errorTitle: {
     fontSize: 17,
     fontWeight: "600",
-    marginTop: 12,
+    marginTop: space.sm,
     textAlign: "center",
   },
   errorSubtitle: {
@@ -1449,11 +1450,11 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: space.xs,
+    marginTop: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
   },
   retryText: {
     fontSize: 15,
@@ -1462,13 +1463,13 @@ const styles = StyleSheet.create({
   statusNote: {
     fontSize: 12,
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   weekLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: space.xs,
   },
   weekLabel: {
     fontSize: 12,
@@ -1480,15 +1481,15 @@ const styles = StyleSheet.create({
   resumeRow: {
     flexDirection: "row",
     gap: 10,
-    marginHorizontal: 20,
+    marginHorizontal: space.lg,
     marginBottom: 10,
   },
   resumeCard: {
     flex: 1,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   resumeValue: {
@@ -1503,7 +1504,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 40,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   pagerWrapper: {
@@ -1517,7 +1518,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 16,
+    paddingVertical: space.md,
   },
   dot: {
     width: 6,

@@ -69,6 +69,7 @@ export const itemColors = {
 
   // Autres
   bain: "#5AADE8", // bleu ciel
+  nez: "#6BA4A4", // teal (soin du nez, même teinte que l'action rapide)
   activite: "#8BC46B", // vert pomme
   croissance: "#E8C45A", // jaune doré
 } as const;

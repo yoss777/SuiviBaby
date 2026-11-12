@@ -1,5 +1,4 @@
 import { itemColors } from "./dashboardColors";
-import { eventColors } from "./eventColors";
 import type { FormSheetProps } from "@/contexts/SheetContext";
 
 // ============================================
@@ -18,109 +17,109 @@ export const EVENT_CONFIG: Record<string, EventConfigItem> = {
     label: "Tétée",
     short: "Tétée",
     icon: { lib: "fa6", name: "person-breastfeeding" },
-    color: "#E91E63",
+    color: itemColors.tetee,
   },
   biberon: {
     label: "Biberon",
     short: "Bib",
     icon: { lib: "mci", name: "baby-bottle" },
-    color: "#FF5722",
+    color: itemColors.biberon,
   },
   solide: {
     label: "Repas solide",
     short: "Solide",
     icon: { lib: "fa6", name: "bowl-food" },
-    color: "#8BC34A",
+    color: itemColors.solide,
   },
   pompage: {
     label: "Pompage",
     short: "Pompe",
     icon: { lib: "fa6", name: "pump-medical" },
-    color: "#28a745",
+    color: itemColors.pompage,
   },
   croissance: {
     label: "Croissance",
     short: "Croiss.",
     icon: { lib: "fa6", name: "seedling" },
-    color: "#8BCF9B",
+    color: itemColors.croissance,
   },
   couche: {
     label: "Couche",
     short: "Couche",
     icon: { lib: "fa6", name: "baby" },
-    color: "#4A90E2",
+    color: itemColors.miction,
   },
   sommeil: {
     label: "Sommeil",
     short: "Sommeil",
     icon: { lib: "fa6", name: "bed" },
-    color: "#6f42c1",
+    color: itemColors.sieste,
   },
   bain: {
     label: "Bain",
     short: "Bain",
     icon: { lib: "fa6", name: "bath" },
-    color: "#3b82f6",
+    color: itemColors.bain,
   },
   temperature: {
     label: "Température",
     short: "Temp",
     icon: { lib: "fa6", name: "temperature-half" },
-    color: "#e03131",
+    color: itemColors.temperature,
   },
   medicament: {
     label: "Médicament",
     short: "Médoc",
     icon: { lib: "fa6", name: "pills" },
-    color: "#2f9e44",
+    color: itemColors.medicament,
   },
   symptome: {
     label: "Symptôme",
     short: "Sympt.",
     icon: { lib: "fa6", name: "virus" },
-    color: "#f59f00",
+    color: itemColors.symptome,
   },
   miction: {
     label: "Miction",
     short: "Pipi",
     icon: { lib: "fa6", name: "water" },
-    color: "#17a2b8",
+    color: itemColors.miction,
   },
   selle: {
     label: "Selle",
     short: "Popo",
     icon: { lib: "fa6", name: "poop" },
-    color: "#dc3545",
+    color: itemColors.selle,
   },
   vitamine: {
     label: "Vitamine",
     short: "Vitamine",
     icon: { lib: "fa6", name: "pills" },
-    color: "#FF9800",
+    color: itemColors.vitamine,
   },
   vaccin: {
     label: "Vaccin",
     short: "Vaccin",
     icon: { lib: "fa6", name: "syringe" },
-    color: "#9C27B0",
+    color: itemColors.vaccin,
   },
   activite: {
     label: "Activité",
     short: "Activité",
     icon: { lib: "fa6", name: "play-circle" },
-    color: "#10b981",
+    color: itemColors.activite,
   },
   jalon: {
     label: "Jalon",
     short: "Jalon",
     icon: { lib: "fa6", name: "star" },
-    color: eventColors.jalon.dark,
+    color: itemColors.jalon,
   },
   nettoyage_nez: {
     label: "Nettoyage nez",
     short: "Nez",
     icon: { lib: "mci", name: "eyedropper" },
-    color: "#06b6d4",
+    color: itemColors.nez,
   },
 };
 
@@ -405,7 +404,7 @@ export const QUICK_ADD_ACTIONS: QuickAddAction[] = [
   {
     key: "nettoyage_nez",
     label: "Nettoyage nez",
-    icon: { type: "mc", name: "eyedropper", color: itemColors.photo },
+    icon: { type: "mc", name: "eyedropper", color: itemColors.nez },
     route: "/baby/routines?type=nettoyage_nez&openModal=true&returnTo=home",
     sheetParams: { formType: "routines", routineType: "nettoyage_nez" },
   },

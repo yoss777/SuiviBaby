@@ -1,3 +1,4 @@
+import { space } from "@/constants/tokens";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -194,21 +195,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    padding: space.xl,
   },
   prepCard: {
     width: "100%",
     maxWidth: 320,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.md,
     borderRadius: 14,
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   prepLoaderStack: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: space.sm,
   },
   prepText: {
     fontSize: 14,

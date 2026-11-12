@@ -1,6 +1,7 @@
 // components/ui/DateTimeSectionRow.tsx
 // Complete date/time section: simple mode or chrono mode (start/end/ongoing/duration)
 
+import { space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -358,15 +359,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    paddingTop: 16,
-    marginBottom: 12,
+    paddingTop: space.md,
+    marginBottom: space.sm,
   },
   toggleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
     borderRadius: 10,
     borderWidth: 1,
     marginBottom: 6,
@@ -379,7 +380,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingTop: 4,
+    paddingTop: space.xxs,
   },
   durationText: {
     fontSize: 13,

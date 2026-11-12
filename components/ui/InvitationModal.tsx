@@ -1,4 +1,6 @@
+import { radius, space } from "@/constants/tokens";
 import { useEffect, useRef, useState } from "react";
+import { neutralColors } from "@/constants/dashboardColors";
 import { getReadableTextColor } from "@/constants/theme";
 import {
   Animated,
@@ -77,9 +79,9 @@ export function InvitationModal({
     };
   }, [durationMs, onTimeout, progressAnim, visible]);
 
-  const radius = 14;
+  const ringRadius = 14;
   const stroke = 3;
-  const circumference = 2 * Math.PI * radius;
+  const circumference = 2 * Math.PI * ringRadius;
   const strokeDashoffset = -circumference * (1 - progress);
 
   return (
@@ -109,7 +111,7 @@ export function InvitationModal({
                 <Circle
                   cx={18}
                   cy={18}
-                  r={radius}
+                  r={ringRadius}
                   stroke={textColor + "30"}
                   strokeWidth={stroke}
                   fill="none"
@@ -117,7 +119,7 @@ export function InvitationModal({
                 <Circle
                   cx={18}
                   cy={18}
-                  r={radius}
+                  r={ringRadius}
                   stroke={accentColor}
                   strokeWidth={stroke}
                   strokeDasharray={`${circumference} ${circumference}`}
@@ -165,18 +167,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: space.lg,
   },
   card: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: space.lg,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: space.md,
   },
   textBlock: {
     flex: 1,
@@ -211,10 +213,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rejectButton: {
-    backgroundColor: "#dc3545",
+    backgroundColor: neutralColors.destructive,
   },
   rejectText: {
-    color: "#fff",
+    color: neutralColors.onDestructive,
     fontWeight: "600",
   },
   acceptText: {

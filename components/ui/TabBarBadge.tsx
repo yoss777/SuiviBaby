@@ -1,3 +1,4 @@
+import { space } from "@/constants/tokens";
 import React from 'react';
 import { getNeutralColors } from '@/constants/dashboardColors';
 import { getReadableTextColor } from '@/constants/theme';
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: space.xxs,
   },
   countText: {
     fontSize: 12,

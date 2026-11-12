@@ -1,5 +1,6 @@
 // Config de l'écran Couches (mictions + selles) : deux écouteurs, ligne avec
 // icône/couleur par type et compteurs du jour.
+import { space } from "@/constants/tokens";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -229,9 +230,9 @@ const styles = StyleSheet.create({
   statsBreakdown: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.sm,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   sessionContent: {
     flex: 1,

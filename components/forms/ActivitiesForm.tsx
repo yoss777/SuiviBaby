@@ -609,7 +609,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: chipActiveColors.filledText,
                 },
               ]}
             >

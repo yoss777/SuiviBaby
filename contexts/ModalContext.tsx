@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, DESTRUCTIVE_COLOR } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -155,7 +155,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           title,
           message,
           confirmText: onlyButton?.text ?? "OK",
-          confirmButtonColor: isError ? "#dc3545" : colors.tint,
+          confirmButtonColor: isError ? DESTRUCTIVE_COLOR : colors.tint,
           confirmTextColor: isError ? "#fff" : tintTextColor,
           onConfirm: onlyButton?.onPress,
         },
@@ -177,7 +177,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
         message,
         confirmText: confirmButton?.text || "Confirmer",
         cancelText: cancelButton?.text || "Annuler",
-        confirmButtonColor: confirmIsDestructive ? "#dc3545" : colors.tint,
+        confirmButtonColor: confirmIsDestructive ? DESTRUCTIVE_COLOR : colors.tint,
         confirmTextColor: confirmIsDestructive ? "#fff" : tintTextColor,
         onConfirm: confirmButton?.onPress,
       },
@@ -200,7 +200,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
         message,
         confirmText: "Supprimer",
         cancelText: "Annuler",
-        confirmButtonColor: "#dc3545",
+        confirmButtonColor: DESTRUCTIVE_COLOR,
         confirmTextColor: "#fff",
         onConfirm,
       },
