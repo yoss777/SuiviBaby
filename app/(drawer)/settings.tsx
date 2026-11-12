@@ -346,7 +346,7 @@ export default function SettingsScreen() {
       {
         id: "premium",
         icon: "diamond-outline",
-        label: "SuiviBaby+",
+        label: "Premium",
         description: "Gérer votre abonnement",
         onPress: () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

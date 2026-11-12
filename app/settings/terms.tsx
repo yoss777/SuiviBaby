@@ -59,7 +59,7 @@ export default function TermsScreen() {
     {
       title: "7. Partage du suivi",
       content:
-        "Vous pouvez inviter d'autres personnes à consulter ou compléter le suivi d'un enfant, choisir leurs droits et les révoquer à tout moment. Vous êtes responsable du choix des personnes invitées. Leur nombre dépend de votre offre.",
+        "Vous pouvez inviter d'autres personnes à consulter ou compléter le suivi d'un enfant, choisir leurs droits et les révoquer à tout moment. Vous êtes responsable du choix des personnes invitées.",
     },
     {
       title: "8. Commande vocale",

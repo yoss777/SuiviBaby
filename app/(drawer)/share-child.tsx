@@ -380,15 +380,6 @@ export default function ShareChildScreen() {
           `Cet enfant est déjà lié au destinataire ${email}.`,
           [{ text: "" }],
         );
-      } else if (error?.code === "sharing-limit") {
-        showAlert(
-          "Limite de partage atteinte",
-          "Le plan gratuit permet 2 co-parents maximum. Passez à Premium pour un partage illimité.",
-          [
-            { text: "Plus tard", style: "cancel" },
-            { text: "Voir Premium", onPress: () => guardedPush("/settings/premium") },
-          ],
-        );
       } else {
         showAlert(
           "Erreur",

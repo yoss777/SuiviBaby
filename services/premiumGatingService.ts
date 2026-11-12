@@ -10,39 +10,26 @@
 export const FREE_LIMITS = {
   /** Nombre max de commandes vocales par jour */
   voiceCommandsPerDay: 3,
-  /** Nombre de jours d'historique accessible */
-  historyDays: 90,
-  /** Nombre max de co-parents invités */
-  maxSharedUsers: 2,
 } as const;
 
-// ============================================
-// HISTORY FILTER
-// ============================================
-
 /**
- * Retourne la date la plus ancienne autorisée pour les requêtes.
- * Free = 90 jours, Premium = pas de limite (retourne null).
+ * Premium n'est pas « illimité » : la voix a un coût par commande, et un
+ * plafond affiché honnêtement vaut mieux qu'un plafond caché (décision
+ * 2026-11-11). Doit rester égal à PREMIUM_DAILY_VOICE_LIMIT côté serveur
+ * (functions/src/billing/quotas.js). Le partage est illimité pour tous.
  */
-export function getHistoryCutoffDate(isPremium: boolean): Date | null {
-  if (isPremium) return null;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - FREE_LIMITS.historyDays);
-  return cutoff;
-}
+export const PREMIUM_LIMITS = {
+  voiceCommandsPerDay: 50,
+} as const;
 
 // ============================================
 // PAYWALL MESSAGES
 // ============================================
 
-export type PaywallTrigger =
-  | "voice_limit"
-  | "pdf_export_limit"
-  | "history_limit"
-  | "sharing_limit"
-  | "ai_insights";
-// Pas de déclencheur « statistiques avancées » : statistiques et courbes OMS
-// sont gratuites (décision Q7, 2026-11-07).
+// Seuls les déclencheurs adossés à une limite réellement appliquée existent :
+// pas d'historique limité (rien ne l'applique), pas de partage limité (gratuit
+// pour tous depuis le 2026-11-11), pas d'« insights IA » (non livré).
+export type PaywallTrigger = "voice_limit" | "pdf_export_limit";
 
 interface PaywallMessage {
   title: string;
@@ -53,28 +40,13 @@ interface PaywallMessage {
 export const PAYWALL_MESSAGES: Record<PaywallTrigger, PaywallMessage> = {
   voice_limit: {
     title: "Commandes vocales épuisées",
-    description: "Vous avez utilisé vos 3 commandes vocales du jour. Passez à Premium pour des commandes illimitées.",
-    ctaText: "Débloquer la voix illimitée",
+    description: `Vous avez utilisé vos ${FREE_LIMITS.voiceCommandsPerDay} commandes vocales du jour. Avec Premium, vous pouvez aller jusqu'à ${PREMIUM_LIMITS.voiceCommandsPerDay} commandes par jour. La saisie manuelle reste disponible.`,
+    ctaText: "Passer à Premium",
   },
   pdf_export_limit: {
     title: "Export PDF utilisé",
     description: "Votre export PDF gratuit a été utilisé. Le rapport PDF est réservé à Premium. L'export JSON de vos données reste gratuit.",
     ctaText: "Passer à Premium",
-  },
-  history_limit: {
-    title: "Historique limité à 90 jours",
-    description: "Accédez à tout l'historique de votre bébé avec Premium. Retrouvez les données depuis la naissance.",
-    ctaText: "Voir tout l'historique",
-  },
-  sharing_limit: {
-    title: "Limite de partage atteinte",
-    description: "Le plan gratuit permet d'inviter 2 personnes. Passez à Premium pour un partage illimité.",
-    ctaText: "Passer à Premium",
-  },
-  ai_insights: {
-    title: "Insights IA",
-    description: "Recevez des analyses personnalisées : \"Bébé dort mieux quand couché avant 19h30\".",
-    ctaText: "Activer les insights IA",
   },
 };
 

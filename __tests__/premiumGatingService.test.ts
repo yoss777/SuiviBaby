@@ -1,35 +1,14 @@
 import {
   decidePdfExportAccess,
   FREE_LIMITS,
-  getHistoryCutoffDate,
   PAYWALL_MESSAGES,
+  PREMIUM_LIMITS,
 } from "@/services/premiumGatingService";
 
 describe("premiumGatingService", () => {
-  describe("getHistoryCutoffDate", () => {
-    it("should return null for premium users", () => {
-      expect(getHistoryCutoffDate(true)).toBeNull();
-    });
-
-    it("should return date 90 days ago for free users", () => {
-      const cutoff = getHistoryCutoffDate(false);
-      const expected = new Date();
-      expected.setDate(expected.getDate() - FREE_LIMITS.historyDays);
-
-      expect(cutoff).not.toBeNull();
-      expect(Math.abs(cutoff!.getTime() - expected.getTime())).toBeLessThan(1000);
-    });
-  });
-
   describe("PAYWALL_MESSAGES", () => {
     it("should define messages for all triggers", () => {
-      const triggers = [
-        "voice_limit",
-        "pdf_export_limit",
-        "history_limit",
-        "sharing_limit",
-        "ai_insights",
-      ] as const;
+      const triggers = ["voice_limit", "pdf_export_limit"] as const;
 
       for (const trigger of triggers) {
         expect(PAYWALL_MESSAGES[trigger]).toBeDefined();
@@ -51,10 +30,22 @@ describe("premiumGatingService", () => {
       }
     });
 
-    it("sharing_limit points to Premium unlimited sharing", () => {
-      const m = PAYWALL_MESSAGES.sharing_limit;
-      expect(m.description).toContain("2");
-      expect(m.description).toContain("Premium");
+    // 2026-11-11 : partage illimité pour tous, voix Premium plafonnée à 50/jour,
+    // historique non limité, pas d'insights IA.
+    it("only advertises limits that are really enforced", () => {
+      expect(Object.keys(PAYWALL_MESSAGES).sort()).toEqual(["pdf_export_limit", "voice_limit"]);
+      for (const msg of Object.values(PAYWALL_MESSAGES)) {
+        const text = `${msg.title} ${msg.description} ${msg.ctaText}`;
+        expect(text).not.toMatch(/illimit/i);
+        expect(text).not.toMatch(/insights/i);
+      }
+    });
+
+    it("voice_limit states the honest Premium allowance", () => {
+      const m = PAYWALL_MESSAGES.voice_limit;
+      expect(m.description).toContain("3 commandes vocales");
+      expect(m.description).toContain("jusqu'à 50");
+      expect(m.ctaText).toBe("Passer à Premium");
     });
   });
 
@@ -93,8 +84,7 @@ describe("premiumGatingService", () => {
   describe("FREE_LIMITS", () => {
     it("should expose the expected static limits", () => {
       expect(FREE_LIMITS.voiceCommandsPerDay).toBe(3);
-      expect(FREE_LIMITS.historyDays).toBe(90);
-      expect(FREE_LIMITS.maxSharedUsers).toBe(2);
+      expect(PREMIUM_LIMITS.voiceCommandsPerDay).toBe(50);
     });
   });
 });

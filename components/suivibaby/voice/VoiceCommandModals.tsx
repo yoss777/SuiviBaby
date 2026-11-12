@@ -9,7 +9,8 @@ import { VOICE_NOTICE_MESSAGE, VOICE_NOTICE_TITLE } from "@/services/voiceNotice
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import type { VoiceInput } from "@/hooks/useVoiceInput";
+import type { VoiceInput, VoiceLimitKind } from "@/hooks/useVoiceInput";
+import { FREE_LIMITS, PAYWALL_MESSAGES, PREMIUM_LIMITS } from "@/services/premiumGatingService";
 import * as Haptics from "expo-haptics";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -18,8 +19,26 @@ interface VoiceCommandModalsProps {
   input: VoiceInput;
 }
 
+
+/** Night hours when no paywall is shown (local time). */
+export function isQuietHours(date = new Date()): boolean {
+  const h = date.getHours();
+  return h >= 22 || h < 7;
+}
+
+export function voiceLimitMessage(kind: VoiceLimitKind | false, date = new Date()): string {
+  if (kind === "premium") {
+    return `Vous avez atteint vos ${PREMIUM_LIMITS.voiceCommandsPerDay} commandes vocales du jour. Le compteur repart à zéro à minuit ; la saisie manuelle reste disponible.`;
+  }
+  if (isQuietHours(date)) {
+    return `Vous avez utilisé vos ${FREE_LIMITS.voiceCommandsPerDay} commandes vocales du jour. La saisie manuelle reste disponible, et le compteur repart à zéro à minuit.`;
+  }
+  return PAYWALL_MESSAGES.voice_limit.description;
+}
+
 export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
   const { voice, voiceLimitReached, setVoiceLimitReached, voiceNoticeVisible, dismissVoiceNotice } = input;
+  const showPremiumOffer = voiceLimitReached === "free" && !isQuietHours();
   const {
     testPromptVisible,
     testPromptText,
@@ -236,16 +255,18 @@ export function VoiceCommandModals({ input }: VoiceCommandModalsProps) {
       />
 
       <InfoModal
-        visible={voiceLimitReached}
+        visible={voiceLimitReached !== false}
         title="Commandes vocales épuisées"
-        message="Vous avez utilisé vos 3 commandes vocales du jour. Passez à Premium pour des commandes illimitées."
-        confirmText="Voir Premium"
-        dismissText="OK"
+        message={voiceLimitMessage(voiceLimitReached)}
+        // Premium is offered only to free users, and never at night (22 h-7 h):
+        // a parent feeding a baby at 3 a.m. needs the manual entry, not a paywall.
+        confirmText={showPremiumOffer ? PAYWALL_MESSAGES.voice_limit.ctaText : "Compris"}
+        dismissText={showPremiumOffer ? "Plus tard" : undefined}
         backgroundColor={Colors[colorScheme].background}
         textColor={Colors[colorScheme].text}
         onConfirm={() => {
           setVoiceLimitReached(false);
-          guardedPush("/settings/premium");
+          if (showPremiumOffer) guardedPush("/settings/premium");
         }}
         onClose={() => setVoiceLimitReached(false)}
       />
