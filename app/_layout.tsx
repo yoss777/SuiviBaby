@@ -1,6 +1,7 @@
 import { parseEmailActionUrl } from "@/utils/passwordResetLink";
 import { applyEmailVerificationLink } from "@/utils/emailVerification";
 import * as Sentry from "@sentry/react-native";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -222,8 +223,10 @@ function AppNavigation() {
     ...baseTheme,
     colors: {
       ...baseTheme.colors,
-      background: Colors[colorScheme].background,
-      card: Colors[colorScheme].background,
+      // Une seule couleur de fond pour l'en-tête et l'écran (nc.background) :
+      // plus de ligne de couture #fff / #f9fafb en clair.
+      background: getNeutralColors(colorScheme).background,
+      card: getNeutralColors(colorScheme).background,
       text: Colors[colorScheme].text,
       primary: Colors[colorScheme].tint,
       border: Colors[colorScheme].tabIconDefault + "30",

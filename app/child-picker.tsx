@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { APP_NAME } from "@/constants/app";
 import { router } from 'expo-router';
 import { useGuardedNavigation } from '@/hooks/useGuardedNavigation';
 import React, { useMemo, useRef, useState } from 'react';
@@ -290,7 +291,7 @@ export default function ChildPicker() {
                 textAlign: 'center',
               }}
             >
-              Suivi Baby
+              {APP_NAME}
             </ThemedText>
             <ThemedText style={styles.subtitle}>
               L&apos;Amour au Cœur de la Vie

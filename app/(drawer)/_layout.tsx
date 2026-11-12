@@ -1,4 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
+import { APP_NAME } from "@/constants/app";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { Drawer } from "expo-router/drawer";
 import {
@@ -18,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { BabySwitcherModal } from "@/components/ui/BabySwitcherModal";
+import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -57,7 +59,7 @@ function BabyHeaderTitle() {
           maxWidth: 200,
         }}
       >
-        {activeChild?.name || "Suivi Enfant"}
+        {activeChild?.name || APP_NAME}
       </Text>
       {hasMultiple && (
         <FontAwesome
@@ -207,7 +209,7 @@ export default function DrawerLayout() {
         <View
           style={[
             styles.container,
-            { backgroundColor: Colors[colorScheme].background },
+            { backgroundColor: getNeutralColors(colorScheme).background },
           ]}
         >
           {isOffline && (
@@ -317,11 +319,12 @@ export default function DrawerLayout() {
               overlayAccessibilityLabel: "Fermer le menu",
               headerLeft: renderDrawerToggle,
               headerTintColor: Colors[colorScheme].text,
+              // En-tête et écran sur le même fond que les écrans (nc.background)
               headerStyle: {
-                backgroundColor: Colors[colorScheme].background,
+                backgroundColor: getNeutralColors(colorScheme).background,
               },
               sceneStyle: {
-                backgroundColor: Colors[colorScheme].background,
+                backgroundColor: getNeutralColors(colorScheme).background,
               },
             }}
           >

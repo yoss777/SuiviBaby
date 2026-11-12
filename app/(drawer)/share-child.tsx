@@ -1,4 +1,5 @@
 import { ThemedView } from "@/components/themed-view";
+import { APP_NAME } from "@/constants/app";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -308,7 +309,7 @@ export default function ShareChildScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await RNShare.share({
-        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour suivre notre enfant en tant que proche. Le code est valide pendant 7 jours.`,
+        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app ${APP_NAME} pour suivre notre enfant en tant que proche. Le code est valide pendant 7 jours.`,
       });
     } catch (error) {
       console.error("Erreur partage:", error);

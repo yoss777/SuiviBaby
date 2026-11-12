@@ -1,5 +1,6 @@
 // app/(auth)/onboarding.tsx
 import { InfoModal } from "@/components/ui/InfoModal";
+import { APP_NAME } from "@/constants/app";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -28,41 +29,45 @@ const ONBOARDING_DONE_KEY = "@suivibaby_onboarding_done";
 const LEGACY_ONBOARDING_KEY = "@samaye_onboarding_done";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// Une seule couleur de marque (indigo) pour toutes les slides : le rouge de
+// « Données sécurisées » évoquait le danger sur le message de confiance.
+const ONBOARDING_ACCENT = "#6366f1";
+
 const SLIDES = [
   {
     icon: "baby-carriage" as const,
-    title: "Bienvenue sur Suivi Baby",
+    title: `Bienvenue sur ${APP_NAME}`,
     description:
       "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bébé.",
-    color: "#6366f1",
+    color: ONBOARDING_ACCENT,
   },
   {
     icon: "clock" as const,
     title: "Saisie en 3 secondes",
     description:
       "Un biberon à 3h du matin ? Un tap suffit. Mode nuit automatique, commandes vocales, saisie rapide — pensée pour les parents fatigués.",
-    color: "#22c55e",
+    color: ONBOARDING_ACCENT,
   },
   {
     icon: "users" as const,
     title: "Toute la famille connectée",
     description:
       "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents. Chacun voit les événements en temps réel.",
-    color: "#f59e0b",
+    color: ONBOARDING_ACCENT,
   },
   {
     icon: "shield-halved" as const,
     title: "Données sécurisées",
     description:
       "Chiffrement en transit et au repos, zéro publicité, conformité RGPD. Les données de votre bébé restent privées.",
-    color: "#ef4444",
+    color: ONBOARDING_ACCENT,
   },
   {
     icon: "wand-magic-sparkles" as const,
     title: "Insights intelligents",
     description:
       "Découvrez des tendances : \"Bébé dort mieux quand couché avant 19h30\". Statistiques et courbes de croissance OMS incluses gratuitement.",
-    color: "#8b5cf6",
+    color: ONBOARDING_ACCENT,
   },
 ];
 

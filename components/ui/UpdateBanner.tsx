@@ -2,6 +2,7 @@
 // Dismissible banner prompting user to update the app
 
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { APP_NAME } from "@/constants/app";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -84,7 +85,7 @@ export const UpdateBanner = memo(function UpdateBanner({
       ]}
       accessibilityRole="alert"
       accessibilityLabel={`Nouvelle version ${latestVersion} disponible`}
-      accessibilityHint="Une mise à jour est disponible pour Suivi Baby"
+      accessibilityHint={`Une mise à jour est disponible pour ${APP_NAME}`}
     >
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: tint + "15" }]}>
