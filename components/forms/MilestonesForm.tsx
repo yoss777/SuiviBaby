@@ -20,7 +20,6 @@ import {
   submitMilestone,
 } from "@/services/events/milestonePhoto";
 import { isLocalPhotoUri } from "@/utils/photoStorage";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
@@ -646,7 +645,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Ajouter une photo"
           >
-            <FontAwesome5 name="camera" size={20} color={nc.textMuted} />
+            <FontAwesome name="camera" size={20} color={nc.textMuted} />
             <Text
               style={[styles.photoPlaceholderText, { color: nc.textLight }]}
             >

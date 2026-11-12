@@ -35,7 +35,7 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   ) as T;
 }
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { HeaderBackButton } from "expo-router/react-navigation";
@@ -1191,7 +1191,7 @@ export default function ImmunizationsScreen() {
           </View>
           <View style={styles.searchContainer}>
             <FontAwesome
-              name="search"
+              name="magnifying-glass"
               size={16}
               color={nc.textMuted}
               style={styles.searchIcon}
@@ -1208,7 +1208,7 @@ export default function ImmunizationsScreen() {
                 style={styles.clearButton}
                 onPress={() => setSearchQuery("")}
               >
-                <FontAwesome name="times-circle" size={16} color={nc.textMuted} />
+                <FontAwesome name="circle-xmark" size={16} color={nc.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -1283,7 +1283,7 @@ export default function ImmunizationsScreen() {
           </View>
           <View style={styles.searchContainer}>
             <FontAwesome
-              name="search"
+              name="magnifying-glass"
               size={16}
               color={nc.textMuted}
               style={styles.searchIcon}
@@ -1300,7 +1300,7 @@ export default function ImmunizationsScreen() {
                 style={styles.clearButton}
                 onPress={() => setSearchQuery("")}
               >
-                <FontAwesome name="times-circle" size={16} color={nc.textMuted} />
+                <FontAwesome name="circle-xmark" size={16} color={nc.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -1474,7 +1474,7 @@ export default function ImmunizationsScreen() {
             disabled={isSubmitting}
           >
             <FontAwesome
-              name="calendar-alt"
+              name="calendar-days"
               size={16}
               color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
             />

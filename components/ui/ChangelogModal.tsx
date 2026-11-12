@@ -118,7 +118,7 @@ export const ChangelogModal = memo(function ChangelogModal({
                 ]}
               >
                 <FontAwesome
-                  name={feature.icon || "sparkles"}
+                  name={feature.icon || "wand-magic-sparkles"}
                   size={14}
                   color={tint}
                 />
@@ -152,7 +152,7 @@ export const ChangelogModal = memo(function ChangelogModal({
         <View style={[styles.container, { backgroundColor: nc.background }]}>
           {/* Header */}
           <View style={styles.header}>
-            <FontAwesome name="sparkles" size={20} color={tint} />
+            <FontAwesome name="wand-magic-sparkles" size={20} color={tint} />
             <Text style={[styles.headerTitle, { color: nc.textStrong }]}>
               Quoi de neuf ?
             </Text>

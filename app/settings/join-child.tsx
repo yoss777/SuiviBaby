@@ -23,7 +23,7 @@ import {
   buildTodayEventsData,
   setTodayEventsCache,
 } from "@/services/todayEventsCache";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { Stack, router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -447,7 +447,7 @@ export default function JoinChildScreen() {
                         ) : (
                           <>
                             <FontAwesome
-                              name="times"
+                              name="xmark"
                               size={16}
                               color={nc.white}
                             />
@@ -613,7 +613,7 @@ export default function JoinChildScreen() {
               ]}
             >
               <FontAwesome
-                name="info-circle"
+                name="circle-info"
                 size={20}
                 color={nc.todayAccent}
               />

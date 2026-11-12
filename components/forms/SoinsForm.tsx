@@ -22,7 +22,7 @@ import {
   supprimerEvenement,
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -858,7 +858,7 @@ export function SoinsForm({
             onPress={() => setFormStep("form")}
             accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <FontAwesome6 name="chevron-left" size={14} color={nc.textLight} />
             <Text style={[styles.backText, { color: nc.textLight }]}>
               Retour
             </Text>
@@ -873,8 +873,8 @@ export function SoinsForm({
             { backgroundColor: nc.background, borderColor: nc.border },
           ]}
         >
-          <FontAwesome5
-            name="search"
+          <FontAwesome6
+            name="magnifying-glass"
             size={16}
             color={nc.textMuted}
             style={styles.searchIcon}
@@ -893,8 +893,8 @@ export function SoinsForm({
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5
-                name="times-circle"
+              <FontAwesome6
+                name="circle-xmark"
                 size={16}
                 color={nc.textMuted}
               />
@@ -932,7 +932,7 @@ export function SoinsForm({
                     vaccin.dosage,
                   )}
                 >
-                  <FontAwesome5
+                  <FontAwesome6
                     name="syringe"
                     size={16}
                     color={isSelected ? accentColors.softText : nc.textLight}
@@ -960,7 +960,7 @@ export function SoinsForm({
                     )}
                   </View>
                   {isSelected && (
-                    <FontAwesome5
+                    <FontAwesome6
                       name="check"
                       size={16}
                       color={accentColors.softText}
@@ -991,7 +991,7 @@ export function SoinsForm({
             onPress={() => setFormStep("form")}
             accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <FontAwesome6 name="chevron-left" size={14} color={nc.textLight} />
             <Text style={[styles.backText, { color: nc.textLight }]}>
               Retour
             </Text>
@@ -1006,8 +1006,8 @@ export function SoinsForm({
             { backgroundColor: nc.background, borderColor: nc.border },
           ]}
         >
-          <FontAwesome5
-            name="search"
+          <FontAwesome6
+            name="magnifying-glass"
             size={16}
             color={nc.textMuted}
             style={styles.searchIcon}
@@ -1026,8 +1026,8 @@ export function SoinsForm({
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5
-                name="times-circle"
+              <FontAwesome6
+                name="circle-xmark"
                 size={16}
                 color={nc.textMuted}
               />
@@ -1057,7 +1057,7 @@ export function SoinsForm({
                 activeOpacity={0.7}
                 accessibilityLabel={vitamine}
               >
-                <FontAwesome5
+                <FontAwesome6
                   name="pills"
                   size={16}
                   color={
@@ -1077,7 +1077,7 @@ export function SoinsForm({
                   {vitamine}
                 </Text>
                 {vitamineName === vitamine && (
-                  <FontAwesome5
+                  <FontAwesome6
                     name="check"
                     size={16}
                     color={accentColors.softText}
@@ -1573,7 +1573,7 @@ export function SoinsForm({
             activeOpacity={0.7}
             accessibilityLabel="Sélectionner un vaccin"
           >
-            <FontAwesome5
+            <FontAwesome6
               name="syringe"
               size={16}
               color={nc.textLight}
@@ -1592,7 +1592,7 @@ export function SoinsForm({
             >
               {vaccinName ? vaccinName : "Sélectionner un vaccin"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
+            <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
@@ -1670,7 +1670,7 @@ export function SoinsForm({
             activeOpacity={0.7}
             accessibilityLabel="Sélectionner une vitamine"
           >
-            <FontAwesome5
+            <FontAwesome6
               name="pills"
               size={16}
               color={nc.textLight}
@@ -1689,7 +1689,7 @@ export function SoinsForm({
             >
               {vitamineName ? vitamineName : "Sélectionner une vitamine"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
+            <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
           </TouchableOpacity>
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
@@ -1872,7 +1872,7 @@ export function SoinsForm({
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome5 name="trash" size={14} color={nc.error} />
+            <FontAwesome6 name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>

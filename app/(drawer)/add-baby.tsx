@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useModal } from '@/contexts/ModalContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { trackOnboardingEvent } from "@/services/onboardingAnalytics";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { createChildDoc } from '@/services/childRepository';
@@ -398,7 +398,7 @@ export default function AddBabyScreen() {
                 <ActivityIndicator size="small" color={nc.white} />
               ) : (
                 <>
-                  <FontAwesome name="plus-circle" size={18} color={nc.white} />
+                  <FontAwesome name="circle-plus" size={18} color={nc.white} />
                   <Text style={dynamicStyles.submitButtonText}>Ajouter l&apos;enfant</Text>
                 </>
               )}
@@ -407,7 +407,7 @@ export default function AddBabyScreen() {
 
           {/* Information */}
           <View style={dynamicStyles.infoBox}>
-            <FontAwesome name="info-circle" size={20} color={nc.todayAccent} />
+            <FontAwesome name="circle-info" size={20} color={nc.todayAccent} />
             <Text style={dynamicStyles.infoText}>
               L&apos;enfant sera immédiatement ajouté à votre liste de suivi. Vous pourrez modifier ses informations plus tard depuis les paramètres.
             </Text>

@@ -11,7 +11,7 @@ import {
 import { countStatsRender, markStatsChartPainted } from "@/utils/statsPerf";
 import { buildDayEntries, getWeekDayLabels } from "@/utils/chartA11y";
 import { ChartA11ySummary } from "./ChartA11ySummary";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   Canvas,
   Circle,
@@ -546,7 +546,7 @@ function PompagesChart({
                 testID="chart-empty-state"
               >
                 <FontAwesome
-                  name="info-circle"
+                  name="circle-info"
                   size={24}
                   color={C.muted}
                 />

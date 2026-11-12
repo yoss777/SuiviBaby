@@ -11,7 +11,7 @@ import {
   type VoiceInput,
   type VoiceInputStatus,
 } from "@/hooks/useVoiceInput";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -213,7 +213,7 @@ export function VoiceBar({ input, bottom, right, dimmed = false }: VoiceBarProps
           <ActivityIndicator size="small" color="#ffffff" />
         ) : (
           <FontAwesome
-            name={willCancel ? "times" : isRecording ? "stop" : "microphone"}
+            name={willCancel ? "xmark" : isRecording ? "stop" : "microphone"}
             size={16}
             color="#ffffff"
             solid

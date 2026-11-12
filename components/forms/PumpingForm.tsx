@@ -18,7 +18,7 @@ import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
 // Bornes CF (parité serveur). Same value sur les deux côtés.
 const PUMP_MAX = NUMERIC_BOUNDS.pompage.quantiteGauche.max;
@@ -450,7 +450,7 @@ export function PumpingForm({
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome5 name="trash" size={14} color={nc.error} />
+            <FontAwesome6 name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
           </TouchableOpacity>
         )}

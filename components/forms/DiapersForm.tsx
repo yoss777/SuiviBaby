@@ -16,7 +16,6 @@ import {
   modifierEvenementOptimistic,
   supprimerEvenement,
 } from "@/services/eventsService";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React, { useCallback, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -284,7 +283,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               }}
               hitSlop={8}
             >
-              <FontAwesome5
+              <FontAwesome
                 name="water"
                 size={18}
                 color={
@@ -327,7 +326,7 @@ export const DiapersForm: React.FC<DiapersFormProps> = ({
               }}
               hitSlop={8}
             >
-              <FontAwesome5
+              <FontAwesome
                 name="poop"
                 size={18}
                 color={

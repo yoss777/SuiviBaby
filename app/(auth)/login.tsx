@@ -926,7 +926,7 @@ export default function LoginScreen() {
                 accessibilityLabel="Accepter les conditions et la politique de confidentialité"
               >
                 <FontAwesome
-                  name={hasConsented ? "check-square" : "square"}
+                  name={hasConsented ? "square-check" : "square"}
                   size={20}
                   color={showConsentError ? nc.error : nc.todayAccent}
                 />
@@ -1012,7 +1012,7 @@ export default function LoginScreen() {
                 accessibilityLabel="Consentir au traitement des données de santé de mon enfant"
               >
                 <FontAwesome
-                  name={hasHealthConsent ? "check-square" : "square"}
+                  name={hasHealthConsent ? "square-check" : "square"}
                   size={20}
                   color={showConsentError && !hasHealthConsent ? nc.error : nc.todayAccent}
                 />

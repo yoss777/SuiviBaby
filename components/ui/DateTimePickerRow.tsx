@@ -4,7 +4,7 @@
 import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -29,7 +29,7 @@ interface DateTimePickerRowProps {
   onPickerToggle?: (visible: boolean) => void;
   minimumDate?: Date;
   maximumDate?: Date;
-  icon?: string; // FontAwesome5 icon name (optional, shown before label)
+  icon?: string; // FontAwesome6 icon name (optional, shown before label)
   valueStyle?: "normal" | "small"; // "small" for date display, "normal" for time
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -166,7 +166,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
         accessibilityState={{ disabled }}
       >
         {icon && (
-          <FontAwesome5
+          <FontAwesome6
             name={icon}
             size={14}
             color={nc.textMuted}
