@@ -51,3 +51,14 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+/**
+ * Cards are flat in dark mode. On Android, `elevation` is drawn by the system
+ * (it ignores shadowOpacity/shadowRadius) and shows as a dark frame around
+ * cards on the dark background, while iOS shadows stay invisible. Spread it
+ * after the card style: `style={[styles.card, flatInDark(colorScheme)]}`.
+ */
+const DARK_FLAT = { elevation: 0, shadowOpacity: 0 } as const;
+export function flatInDark(scheme: string | null | undefined) {
+  return scheme === "dark" ? DARK_FLAT : null;
+}

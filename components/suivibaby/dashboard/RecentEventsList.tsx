@@ -1,4 +1,5 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { flatInDark } from "@/constants/theme";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import {
   ACTIVITY_TYPE_LABELS,
@@ -523,7 +524,7 @@ const EventRow = memo(function EventRow({
             </View>
             <TouchableOpacity
               style={[
-                styles.recentCard,
+                styles.recentCard, flatInDark(colorScheme),
                 {
                   borderColor,
                   backgroundColor: nc.backgroundCard,

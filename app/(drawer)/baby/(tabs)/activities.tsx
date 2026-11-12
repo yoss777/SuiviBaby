@@ -1,4 +1,5 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
+import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
 import { ThemedText } from "@/components/themed-text";
@@ -222,7 +223,7 @@ const ActivitySkeleton = React.memo(function ActivitySkeleton({
     <View
       key={key}
       style={[
-        styles.sessionCard,
+        styles.sessionCard, flatInDark(colorScheme),
         { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard, shadowColor: nc.shadow },
       ]}
     >
@@ -1207,7 +1208,7 @@ export default function ActivitiesScreen() {
           style={({ pressed }) => {
             const isSelected = selectionMode && selectedIds.has(event.id);
             return [
-              styles.sessionCard,
+              styles.sessionCard, flatInDark(colorScheme),
               {
                 borderColor: nc.borderLight,
                 backgroundColor: pressed

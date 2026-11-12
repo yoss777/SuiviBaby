@@ -1,4 +1,5 @@
 import { ThemedText } from "@/components/themed-text";
+import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
@@ -146,7 +147,7 @@ const RoutinesSkeleton = React.memo(function RoutinesSkeleton({
     <View
       key={key}
       style={[
-        styles.sessionCard,
+        styles.sessionCard, flatInDark(colorScheme),
         { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard, shadowColor: nc.shadow },
       ]}
     >
@@ -1330,7 +1331,7 @@ export default function RoutinesScreen() {
         style={({ pressed }) => {
           const isSelected = selectionMode && selectedIds.has(event.id);
           return [
-            styles.sessionCard,
+            styles.sessionCard, flatInDark(colorScheme),
             {
               borderColor: nc.borderLight,
               backgroundColor: pressed

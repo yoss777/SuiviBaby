@@ -2,6 +2,7 @@
 // Unified layout — same container size whether active or inactive
 
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { flatInDark } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -127,13 +128,18 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   return (
     <Animated.View
       style={[
-        styles.container,
+        styles.container, flatInDark(colorScheme),
         {
           backgroundColor: isActive ? bgColor : nc.backgroundCard,
           borderWidth: isActive ? 2 : 1,
           borderColor: isActive ? accentColor : nc.borderLight,
         },
         isActive && {
+          // Glow is an iOS shadow. On Android, elevation would tint with the
+          // accent color and show through the translucent active background as
+          // a box inside the card: keep the card flat, the 2 px border and the
+          // pulse already mark the running state.
+          elevation: 0,
           shadowColor: accentColor,
           shadowOpacity: 0.25,
           shadowRadius: 12,

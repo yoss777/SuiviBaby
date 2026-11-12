@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { flatInDark } from "@/constants/theme";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import {
   ConfettiBurst,
@@ -260,7 +261,7 @@ export default function MomentsScreen() {
             <Animated.View entering={FadeInUp.delay(100).springify()}>
               <View
                 style={[
-                  styles.emptyState,
+                  styles.emptyState, flatInDark(colorScheme),
                   { backgroundColor: nc.backgroundCard },
                 ]}
                 accessibilityRole="text"
