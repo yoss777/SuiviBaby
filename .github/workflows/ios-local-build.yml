@@ -36,6 +36,11 @@ on:
         required: true
         default: true
         type: boolean
+      show_previews:
+        description: "INTERNAL ONLY: show preview screens (SHOW_PREVIEWS=true). Never submit such a build for App Store review."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -53,6 +58,7 @@ jobs:
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SHOW_PREVIEWS: ${{ inputs.show_previews && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,6 +98,10 @@ jobs:
           echo "$PLIST_B64" | base64 --decode > GoogleService-Info.plist
           if [ -d ios/SuiviBaby ]; then cp GoogleService-Info.plist ios/SuiviBaby/GoogleService-Info.plist; fi
           grep -q "<key>PROJECT_ID</key>" GoogleService-Info.plist || { echo "::error::Invalid plist"; exit 1; }
+
+      - name: Preview screens warning
+        if: ${{ inputs.show_previews }}
+        run: echo "::warning::INTERNAL build with preview screens (SHOW_PREVIEWS=true). TestFlight internal testing only, never submit it for App Store review."
 
       - name: Build (eas build --local)
         run: |
