@@ -216,7 +216,7 @@ export default function TermsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Retour en haut"
           >
-            <Ionicons name="chevron-up" size={24} color={nc.white} />
+            <Ionicons name="chevron-up" size={24} color={nc.onTodayAccent} />
           </TouchableOpacity>
         </Animated.View>
       </SafeAreaView>

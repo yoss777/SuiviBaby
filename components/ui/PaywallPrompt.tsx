@@ -66,7 +66,7 @@ export function PaywallPrompt({
             style={[styles.upgradeButton, { backgroundColor: nc.todayAccent }]}
             onPress={handleUpgrade}
           >
-            <Text style={[styles.upgradeButtonText, { color: nc.white }]}>
+            <Text style={[styles.upgradeButtonText, { color: nc.onTodayAccent }]}>
               {message.ctaText}
             </Text>
           </TouchableOpacity>

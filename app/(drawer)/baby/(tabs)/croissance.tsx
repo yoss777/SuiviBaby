@@ -2107,8 +2107,8 @@ export default function CroissanceScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Ajouter une mesure"
                       >
-                        <Ionicons name="add" size={20} color="#fff" />
-                        <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
+                        <Ionicons name="add" size={20} color={nc.onTodayAccent} />
+                        <Text style={[styles.emptyCtaText, { color: nc.onTodayAccent }]}>Ajouter une mesure</Text>
                       </Pressable>
                     )}
                   </View>

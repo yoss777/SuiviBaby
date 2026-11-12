@@ -30,7 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBaby } from '@/contexts/BabyContext';
 import { useHeaderLeft } from '../../_layout';
 import { HeaderBackButton } from "expo-router/react-navigation";
-import { Colors, flatInDark } from "@/constants/theme";
+import { Colors, flatInDark, getReadableTextColor } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useModal } from "@/contexts/ModalContext";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -364,7 +364,7 @@ export default function ManageAccessScreen() {
           accessibilityRole="button"
           accessibilityLabel="Inviter un parent à accéder au profil de l'enfant"
         >
-          <Ionicons name="person-add" size={20} color={nc.white} />
+          <Ionicons name="person-add" size={20} color={getReadableTextColor(tintColor)} />
           <Text style={ds.inviteButtonText}>Inviter un parent</Text>
         </TouchableOpacity>
       </View>
@@ -494,7 +494,7 @@ const dynamicStyles = (
       gap: 8,
     },
     inviteButtonText: {
-      color: nc.white,
+      color: getReadableTextColor(tintColor),
       fontSize: 16,
       fontWeight: '600',
     },
@@ -512,7 +512,7 @@ const dynamicStyles = (
       borderRadius: 8,
     },
     backButtonText: {
-      color: nc.white,
+      color: getReadableTextColor(tintColor),
       fontSize: 16,
       fontWeight: '600',
     },

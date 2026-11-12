@@ -3,7 +3,7 @@ import { DotsLoader } from "@/components/ui/DotsLoader";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useBaby, type Child } from "@/contexts/BabyContext";
 import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
 import { useModal } from "@/contexts/ModalContext";
@@ -486,19 +486,19 @@ export default function JoinChildScreen() {
                         {processingInvitation === invitation.id ? (
                           <ActivityIndicator
                             size="small"
-                            color={nc.white}
+                            color={getReadableTextColor(nc.success)}
                           />
                         ) : (
                           <>
                             <FontAwesome
                               name="check"
                               size={16}
-                              color={nc.white}
+                              color={getReadableTextColor(nc.success)}
                             />
                             <Text
                               style={[
                                 styles.acceptButtonText,
-                                { color: nc.white },
+                                { color: getReadableTextColor(nc.success) },
                               ]}
                             >
                               Accepter
@@ -586,12 +586,12 @@ export default function JoinChildScreen() {
                       <FontAwesome
                         name="unlock"
                         size={18}
-                        color={nc.backgroundCard}
+                        color={nc.onTodayAccent}
                       />
                       <Text
                         style={[
                           styles.submitButtonText,
-                          { color: colorScheme === 'dark' ? nc.white : nc.backgroundCard },
+                          { color: nc.onTodayAccent },
                         ]}
                       >
                         Valider le code

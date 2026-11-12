@@ -211,9 +211,9 @@ export default function ForgotPasswordScreen() {
                 accessibilityState={{ disabled: !canSubmit }}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={nc.onTodayAccent} size="small" />
                 ) : (
-                  <Text style={styles.mainButtonText}>
+                  <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
                     {cooldown > 0
                       ? `Renvoyer dans ${cooldown}s`
                       : sent

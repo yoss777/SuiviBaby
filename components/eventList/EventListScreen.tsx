@@ -300,13 +300,12 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                   calendarBackground: Colors[colorScheme].background,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: tint,
-                  selectedDayTextColor:
-                    colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: Colors[colorScheme].onTint,
                   todayTextColor: tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: tint,
-                  selectedDotColor: nc.white,
+                  selectedDotColor: Colors[colorScheme].onTint,
                   arrowColor: tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: tint,
@@ -348,8 +347,8 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                 accessibilityRole="button"
                 accessibilityLabel={config.empty.ctaA11y}
               >
-                <Ionicons name="add" size={20} color={nc.white} />
-                <Text style={[styles.emptyCtaText, { color: nc.white }]}>{config.empty.ctaLabel}</Text>
+                <Ionicons name="add" size={20} color={Colors[colorScheme].onTint} />
+                <Text style={[styles.emptyCtaText, { color: Colors[colorScheme].onTint }]}>{config.empty.ctaLabel}</Text>
               </Pressable>
             )}
             {loadMoreButton}

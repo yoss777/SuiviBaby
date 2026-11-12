@@ -1,6 +1,6 @@
 import { ThemedView } from "@/components/themed-view";
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -164,7 +164,7 @@ export default function ShareChildScreen() {
           elevation: 5,
         },
         generateButtonText: {
-          color: nc.white,
+          color: nc.onTodayAccent,
           fontSize: 16,
           fontWeight: "600",
         },
@@ -201,7 +201,7 @@ export default function ShareChildScreen() {
           elevation: 5,
         },
         inviteButtonText: {
-          color: nc.white,
+          color: getReadableTextColor(nc.success),
           fontSize: 16,
           fontWeight: "600",
         },
@@ -526,13 +526,13 @@ export default function ShareChildScreen() {
                   accessibilityLabel="Générer un code de partage"
                 >
                   {isLoadingCode ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={nc.onTodayAccent} />
                   ) : (
                     <>
                       <FontAwesome
                         name="plus-circle"
                         size={18}
-                        color={nc.white}
+                        color={nc.onTodayAccent}
                       />
                       <Text style={dynamicStyles.generateButtonText}>
                         Générer un code
@@ -584,13 +584,13 @@ export default function ShareChildScreen() {
                   accessibilityLabel="Envoyer l'invitation par email"
                 >
                   {isLoadingInvite ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={getReadableTextColor(nc.success)} />
                   ) : (
                     <>
                       <FontAwesome
                         name="paper-plane"
                         size={18}
-                        color={nc.white}
+                        color={getReadableTextColor(nc.success)}
                       />
                       <Text style={dynamicStyles.inviteButtonText}>
                         Envoyer l&apos;invitation

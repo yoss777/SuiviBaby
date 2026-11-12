@@ -73,6 +73,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
   ) => {
     const colorScheme = useColorScheme() ?? "light";
     const tintColor = Colors[colorScheme].tint;
+    const onTint = Colors[colorScheme].onTint;
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
     const scrollViewRef = useRef<any>(null);
@@ -225,9 +226,9 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                     accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
                   >
                     {isSubmitting ? (
-                      <ActivityIndicator size="small" color={nc.white} />
+                      <ActivityIndicator size="small" color={onTint} />
                     ) : (
-                      <Text style={[styles.validateText, { color: nc.white }]}>
+                      <Text style={[styles.validateText, { color: onTint }]}>
                         {isEditing ? "Enregistrer" : "Ajouter"}
                       </Text>
                     )}

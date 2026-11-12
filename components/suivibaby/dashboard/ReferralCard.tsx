@@ -150,8 +150,8 @@ export const ReferralCard = memo(function ReferralCard({
           accessibilityHint="Ouvre le menu de partage"
           accessibilityState={{ disabled: false }}
         >
-          <FontAwesome name="share-nodes" size={12} color={nc.background} />
-          <Text style={[styles.shareText, { color: nc.background }]}>
+          <FontAwesome name="share-nodes" size={12} color={Colors[colorScheme].onTint} />
+          <Text style={[styles.shareText, { color: Colors[colorScheme].onTint }]}>
             {"Partager"}
           </Text>
         </TouchableOpacity>

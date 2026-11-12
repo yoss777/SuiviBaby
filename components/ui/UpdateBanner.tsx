@@ -108,7 +108,7 @@ export const UpdateBanner = memo(function UpdateBanner({
             accessibilityHint="Ouvre le store pour mettre à jour"
             accessibilityState={{ disabled: false }}
           >
-            <Text style={[styles.installText, { color: nc.background }]}>
+            <Text style={[styles.installText, { color: Colors[colorScheme].onTint }]}>
               {"Installer"}
             </Text>
           </TouchableOpacity>

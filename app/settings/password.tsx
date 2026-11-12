@@ -452,7 +452,7 @@ export default function PasswordScreen() {
             <Ionicons
               name="checkmark"
               size={20}
-              color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+              color={nc.onTodayAccent}
             />
             <Text
               style={[

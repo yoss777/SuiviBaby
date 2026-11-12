@@ -49,9 +49,8 @@ export function DateFilterBar({
     activeAccentColor ?? tintColor,
     colorScheme,
   );
-  // Active text must contrast with tint background (dark mode tint is white)
-  const activeTextColor =
-    colorScheme === "dark" ? Colors[colorScheme].background : nc.white;
+  // Texte posé sur l'aplat tint : token onTint (lisible en clair et en sombre)
+  const activeTextColor = Colors[colorScheme].onTint;
 
   const mergedContainerStyle = [styles.container, containerStyle];
   const mergedContentStyle = [styles.content, contentContainerStyle];

@@ -417,9 +417,9 @@ export default function ResetPasswordScreen() {
             accessibilityState={{ disabled: loading }}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator color={nc.onTodayAccent} size="small" />
             ) : (
-              <Text style={styles.mainButtonText}>
+              <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
                 {success ? "Se connecter" : "Réinitialiser"}
               </Text>
             )}

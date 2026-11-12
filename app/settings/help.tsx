@@ -312,7 +312,7 @@ export default function HelpScreen() {
                 <Ionicons
                   name="send"
                   size={20}
-                  color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+                  color={nc.onTodayAccent}
                 />
                 <Text
                   style={[

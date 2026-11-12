@@ -245,13 +245,13 @@ export default function OnboardingScreen() {
           currentIndex === SLIDES.length - 1 ? "Commencer" : "Suivant"
         }
       >
-        <Text style={[styles.nextButtonText, { color: nc.white }]}>
+        <Text style={[styles.nextButtonText, { color: nc.onTodayAccent }]}>
           {currentIndex === SLIDES.length - 1 ? "Commencer" : "Suivant"}
         </Text>
         <FontAwesome
           name={currentIndex === SLIDES.length - 1 ? "rocket" : "arrow-right"}
           size={18}
-          color={nc.white}
+          color={nc.onTodayAccent}
         />
       </TouchableOpacity>
       <InfoModal
