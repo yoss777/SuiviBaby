@@ -71,7 +71,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StickyHeaderSectionList } from "react-native-sticky-parallax-header";
 import { useHeaderRight } from "../../_layout";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
-import { pressedOpacity, pressedTint, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // P11: Enable LayoutAnimation on Android
 if (
@@ -762,7 +762,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 88,
-    minHeight: 44,
+    // Pas de hauteur minimale : la hauteur suit celle de la carte (alignée par
+    // marginBottom) ; un minimum faisait dépasser le rouge sous les cartes courtes.
     marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: 4,
@@ -1305,8 +1306,7 @@ const TimelineCard = React.memo(
           android_ripple={ripple}
           style={({ pressed }) => [
             styles.card, flatInDark(colorScheme), { backgroundColor, borderColor },
-            // Opaque au toucher : le bouton « Supprimer » est derrière la carte.
-            pressedTint(pressed, getNeutralColors(colorScheme).backgroundPressed),
+            pressedOpacity(pressed, 0.85),
           ]}
           onPress={onPress}
           onLongPress={

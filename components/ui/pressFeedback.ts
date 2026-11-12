@@ -43,14 +43,3 @@ export function pressedOpacity(pressed: boolean, opacity = 0.7): ViewStyle | nul
   return opacity === 0.7 ? PRESSED_IOS : { opacity };
 }
 
-/**
- * Retour au toucher qui garde la surface OPAQUE (iOS) : une teinte de fond au
- * lieu d'une opacité. À utiliser pour les cartes posées sur une action de
- * glissement (bouton « Supprimer » dessiné derrière la carte) : avec
- * pressedOpacity, le rouge transparaissait dès qu'on posait le doigt pour
- * glisser. Sur Android, le ripple fait déjà le retour : rien n'est ajouté.
- */
-export function pressedTint(pressed: boolean, tint: string): ViewStyle | null {
-  if (!pressed || Platform.OS === "android") return null;
-  return { backgroundColor: tint };
-}

@@ -30,7 +30,7 @@ import {
   showRowActionMenu,
 } from "@/utils/rowActions";
 import { getDateTime, isValidDate } from "@/utils/date";
-import { pressedOpacity, pressedTint, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // ============================================
 // TYPES
@@ -538,8 +538,7 @@ const EventRow = memo(function EventRow({
                   borderColor,
                   backgroundColor: nc.backgroundCard,
                 },
-                // Opaque au toucher : le bouton « Supprimer » est derrière la carte.
-                pressedTint(pressed, nc.backgroundPressed),
+                pressedOpacity(pressed, 0.85),
               ]}
               onPress={onEventPress ? handlePress : undefined}
               // Alternative au glissement : appui long et actions d'accessibilité.
@@ -942,7 +941,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 88,
-    minHeight: 44,
+    // Pas de hauteur minimale : la hauteur suit celle de la carte (alignée par
+    // marginBottom) ; un minimum faisait dépasser le rouge sous les cartes courtes.
     marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: space.xxs,

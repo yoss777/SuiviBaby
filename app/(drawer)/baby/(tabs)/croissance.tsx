@@ -556,7 +556,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 88,
-    minHeight: 44,
+    // Pas de hauteur minimale : la hauteur suit celle de la carte (alignée par
+    // marginBottom) ; un minimum faisait dépasser le rouge sous les cartes courtes.
     borderRadius: 14,
     marginHorizontal: 4,
     marginVertical: 7,
