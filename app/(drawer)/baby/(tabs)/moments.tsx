@@ -3,7 +3,6 @@ import { flatInDark } from "@/constants/theme";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import {
   ConfettiBurst,
-  // FloatingActionButton, // Commented - keeping animation for later use
   HeroMoodCard,
   MomentsSkeletonLoader,
   PolaroidGallery,
@@ -339,14 +338,6 @@ export default function MomentsScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
-
-      {/* Floating Action Button - commented for now, keeping animation for later use
-      <FloatingActionButton
-        onMoodPress={handleAddMood}
-        onPhotoPress={handleAddPhoto}
-        onMilestonePress={handleAddMilestone}
-      />
-      */}
 
       {/* Swipe Gallery */}
       <SwipeGallery
