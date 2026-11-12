@@ -74,7 +74,7 @@ describe("modèle du chrono", () => {
     expect(adjustSide(st, "right", 120, T0).rightSeconds).toBe(120);
   });
 
-  it("un brouillon oublié est périmé (6 h en pause, 12 h en marche)", () => {
+  it("un brouillon oublié est périmé (1 h en pause, 3 h en marche sans action)", () => {
     const paused: NursingTimerState = { ...EMPTY_NURSING_TIMER, leftSeconds: 60, updatedAt: T0 };
     expect(isNursingDraftStale(paused, T0 + PAUSED_DRAFT_TTL_MS - 1)).toBe(false);
     expect(isNursingDraftStale(paused, T0 + PAUSED_DRAFT_TTL_MS + 1)).toBe(true);
