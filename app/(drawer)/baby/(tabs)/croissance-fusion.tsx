@@ -7,10 +7,15 @@
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { SHOW_PREVIEWS } from "@/constants/featureFlags";
+import { Redirect, router, useFocusEffect, useIsFocused } from "expo-router";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
-import CroissanceScreen from "./croissance";
+
+// Chargé à la demande et monté seulement quand l'aperçu est à l'écran : pas
+// de second CroissanceScreen (écouteurs Firestore, graphique) en arrière-plan
+// à côté de l'onglet Croissance.
+const CroissanceScreen = lazy(() => import("./croissance"));
 
 const MERGED_TOOLS = [
   "Filtre par période (7 jours, 30 jours, choisir une date)",
@@ -23,6 +28,7 @@ export default function CroissanceFusionPreview() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const [open, setOpen] = useState(true);
+  const isFocused = useIsFocused();
 
   // Hidden tab: Android back would go to Home, come back to Plus instead.
   useFocusEffect(
@@ -34,6 +40,9 @@ export default function CroissanceFusionPreview() {
       return () => sub.remove();
     }, []),
   );
+
+  // Aperçu interne : jamais dans un build de store (lien profond compris).
+  if (!SHOW_PREVIEWS) return <Redirect href="/baby/croissance" />;
 
   return (
     <View style={{ flex: 1, backgroundColor: nc.background }}>
@@ -75,7 +84,11 @@ export default function CroissanceFusionPreview() {
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <CroissanceScreen />
+        {isFocused ? (
+          <Suspense fallback={null}>
+            <CroissanceScreen />
+          </Suspense>
+        ) : null}
       </View>
     </View>
   );
@@ -83,7 +96,7 @@ export default function CroissanceFusionPreview() {
 
 const styles = StyleSheet.create({
   banner: { margin: 12, marginBottom: 4, padding: 12, borderRadius: 12, borderWidth: 1, gap: 6 },
-  bannerHeader: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32 },
+  bannerHeader: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
   bannerTitle: { flex: 1, fontSize: 15, fontWeight: "700" },
   bannerText: { fontSize: 13, lineHeight: 18 },
   bullet: { fontSize: 13, lineHeight: 18, paddingLeft: 4 },
