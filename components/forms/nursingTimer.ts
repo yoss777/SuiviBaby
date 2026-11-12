@@ -30,9 +30,13 @@ export const EMPTY_NURSING_TIMER: NursingTimerState = {
   updatedAt: 0,
 };
 
-/** Un chrono en pause n'est repris que dans les 6 h ; un chrono en marche, 12 h. */
-export const PAUSED_DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
-export const RUNNING_DRAFT_TTL_MS = 12 * 60 * 60 * 1000;
+/**
+ * Expiration d'un brouillon oublié : un chrono en pause depuis plus d'1 h, ou
+ * en marche sans aucune action depuis plus de 3 h (aucune tétée ne dure 3 h
+ * d'affilée), n'est plus proposé et s'efface.
+ */
+export const PAUSED_DRAFT_TTL_MS = 60 * 60 * 1000;
+export const RUNNING_DRAFT_TTL_MS = 3 * 60 * 60 * 1000;
 
 function runningExtra(state: NursingTimerState, side: NursingSide, now: number): number {
   if (state.runningSide !== side || state.runningSince == null) return 0;
@@ -120,6 +124,62 @@ export function hasNursingProgress(state: NursingTimerState): boolean {
 export function isNursingDraftStale(state: NursingTimerState, now: number): boolean {
   const ttl = state.runningSide ? RUNNING_DRAFT_TTL_MS : PAUSED_DRAFT_TTL_MS;
   return now - state.updatedAt > ttl;
+}
+
+/** Temps total compté (deux côtés, segment en cours compris). */
+export function totalNursingSeconds(state: NursingTimerState, now: number): number {
+  return sideSeconds(state, "left", now) + sideSeconds(state, "right", now);
+}
+
+/**
+ * Que faire d'un brouillon de tétée trouvé à l'ouverture de la feuille Repas ?
+ * - "resume" : la feuille est sur Tétée : on reprend le chrono ;
+ * - "offer" : elle est ouverte pour un biberon ou un solide : on garde ce type
+ *   et on propose la reprise dans un bandeau, sans rien imposer ;
+ * - "none" : rien à reprendre (pas de brouillon, édition, chrono déjà lancé).
+ */
+export function resolveNursingDraftOnOpen(opts: {
+  draft: NursingTimerState | null;
+  currentType: string;
+  isEditing: boolean;
+  formHasProgress: boolean;
+}): "resume" | "offer" | "none" {
+  if (opts.isEditing || !opts.draft || opts.formHasProgress) return "none";
+  if (!hasNursingProgress(opts.draft)) return "none";
+  return opts.currentType === "tetee" ? "resume" : "offer";
+}
+
+/**
+ * Heure proposée pour le repas saisi. L'heure de début du chrono n'est
+ * utilisée que pour une tétée, et seulement si l'heure n'a pas été choisie à
+ * la main : un biberon ou un solide garde toujours sa propre heure.
+ */
+export function proposedMealDate(opts: {
+  mealType: string;
+  timer: NursingTimerState;
+  dateTouched: boolean;
+  fallback: Date;
+}): Date {
+  if (opts.mealType === "tetee" && !opts.dateTouched && opts.timer.startedAt != null) {
+    return new Date(opts.timer.startedAt);
+  }
+  return opts.fallback;
+}
+
+/** Durée lisible : « moins d'1 min », « 12 min », « 1 h 05 » (espaces insécables). */
+export function formatNursingMinutes(totalSeconds: number): string {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  if (minutes < 1) return "moins d'1 min";
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h} h ${m.toString().padStart(2, "0")}`;
+}
+
+/** Libellé du bandeau : « Tétée en cours (12 min) » ou « Tétée en pause (12 min) ». */
+export function nursingDraftLabel(state: NursingTimerState, now: number): string {
+  const status = state.runningSide ? "en cours" : "en pause";
+  return `Tétée ${status} (${formatNursingMinutes(totalNursingSeconds(state, now))})`;
 }
 
 // ============================================

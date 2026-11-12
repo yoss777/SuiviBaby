@@ -50,12 +50,18 @@ import {
   loadNursingTimer,
   type NursingSide,
   type NursingTimerState,
+  proposedMealDate,
   resetSide,
+  resolveNursingDraftOnOpen,
   saveLastBottle,
   saveNursingTimer,
   sideSeconds,
   toggleSide,
 } from "@/components/forms/nursingTimer";
+import {
+  NursingDraftBanner,
+  NursingElapsedText,
+} from "@/components/forms/NursingTimerDisplay";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -112,19 +118,6 @@ const DEFAULT_BIBERON_ML = 100;
 const BIBERON_STEP_ML = 10;
 const BIBERON_PRESETS_ML = [60, 90, 120, 150, 180] as const;
 
-function formatDurationA11y(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  const m = `${minutes} minute${minutes > 1 ? "s" : ""}`;
-  return seconds > 0 ? `${m} ${seconds} seconde${seconds > 1 ? "s" : ""}` : m;
-}
-
-function formatDuration(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-}
-
 // ============================================
 // COMPONENT
 // ============================================
@@ -166,10 +159,16 @@ export function MealsForm({
     leftSeconds: editData?.dureeGauche ? editData.dureeGauche * 60 : 0,
     rightSeconds: editData?.dureeDroite ? editData.dureeDroite * 60 : 0,
   }));
-  const [now, setNow] = useState(() => Date.now());
+  // Le temps qui défile est affiché par <NursingElapsedText>, qui porte seul
+  // son intervalle : ce formulaire ne se re-rend pas à chaque seconde.
   const runningSide = timer.runningSide;
-  const leftSeconds = sideSeconds(timer, "left", now);
-  const rightSeconds = sideSeconds(timer, "right", now);
+  // Brouillon de tétée trouvé alors que la feuille est ouverte pour un
+  // biberon ou un solide : proposé dans un bandeau, jamais imposé.
+  const [pendingDraft, setPendingDraft] = useState<NursingTimerState | null>(null);
+  const mealTypeRef = useRef(mealType);
+  useEffect(() => {
+    mealTypeRef.current = mealType;
+  }, [mealType]);
   const timerRef = useRef(timer);
   useEffect(() => {
     timerRef.current = timer;
@@ -244,7 +243,6 @@ export function MealsForm({
   const updateTimer = useCallback(
     (fn: (state: NursingTimerState, at: number) => NursingTimerState) => {
       const at = Date.now();
-      setNow(at);
       setTimer((prev) => fn(prev, at));
     },
     [],
@@ -292,20 +290,9 @@ export function MealsForm({
     }
   }, [mealType, pauseChrono]);
 
-  // Rafraîchit l'affichage tant qu'un côté tourne (le temps vient des horodatages).
-  useEffect(() => {
-    if (!runningSide) return;
-    const id = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(id);
-  }, [runningSide]);
-
   // Reprise d'un chrono laissé en cours (feuille fermée, app relancée) et
   // préremplissage du biberon avec la dernière quantité donnée.
   const [restoredVersion, setRestoredVersion] = useState(0);
-  const dateHeureDirtyRef = useRef(dateHeureDirty);
-  useEffect(() => {
-    dateHeureDirtyRef.current = dateHeureDirty;
-  }, [dateHeureDirty]);
   useEffect(() => {
     if (isEditing || !childId) {
       timerLoadedRef.current = true;
@@ -317,15 +304,21 @@ export function MealsForm({
         if (cancelled) return;
         timerLoadedRef.current = true;
         let restored = false;
-        if (draft && !hasNursingProgress(timerRef.current)) {
+        // Le type demandé à l'ouverture est toujours respecté : une feuille
+        // ouverte pour un biberon reste sur Biberon, la tétée est proposée
+        // dans un bandeau. L'heure n'est jamais modifiée ici (voir
+        // proposedMealDate : l'heure de début ne vaut que pour une tétée).
+        const opening = resolveNursingDraftOnOpen({
+          draft,
+          currentType: mealTypeRef.current,
+          isEditing,
+          formHasProgress: hasNursingProgress(timerRef.current),
+        });
+        if (opening === "resume" && draft) {
           setTimer(draft);
-          setNow(Date.now());
-          if (draft.runningSide) setMealType("tetee");
-          if (draft.startedAt && !dateHeureDirtyRef.current) {
-            setDateHeure(new Date(draft.startedAt));
-          }
-          restored = true;
-        } else {
+        } else if (opening === "offer" && draft) {
+          setPendingDraft(draft);
+        } else if (hasNursingProgress(timerRef.current)) {
           // Un chrono démarré avant la fin du chargement est enregistré tout de suite.
           saveNursingTimer(childId, timerRef.current);
         }
@@ -363,11 +356,60 @@ export function MealsForm({
     [],
   );
 
-  // Garde-fou de saisie. En création, le chrono n'en fait pas partie : il est
-  // déjà sauvegardé et repris à la réouverture, rien n'est perdu.
-  const { resetBaseline } = useFormDirtyGuard({
+  // Reprendre le brouillon proposé dans le bandeau (ou en passant sur Tétée).
+  const resumePendingDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    if (!hasNursingProgress(timerRef.current)) setTimer(pendingDraft);
+    setPendingDraft(null);
+    setMealType("tetee");
+  }, [pendingDraft]);
+
+  const selectMealType = (next: MealType) => {
+    if (next === "tetee" && pendingDraft) {
+      resumePendingDraft();
+      return;
+    }
+    setMealType(next);
+  };
+
+  // Abandonner une tétée lancée par erreur : efface le brouillon (confirmé).
+  const discardNursingDraft = useCallback(() => {
+    if (!childId) return;
+    showAlert(
+      "Abandonner la tétée ?",
+      "Le temps chronométré sera effacé. Rien n'est enregistré dans le journal.",
+      [
+        { text: "Garder", style: "cancel" },
+        {
+          text: "Abandonner",
+          style: "destructive",
+          onPress: () => {
+            setPendingDraft(null);
+            setTimer((prev) => (hasNursingProgress(prev) ? EMPTY_NURSING_TIMER : prev));
+            clearNursingTimer(childId);
+          },
+        },
+      ],
+    );
+  }, [childId, showAlert]);
+
+  // Heure proposée : celle du début du chrono pour une tétée (si l'heure n'a
+  // pas été choisie), sinon celle du formulaire. Jamais pour un autre type.
+  const effectiveDate = proposedMealDate({
     mealType,
-    dateHeure,
+    timer,
+    dateTouched: dateHeureDirty || isEditing,
+    fallback: dateHeure,
+  });
+
+  // Garde-fou de saisie : seules les valeurs saisies comptent. Le type de
+  // repas (onglet) n'en fait pas partie, et l'heure n'est « modifiée » que si
+  // l'utilisateur l'a choisie. En création, le chrono n'en fait pas partie
+  // non plus : il est déjà sauvegardé et repris à la réouverture.
+  const { resetBaseline } = useFormDirtyGuard({
+    // En édition, changer le type change vraiment l'événement enregistré.
+    mealType: isEditing ? mealType : undefined,
+    dateHeureDirty,
     quantite,
     typeBiberon,
     typeSolide,
@@ -395,7 +437,7 @@ export function MealsForm({
 
     setIsSubmitting(true);
 
-    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
+    const dateToSave = !isEditing || dateHeureDirty ? effectiveDate : undefined;
 
     if (mealType === "tetee") {
       // Temps figé à l'instant de l'envoi (le côté en cours compris).
@@ -541,10 +583,25 @@ export function MealsForm({
   // RENDER
   // ============================================
 
-  const totalSeconds = leftSeconds + rightSeconds;
-
   return (
     <View style={styles.container}>
+      {/* Tétée en cours alors que la feuille est ouverte pour autre chose. */}
+      {pendingDraft && mealType !== "tetee" && (
+        <NursingDraftBanner
+          draft={pendingDraft}
+          colors={{
+            background: accentColors.softBg,
+            border: accentColors.softBorder,
+            text: nc.textStrong,
+            actionText: accentColors.softText,
+            mutedText: nc.textLight,
+          }}
+          onResume={resumePendingDraft}
+          onDiscard={discardNursingDraft}
+          disabled={isSubmitting}
+        />
+      )}
+
       {/* Type selector */}
       <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
         Type de repas
@@ -560,7 +617,7 @@ export function MealsForm({
             },
             isSubmitting && styles.typeChipDisabled,
           ]}
-          onPress={() => setMealType("tetee")}
+          onPress={() => selectMealType("tetee")}
           disabled={isSubmitting}
           accessibilityLabel="Type tétée"
           accessibilityRole="button"
@@ -597,7 +654,7 @@ export function MealsForm({
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => {
-            setMealType("biberon");
+            selectMealType("biberon");
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type biberon"
@@ -635,7 +692,7 @@ export function MealsForm({
             isSubmitting && styles.typeChipDisabled,
           ]}
           onPress={() => {
-            setMealType("solide");
+            selectMealType("solide");
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type solide"
@@ -824,9 +881,13 @@ export function MealsForm({
           <View style={styles.chronoContainer}>
             {(["left", "right"] as const).map((side) => {
               const sideLabel = side === "left" ? "gauche" : "droit";
-              const seconds = side === "left" ? leftSeconds : rightSeconds;
+              // Temps figé (hors segment en cours) : suffit pour les libellés et
+              // l'état des boutons, sans dépendre de l'horloge qui défile.
+              const countedSeconds = side === "left" ? timer.leftSeconds : timer.rightSeconds;
               const isRunning = runningSide === side;
-              const minutes = Math.round(seconds / 60);
+              const hasTime = countedSeconds > 0 || isRunning;
+              // Édition : le chrono ne tourne pas, le temps figé est le temps affiché.
+              const minutes = Math.round(countedSeconds / 60);
               return (
                 <View
                   key={side}
@@ -839,12 +900,12 @@ export function MealsForm({
                   <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
                     {side === "left" ? "Gauche" : "Droit"}
                   </Text>
-                  <Text
+                  <NursingElapsedText
+                    timer={timer}
+                    side={side}
                     style={[styles.chronoTime, { color: nc.textStrong }]}
-                    accessibilityLabel={`Côté ${sideLabel} : ${formatDurationA11y(seconds)}`}
-                  >
-                    {formatDuration(seconds)}
-                  </Text>
+                    a11yPrefix={`Côté ${sideLabel}`}
+                  />
                   {isEditing ? (
                     <View style={styles.chronoAdjustRow}>
                       <TouchableOpacity
@@ -923,7 +984,7 @@ export function MealsForm({
                         accessibilityLabel={
                           isRunning
                             ? `Mettre en pause le côté ${sideLabel}`
-                            : seconds > 0
+                            : countedSeconds > 0
                               ? `Reprendre le côté ${sideLabel}`
                               : `Démarrer le côté ${sideLabel}`
                         }
@@ -942,21 +1003,21 @@ export function MealsForm({
                       <TouchableOpacity
                         style={[
                           styles.chronoResetButton,
-                          seconds === 0 && styles.chronoControlButtonDisabled,
+                          !hasTime && styles.chronoControlButtonDisabled,
                         ]}
                         onPress={() => resetChrono(side)}
-                        disabled={isSubmitting || seconds === 0}
+                        disabled={isSubmitting || !hasTime}
                         accessibilityRole="button"
                         accessibilityLabel={`Remettre à zéro le côté ${sideLabel}`}
                         accessibilityHint="Demande une confirmation"
                         accessibilityState={{
-                          disabled: isSubmitting || seconds === 0,
+                          disabled: isSubmitting || !hasTime,
                         }}
                       >
                         <Ionicons
                           name="refresh"
                           size={18}
-                          color={seconds === 0 ? nc.textMuted : nc.textLight}
+                          color={!hasTime ? nc.textMuted : nc.textLight}
                         />
                       </TouchableOpacity>
                     </View>
@@ -970,14 +1031,32 @@ export function MealsForm({
             <Text style={[styles.chronoTotalLabel, { color: nc.textLight }]}>
               Total
             </Text>
-            <Text style={[styles.chronoTotalValue, { color: nc.textStrong }]}>
-              {formatDuration(totalSeconds)}
-            </Text>
+            <NursingElapsedText
+              timer={timer}
+              style={[styles.chronoTotalValue, { color: nc.textStrong }]}
+              a11yPrefix="Durée totale"
+            />
           </View>
           {!isEditing && runningSide && (
             <Text style={[styles.chronoHint, { color: nc.textLight }]}>
               Le chrono continue même si vous fermez cette fenêtre.
             </Text>
+          )}
+          {/* Tétée lancée par erreur : on peut l'abandonner (confirmé). */}
+          {!isEditing && hasNursingProgress(timer) && (
+            <TouchableOpacity
+              style={styles.chronoDiscardButton}
+              onPress={discardNursingDraft}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Abandonner la tétée"
+              accessibilityHint="Efface le chrono, demande une confirmation"
+              accessibilityState={{ disabled: isSubmitting }}
+            >
+              <Text style={[styles.chronoDiscardText, { color: nc.textLight }]}>
+                Abandonner la tétée
+              </Text>
+            </TouchableOpacity>
           )}
         </>
       )}
@@ -1393,7 +1472,7 @@ export function MealsForm({
 
       {/* DATE/TIME PICKER */}
       <DateTimeSectionRow
-        value={dateHeure}
+        value={effectiveDate}
         onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
@@ -1646,6 +1725,17 @@ const styles = StyleSheet.create({
   chronoHint: {
     fontSize: 13,
     textAlign: "center",
+  },
+  chronoDiscardButton: {
+    alignSelf: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+  },
+  chronoDiscardText: {
+    fontSize: 14,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   chronoControlButtonDisabled: {
     opacity: 0.5,
