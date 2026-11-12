@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/SmartFeedCard.tsx
 // Displays a single contextual tip card on the dashboard
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Tip } from "@/types/content";
 import { TIP_CATEGORY_LABELS, getTipCategoryColor } from "@/types/content";
@@ -10,9 +11,10 @@ import React, { memo, useCallback } from "react";
 import {
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface SmartFeedCardProps {
   tip: Tip;
@@ -31,6 +33,8 @@ export const SmartFeedCard = memo(function SmartFeedCard({
   onBookmark,
   colorScheme = "light",
 }: SmartFeedCardProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const nc = getNeutralColors(colorScheme);
   const accentColor = getTipCategoryColor(tip.category, colorScheme);
 
@@ -52,16 +56,17 @@ export const SmartFeedCard = memo(function SmartFeedCard({
   const catLabel = TIP_CATEGORY_LABELS[tip.category] ?? tip.category;
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      android_ripple={ripple}
+      style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: nc.backgroundCard,
           borderColor: accentColor + "30",
         },
+        pressedOpacity(pressed),
       ]}
       onPress={handleRead}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Conseil : ${tip.title}`}
       accessibilityHint="Appuyez pour lire l'article complet"
@@ -103,7 +108,9 @@ export const SmartFeedCard = memo(function SmartFeedCard({
 
           {/* Actions */}
           <View style={styles.actions}>
-            <TouchableOpacity
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={handleBookmark}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
@@ -119,8 +126,10 @@ export const SmartFeedCard = memo(function SmartFeedCard({
                 size={14}
                 color={isBookmarked ? accentColor : nc.textMuted}
               />
-            </TouchableOpacity>
-            <TouchableOpacity
+            </Pressable>
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={handleDismiss}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
@@ -128,7 +137,7 @@ export const SmartFeedCard = memo(function SmartFeedCard({
               accessibilityHint="Ce conseil ne sera plus affiché"
             >
               <FontAwesome name="xmark" size={14} color={nc.textMuted} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -175,13 +184,13 @@ export const SmartFeedCard = memo(function SmartFeedCard({
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -192,24 +201,24 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 12,
+    padding: space.sm,
     justifyContent: "space-between",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   iconCircle: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -227,19 +236,19 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
     alignItems: "center",
   },
   title: {
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   summary: {
     fontSize: 13,
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   footer: {
     flexDirection: "row",
@@ -250,15 +259,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontStyle: "italic",
-    marginRight: 8,
+    marginRight: space.xs,
   },
   ctaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: space.xxs,
+    borderRadius: radius.md,
   },
   ctaText: {
     fontSize: 12,

@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
-import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import type { ScrollViewInstance } from "react-native";
@@ -216,7 +216,7 @@ export default function TermsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Retour en haut"
           >
-            <Ionicons name="chevron-up" size={24} color={nc.white} />
+            <Ionicons name="chevron-up" size={24} color={nc.onTodayAccent} />
           </TouchableOpacity>
         </Animated.View>
       </SafeAreaView>
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,

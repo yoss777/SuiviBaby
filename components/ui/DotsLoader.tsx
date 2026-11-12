@@ -1,12 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { neutralColors } from "@/constants/dashboardColors";
 
 export function DotsLoader({
   size = 6,
   gap = 6,
   // color = "#111827",
-  color = "#ffffff",
+  color = neutralColors.white,
 }: {
   size?: number;
   gap?: number;

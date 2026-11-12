@@ -18,8 +18,8 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 
-import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
+import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -250,7 +250,7 @@ export function DeletionRequestNotifier() {
                 onPress={() => handleVote("approved")}
                 disabled={isVoting}
               >
-                <Text style={[styles.actionText, { color: nc.white }]}>
+                <Text style={[styles.actionText, { color: getReadableTextColor(nc.success) }]}>
                   Approuver
                 </Text>
               </TouchableOpacity>
@@ -263,7 +263,7 @@ export function DeletionRequestNotifier() {
               ]}
               onPress={dismiss}
             >
-              <Text style={[styles.okText, { color: nc.white }]}>OK</Text>
+              <Text style={[styles.okText, { color: Colors[colorScheme].onTint }]}>OK</Text>
             </TouchableOpacity>
           )}
         </Pressable>
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

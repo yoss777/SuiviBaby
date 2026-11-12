@@ -1,12 +1,13 @@
 // components/suivibaby/dashboard/InsightCard.tsx
 // Displays a data-driven insight on the dashboard — dismissible via X button or swipe
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import type { Insight } from "@/types/content";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback } from "react";
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, StyleSheet, Text, Pressable, View } from "react-native";
 import Animated, {
   FadeOut,
   LinearTransition,
@@ -16,6 +17,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3;
@@ -43,6 +45,8 @@ export const InsightCard = memo(function InsightCard({
   onDismiss,
   colorScheme = "light",
 }: InsightCardProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const nc = getNeutralColors(colorScheme);
   const config = TYPE_CONFIG[insight.type] ?? TYPE_CONFIG.info;
 
@@ -149,14 +153,16 @@ export const InsightCard = memo(function InsightCard({
               </Text>
             </View>
             {onDismiss && (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={rippleBorderless}
+                style={({ pressed }) => pressedOpacity(pressed, 0.2)}
                 onPress={handleDismissButton}
                 hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
                 accessibilityRole="button"
                 accessibilityLabel="Masquer"
               >
                 <FontAwesome name="xmark" size={14} color={nc.textMuted} />
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
 
@@ -174,8 +180,9 @@ export const InsightCard = memo(function InsightCard({
 
           {/* Learn more */}
           {insight.relatedTipId && onLearnMore && (
-            <TouchableOpacity
-              style={styles.learnMore}
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [styles.learnMore, pressedOpacity(pressed, 0.2)]}
               onPress={handleLearnMore}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
@@ -191,7 +198,7 @@ export const InsightCard = memo(function InsightCard({
                 size={10}
                 color={insight.accentColor}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
       </View>
@@ -207,9 +214,9 @@ export const InsightCard = memo(function InsightCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    padding: 12,
+    padding: space.sm,
   },
   row: {
     flexDirection: "row",
@@ -230,15 +237,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   typeBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   typeText: {
     fontSize: 12,
@@ -258,7 +265,7 @@ const styles = StyleSheet.create({
   learnMore: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     marginTop: 6,
   },
   learnMoreText: {

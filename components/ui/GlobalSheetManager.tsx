@@ -1,7 +1,7 @@
 // components/ui/GlobalSheetManager.tsx
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import BottomSheet, { type BottomSheetFooterProps } from '@gorhom/bottom-sheet';
 import { SafeBoundary } from '@/components/SafeBoundary';
 import { useSheetState, useSheetActions, isFormSheetProps, isSoinsFormProps, isMealsFormProps, isPumpingFormProps, isActivitiesFormProps, isMilestonesFormProps, isDiapersFormProps, isRoutinesFormProps, isCroissanceFormProps, isContentSheetProps } from '@/contexts/SheetContext';
 import { FormBottomSheet } from './FormBottomSheet';
@@ -21,6 +21,20 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fetchTipById, bookmarkTip, removeBookmark, submitTipFeedback, getUserContentState } from '@/services/smartContentService';
 import type { Tip, UserContent } from '@/types/content';
 import type { AnySheetProps } from '@/contexts/SheetContext';
+import { useBaby } from '@/contexts/BabyContext';
+import { useModal } from '@/contexts/ModalContext';
+import {
+  FormGuardProvider,
+  resolveDismissRequest,
+  type FormGuardContextValue,
+} from '@/components/forms/formGuard';
+import {
+  createSheetFooterStore,
+  SheetFooterContext,
+  SheetFooterSpacer,
+  type SheetFooterStore,
+} from '@/components/forms/SheetFooter';
+import { SheetFooterHost } from '@/components/forms/SheetFooterHost';
 
 // Clé de montage d'une feuille : type de formulaire + sous-type + événement édité
 // (+ enfant). Un autre formulaire ou un autre événement remonte le formulaire
@@ -82,7 +96,7 @@ function FormCrashFallback({ onClose, onCrash }: { onClose: () => void; onCrash?
         accessibilityLabel="Fermer"
         style={[fallbackStyles.button, { backgroundColor: Colors[colorScheme].tint }]}
       >
-        <Text style={fallbackStyles.buttonText}>Fermer</Text>
+        <Text style={[fallbackStyles.buttonText, { color: Colors[colorScheme].onTint }]}>Fermer</Text>
       </Pressable>
     </View>
   );
@@ -93,7 +107,7 @@ const fallbackStyles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
   message: { fontSize: 14, textAlign: 'center' },
   button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  buttonText: { fontWeight: '600', fontSize: 15 },
 });
 
 // Boundary d'un formulaire : un crash de rendu n'emporte que la feuille.
@@ -112,6 +126,51 @@ function FormBoundary({
     <SafeBoundary name={`sheet.${name}`} fallback={<FormCrashFallback onClose={onClose} onCrash={onCrash} />}>
       {children}
     </SafeBoundary>
+  );
+}
+
+// Rappel de l'enfant concerné en haut de chaque formulaire : avec des jumeaux
+// ou une fratrie, une saisie sur le mauvais enfant doit se voir avant l'envoi.
+export function SheetChildLabel() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const nc = getNeutralColors(colorScheme);
+  const { activeChild } = useBaby();
+  const name = activeChild?.name?.trim();
+  if (!name) return null;
+  return (
+    <View style={childLabelStyles.row} accessible accessibilityLabel={`Saisie pour ${name}`}>
+      <Text style={[childLabelStyles.text, { color: nc.textLight }]} numberOfLines={1}>
+        Pour <Text style={[childLabelStyles.name, { color: nc.textStrong }]}>{name}</Text>
+      </Text>
+    </View>
+  );
+}
+
+const childLabelStyles = StyleSheet.create({
+  row: { alignItems: 'center', marginTop: -12, marginBottom: 8 },
+  text: { fontSize: 14 },
+  name: { fontWeight: '700' },
+});
+
+// Corps commun des feuilles de formulaire : garde-fou de saisie, pied collant,
+// nom de l'enfant et espace réservé sous le dernier champ.
+function FormSheetBody({
+  footerStore,
+  guard,
+  children,
+}: {
+  footerStore: SheetFooterStore;
+  guard: FormGuardContextValue;
+  children: React.ReactNode;
+}) {
+  return (
+    <FormGuardProvider value={guard}>
+      <SheetFooterContext.Provider value={footerStore}>
+        <SheetChildLabel />
+        {children}
+        <SheetFooterSpacer store={footerStore} />
+      </SheetFooterContext.Provider>
+    </FormGuardProvider>
   );
 }
 
@@ -185,6 +244,83 @@ const GlobalSheetManagerInner = () => {
   const [isInPicker, setIsInPicker] = useState(false);
   const [activeRoutineSheet, setActiveRoutineSheet] = useState<"nap" | "night" | "bain" | "nez">("nap");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showAlert } = useModal();
+  const { setCloseGuard } = useSheetActions();
+
+  // --- Pied collant -------------------------------------------------------
+  const footerStore = useMemo(() => createSheetFooterStore(), []);
+  const renderFooter = useCallback(
+    (props: BottomSheetFooterProps) => <SheetFooterHost {...props} store={footerStore} />,
+    [footerStore],
+  );
+
+  // --- Garde-fou contre la perte de saisie --------------------------------
+  const [isDirty, setIsDirtyState] = useState(false);
+  const isDirtyRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+  const discardRef = useRef<(() => void) | null>(null);
+  const guard = useMemo<FormGuardContextValue>(
+    () => ({
+      setDirty: (dirty) => {
+        isDirtyRef.current = dirty;
+        setIsDirtyState(dirty);
+      },
+      setDiscardHandler: (handler) => {
+        discardRef.current = handler;
+      },
+    }),
+    [],
+  );
+
+  const guardedClose = useCallback(
+    (afterClose?: () => void) => {
+      const decision = resolveDismissRequest({
+        dirty: isDirtyRef.current,
+        isSubmitting: isSubmittingRef.current,
+      });
+      if (decision === 'ignore') return;
+      const close = () => {
+        isDirtyRef.current = false;
+        closeSheet();
+        afterClose?.();
+      };
+      if (decision === 'close') {
+        close();
+        return;
+      }
+      showAlert(
+        'Abandonner la saisie ?',
+        'Les informations saisies ne seront pas enregistrées.',
+        [
+          { text: 'Continuer la saisie', style: 'cancel' },
+          {
+            text: 'Abandonner',
+            style: 'destructive',
+            onPress: () => {
+              discardRef.current?.();
+              close();
+            },
+          },
+        ],
+      );
+    },
+    [closeSheet, showAlert],
+  );
+  // Sans argument : utilisable tel quel comme onPress / onCancel.
+  const requestClose = useCallback(() => guardedClose(), [guardedClose]);
+
+  // Retour Android : même garde-fou que le fond et les boutons.
+  useEffect(() => {
+    setCloseGuard(() => {
+      if (!isDirtyRef.current && !isSubmittingRef.current) return false;
+      guardedClose();
+      return true;
+    });
+    return () => setCloseGuard(null);
+  }, [setCloseGuard, guardedClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -240,17 +376,21 @@ const GlobalSheetManagerInner = () => {
           icon="prescription-bottle"
           accentColor={config.color}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="SoinsForm" onClose={closeSheet} onCrash={resetPicker}>
             <SoinsForm
               key={formKey}
               initialType={soinsType}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -258,6 +398,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -276,17 +417,21 @@ const GlobalSheetManagerInner = () => {
           icon="baby"
           accentColor={eventColors.meal.dark}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="MealsForm" onClose={closeSheet} onCrash={resetPicker}>
             <MealsForm
               key={formKey}
               initialType={mealType}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -294,6 +439,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -312,16 +458,20 @@ const GlobalSheetManagerInner = () => {
           icon="pump-medical"
           accentColor={eventColors.pumping.dark}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="PumpingForm" onClose={closeSheet} onCrash={resetPicker}>
             <PumpingForm
               key={formKey}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -329,6 +479,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -347,17 +498,21 @@ const GlobalSheetManagerInner = () => {
           icon="play-circle"
           accentColor={eventColors.activite.dark}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="ActivitiesForm" onClose={closeSheet} onCrash={resetPicker}>
             <ActivitiesForm
               key={formKey}
               initialType={activiteType}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -366,6 +521,7 @@ const GlobalSheetManagerInner = () => {
               promenadeEnCours={viewProps.promenadeEnCours}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -380,6 +536,7 @@ const GlobalSheetManagerInner = () => {
         closeSheet();
         onCancel?.();
       };
+      const requestCancel = () => guardedClose(onCancel);
 
       return (
         <FormBottomSheet
@@ -389,17 +546,21 @@ const GlobalSheetManagerInner = () => {
           icon="star"
           accentColor={eventColors.jalon.dark}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={handleCancel}
+          onCancel={requestCancel}
           onClose={handleCancel}
+          onRequestDismiss={requestCancel}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="MilestonesForm" onClose={handleCancel} onCrash={resetPicker}>
             <MilestonesForm
               key={formKey}
               initialType={jalonType}
               onSuccess={handleSuccess}
-              onCancel={handleCancel}
+              onCancel={requestCancel}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -407,6 +568,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -416,9 +578,8 @@ const GlobalSheetManagerInner = () => {
       const { diapersType, editData } = viewProps;
       const isEditing = !!editData;
       const isMiction = diapersType === 'miction';
-      const title = isEditing
-        ? (isMiction ? 'Modifier la miction' : 'Modifier la selle')
-        : (isMiction ? 'Nouvelle miction' : 'Nouvelle selle');
+      // Lexique parent : « couche (pipi / selle) » ; types stockés inchangés.
+      const title = isEditing ? 'Modifier la couche' : 'Nouvelle couche';
       const icon = isMiction ? 'droplet' : 'poop';
       const accentColor = isMiction ? eventColors.miction.dark : eventColors.selle.dark;
 
@@ -430,17 +591,21 @@ const GlobalSheetManagerInner = () => {
           icon={icon}
           accentColor={accentColor}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="DiapersForm" onClose={closeSheet} onCrash={resetPicker}>
             <DiapersForm
               key={formKey}
               initialType={diapersType}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -448,6 +613,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -494,18 +660,22 @@ const GlobalSheetManagerInner = () => {
           iconLib={iconLib}
           accentColor={accentColor}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="RoutinesForm" onClose={closeSheet} onCrash={resetPicker}>
             <RoutinesForm
               key={formKey}
               initialType={routineType}
               initialSleepMode={sleepMode}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -515,6 +685,7 @@ const GlobalSheetManagerInner = () => {
               onSheetTypeChange={setActiveRoutineSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }
@@ -533,16 +704,20 @@ const GlobalSheetManagerInner = () => {
           icon="seedling"
           accentColor={eventColors.croissance.dark}
           showActions={false}
-          enablePanDownToClose={!isInPicker}
+          enablePanDownToClose={!isInPicker && !isDirty}
+          enablePanGestures={!isInPicker}
           onSubmit={() => {}}
-          onCancel={closeSheet}
+          onCancel={requestClose}
           onClose={closeSheet}
+          onRequestDismiss={requestClose}
+          footerComponent={renderFooter}
         >
+          <FormSheetBody footerStore={footerStore} guard={guard}>
           <FormBoundary key={formKey} name="CroissanceForm" onClose={closeSheet} onCrash={resetPicker}>
             <CroissanceForm
               key={formKey}
               onSuccess={handleSuccess}
-              onCancel={closeSheet}
+              onCancel={requestClose}
               isSubmitting={isSubmitting}
               setIsSubmitting={setIsSubmitting}
               onFormStepChange={handleFormStepChange}
@@ -550,6 +725,7 @@ const GlobalSheetManagerInner = () => {
               onDelete={closeSheet}
             />
           </FormBoundary>
+          </FormSheetBody>
         </FormBottomSheet>
       );
     }

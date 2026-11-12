@@ -1,16 +1,20 @@
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { formatTemperatureFr } from "@/utils/frenchNumber";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { getTemperatureAlert, getTemperatureEditAlert } from "@/utils/temperatureAlert";
 import { validateSoinsSubmission } from "@/utils/soinsSubmit";
 import { showTemperatureAlertDialog } from "@/utils/temperatureAlertDialog";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -18,8 +22,8 @@ import {
   supprimerEvenement,
 } from "@/services/eventsService";
 import { normalizeQuery } from "@/utils/text";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useCallback, useMemo, useRef, useState } from "react";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -27,10 +31,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { toDate } from "@/utils/date";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -211,9 +215,11 @@ export function SoinsForm({
   editData,
   onDelete,
 }: SoinsFormProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -331,27 +337,8 @@ export function SoinsForm({
     return 3;
   });
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -384,7 +371,7 @@ export function SoinsForm({
 
     const temperatureItems = [
       {
-        label: "36.8° axillaire",
+        label: "36,8 °C axillaire",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -394,7 +381,7 @@ export function SoinsForm({
         },
       },
       {
-        label: "38.5° rectale",
+        label: "38,5 °C rectale",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -404,7 +391,7 @@ export function SoinsForm({
         },
       },
       {
-        label: "37.5° frontale",
+        label: "37,5 °C frontale",
         onPress: () => {
           setIncludeTemperature(true);
           setIncludeSymptome(keepCombined);
@@ -598,6 +585,9 @@ export function SoinsForm({
     });
     if (alert) showTemperatureAlertDialog(showAlert, alert);
   };
+
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ includeTemperature, includeSymptome, dateHeure, note, temperatureValue, temperatureMode, medicamentName, medicamentDosage, medicamentVoie, symptomes, symptomeAutre, symptomeIntensite, vaccinName, vaccinDosage, vaccinCustomName, vitamineName, vitamineDosage, vitamineCustomName, gouttesCount });
 
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -820,39 +810,29 @@ export function SoinsForm({
     onSuccess();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cet élément ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          if (outcome === "queued") {
-            // Hors ligne : la suppression n'est PAS faite, elle est en attente.
-            showToast("Suppression enregistrée : synchronisation en attente");
-          } else if (editData.type === "temperature") {
-            showToast("Température supprimée");
-          } else if (editData.type === "medicament") {
-            showToast("Médicament supprimé");
-          } else if (editData.type === "symptome") {
-            showToast("Symptôme supprimé");
-          } else if (editData.type === "vaccin") {
-            showToast("Vaccin supprimé");
-          } else if (editData.type === "vitamine") {
-            showToast("Vitamine supprimée");
-          }
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "temperature"
+          ? "Température supprimée"
+          : editData.type === "medicament"
+            ? "Médicament supprimé"
+            : editData.type === "symptome"
+              ? "Symptôme supprimé"
+              : editData.type === "vaccin"
+                ? "Vaccin supprimé"
+                : editData.type === "vitamine"
+                  ? "Vitamine supprimée"
+                  : "Soin supprimé",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   const getVaccinDisplay = (nomVaccin: string, dosage?: string | null) =>
@@ -870,7 +850,7 @@ export function SoinsForm({
             onPress={() => setFormStep("form")}
             accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <FontAwesome6 name="chevron-left" size={14} color={nc.textLight} />
             <Text style={[styles.backText, { color: nc.textLight }]}>
               Retour
             </Text>
@@ -885,8 +865,8 @@ export function SoinsForm({
             { backgroundColor: nc.background, borderColor: nc.border },
           ]}
         >
-          <FontAwesome5
-            name="search"
+          <FontAwesome6
+            name="magnifying-glass"
             size={16}
             color={nc.textMuted}
             style={styles.searchIcon}
@@ -900,17 +880,18 @@ export function SoinsForm({
             autoFocus={true}
           />
           {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => [styles.clearButton, pressedOpacity(pressed, 0.2)]}
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5
-                name="times-circle"
+              <FontAwesome6
+                name="circle-xmark"
                 size={16}
                 color={nc.textMuted}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
         <ScrollView style={styles.pickerList}>
@@ -920,14 +901,16 @@ export function SoinsForm({
                 vaccinName === vaccin.nomVaccin &&
                 (vaccinDosage || "") === (vaccin.dosage ?? "");
               return (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={`${vaccin.nomVaccin}-${index}`}
-                  style={[
+                  style={({ pressed }) => [
                     styles.pickerItem,
                     { borderBottomColor: nc.backgroundPressed },
                     isSelected && {
                       backgroundColor: accentColors.softBg,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={() => {
                     setVaccinName(vaccin.nomVaccin);
@@ -938,13 +921,12 @@ export function SoinsForm({
                     setFormStep("form");
                     setSearchQuery("");
                   }}
-                  activeOpacity={0.7}
                   accessibilityLabel={getVaccinDisplay(
                     vaccin.nomVaccin,
                     vaccin.dosage,
                   )}
                 >
-                  <FontAwesome5
+                  <FontAwesome6
                     name="syringe"
                     size={16}
                     color={isSelected ? accentColors.softText : nc.textLight}
@@ -972,13 +954,13 @@ export function SoinsForm({
                     )}
                   </View>
                   {isSelected && (
-                    <FontAwesome5
+                    <FontAwesome6
                       name="check"
                       size={16}
                       color={accentColors.softText}
                     />
                   )}
-                </TouchableOpacity>
+                </Pressable>
               );
             })
           ) : (
@@ -1003,7 +985,7 @@ export function SoinsForm({
             onPress={() => setFormStep("form")}
             accessibilityLabel="Retour"
           >
-            <FontAwesome5 name="chevron-left" size={14} color={nc.textLight} />
+            <FontAwesome6 name="chevron-left" size={14} color={nc.textLight} />
             <Text style={[styles.backText, { color: nc.textLight }]}>
               Retour
             </Text>
@@ -1018,8 +1000,8 @@ export function SoinsForm({
             { backgroundColor: nc.background, borderColor: nc.border },
           ]}
         >
-          <FontAwesome5
-            name="search"
+          <FontAwesome6
+            name="magnifying-glass"
             size={16}
             color={nc.textMuted}
             style={styles.searchIcon}
@@ -1033,30 +1015,33 @@ export function SoinsForm({
             autoFocus={true}
           />
           {searchQuery && (
-            <TouchableOpacity
-              style={styles.clearButton}
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => [styles.clearButton, pressedOpacity(pressed, 0.2)]}
               onPress={() => setSearchQuery("")}
               accessibilityLabel="Effacer la recherche"
             >
-              <FontAwesome5
-                name="times-circle"
+              <FontAwesome6
+                name="circle-xmark"
                 size={16}
                 color={nc.textMuted}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
         <ScrollView style={styles.pickerList}>
           {filteredVitamines.length > 0 ? (
             filteredVitamines.map((vitamine) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={vitamine}
-                style={[
+                style={({ pressed }) => [
                   styles.pickerItem,
                   { borderBottomColor: nc.backgroundPressed },
                   vitamineName === vitamine && {
                     backgroundColor: accentColors.softBg,
                   },
+                  pressedOpacity(pressed),
                 ]}
                 onPress={() => {
                   setVitamineName(vitamine);
@@ -1066,10 +1051,9 @@ export function SoinsForm({
                   setFormStep("form");
                   setSearchQuery("");
                 }}
-                activeOpacity={0.7}
                 accessibilityLabel={vitamine}
               >
-                <FontAwesome5
+                <FontAwesome6
                   name="pills"
                   size={16}
                   color={
@@ -1089,13 +1073,13 @@ export function SoinsForm({
                   {vitamine}
                 </Text>
                 {vitamineName === vitamine && (
-                  <FontAwesome5
+                  <FontAwesome6
                     name="check"
                     size={16}
                     color={accentColors.softText}
                   />
                 )}
-              </TouchableOpacity>
+              </Pressable>
             ))
           ) : (
             <Text style={[styles.noResultsText, { color: nc.textLight }]}>
@@ -1139,7 +1123,7 @@ export function SoinsForm({
             colorScheme,
           );
           return (
-            <TouchableOpacity
+            <Pressable
               key={type}
               style={[
                 styles.typeChip,
@@ -1151,7 +1135,6 @@ export function SoinsForm({
                 isDisabled && styles.typeChipDisabled,
               ]}
               disabled={isDisabled || isSubmitting}
-              activeOpacity={1}
               accessibilityLabel={`Type ${TYPE_CONFIG[type].label}`}
               accessibilityRole="button"
               accessibilityState={{
@@ -1205,7 +1188,7 @@ export function SoinsForm({
               >
                 {TYPE_CONFIG[type].label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -1241,14 +1224,15 @@ export function SoinsForm({
               )}
               <View style={styles.templatesRow}>
                 {section.items.map((template) => (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={template.label}
-                    style={[
+                    style={({ pressed }) => [
                       styles.templateChip,
                       { backgroundColor: nc.backgroundPressed },
+                      pressedOpacity(pressed, 0.8),
                     ]}
                     onPress={template.onPress}
-                    activeOpacity={0.8}
                     accessibilityLabel={`Template ${template.label}`}
                     hitSlop={8}
                   >
@@ -1260,7 +1244,7 @@ export function SoinsForm({
                     >
                       {template.label}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -1276,20 +1260,18 @@ export function SoinsForm({
               Température (°C)
             </Text>
             <View style={styles.quantityPickerRow}>
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.quantityButton,
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
+                {...repeatPress(() =>
                     setTemperatureValue((value) =>
                       Math.max(TEMP_BOUNDS.min, Math.round((value - 0.1) * 10) / 10),
-                    ),
-                  )
-                }
-                onPressOut={handlePressOut}
+                    ))}
                 disabled={isSubmitting || temperatureValue <= TEMP_BOUNDS.min}
                 accessibilityLabel="Diminuer la température"
               >
@@ -1302,28 +1284,26 @@ export function SoinsForm({
                 >
                   -
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
               <Text
                 style={[styles.quantityPickerValue, { color: nc.textStrong }]}
               >
-                {temperatureValue.toFixed(1)}°C
+                {formatTemperatureFr(temperatureValue)}
               </Text>
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.quantityButton,
                   { backgroundColor: nc.backgroundPressed },
                   isSubmitting && styles.quantityButtonDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
-                onPressIn={() =>
-                  handlePressIn(() =>
+                {...repeatPress(() =>
                     setTemperatureValue((value) =>
                       // Borné à TEMP_BOUNDS.max (43 °C, parité CF validateEventData). Au-delà,
                       // valeur non médicale + rejet serveur tardif.
                       Math.min(TEMP_BOUNDS.max, Math.round((value + 0.1) * 10) / 10),
-                    ),
-                  )
-                }
-                onPressOut={handlePressOut}
+                    ))}
                 disabled={isSubmitting || temperatureValue >= TEMP_BOUNDS.max}
                 accessibilityLabel="Augmenter la température"
               >
@@ -1336,7 +1316,7 @@ export function SoinsForm({
                 >
                   +
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
           <View style={styles.chipSection}>
@@ -1345,15 +1325,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {MODE_TEMPERATURE.map((mode) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={mode}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     temperatureMode === mode && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() => setTemperatureMode(mode)}
                   accessibilityLabel={`Mode ${mode}`}
@@ -1371,7 +1353,7 @@ export function SoinsForm({
                   >
                     {mode}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1419,15 +1401,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {VOIES_MEDICAMENT.map((voie) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={voie}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     medicamentVoie === voie && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() =>
                     setMedicamentVoie(
@@ -1449,7 +1433,7 @@ export function SoinsForm({
                   >
                     {voie}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1467,9 +1451,10 @@ export function SoinsForm({
               {SYMPTOMES_OPTIONS.map((symptome) => {
                 const active = symptomes.includes(symptome);
                 return (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={symptome}
-                    style={[
+                    style={({ pressed }) => [
                       styles.chip,
                       {
                         borderColor: nc.border,
@@ -1479,6 +1464,7 @@ export function SoinsForm({
                         backgroundColor: accentColors.softBg,
                         borderColor: accentColors.softBorder,
                       },
+                      pressedOpacity(pressed, 0.2),
                     ]}
                     accessibilityLabel={`Symptôme ${symptome}`}
                     hitSlop={8}
@@ -1504,7 +1490,7 @@ export function SoinsForm({
                     >
                       {symptome}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 );
               })}
             </View>
@@ -1532,15 +1518,17 @@ export function SoinsForm({
             </Text>
             <View style={styles.chipRow}>
               {INTENSITES.map((item) => (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={item}
-                  style={[
+                  style={({ pressed }) => [
                     styles.chip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     symptomeIntensite === item && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={() =>
                     setSymptomeIntensite(
@@ -1552,7 +1540,6 @@ export function SoinsForm({
                     )
                   }
                   disabled={symptomes.length === 0}
-                  activeOpacity={symptomes.length === 0 ? 1 : 0.7}
                   accessibilityLabel={`Intensité ${item}`}
                   hitSlop={8}
                 >
@@ -1569,7 +1556,7 @@ export function SoinsForm({
                   >
                     {item}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
@@ -1579,21 +1566,22 @@ export function SoinsForm({
       {/* Vaccin form */}
       {selectedType === "vaccin" && (
         <>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.selectorButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
+              pressedOpacity(pressed),
             ]}
             onPress={() => {
               if (isSubmitting) return;
               setSearchQuery("");
               setFormStep("vaccinPicker");
             }}
-            activeOpacity={0.7}
             accessibilityLabel="Sélectionner un vaccin"
           >
-            <FontAwesome5
+            <FontAwesome6
               name="syringe"
               size={16}
               color={nc.textLight}
@@ -1612,8 +1600,8 @@ export function SoinsForm({
             >
               {vaccinName ? vaccinName : "Sélectionner un vaccin"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
-          </TouchableOpacity>
+            <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
+          </Pressable>
           {vaccinName === "Autre vaccin" && (
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: nc.textLight }]}>
@@ -1676,21 +1664,22 @@ export function SoinsForm({
       {/* Vitamine form */}
       {selectedType === "vitamine" && (
         <>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.selectorButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.selectorButtonDisabled,
+              pressedOpacity(pressed),
             ]}
             onPress={() => {
               if (isSubmitting) return;
               setSearchQuery("");
               setFormStep("vitaminePicker");
             }}
-            activeOpacity={0.7}
             accessibilityLabel="Sélectionner une vitamine"
           >
-            <FontAwesome5
+            <FontAwesome6
               name="pills"
               size={16}
               color={nc.textLight}
@@ -1709,8 +1698,8 @@ export function SoinsForm({
             >
               {vitamineName ? vitamineName : "Sélectionner une vitamine"}
             </Text>
-            <FontAwesome5 name="chevron-right" size={14} color={nc.textMuted} />
-          </TouchableOpacity>
+            <FontAwesome6 name="chevron-right" size={14} color={nc.textMuted} />
+          </Pressable>
           {vitamineName === "Autre vitamine" && (
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: nc.textLight }]}>
@@ -1735,18 +1724,16 @@ export function SoinsForm({
                 Quantité
               </Text>
               <View style={styles.quantityPickerRow}>
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.quantityButton,
                     { backgroundColor: nc.backgroundPressed },
                     isSubmitting && styles.quantityButtonDisabled,
+                    pressedOpacity(pressed, 0.2),
                   ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
-                      setGouttesCount((value) => Math.max(0, value - 1)),
-                    )
-                  }
-                  onPressOut={handlePressOut}
+                  {...repeatPress(() =>
+                      setGouttesCount((value) => Math.max(0, value - 1)))}
                   disabled={isSubmitting}
                   accessibilityLabel="Diminuer les gouttes"
                 >
@@ -1759,27 +1746,25 @@ export function SoinsForm({
                   >
                     -
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
                 <Text
                   style={[styles.quantityPickerValue, { color: nc.textStrong }]}
                 >
                   {gouttesCount} goutte{gouttesCount > 1 ? "s" : ""}
                 </Text>
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.quantityButton,
                     { backgroundColor: nc.backgroundPressed },
                     (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
                       styles.quantityButtonDisabled,
-                  ]}
-                  onPressIn={() =>
-                    handlePressIn(() =>
+                      pressedOpacity(pressed, 0.2),
+                    ]}
+                  {...repeatPress(() =>
                       setGouttesCount((value) =>
                         Math.min(MAX_GOUTTES_COUNT, value + 1),
-                      ),
-                    )
-                  }
-                  onPressOut={handlePressOut}
+                      ))}
                   disabled={isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT}
                   accessibilityLabel="Augmenter les gouttes"
                 >
@@ -1793,7 +1778,7 @@ export function SoinsForm({
                   >
                     +
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
           )}
@@ -1847,12 +1832,16 @@ export function SoinsForm({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -1861,47 +1850,54 @@ export function SoinsForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={nc.white} />
+              <ActivityIndicator size="small" color={accentColors.filledText} />
             ) : (
               <Text
                 style={[
                   styles.validateText,
                   {
-                    color: nc.white,
+                    color: accentColors.filledText,
                   },
                 ]}
               >
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome5 name="trash" size={14} color={nc.error} />
+            <FontAwesome6 name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -1965,6 +1961,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   pickerItem: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
@@ -2051,6 +2048,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   templateChip: {
+    ...RIPPLE_CLIP,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
@@ -2104,6 +2102,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    ...RIPPLE_CLIP,
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
@@ -2131,9 +2130,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    ...RIPPLE_CLIP,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2153,6 +2154,7 @@ const styles = StyleSheet.create({
   },
   // Selector button (for vaccin/vitamine)
   selectorButton: {
+    ...RIPPLE_CLIP,
     padding: 16,
     borderRadius: 12,
     flexDirection: "row",
@@ -2183,6 +2185,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -2196,6 +2199,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

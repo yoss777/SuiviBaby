@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -25,7 +26,7 @@ export function SelectionToolbar({
   const allSelected = selectedCount > 0 && selectedCount === totalCount;
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme].background, borderBottomColor: nc.borderLightAlpha }]}>
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme].surface, borderBottomColor: nc.borderLightAlpha }]}>
       <Pressable
         style={styles.selectButton}
         onPress={allSelected ? onClearSelection : onSelectAll}
@@ -43,14 +44,14 @@ export function SelectionToolbar({
       </Pressable>
 
       <Pressable
-        style={[styles.deleteButton, { backgroundColor: nc.error }, selectedCount === 0 && styles.deleteButtonDisabled]}
+        style={[styles.deleteButton, { backgroundColor: nc.destructive }, selectedCount === 0 && styles.deleteButtonDisabled]}
         onPress={onDelete}
         disabled={selectedCount === 0}
         accessibilityRole="button"
         accessibilityLabel={`Supprimer ${selectedCount} élément${selectedCount > 1 ? "s" : ""}`}
       >
-        <Ionicons name="trash-outline" size={16} color={nc.white} />
-        <Text style={[styles.deleteButtonText, { color: nc.white }]}>
+        <Ionicons name="trash-outline" size={16} color={nc.onDestructive} />
+        <Text style={[styles.deleteButtonText, { color: nc.onDestructive }]}>
           Supprimer{selectedCount > 0 ? ` (${selectedCount})` : ""}
         </Text>
       </Pressable>
@@ -63,15 +64,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderBottomWidth: 1,
   },
   selectButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: space.xxs,
   },
   selectButtonText: {
     fontSize: 14,
@@ -82,8 +83,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: space.xs,
+    borderRadius: radius.sm,
   },
   deleteButtonDisabled: {
     opacity: 0.4,

@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Stack } from "expo-router";
@@ -538,7 +538,7 @@ export default function EditChildScreen() {
                           disabled={isDeleting}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <FontAwesome name="trash-alt" size={14} color={nc.error} />
+                          <FontAwesome name="trash-can" size={14} color={nc.error} />
                           <Text style={[styles.dangerButtonText, { color: nc.errorText }]}>{isDeleting ? "..." : "Supprimer"}</Text>
                         </TouchableOpacity>
                       </View>
@@ -573,7 +573,7 @@ export default function EditChildScreen() {
           cancelText="Exporter d'abord"
           backgroundColor={nc.backgroundCard}
           textColor={nc.textStrong}
-          confirmButtonColor={nc.error}
+          confirmButtonColor={nc.destructive}
           confirmTextColor={nc.white}
           allowBackdropDismiss
           onDismiss={() => setDeleteConfirm({ visible: false, child: null })}
@@ -639,9 +639,9 @@ export default function EditChildScreen() {
                   disabled={!transferModal.selectedParentId || transferModal.loading}
                 >
                   {transferModal.loading ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={Colors[colorScheme].onTint} />
                   ) : (
-                    <Text style={[styles.modalButtonText, { color: nc.white, fontWeight: "700" }]}>Confirmer</Text>
+                    <Text style={[styles.modalButtonText, { color: Colors[colorScheme].onTint, fontWeight: "700" }]}>Confirmer</Text>
                   )}
                 </TouchableOpacity>
               </View>

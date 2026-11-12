@@ -1,11 +1,11 @@
-import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -14,8 +14,11 @@ import {
 } from "@/services/eventsService";
 
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
 // Bornes CF (parité serveur). Same value sur les deux côtés.
 const PUMP_MAX = NUMERIC_BOUNDS.pompage.quantiteGauche.max;
@@ -24,7 +27,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 
@@ -64,9 +67,10 @@ export function PumpingForm({
   editData,
   onDelete,
 }: PumpingFormProps) {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -97,27 +101,8 @@ export function PumpingForm({
   const lastLeftQuantityRef = useRef(quantiteGauche);
   const lastRightQuantityRef = useRef(quantiteDroite);
 
-  // Long press acceleration
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -162,6 +147,9 @@ export function PumpingForm({
   };
 
   // Submit handler
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ useLeftBreast, useRightBreast, quantiteGauche, quantiteDroite, dateHeure });
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
     if (!useLeftBreast && !useRightBreast) {
@@ -191,26 +179,18 @@ export function PumpingForm({
   };
 
   // Delete handler
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!activeChild?.id || !editData?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cette session ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Session supprimée"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur lors de la suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Session supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   return (
@@ -218,14 +198,16 @@ export function PumpingForm({
       {/* Breast selection */}
       <Text style={[styles.categoryLabel, { color: nc.textLight }]}>Seins</Text>
       <View style={styles.breastToggleRow}>
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useLeftBreast && {
               backgroundColor: accentColors.softBg,
               borderColor: accentColors.softBorder,
             },
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={toggleLeftBreast}
           disabled={isSubmitting}
@@ -247,15 +229,17 @@ export function PumpingForm({
           >
             Gauche
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
+        </Pressable>
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.breastToggleButton,
             { borderColor: nc.border, backgroundColor: nc.background },
             useRightBreast && {
               backgroundColor: accentColors.softBg,
               borderColor: accentColors.softBorder,
             },
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={toggleRightBreast}
           disabled={isSubmitting}
@@ -277,7 +261,7 @@ export function PumpingForm({
           >
             Droit
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Left breast quantity */}
@@ -287,18 +271,16 @@ export function PumpingForm({
             Quantité Sein Gauche
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteGauche((q) => Math.max(0, q - 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                  setQuantiteGauche((q) => Math.max(0, q - 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité gauche"
             >
@@ -311,22 +293,21 @@ export function PumpingForm({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {quantiteGauche} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité gauche"
             >
@@ -339,7 +320,7 @@ export function PumpingForm({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -351,18 +332,16 @@ export function PumpingForm({
             Quantité Sein Droit
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteDroite((q) => Math.max(0, q - 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                  setQuantiteDroite((q) => Math.max(0, q - 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité droite"
             >
@@ -375,22 +354,21 @@ export function PumpingForm({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {quantiteDroite} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité droite"
             >
@@ -403,7 +381,7 @@ export function PumpingForm({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
@@ -415,16 +393,23 @@ export function PumpingForm({
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
+        // Un repas, une couche ou un tirage ne se saisit pas au futur : évite
+        // un mauvais jour choisi d'un pouce ensommeillé.
+        maximumDate={new Date()}
       />
 
       {/* Action buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -433,12 +418,14 @@ export function PumpingForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
+          </Pressable>
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -446,7 +433,7 @@ export function PumpingForm({
           >
             {isSubmitting ? (
               <ActivityIndicator
-                color={nc.white}
+                color={accentColors.filledText}
                 size="small"
               />
             ) : (
@@ -454,26 +441,31 @@ export function PumpingForm({
                 style={[
                   styles.validateText,
                   {
-                    color: nc.white,
+                    color: accentColors.filledText,
                   },
                 ]}
               >
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
           >
-            <FontAwesome5 name="trash" size={14} color={nc.error} />
+            <FontAwesome6 name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -505,6 +497,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   breastToggleButton: {
+    ...RIPPLE_CLIP,
     paddingVertical: 8,
     paddingHorizontal: 18,
     borderRadius: 999,
@@ -523,9 +516,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    ...RIPPLE_CLIP,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -550,6 +545,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -563,6 +559,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

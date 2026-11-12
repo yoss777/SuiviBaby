@@ -8,7 +8,7 @@ import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useModal } from "@/contexts/ModalContext";
@@ -35,7 +35,7 @@ function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
   ) as T;
 }
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { HeaderBackButton } from "expo-router/react-navigation";
@@ -1182,7 +1182,7 @@ export default function ImmunizationsScreen() {
               style={styles.sheetBackButton}
               onPress={() => setSheetStep("form")}
             >
-              <FontAwesome name="chevron-left" size={14} color="#666" />
+              <FontAwesome name="chevron-left" size={14} color={nc.textLight} />
               <Text style={styles.sheetBackText}>Retour</Text>
             </Pressable>
             <Text style={styles.sheetBreadcrumbText}>
@@ -1191,9 +1191,9 @@ export default function ImmunizationsScreen() {
           </View>
           <View style={styles.searchContainer}>
             <FontAwesome
-              name="search"
+              name="magnifying-glass"
               size={16}
-              color="#999"
+              color={nc.textMuted}
               style={styles.searchIcon}
             />
             <TextInput
@@ -1208,7 +1208,7 @@ export default function ImmunizationsScreen() {
                 style={styles.clearButton}
                 onPress={() => setSearchQuery("")}
               >
-                <FontAwesome name="times-circle" size={16} color="#999" />
+                <FontAwesome name="circle-xmark" size={16} color={nc.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -1237,13 +1237,13 @@ export default function ImmunizationsScreen() {
                     <FontAwesome
                       name="syringe"
                       size={16}
-                      color={isSelected ? Colors[colorScheme].tint : "#666"}
+                      color={isSelected ? Colors[colorScheme].tint : nc.textLight}
                       style={styles.vaccinListItemIcon}
                     />
                     <Text
                       style={[
                         styles.vaccinListItemText,
-                        isSelected && { color: "#000000" },
+                        isSelected && { color: nc.textStrong },
                         isSelected && styles.vaccinListItemTextSelected,
                       ]}
                     >
@@ -1274,7 +1274,7 @@ export default function ImmunizationsScreen() {
               style={styles.sheetBackButton}
               onPress={() => setSheetStep("form")}
             >
-              <FontAwesome name="chevron-left" size={14} color="#666" />
+              <FontAwesome name="chevron-left" size={14} color={nc.textLight} />
               <Text style={styles.sheetBackText}>Retour</Text>
             </Pressable>
             <Text style={styles.sheetBreadcrumbText}>
@@ -1283,9 +1283,9 @@ export default function ImmunizationsScreen() {
           </View>
           <View style={styles.searchContainer}>
             <FontAwesome
-              name="search"
+              name="magnifying-glass"
               size={16}
-              color="#999"
+              color={nc.textMuted}
               style={styles.searchIcon}
             />
             <TextInput
@@ -1300,7 +1300,7 @@ export default function ImmunizationsScreen() {
                 style={styles.clearButton}
                 onPress={() => setSearchQuery("")}
               >
-                <FontAwesome name="times-circle" size={16} color="#999" />
+                <FontAwesome name="circle-xmark" size={16} color={nc.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -1324,7 +1324,7 @@ export default function ImmunizationsScreen() {
                     color={
                       selectedVitamine === vitamine
                         ? Colors[colorScheme].tint
-                        : "#666"
+                        : nc.textLight
                     }
                     style={styles.vaccinListItemIcon}
                   />
@@ -1372,7 +1372,7 @@ export default function ImmunizationsScreen() {
             }}
             disabled={isSubmitting}
           >
-            <FontAwesome name="list" size={20} color="#666" />
+            <FontAwesome name="list" size={20} color={nc.textLight} />
             <Text
               style={[
                 styles.vaccinSelectorText,
@@ -1384,7 +1384,7 @@ export default function ImmunizationsScreen() {
                 ? getVaccinDisplay(selectedVaccinName, selectedVaccinDosage)
                 : "Sélectionner un vaccin"}
             </Text>
-            <FontAwesome name="chevron-right" size={16} color="#999" />
+            <FontAwesome name="chevron-right" size={16} color={nc.textMuted} />
           </TouchableOpacity>
         )}
 
@@ -1402,7 +1402,7 @@ export default function ImmunizationsScreen() {
             }}
             disabled={isSubmitting}
           >
-            <FontAwesome name="list" size={20} color="#666" />
+            <FontAwesome name="list" size={20} color={nc.textLight} />
             <Text
               style={[
                 styles.vaccinSelectorText,
@@ -1412,7 +1412,7 @@ export default function ImmunizationsScreen() {
             >
               {selectedVitamine || "Choisir une vitamine"}
             </Text>
-            <FontAwesome name="chevron-right" size={16} color="#999" />
+            <FontAwesome name="chevron-right" size={16} color={nc.textMuted} />
           </TouchableOpacity>
         )}
 
@@ -1474,9 +1474,9 @@ export default function ImmunizationsScreen() {
             disabled={isSubmitting}
           >
             <FontAwesome
-              name="calendar-alt"
+              name="calendar-days"
               size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+              color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
             />
             <Text
               style={[
@@ -1498,7 +1498,7 @@ export default function ImmunizationsScreen() {
             <FontAwesome
               name="clock"
               size={16}
-              color={isSubmitting ? "#ccc" : Colors[colorScheme].tint}
+              color={isSubmitting ? nc.textMuted : Colors[colorScheme].tint}
             />
             <Text
               style={[
@@ -1561,7 +1561,7 @@ export default function ImmunizationsScreen() {
           ? "Nouvelle vitamine"
           : "Nouveau vaccin",
       icon: immunoType === "vitamine" ? "pills" : "syringe",
-      accentColor: immunoType === "vitamine" ? "#FF9800" : "#9C27B0",
+      accentColor: immunoType === "vitamine" ? eventColors.vitamine.dark : eventColors.vaccin.dark,
       isEditing: !!editingImmuno,
       isSubmitting,
       showActions: sheetStep === "form",
@@ -1695,7 +1695,7 @@ export default function ImmunizationsScreen() {
             </View>
           </View>
 
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+          <Ionicons name="chevron-forward" size={18} color={nc.textMuted} />
         </Pressable>
       );
     },
@@ -1817,7 +1817,7 @@ export default function ImmunizationsScreen() {
       <SafeAreaView
         style={[
           { flex: 1 },
-          // { backgroundColor: Colors[colorScheme].background },
+          // { backgroundColor: Colors[colorScheme].surface },
         ]}
         edges={["bottom"]}
         onLayout={() => setLayoutReady(true)}
@@ -1912,16 +1912,16 @@ export default function ImmunizationsScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : "#ffffff",
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : neutralColors.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: Colors[colorScheme].tint,
-                  selectedDotColor: "#ffffff",
+                  selectedDotColor: neutralColors.white,
                   arrowColor: Colors[colorScheme].tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: Colors[colorScheme].tint,
@@ -1987,7 +1987,7 @@ export default function ImmunizationsScreen() {
           message={`Voulez-vous vraiment supprimer ${deleteTargetLabel} ?`}
           confirmText="Supprimer"
           cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
+          backgroundColor={Colors[colorScheme].surface}
           textColor={Colors[colorScheme].text}
           onCancel={() => setShowDeleteModal(false)}
           onConfirm={confirmDelete}
@@ -2004,7 +2004,7 @@ export default function ImmunizationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
   },
   flatlistContent: {
     paddingBottom: 8,
@@ -2018,7 +2018,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: neutralColors.border,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -2039,7 +2039,7 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -2057,7 +2057,7 @@ const styles = StyleSheet.create({
   },
   dayStatLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
   },
 
   // Stats breakdown
@@ -2079,7 +2079,7 @@ const styles = StyleSheet.create({
   },
   statsBreakdownLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
   },
   statsBreakdownValue: {
     fontSize: 12,
@@ -2089,10 +2089,10 @@ const styles = StyleSheet.create({
 
   // Sessions container
   sessionsContainer: {
-    backgroundColor: "#ffffff",
+    backgroundColor: neutralColors.white,
     borderRadius: 16,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -2107,10 +2107,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
+    borderBottomColor: neutralColors.backgroundPressed,
   },
   sessionCardPressed: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: neutralColors.background,
   },
   sessionTime: {
     width: 52,
@@ -2118,7 +2118,7 @@ const styles = StyleSheet.create({
   sessionTimeText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#6b7280",
+    color: neutralColors.textLight,
   },
   sessionTimeTextLast: {
     color: "#374151",
@@ -2143,11 +2143,11 @@ const styles = StyleSheet.create({
   sessionType: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
+    color: neutralColors.textStrong,
   },
   sessionDetailText: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     marginTop: 2,
   },
 
@@ -2159,7 +2159,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f3f4f6",
+    borderTopColor: neutralColors.backgroundPressed,
   },
   expandTriggerText: {
     fontSize: 13,
@@ -2174,7 +2174,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: "#666",
+    color: neutralColors.textLight,
     marginTop: 16,
     fontWeight: "600",
   },
@@ -2184,7 +2184,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: neutralColors.textStrong,
     paddingTop: 20,
     marginBottom: 10,
   },
@@ -2199,7 +2199,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: neutralColors.backgroundPressed,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2209,44 +2209,44 @@ const styles = StyleSheet.create({
   quantityButtonText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#333",
+    color: neutralColors.textStrong,
   },
   quantityButtonTextDisabled: {
-    color: "#999",
+    color: neutralColors.textMuted,
   },
   quantityPickerValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: neutralColors.textStrong,
   },
 
   // Vaccin Selector
   vaccinSelector: {
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
     padding: 16,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: neutralColors.border,
     marginBottom: 20,
   },
   vaccinSelectorDisabled: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: neutralColors.backgroundPressed,
     opacity: 0.5,
   },
   vaccinSelectorText: {
     flex: 1,
     fontSize: 16,
-    color: "#6b7280",
+    color: neutralColors.textLight,
   },
   vaccinSelectorTextSelected: {
-    color: "#333",
+    color: neutralColors.textStrong,
     fontWeight: "500",
   },
   vaccinSelectorTextDisabled: {
-    color: "#ccc",
+    color: neutralColors.textMuted,
   },
 
   // Date/Time
@@ -2269,7 +2269,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f6f8",
   },
   dateButtonDisabled: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: neutralColors.backgroundPressed,
     opacity: 0.5,
   },
   dateButtonText: {
@@ -2278,7 +2278,7 @@ const styles = StyleSheet.create({
     color: "#4a4f55",
   },
   dateButtonTextDisabled: {
-    color: "#ccc",
+    color: neutralColors.textMuted,
   },
   selectedDateTime: {
     alignItems: "center",
@@ -2286,7 +2286,7 @@ const styles = StyleSheet.create({
   },
   selectedDate: {
     fontSize: 16,
-    color: "#333",
+    color: neutralColors.textStrong,
     fontWeight: "600",
     marginBottom: 4,
   },
@@ -2312,12 +2312,12 @@ const styles = StyleSheet.create({
   },
   sheetBackText: {
     fontSize: 14,
-    color: "#666",
+    color: neutralColors.textLight,
     fontWeight: "600",
   },
   sheetBreadcrumbText: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -2330,7 +2330,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: neutralColors.backgroundPressed,
     borderRadius: 12,
   },
   vaccinListItemIcon: {
@@ -2343,7 +2343,7 @@ const styles = StyleSheet.create({
   vaccinListItemText: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
+    color: neutralColors.textStrong,
   },
   vaccinListItemTextSelected: {
     fontWeight: "600",
@@ -2351,17 +2351,17 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
     borderRadius: 12,
     paddingHorizontal: 12,
     marginVertical: 12,
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: neutralColors.border,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
+    color: neutralColors.textStrong,
     paddingVertical: 10,
   },
   searchIcon: {
@@ -2375,7 +2375,7 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     fontSize: 16,
-    color: "#666",
+    color: neutralColors.textLight,
     textAlign: "center",
     padding: 20,
   },

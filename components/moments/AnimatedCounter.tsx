@@ -7,6 +7,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { neutralColors } from "@/constants/dashboardColors";
 
 type AnimatedCounterProps = {
   value: number;
@@ -55,11 +56,11 @@ export const AnimatedCounter = ({
 const styles = StyleSheet.create({
   statCard: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
     borderRadius: 16,
     padding: 16,
     alignItems: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -79,7 +80,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     marginTop: 2,
   },
 });

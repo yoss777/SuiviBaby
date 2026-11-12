@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TextInput, Pressable, View } from "react-native";
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import {
@@ -10,6 +10,7 @@ import {
   hasAllergy,
   removeAllergy,
 } from "@/utils/childAllergies";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface Props {
   value: string[];
@@ -29,6 +30,7 @@ const ERRORS = {
 
 /** Éditeur des « Allergies connues » : suggestions cochables + saisie libre. */
 export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabled }: Props) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -77,15 +79,17 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
         {ALLERGY_SUGGESTIONS.map((s) => {
           const checked = hasAllergy(value, s.label);
           return (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={s.label}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 {
                   borderColor: checked ? nc.todayAccent : nc.border,
                   backgroundColor: checked ? nc.todayAccent + "20" : nc.backgroundPressed,
                 },
                 locked && styles.disabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => toggleSuggestion(s.label)}
               disabled={locked}
@@ -95,7 +99,7 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
             >
               <Text style={styles.emoji}>{s.emoji}</Text>
               <Text style={[styles.chipText, { color: nc.textStrong }]}>{s.label}</Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -103,12 +107,14 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
       {custom.length > 0 && (
         <View style={styles.row}>
           {custom.map((a) => (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={a}
-              style={[
+              style={({ pressed }) => [
                 styles.chip,
                 { borderColor: nc.todayAccent, backgroundColor: nc.todayAccent + "20" },
                 locked && styles.disabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => onChange(removeAllergy(value, a))}
               disabled={locked}
@@ -116,7 +122,7 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
               accessibilityLabel={`Retirer ${a}`}
             >
               <Text style={[styles.chipText, { color: nc.textStrong }]}>{a}  ✕</Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       )}
@@ -140,11 +146,13 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
           returnKeyType="done"
           accessibilityLabel="Autre allergie"
         />
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.addButton,
             { backgroundColor: nc.todayAccent },
             (locked || !draft.trim()) && styles.disabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={submitDraft}
           disabled={locked || !draft.trim()}
@@ -152,8 +160,8 @@ export function AllergiesEditor({ value, onChange, colorScheme, readOnly, disabl
           accessibilityLabel="Ajouter l'allergie"
           accessibilityState={{ disabled: locked || !draft.trim() }}
         >
-          <Text style={[styles.addText, { color: nc.white }]}>Ajouter</Text>
-        </TouchableOpacity>
+          <Text style={[styles.addText, { color: nc.onTodayAccent }]}>Ajouter</Text>
+        </Pressable>
       </View>
       {error && (
         <Text style={[styles.error, { color: nc.errorText }]} accessibilityRole="alert">
@@ -169,6 +177,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, lineHeight: 18, marginBottom: 8 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
   chip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -190,6 +199,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   addButton: {
+    ...RIPPLE_CLIP,
     minHeight: 44,
     minWidth: 44,
     paddingHorizontal: 16,

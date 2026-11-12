@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { PropsWithChildren } from "react";
 import {
   Pressable,
@@ -49,9 +50,8 @@ export function DateFilterBar({
     activeAccentColor ?? tintColor,
     colorScheme,
   );
-  // Active text must contrast with tint background (dark mode tint is white)
-  const activeTextColor =
-    colorScheme === "dark" ? Colors[colorScheme].background : nc.white;
+  // Texte posé sur l'aplat tint : token onTint (lisible en clair et en sombre)
+  const activeTextColor = Colors[colorScheme].onTint;
 
   const mergedContainerStyle = [styles.container, containerStyle];
   const mergedContentStyle = [styles.content, contentContainerStyle];
@@ -132,20 +132,17 @@ export function DateFilterBar({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    // borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
+  container: {},
   content: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   button: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
     // borderWidth: 1,
   },
   text: {

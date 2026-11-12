@@ -1,6 +1,14 @@
+import { radius, space } from "@/constants/tokens";
 import { ThemedView } from "@/components/themed-view";
 import { SkeletonList } from "@/components/ui/Skeleton";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getAccentColors } from "@/components/ui/accentColors";
+import {
+  getNeutralColors,
+  itemColors,
+  neutralColors,
+} from "@/constants/dashboardColors";
+import { eventColors } from "@/constants/eventColors";
+import { isPlusRouteVisible, SHOW_PREVIEWS } from "@/constants/featureFlags";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -30,8 +38,8 @@ interface Item {
   title: string;
   subtitle: string;
   icon: ItemIcon;
+  /** Couleur d'identité (tokens de catégorie) ; l'icône utilise sa variante lisible. */
   color: string;
-  darkColor?: string;
   route: string;
   ownerOnly?: boolean;
 }
@@ -41,6 +49,9 @@ interface Section {
   items: Item[];
 }
 
+// Statistiques et outils : neutre (pas une catégorie de saisie).
+const STATS_COLOR = neutralColors.textLight;
+
 const SECTIONS: Section[] = [
   {
     label: "Suivi quotidien",
@@ -49,29 +60,28 @@ const SECTIONS: Section[] = [
         title: "Repas",
         subtitle: "Biberons, tétées et solides",
         icon: "utensils",
-        color: "#4A90E2",
+        color: eventColors.meal.dark,
         route: "/baby/meals",
       },
       {
         title: "Routines",
         subtitle: "Sommeil, bain et routines rapides",
         icon: "bath",
-        color: "#8b5cf6",
+        color: eventColors.sommeil.dark,
         route: "/baby/routines",
       },
       {
         title: "Couches",
         subtitle: "Mictions et selles",
         icon: { lib: "mci", name: "human-baby-changing-table" },
-        color: "#17a2b8",
+        color: eventColors.miction.dark,
         route: "/baby/diapers",
       },
       {
         title: "Statistiques",
         subtitle: "Alimentation et expression du lait",
         icon: "chart-line",
-        color: "#607D8B",
-        darkColor: "#90A4AE",
+        color: STATS_COLOR,
         route: "/baby/stats",
       },
     ],
@@ -83,14 +93,14 @@ const SECTIONS: Section[] = [
         title: "Santé",
         subtitle: "Température, symptômes, médicaments, vaccins",
         icon: "prescription-bottle",
-        color: "#9C27B0",
+        color: eventColors.vaccin.dark,
         route: "/baby/soins",
       },
       {
         title: "Tire-lait",
         subtitle: "Sessions et totaux",
         icon: "pump-medical",
-        color: "#28a745",
+        color: eventColors.pumping.dark,
         route: "/baby/pumping",
       },
     ],
@@ -102,15 +112,14 @@ const SECTIONS: Section[] = [
         title: "Croissance",
         subtitle: "Poids, taille et tour de tête",
         icon: "seedling",
-        color: "#8BCF9B",
-        darkColor: "#A8E6B8",
+        color: eventColors.croissance.dark,
         route: "/baby/growth",
       },
       {
         title: "Activités",
         subtitle: "Tummy time, jeux, lecture, promenade...",
         icon: "play-circle",
-        color: "#10b981",
+        color: eventColors.activite.dark,
         route: "/baby/activities",
       },
     ],
@@ -122,14 +131,14 @@ const SECTIONS: Section[] = [
         title: "Galerie",
         subtitle: "Photos et moments capturés",
         icon: "images",
-        color: "#f472b6",
+        color: itemColors.photo,
         route: "/baby/gallery",
       },
       {
         title: "Jalons",
         subtitle: "Dents, pas, sourires, mots...",
         icon: "star",
-        color: "#ec4899",
+        color: eventColors.jalon.dark,
         route: "/baby/milestones",
       },
     ],
@@ -141,7 +150,7 @@ const SECTIONS: Section[] = [
         title: "Gestion des accès",
         subtitle: "Gérer les permissions des parents",
         icon: "user-gear",
-        color: "#f59e0b",
+        color: neutralColors.warning,
         route: "/baby/manage-access",
         ownerOnly: true,
       },
@@ -154,7 +163,7 @@ export default function PlusScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const navLockRef = useRef(false);
-  const iconBgOpacity = colorScheme === "dark" ? "26" : "1A";
+  const statsAccent = getAccentColors(STATS_COLOR, colorScheme);
 
   // Récupérer l'enfant actif et les permissions
   const { activeChild } = useBaby();
@@ -223,12 +232,15 @@ export default function PlusScreen() {
 
   const isDark = colorScheme === "dark";
 
-  // Filtrer les sections : retirer les items ownerOnly si pas les droits,
-  // puis exclure les sections vides
+  // Filtrer les sections : retirer les items ownerOnly si pas les droits et
+  // les aperçus internes hors drapeau (jamais en build de store), puis
+  // exclure les sections vides
   const visibleSections = SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => !item.ownerOnly || permissions.canManageAccess,
+      (item) =>
+        (!item.ownerOnly || permissions.canManageAccess) &&
+        isPlusRouteVisible(item.route, SHOW_PREVIEWS),
     ),
   })).filter((section) => section.items.length > 0);
 
@@ -266,8 +278,7 @@ export default function PlusScreen() {
                 </Text>
                 <View style={styles.sectionItems}>
                   {section.items.map((item) => {
-                    const itemColor =
-                      isDark && item.darkColor ? item.darkColor : item.color;
+                    const accent = getAccentColors(item.color, colorScheme);
                     return (
                       <TouchableOpacity
                         key={item.title}
@@ -289,7 +300,7 @@ export default function PlusScreen() {
                           style={[
                             styles.iconWrap,
                             {
-                              backgroundColor: `${itemColor}${iconBgOpacity}`,
+                              backgroundColor: accent.softBg,
                             },
                           ]}
                           importantForAccessibility="no"
@@ -298,13 +309,13 @@ export default function PlusScreen() {
                             <FontAwesome
                               name={item.icon as any}
                               size={18}
-                              color={itemColor}
+                              color={accent.softText}
                             />
                           ) : (
                             <MaterialCommunityIcons
                               name={item.icon.name as any}
                               size={18}
-                              color={itemColor}
+                              color={accent.softText}
                             />
                           )}
                         </View>
@@ -370,7 +381,7 @@ export default function PlusScreen() {
                     style={[
                       styles.iconWrap,
                       {
-                        backgroundColor: `#607D8B${iconBgOpacity}`,
+                        backgroundColor: statsAccent.softBg,
                       },
                     ]}
                     importantForAccessibility="no"
@@ -378,13 +389,13 @@ export default function PlusScreen() {
                     {exporting ? (
                       <ActivityIndicator
                         size="small"
-                        color={isDark ? "#90A4AE" : "#607D8B"}
+                        color={statsAccent.softText}
                       />
                     ) : (
                       <FontAwesome
                         name="file-csv"
                         size={18}
-                        color={isDark ? "#90A4AE" : "#607D8B"}
+                        color={statsAccent.softText}
                       />
                     )}
                   </View>
@@ -424,32 +435,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: space.xl,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
   },
   title: {
     fontSize: 26,
     fontWeight: "800",
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: space.xxs,
     fontSize: 13,
   },
   section: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: space.lg,
+    marginBottom: space.lg,
   },
   sectionLabel: {
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.6,
-    marginBottom: 8,
-    marginLeft: 4,
+    marginBottom: space.xs,
+    marginLeft: space.xxs,
   },
   sectionItems: {
     gap: 10,
@@ -457,12 +468,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -471,7 +482,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -490,11 +501,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 48,
-    gap: 12,
+    gap: space.sm,
   },
   emptyText: {
     fontSize: 14,
     textAlign: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: space.lg,
   },
 });

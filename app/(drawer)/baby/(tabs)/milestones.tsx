@@ -1,6 +1,8 @@
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
@@ -10,7 +12,6 @@ import {
   MilestonesEditData,
 } from "@/components/forms/MilestonesForm";
 import { PhotoImage } from "@/components/ui/PhotoImage";
-import { ThemedText } from "@/components/themed-text";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
@@ -20,6 +21,8 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
@@ -173,13 +176,13 @@ const DeleteAction = React.memo(function DeleteAction({
   const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer ce jalon"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -327,12 +330,7 @@ export default function MilestonesScreen() {
     childId: activeChild?.id,
   });
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: MilestoneEventWithId | null;
-  }>({ visible: false, event: null });
-
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
@@ -1075,6 +1073,14 @@ export default function MilestonesScreen() {
             ];
           }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Jalon",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
           accessibilityRole="button"
           accessibilityLabel="Modifier ce jalon"
         >
@@ -1158,9 +1164,19 @@ export default function MilestonesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
+    const childId = activeChild.id;
+    softDeleteNow({
+      id: eventId,
+      message: "Jalon supprimé",
+      run: () => supprimerJalon(childId, eventId),
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
+    });
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1214,45 +1230,6 @@ export default function MilestonesScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
-      message: "Jalon supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      run: () => supprimerJalon(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
-    });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderDayGroup = ({ item, index }: { item: MilestoneGroup; index: number }) => {
     const [year, month, day] = item.date.split("-").map(Number);
@@ -1385,11 +1362,11 @@ export default function MilestonesScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1417,38 +1394,27 @@ export default function MilestonesScreen() {
 
         {loaded.jalons && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.jalon.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.jalon.dark}
+              icon={
                 <FontAwesome
                   name="star"
                   size={36}
                   color={eventColors.jalon.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucun jalon enregistré"
-                  : "Aucun jalon pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                Capturez les premiers pas, sourires et moments importants
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={() => openAddModal("dent")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter un jalon"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter un jalon</Text>
-                </Pressable>
-              )}
+                  : "Aucun jalon pour ce filtre"
+              }
+              subtitle="Capturez les premiers pas, sourires et moments importants"
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter un jalon", onPress: () => openAddModal("dent") }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   loading={isLoadingMore || autoLoadMore}
@@ -1457,7 +1423,7 @@ export default function MilestonesScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1489,23 +1455,12 @@ export default function MilestonesScreen() {
         )}
       </SafeAreaView>
       <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer ce jalon ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
-      <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} jalon${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}
@@ -1562,43 +1517,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 80,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   dayGroup: {
     marginBottom: 24,

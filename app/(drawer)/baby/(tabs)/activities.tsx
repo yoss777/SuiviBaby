@@ -1,11 +1,12 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { PromenadeWidget } from "@/components/suivibaby/dashboard/PromenadeWidget";
-import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
@@ -19,6 +20,8 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -175,13 +178,13 @@ const DeleteAction = React.memo(function DeleteAction({
   const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette activité"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -331,12 +334,7 @@ export default function ActivitiesScreen() {
     childId: activeChild?.id,
   });
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: ActivityEventWithId | null;
-  }>({ visible: false, event: null });
-
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   // Detect ongoing promenade (iso sommeilEnCours in routines.tsx)
   const promenadeEnCours = useMemo(() => {
@@ -1057,45 +1055,19 @@ export default function ActivitiesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Activité supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1181,9 +1153,6 @@ export default function ActivitiesScreen() {
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderEventItem = (event: ActivityEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
@@ -1225,6 +1194,14 @@ export default function ActivitiesScreen() {
             ];
           }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Activité",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette activité"
         >
@@ -1475,11 +1452,11 @@ export default function ActivitiesScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1528,38 +1505,27 @@ export default function ActivitiesScreen() {
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.activite.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.activite.dark}
+              icon={
                 <FontAwesome
                   name="baby"
                   size={36}
                   color={eventColors.activite.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucune activité enregistrée"
-                  : "Aucune activité pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                {"Suivez les activités et le temps d'éveil"}
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={() => openAddModal("tummyTime")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une activité"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter une activité</Text>
-                </Pressable>
-              )}
+                  : "Aucune activité pour ce filtre"
+              }
+              subtitle={"Suivez les activités et le temps d'éveil"}
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter une activité", onPress: () => openAddModal("tummyTime") }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -1569,7 +1535,7 @@ export default function ActivitiesScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1602,23 +1568,12 @@ export default function ActivitiesScreen() {
         )}
       </SafeAreaView>
       <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer cette activité ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
-      <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}
@@ -1775,43 +1730,6 @@ const styles = StyleSheet.create({
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   dateChip: {
     flexDirection: "row",

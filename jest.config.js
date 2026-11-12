@@ -20,6 +20,8 @@ module.exports = {
     "<rootDir>/__tests__/storage.rules.test.ts",
     "<rootDir>/__tests__/.*\\.rules\\.test\\.ts$",
     "<rootDir>/functions/",
+    // Agent git worktrees (Claude Code) hold full copies of the repo.
+    "<rootDir>/.claude/",
   ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",

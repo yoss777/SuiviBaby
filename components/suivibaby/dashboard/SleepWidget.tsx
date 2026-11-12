@@ -1,9 +1,12 @@
+import { radius, space } from "@/constants/tokens";
 import {
   getCategoryColors,
   getCategoryTextColors,
   getNeutralColors,
+  neutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useAnnounceActiveChange } from "@/hooks/useAnnounceActiveChange";
 import { flatInDark } from "@/constants/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
@@ -13,10 +16,12 @@ import {
   Easing,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { isNightHour } from "@/utils/decorativeMotion";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -57,11 +62,17 @@ export const SleepWidget = memo(function SleepWidget({
   sharedPulseAnim,
 }: SleepWidgetProps) {
   // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const ripple = usePressRipple();
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
       ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
       : elapsedMinutesProp;
+  useAnnounceActiveChange(
+    isActive,
+    isNap ? "Sieste démarrée" : "Nuit démarrée",
+    "Sommeil terminé",
+  );
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
 
@@ -117,9 +128,11 @@ export const SleepWidget = memo(function SleepWidget({
   const ownPulseAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
 
+  // Respiration décorative : coupée la nuit (Réduire les animations : startLoop).
+  const pulseAllowed = !isNightHour(currentTime);
   useEffect(() => {
     if (sharedPulseAnim) return;
-    if (isActive) {
+    if (isActive && pulseAllowed) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(ownPulseAnim, {
@@ -141,7 +154,7 @@ export const SleepWidget = memo(function SleepWidget({
     } else {
       ownPulseAnim.setValue(1);
     }
-  }, [isActive, pulseAnim]);
+  }, [isActive, pulseAnim, pulseAllowed]);
 
   // Unified container — same size whether active or inactive
   return (
@@ -191,7 +204,8 @@ export const SleepWidget = memo(function SleepWidget({
         <>
           <Text
             style={[styles.timerValue, { color: sleepColors.textDark }]}
-            accessibilityLiveRegion="polite"
+            // Pas de live region : le minuteur change chaque minute et TalkBack
+            // l'annoncerait en continu. L'annonce se fait au démarrage/à l'arrêt.
           >
             {formatDuration(elapsedMinutes)}
           </Text>
@@ -209,8 +223,12 @@ export const SleepWidget = memo(function SleepWidget({
       {isActive ? (
         showStopButton && (
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: sleepColors.primary }]}
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
+                styles.actionButton, { backgroundColor: sleepColors.primary },
+                pressedOpacity(pressed, 0.2),
+              ]}
               onPress={handleStop}
               accessibilityRole="button"
               accessibilityLabel="Terminer le sommeil"
@@ -224,18 +242,19 @@ export const SleepWidget = memo(function SleepWidget({
               >
                 Terminer
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             {onEditSleep && (
-              <TouchableOpacity
-                style={[
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
                   styles.editButton,
                   {
                     backgroundColor: sleepColors.buttonSecondaryBg,
                     borderColor: `${sleepColors.primary}40`,
                   },
+                  pressedOpacity(pressed),
                 ]}
                 onPress={handleEdit}
-                activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="Ajuster le sommeil avant d'enregistrer"
               >
@@ -244,20 +263,22 @@ export const SleepWidget = memo(function SleepWidget({
                   size={15}
                   color={sleepColors.primary}
                 />
-              </TouchableOpacity>
+              </Pressable>
             )}
           </View>
         )
       ) : (
         <View style={styles.buttonsRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.startButton,
               {
                 backgroundColor: preferNight
                   ? sleepColors.buttonSecondaryBg
                   : sleepColors.primary,
               },
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={() => handleStart(true)}
             accessibilityRole="button"
@@ -279,15 +300,17 @@ export const SleepWidget = memo(function SleepWidget({
             >
               Sieste
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
+          </Pressable>
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.startButton,
               {
                 backgroundColor: preferNight
                   ? sleepColors.primary
                   : sleepColors.buttonSecondaryBg,
               },
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={() => handleStart(false)}
             accessibilityRole="button"
@@ -309,7 +332,7 @@ export const SleepWidget = memo(function SleepWidget({
             >
               Nuit
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       )}
     </Animated.View>
@@ -318,10 +341,10 @@ export const SleepWidget = memo(function SleepWidget({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: space.md,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -342,7 +365,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: space.xxs,
     fontSize: 12,
   },
   buttonsRow: {
@@ -351,10 +374,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   startButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     minHeight: 44,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
@@ -364,13 +388,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   actionButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     // Largeur minimale : « Terminer » tient sur une ligne même si la carte est étroite
     minWidth: 96,
     minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -382,13 +407,14 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     marginTop: 10,
   },
   editButton: {
+    ...RIPPLE_CLIP,
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

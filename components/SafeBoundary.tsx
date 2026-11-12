@@ -15,6 +15,7 @@
 //  - the fallback is a leaf — it does not recover automatically; the user
 //    keeps interacting with the rest of the screen
 
+import { neutralColors } from "@/constants/dashboardColors";
 import * as Sentry from "@sentry/react-native";
 import React from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     borderRadius: 12,
-    backgroundColor: "#fef2f2",
+    backgroundColor: neutralColors.errorBg,
     borderWidth: 1,
     borderColor: "#fecaca",
     alignItems: "center",
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 4,
     fontSize: 12,
-    color: "#dc2626",
+    color: neutralColors.destructive,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     textAlign: "center",
   },

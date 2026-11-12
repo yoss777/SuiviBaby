@@ -1,6 +1,9 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { neutralColors } from '@/constants/dashboardColors';
+import { RIPPLE_CLIP } from "@/components/ui/pressFeedback";
+
 interface ModernActionButtonsProps {
   onCancel: () => void;
   onValidate: () => void;
@@ -83,7 +86,7 @@ const ModernActionButtons: React.FC<ModernActionButtonsProps> = ({
           {isLoading && (
             <ActivityIndicator
               size="small"
-              color="#ffffff"
+              color={neutralColors.white}
               style={styles.loadingIndicator}
             />
           )}
@@ -110,6 +113,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   button: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 24,
@@ -118,7 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 54,
     // Ombre moderne
-    shadowColor: '#000',
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
@@ -160,7 +164,7 @@ const styles = StyleSheet.create({
     paddingLeft:20,
   },
   cancelButtonText: {
-    color: '#6c757d',
+    color: neutralColors.textLight,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -168,18 +172,18 @@ const styles = StyleSheet.create({
     color: '#bbb',
   },
   validateButtonText: {
-    color: '#ffffff',
+    color: neutralColors.white,
     fontSize: 16,
     fontWeight: '600',
   },
   validateButtonTextDisabled: {
-    color: '#ffffff',
+    color: neutralColors.white,
     opacity: 0.7,
   },
   deleteButton: {
-    backgroundColor: '#dc3545',
+    backgroundColor: neutralColors.destructive,
     borderWidth: 1,
-    borderColor: '#dc3545',
+    borderColor: neutralColors.destructive,
   },
   deleteButtonDisabled: {
     backgroundColor: '#f8d7da',
@@ -188,12 +192,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   deleteButtonText: {
-    color: '#ffffff',
+    color: neutralColors.white,
     fontSize: 16,
     fontWeight: '600',
   },
   deleteButtonTextDisabled: {
-    color: '#ffffff',
+    color: neutralColors.white,
     opacity: 0.7,
   },
 });

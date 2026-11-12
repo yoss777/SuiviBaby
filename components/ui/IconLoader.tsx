@@ -2,11 +2,12 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import { Animated, Easing } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { neutralColors } from "@/constants/dashboardColors";
 
 export function IconLoader({
   name = "baby-bottle",
   size = 22,
-  color = "#fff",
+  color = neutralColors.white,
 }: {
   name?: any;
   size?: number;

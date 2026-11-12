@@ -11,9 +11,14 @@ jest.mock("react-native-safe-area-context", () => ({
 }));
 
 import React from "react";
-import { AppState } from "react-native";
-import { act, fireEvent, render } from "@testing-library/react-native";
-import { ToastProvider, useToast } from "@/contexts/ToastContext";
+import { AccessibilityInfo, AppState, Text } from "react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import {
+  ACTION_TOAST_MIN_MS,
+  ToastProvider,
+  useToast,
+  useToastBottomInset,
+} from "@/contexts/ToastContext";
 
 type Api = ReturnType<typeof useToast>;
 let api: Api;
@@ -50,8 +55,8 @@ describe("showUndoToast", () => {
   it("runs onExpire once after the delay", () => {
     setup();
     const onExpire = jest.fn();
-    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
-    act(() => { jest.advanceTimersByTime(3999); });
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 8000));
+    act(() => { jest.advanceTimersByTime(7999); });
     expect(onExpire).not.toHaveBeenCalled();
     act(() => { jest.advanceTimersByTime(1); });
     expect(onExpire).toHaveBeenCalledTimes(1);
@@ -114,35 +119,88 @@ describe("showUndoToast", () => {
     expect(queryByText("Info")).toBeNull();
   });
 
-  it("a second undo toast does not drop the first deletion", () => {
+  // Audit UI/UX V3, N-V3-4 : plusieurs annulations en attente, chacune sur
+  // son propre délai ; un autre toast ne valide plus rien en silence.
+  it("a second undo toast keeps the first deletion pending and undoable for its own 8 s", () => {
+    const { getByText, queryByText } = setup();
+    const firstUndo = jest.fn();
+    const first = jest.fn();
+    const secondUndo = jest.fn();
+    const second = jest.fn();
+    act(() => api.showUndoToast("Premier", firstUndo, first));
+    act(() => { jest.advanceTimersByTime(3000); });
+    act(() => api.showUndoToast("Second", secondUndo, second));
+    expect(first).not.toHaveBeenCalled();
+    // Le plus récent est affiché, avec le nombre d'autres annulations possibles.
+    expect(getByText("Second (+1)")).toBeTruthy();
+
+    // « Annuler » porte sur le plus récent, puis le premier reprend sa place.
+    fireEvent.press(getByText("Annuler"));
+    expect(secondUndo).toHaveBeenCalledTimes(1);
+    expect(getByText("Premier")).toBeTruthy();
+    fireEvent.press(getByText("Annuler"));
+    expect(firstUndo).toHaveBeenCalledTimes(1);
+    expect(queryByText("Annuler")).toBeNull();
+
+    act(() => { jest.advanceTimersByTime(20_000); });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("each pending deletion expires on its own schedule", () => {
     setup();
     const first = jest.fn();
     const second = jest.fn();
-    act(() => api.showUndoToast("Premier", jest.fn(), first, 4000));
-    act(() => api.showUndoToast("Second", jest.fn(), second, 4000));
+    act(() => api.showUndoToast("Premier", jest.fn(), first));
+    act(() => { jest.advanceTimersByTime(3000); });
+    act(() => api.showUndoToast("Second", jest.fn(), second));
+    act(() => { jest.advanceTimersByTime(5000); });
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
-    act(() => { jest.advanceTimersByTime(4000); });
+    expect(screen.getByText("Second")).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(3000); });
     expect(second).toHaveBeenCalledTimes(1);
-    expect(first).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Annuler")).toBeNull();
   });
 
-  it("a plain toast shown during the undo window does not drop the deletion", () => {
-    setup();
+  it("a plain toast shown during the undo window neither commits nor hides the undo", () => {
+    const { getByText } = setup();
+    const onUndo = jest.fn();
     const onExpire = jest.fn();
-    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
+    act(() => api.showUndoToast("Supprimé", onUndo, onExpire));
     act(() => api.showToast("Autre message"));
-    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(getByText("Autre message")).toBeTruthy();
+    expect(getByText("Supprimé")).toBeTruthy();
+    fireEvent.press(getByText("Annuler"));
+    expect(onUndo).toHaveBeenCalledTimes(1);
     act(() => { jest.advanceTimersByTime(10_000); });
-    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(onExpire).not.toHaveBeenCalled();
   });
 
-  it("an action toast shown during the undo window does not drop the deletion", () => {
+  it("an action toast shown during the undo window does not commit the deletion", () => {
     setup();
     const onExpire = jest.fn();
     act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
     act(() => api.showActionToast("Erreur", "Réessayer", jest.fn()));
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    act(() => { jest.advanceTimersByTime(ACTION_TOAST_MIN_MS); });
     expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("the background flush commits every pending deletion once", () => {
+    setup();
+    const first = jest.fn();
+    const second = jest.fn();
+    act(() => api.showUndoToast("Premier", jest.fn(), first));
+    act(() => api.showUndoToast("Second", jest.fn(), second));
+    act(() => appStateHandler?.("background"));
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(10_000); });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
   });
 
   it("a toast without onExpire is harmless in the background", () => {
@@ -157,5 +215,52 @@ describe("lifecycle", () => {
     const { unmount } = setup();
     unmount();
     expect(removeSpy).toHaveBeenCalled();
+  });
+});
+
+describe("accessibilité et confort (P1-11)", () => {
+  it("un toast avec action reste au moins 8 s, même si l'appelant demande moins", () => {
+    setup();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 4000));
+    act(() => { jest.advanceTimersByTime(ACTION_TOAST_MIN_MS - 1); });
+    expect(onExpire).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+
+  it("annonce le message et l'action au lecteur d'écran", () => {
+    const spy = jest.spyOn(AccessibilityInfo, "announceForAccessibility").mockImplementation(() => {});
+    setup();
+    act(() => api.showActionToast("Échec de l'envoi", "Réessayer", jest.fn()));
+    expect(spy).toHaveBeenCalledWith("Échec de l'envoi. Action disponible : Réessayer.");
+    act(() => api.showToast("Enregistré"));
+    expect(spy).toHaveBeenLastCalledWith("Enregistré");
+  });
+
+  it("le bouton d'action est un bouton d'au moins 44 pt", () => {
+    setup();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), jest.fn()));
+    const button = screen.getByRole("button", { name: "Annuler" });
+    const style = Object.assign({}, ...[button.props.style].flat(Infinity).filter(Boolean));
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+    expect(style.minWidth).toBeGreaterThanOrEqual(44);
+  });
+
+  it("se pose au-dessus de la barre d'onglets déclarée", () => {
+    function TabBar() {
+      useToastBottomInset(120);
+      return <Text>tabs</Text>;
+    }
+    render(
+      <ToastProvider>
+        <Probe />
+        <TabBar />
+      </ToastProvider>,
+    );
+    act(() => api.showToast("Enregistré"));
+    const toast = screen.getByText("Enregistré").parent?.parent;
+    const style = Object.assign({}, ...[toast?.props.style].flat(Infinity).filter(Boolean));
+    expect(style.bottom).toBeGreaterThan(120);
   });
 });

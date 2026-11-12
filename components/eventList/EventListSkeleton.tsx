@@ -1,4 +1,5 @@
 // Squelette de chargement des écrans de liste (repas, pompages, couches).
+import { space } from "@/constants/tokens";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, View, type ViewStyle } from "react-native";
 
@@ -94,8 +95,8 @@ export const EventListSkeleton = React.memo(function EventListSkeleton({ colorSc
 
 const styles = StyleSheet.create({
   skeletonContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
   },
   skeletonBlock: {
     borderRadius: 4,

@@ -1,8 +1,6 @@
 // Legacy animated components
 export { AnimatedCounter } from "./AnimatedCounter";
 export { AnimatedMoodEmoji } from "./AnimatedMoodEmoji";
-export { FloatingBlob } from "./FloatingBlob";
-export { FloatingParticle } from "./FloatingParticle";
 export { MoodBackdrop } from "./MoodBackdrop";
 export { PulsingAura } from "./PulsingAura";
 export { SparkleBurst } from "./SparkleBurst";
@@ -11,7 +9,6 @@ export { SparkleBurst } from "./SparkleBurst";
 export { CommentsBottomSheet } from "./CommentsBottomSheet";
 export { MomentsSkeletonLoader } from "./MomentsSkeletonLoader";
 export { ConfettiBurst } from "./ConfettiBurst";
-export { FloatingActionButton } from "./FloatingActionButton";
 export { HeroMoodCard } from "./HeroMoodCard";
 export { PolaroidGallery } from "./PolaroidGallery";
 export { SwipeGallery } from "./SwipeGallery";

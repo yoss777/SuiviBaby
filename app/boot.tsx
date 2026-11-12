@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { APP_NAME } from "@/constants/app";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Image, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +30,7 @@ import {
 } from "@/services/todayEventsCache";
 import { router } from "expo-router";
 import { hasCompletedOnboarding } from "./(auth)/onboarding";
+import { neutralColors } from "@/constants/dashboardColors";
 
 const BOOT_NETWORK_TIMEOUT_MS = 8000;
 
@@ -461,7 +463,7 @@ function BootScreenContent() {
             source={require("@/assets/images/icon.png")}
             style={styles.logo}
             resizeMode="contain"
-            accessibilityLabel="Logo Suivi Baby"
+            accessibilityLabel={`Logo ${APP_NAME}`}
           />
           {showBootFallback ? (
             <View style={styles.feedbackCard}>
@@ -535,7 +537,7 @@ const styles = StyleSheet.create({
   feedbackTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#1f2937",
+    color: neutralColors.textStrong,
     textAlign: "center",
   },
   feedbackText: {
@@ -546,7 +548,7 @@ const styles = StyleSheet.create({
   },
   feedbackHint: {
     fontSize: 13,
-    color: "#6b7280",
+    color: neutralColors.textLight,
     textAlign: "center",
   },
   retryButton: {
@@ -564,7 +566,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#ffffff",
+    color: neutralColors.white,
   },
 });
 

@@ -1,3 +1,4 @@
+import { space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import React, { memo, ReactNode } from "react";
@@ -66,8 +67,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 6,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
   },
   button: {
     // Pastille à la taille de son contenu (pas d'étirement sur la largeur)

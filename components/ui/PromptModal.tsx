@@ -5,9 +5,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+
+import { getNeutralColors } from "@/constants/dashboardColors";
+import { Colors, getReadableTextColor } from "@/constants/theme";
+import { radius, space } from "@/constants/tokens";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { pressedOpacity, usePressRipple } from "./pressFeedback";
 
 interface PromptModalProps {
   visible: boolean;
@@ -21,32 +26,18 @@ interface PromptModalProps {
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   confirmText?: string;
   cancelText?: string;
+  /** Par défaut : `tint` du thème. */
   confirmButtonColor?: string;
   confirmTextColor?: string;
   confirmDisabled?: boolean;
-  backgroundColor: string;
-  textColor: string;
+  /** Par défaut : surface de carte du thème (nc.backgroundCard). */
+  backgroundColor?: string;
+  /** Par défaut : nc.textStrong. */
+  textColor?: string;
   onChangeText: (text: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
-
-const getReadableTextColor = (color: string, fallback = "#fff") => {
-  if (!color || !color.startsWith("#")) return fallback;
-  let hex = color.slice(1);
-  if (hex.length === 3) {
-    hex = hex
-      .split("")
-      .map((char) => char + char)
-      .join("");
-  }
-  if (hex.length !== 6) return fallback;
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.7 ? "#1b1b1b" : "#fff";
-};
 
 export function PromptModal({
   visible,
@@ -60,7 +51,7 @@ export function PromptModal({
   autoCapitalize = "sentences",
   confirmText = "Valider",
   cancelText = "Annuler",
-  confirmButtonColor = "#28a745",
+  confirmButtonColor,
   confirmTextColor,
   confirmDisabled = false,
   backgroundColor,
@@ -69,33 +60,42 @@ export function PromptModal({
   onConfirm,
   onCancel,
 }: PromptModalProps) {
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const theme = Colors[colorScheme];
+  const ripple = usePressRipple();
+  const surface = backgroundColor ?? nc.backgroundCard;
+  const ink = textColor ?? nc.textStrong;
+  const confirmBg = confirmButtonColor ?? theme.tint;
   const resolvedConfirmTextColor =
-    confirmTextColor ?? getReadableTextColor(confirmButtonColor);
+    confirmTextColor ??
+    (confirmButtonColor ? getReadableTextColor(confirmButtonColor) : theme.onTint);
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={() => {}}
+      // Bouton retour Android = Annuler
+      onRequestClose={onCancel}
     >
       <Pressable style={styles.modalOverlay}>
         <Pressable
-          style={[styles.modalContent, { backgroundColor }]}
+          style={[styles.modalContent, { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}
         >
-          <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
+          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
           {subtitle ? (
-            <Text style={[styles.modalSubtitle, { color: textColor }]}>{subtitle}</Text>
+            <Text style={[styles.modalSubtitle, { color: ink }]}>{subtitle}</Text>
           ) : null}
           {message ? (
-            <Text style={[styles.modalMessage, { color: textColor }]}>
+            <Text style={[styles.modalMessage, { color: ink }]}>
               {message}
             </Text>
           ) : null}
           <TextInput
-            style={[styles.input, { color: textColor, borderColor: textColor + "20" }]}
+            style={[styles.input, { color: ink, borderColor: nc.border }]}
             placeholder={placeholder}
-            placeholderTextColor={textColor + "80"}
+            placeholderTextColor={nc.textLight}
             value={value}
             onChangeText={onChangeText}
             autoCorrect={false}
@@ -104,23 +104,32 @@ export function PromptModal({
             secureTextEntry={secureTextEntry}
           />
           <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={onCancel}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelButtonText}>{cancelText}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.modalButton,
-                styles.confirmButton,
-                { backgroundColor: confirmButtonColor },
-                confirmDisabled && styles.confirmButtonDisabled,
+                { backgroundColor: nc.backgroundPressed },
+                pressedOpacity(pressed),
               ]}
+              android_ripple={ripple}
+              onPress={onCancel}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.cancelButtonText, { color: nc.textStrong }]}>
+                {cancelText}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalButton,
+                { backgroundColor: confirmBg },
+                confirmDisabled && styles.confirmButtonDisabled,
+                pressedOpacity(pressed),
+              ]}
+              android_ripple={ripple}
               onPress={onConfirm}
-              activeOpacity={0.7}
               disabled={confirmDisabled}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: confirmDisabled }}
             >
               <Text
                 style={[
@@ -130,7 +139,7 @@ export function PromptModal({
               >
                 {confirmText}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>
@@ -144,62 +153,58 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: space.lg,
   },
   modalContent: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: space.lg,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalMessage: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: space.md,
     textAlign: "center",
   },
   input: {
     borderWidth: 1,
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: space.md,
     minHeight: 44,
   },
   modalButtons: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: space.sm,
     borderRadius: 10,
     alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#f2f2f2",
+    justifyContent: "center",
+    overflow: "hidden", // borne le ripple Android au bouton
   },
   cancelButtonText: {
-    color: "#333",
     fontWeight: "600",
   },
-  confirmButton: {
-  },
   confirmButtonText: {
-    color: "#fff",
     fontWeight: "700",
   },
   confirmButtonDisabled: {

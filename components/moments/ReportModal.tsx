@@ -52,6 +52,7 @@ export const ReportModal = memo(function ReportModal({
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
+  const onTint = Colors[colorScheme].onTint;
 
   const [selectedReason, setSelectedReason] =
     useState<ContentReportReason | null>(null);
@@ -140,7 +141,7 @@ export const ReportModal = memo(function ReportModal({
                       },
                     ]}
                   >
-                    {isSelected && <View style={styles.radioDot} />}
+                    {isSelected && <View style={[styles.radioDot, { backgroundColor: onTint }]} />}
                   </View>
                 </Pressable>
               );
@@ -189,9 +190,9 @@ export const ReportModal = memo(function ReportModal({
               accessibilityLabel="Envoyer le signalement"
             >
               {isSending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={onTint} />
               ) : (
-                <Text style={[styles.btnText, { color: "#fff" }]}>
+                <Text style={[styles.btnText, { color: onTint }]}>
                   Envoyer
                 </Text>
               )}
@@ -259,7 +260,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#fff",
   },
   messageInput: {
     borderRadius: 12,

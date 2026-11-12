@@ -1,6 +1,7 @@
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import {
   Modal,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { neutralColors } from "@/constants/dashboardColors";
 
 interface AddChildModalProps {
   visible: boolean;
@@ -41,12 +43,12 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
         <Pressable
           style={[
             styles.modalContent,
-            { backgroundColor: Colors[colorScheme].background },
+            { backgroundColor: Colors[colorScheme].surface },
           ]}
           onPress={(e) => e.stopPropagation()}
         >
           <View style={styles.header}>
-            <FontAwesome name="baby" size={32} color="#4A90E2" />
+            <FontAwesome name="baby" size={32} color={Colors[colorScheme].tint} />
             <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
               Ajouter un enfant
             </Text>
@@ -65,7 +67,7 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>
-                <FontAwesome name="plus-circle" size={32} color="#28a745" />
+                <FontAwesome name="circle-plus" size={32} color={eventColors.pumping.dark} />
               </View>
               <View style={styles.optionContent}>
                 <Text style={styles.optionTitle}>Créer un nouvel enfant</Text>
@@ -73,7 +75,7 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
                   Ajoutez un enfant dont vous êtes le parent
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={20} color="#ccc" />
+              <FontAwesome name="chevron-right" size={20} color={neutralColors.textMuted} />
             </TouchableOpacity>
 
             {/* Option 2 : Rejoindre avec un code */}
@@ -83,7 +85,7 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
               activeOpacity={0.7}
             >
               <View style={styles.optionIcon}>
-                <FontAwesome name="key" size={32} color="#9C27B0" />
+                <FontAwesome name="key" size={32} color={eventColors.vaccin.dark} />
               </View>
               <View style={styles.optionContent}>
                 <Text style={styles.optionTitle}>Rejoindre avec un code</Text>
@@ -91,7 +93,7 @@ export function AddChildModal({ visible, onClose }: AddChildModalProps) {
                   Accédez à un enfant partagé avec vous
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={20} color="#ccc" />
+              <FontAwesome name="chevron-right" size={20} color={neutralColors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -122,7 +124,7 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     borderRadius: 24,
     padding: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -157,12 +159,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   createOption: {
-    borderColor: "#28a745",
-    backgroundColor: "#e8f5e9",
+    borderColor: eventColors.pumping.dark,
+    backgroundColor: eventColors.pumping.light,
   },
   joinOption: {
-    borderColor: "#9C27B0",
-    backgroundColor: "#f3e5f5",
+    borderColor: eventColors.vaccin.dark,
+    backgroundColor: eventColors.vaccin.light,
   },
   optionIcon: {
     width: 48,
@@ -178,23 +180,23 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#212529",
+    color: neutralColors.textStrong,
     marginBottom: 4,
   },
   optionDescription: {
     fontSize: 13,
-    color: "#6c757d",
+    color: neutralColors.textLight,
     lineHeight: 18,
   },
   cancelButton: {
     paddingVertical: 14,
     alignItems: "center",
     borderRadius: 12,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: neutralColors.backgroundPressed,
   },
   cancelText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#666",
+    color: neutralColors.textLight,
   },
 });

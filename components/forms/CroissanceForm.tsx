@@ -1,13 +1,16 @@
 // components/forms/CroissanceForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { parseDecimalFr, toDecimalInputFr } from "@/utils/frenchNumber";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -26,7 +29,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { toDateOr } from "@/utils/date";
@@ -64,12 +67,9 @@ export type CroissanceFormProps = {
 // HELPERS
 // ============================================
 
-const parseNumber = (value: string): number | undefined => {
-  const trimmed = value.trim().replace(",", ".");
-  if (!trimmed) return undefined;
-  const parsed = parseFloat(trimmed);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
+// Virgule ou point acceptés ; une saisie invalide (« 3,4,5 ») n'est jamais
+// tronquée en silence : elle est refusée par la validation.
+const parseNumber = (value: string): number | undefined => parseDecimalFr(value);
 
 // ============================================
 // COMPONENT
@@ -84,9 +84,10 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   editData,
   onDelete,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -103,13 +104,13 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [tailleCm, setTailleCm] = useState<string>(
-    editData?.tailleCm?.toString() ?? "",
+    toDecimalInputFr(editData?.tailleCm),
   );
   const [poidsKg, setPoidsKg] = useState<string>(
-    editData?.poidsKg?.toString() ?? "",
+    toDecimalInputFr(editData?.poidsKg),
   );
   const [teteCm, setTeteCm] = useState<string>(
-    editData?.teteCm?.toString() ?? "",
+    toDecimalInputFr(editData?.teteCm),
   );
   // ============================================
   // HANDLERS
@@ -120,12 +121,28 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     setDateHeureDirty(true);
   }, []);
 
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ tailleCm, poidsKg, teteCm, dateHeure });
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
     const tailleValue = parseNumber(tailleCm);
     const poidsValue = parseNumber(poidsKg);
     const teteValue = parseNumber(teteCm);
+
+    // Un champ rempli mais illisible n'est jamais ignoré en silence.
+    const invalid: string[] = [];
+    if (tailleCm.trim() && tailleValue === undefined) invalid.push("Taille");
+    if (poidsKg.trim() && poidsValue === undefined) invalid.push("Poids");
+    if (teteCm.trim() && teteValue === undefined) invalid.push("Tour de tête");
+    if (invalid.length > 0) {
+      showAlert(
+        "Valeur invalide",
+        `${invalid.join(", ")} : saisissez un nombre, par exemple 3,45.`,
+      );
+      return;
+    }
 
     if (!tailleValue && !poidsValue && !teteValue) {
       showAlert("Attention", "Entrez au moins une mesure.");
@@ -172,26 +189,18 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     onSuccess?.();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cette mesure ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Mesure supprimée"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer la mesure.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Mesure supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -271,12 +280,16 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -285,13 +298,15 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -301,20 +316,23 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: accentColors.filledText,
                 },
               ]}
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.deleteButton,
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
@@ -322,7 +340,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -366,6 +384,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -379,6 +398,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

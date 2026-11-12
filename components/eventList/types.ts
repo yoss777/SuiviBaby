@@ -114,8 +114,6 @@ export interface EventListConfig<T extends BaseEvent, S extends object = object>
   };
   texts: {
     expandMore: (extra: number) => string;
-    deleteTitle: string;
-    deleteMessage: string;
     batchDeleteMessage: (count: number) => string;
     deleted: string;
     batchDeleted: (count: number) => string;

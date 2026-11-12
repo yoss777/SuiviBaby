@@ -1,4 +1,4 @@
-import { getMoodFills, getNeutralColors } from "@/constants/dashboardColors";
+import { getMoodFills, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     borderRadius: 20,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,

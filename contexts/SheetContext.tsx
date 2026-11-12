@@ -178,9 +178,15 @@ interface SheetStateType {
   viewProps: AnySheetProps | null;
 }
 
+// Garde de fermeture : renvoie true si elle prend la main (ex. demande
+// « Abandonner la saisie ? »), false pour laisser la feuille se fermer.
+export type SheetCloseGuard = () => boolean;
+
 interface SheetActionsType {
   openSheet: (props: AnySheetProps) => void;
   closeSheet: () => void;
+  /** Enregistre (ou retire avec null) la garde consultée par le retour Android. */
+  setCloseGuard: (guard: SheetCloseGuard | null) => void;
 }
 
 interface SheetContextType extends SheetStateType, SheetActionsType {}
@@ -194,6 +200,11 @@ export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
   const [viewProps, setViewProps] = useState<AnySheetProps | null>(null);
   const pendingDismissRef = useRef<(() => void) | null>(null);
   const isOpenRef = useRef(false);
+  const closeGuardRef = useRef<SheetCloseGuard | null>(null);
+
+  const setCloseGuard = useCallback((guard: SheetCloseGuard | null) => {
+    closeGuardRef.current = guard;
+  }, []);
 
   const openSheet = useCallback((props: AnySheetProps) => {
     setViewProps((prev) => {
@@ -227,6 +238,7 @@ export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
       'hardwareBackPress',
       () => {
         if (!isOpenRef.current) return false;
+        if (closeGuardRef.current?.()) return true;
         closeSheet();
         return true;
       },
@@ -239,8 +251,8 @@ export const SheetProvider = ({ children }: { children: React.ReactNode }) => {
     [viewProps],
   );
   const actionsValue = useMemo(
-    () => ({ openSheet, closeSheet }),
-    [openSheet, closeSheet],
+    () => ({ openSheet, closeSheet, setCloseGuard }),
+    [openSheet, closeSheet, setCloseGuard],
   );
 
   return (

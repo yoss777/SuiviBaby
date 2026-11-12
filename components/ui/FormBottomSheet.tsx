@@ -1,3 +1,5 @@
+import { space } from "@/constants/tokens";
+import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -6,6 +8,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
+  BottomSheetFooterProps,
   BottomSheetHandle,
   BottomSheetHandleProps,
   BottomSheetScrollView,
@@ -35,6 +38,13 @@ export interface FormBottomSheetProps {
   isSubmitting?: boolean;
   showActions?: boolean;
   enablePanDownToClose?: boolean;
+  /**
+   * Glissement du contenu et de la poignée entre les crans (agrandir,
+   * réduire). Indépendant de `enablePanDownToClose` : une saisie protégée
+   * interdit seulement la fermeture par glissement, pas le changement de cran.
+   * Par défaut, suit `enablePanDownToClose` (comportement historique).
+   */
+  enablePanGestures?: boolean;
   enableOverDrag?: boolean;
   children: React.ReactNode;
   onSubmit: () => void | Promise<void>;
@@ -43,6 +53,13 @@ export interface FormBottomSheetProps {
   onClose?: () => void;
   snapPoints?: string[];
   initialIndex?: number;
+  /**
+   * Fourni quand la saisie doit être protégée : le fond ne ferme plus la
+   * feuille directement, il appelle ce rappel (qui peut demander confirmation).
+   */
+  onRequestDismiss?: () => void;
+  /** Pied collant (boutons d'action toujours visibles). */
+  footerComponent?: React.FC<BottomSheetFooterProps>;
 }
 
 // ============================================
@@ -55,11 +72,12 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       title,
       icon = "edit",
       iconLib = "fa6",
-      accentColor = "#4A90E2",
+      accentColor = eventColors.meal.dark,
       isEditing = false,
       isSubmitting = false,
       showActions = true,
       enablePanDownToClose = true,
+      enablePanGestures,
       enableOverDrag = false,
       children,
       onSubmit,
@@ -68,14 +86,18 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
       onClose,
       snapPoints: customSnapPoints,
       initialIndex = -1,
+      onRequestDismiss,
+      footerComponent,
     },
     ref,
   ) => {
     const colorScheme = useColorScheme() ?? "light";
     const tintColor = Colors[colorScheme].tint;
+    const onTint = Colors[colorScheme].onTint;
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
     const scrollViewRef = useRef<any>(null);
+    const panGestures = enablePanGestures ?? enablePanDownToClose;
     const [scrollEnabled, setScrollEnabled] = useState(true);
     const snapPoints = useMemo(
       () => customSnapPoints || ["75%", "90%"],
@@ -98,13 +120,16 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
-          pressBehavior="close"
+          // Saisie protégée : le fond garde la feuille ouverte (retour au cran
+          // d'ouverture) et délègue la décision à onRequestDismiss.
+          pressBehavior={onRequestDismiss ? Math.max(0, initialIndex) : "close"}
+          onPress={onRequestDismiss}
           // Libellés français (défauts anglais de @gorhom/bottom-sheet)
           accessibilityLabel="Fermer le formulaire"
           accessibilityHint="Touchez deux fois pour fermer sans enregistrer"
         />
       ),
-      [],
+      [onRequestDismiss, initialIndex],
     );
 
     const renderHandle = useCallback(
@@ -129,10 +154,11 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
         index={initialIndex}
         snapPoints={snapPoints}
         enablePanDownToClose={enablePanDownToClose}
-        enableContentPanningGesture={enablePanDownToClose}
-        enableHandlePanningGesture={enablePanDownToClose}
+        enableContentPanningGesture={panGestures}
+        enableHandlePanningGesture={panGestures}
         enableOverDrag={enableOverDrag}
         backdropComponent={renderBackdrop}
+        footerComponent={footerComponent}
         onClose={onClose}
         backgroundStyle={{ backgroundColor: nc.backgroundCard }}
         handleComponent={renderHandle}
@@ -225,9 +251,9 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
                     accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
                   >
                     {isSubmitting ? (
-                      <ActivityIndicator size="small" color={nc.white} />
+                      <ActivityIndicator size="small" color={onTint} />
                     ) : (
-                      <Text style={[styles.validateText, { color: nc.white }]}>
+                      <Text style={[styles.validateText, { color: onTint }]}>
                         {isEditing ? "Enregistrer" : "Ajouter"}
                       </Text>
                     )}
@@ -268,14 +294,14 @@ FormBottomSheet.displayName = "FormBottomSheet";
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: space.lg,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    marginBottom: 20,
+    gap: space.sm,
+    marginBottom: space.lg,
     marginTop: 10,
   },
   title: {
@@ -297,24 +323,24 @@ const styles = StyleSheet.create({
 
   // Boutons d'action
   buttonsContainer: {
-    gap: 12,
+    gap: space.sm,
     paddingBottom: Platform.OS === "ios" ? 20 : 16,
     paddingTop: 10,
   },
   primaryRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   deleteOutlineButton: {
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     minHeight: 44, // cible tactile ≥ 44 pt
     minWidth: 44,
-    gap: 8,
+    gap: space.xs,
   },
   deleteOutlineText: {
     fontSize: 14,
@@ -324,7 +350,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     borderWidth: 1,
-    paddingVertical: 16,
+    paddingVertical: space.md,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
@@ -336,7 +362,7 @@ const styles = StyleSheet.create({
   },
   validateButton: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: space.md,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",

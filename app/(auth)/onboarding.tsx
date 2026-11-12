@@ -1,6 +1,9 @@
 // app/(auth)/onboarding.tsx
+import { radius, space } from "@/constants/tokens";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { APP_NAME } from "@/constants/app";
+import { withAlpha } from "@/components/ui/accentColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   getBiometricType,
@@ -28,41 +31,28 @@ const ONBOARDING_DONE_KEY = "@suivibaby_onboarding_done";
 const LEGACY_ONBOARDING_KEY = "@samaye_onboarding_done";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// P1-22 : 3 écrans au plus avant la connexion (5 auparavant). Promesse exacte
+// sur la saisie (« Un tap suffit » était faux : FAB, action, Ajouter).
+// Couleur : une seule, le token de marque `nc.todayAccent` (indigo, lisible
+// dans les deux thèmes), appliquée au rendu.
 const SLIDES = [
   {
     icon: "baby-carriage" as const,
-    title: "Bienvenue sur Suivi Baby",
+    title: `Bienvenue sur ${APP_NAME}`,
     description:
-      "L'app qui vous accompagne au quotidien pour suivre l'alimentation, le sommeil et la croissance de votre bébé.",
-    color: "#6366f1",
+      "Alimentation, sommeil, couches et croissance au même endroit, avec les courbes OMS et des tendances incluses gratuitement.",
   },
   {
     icon: "clock" as const,
     title: "Saisie en 3 secondes",
     description:
-      "Un biberon à 3h du matin ? Un tap suffit. Mode nuit automatique, commandes vocales, saisie rapide — pensée pour les parents fatigués.",
-    color: "#22c55e",
+      "Un biberon à 3 h du matin ? Trois touches, ou votre voix. Mode nuit automatique, pensé pour les parents fatigués.",
   },
   {
     icon: "users" as const,
-    title: "Toute la famille connectée",
+    title: "Partagé et protégé",
     description:
-      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents. Chacun voit les événements en temps réel.",
-    color: "#f59e0b",
-  },
-  {
-    icon: "shield-halved" as const,
-    title: "Données sécurisées",
-    description:
-      "Chiffrement en transit et au repos, zéro publicité, conformité RGPD. Les données de votre bébé restent privées.",
-    color: "#ef4444",
-  },
-  {
-    icon: "wand-magic-sparkles" as const,
-    title: "Insights intelligents",
-    description:
-      "Découvrez des tendances : \"Les jours avec activité d'éveil, bébé dort mieux la nuit\". Statistiques et courbes de croissance OMS incluses gratuitement.",
-    color: "#8b5cf6",
+      "Partagez le suivi avec votre partenaire, la nounou ou les grands-parents, en temps réel. Données chiffrées, zéro publicité, conformité RGPD.",
   },
 ];
 
@@ -152,13 +142,17 @@ export default function OnboardingScreen() {
         style={[styles.slide, { width: SCREEN_WIDTH }]}
         accessible
         accessibilityLabel={`${item.title}. ${item.description}`}
+        accessibilityHint={`Écran ${SLIDES.indexOf(item) + 1} sur ${SLIDES.length}`}
       >
         <View
-          style={[styles.iconCircle, { backgroundColor: item.color + "20" }]}
+          style={[styles.iconCircle, { backgroundColor: withAlpha(nc.todayAccent, 0.12) }]}
         >
-          <FontAwesome name={item.icon} size={60} color={item.color} accessibilityElementsHidden />
+          <FontAwesome name={item.icon} size={60} color={nc.todayAccent} accessibilityElementsHidden />
         </View>
-        <Text style={[styles.slideTitle, { color: nc.textStrong }]}>
+        <Text
+          style={[styles.slideTitle, { color: nc.textStrong }]}
+          accessibilityRole="header"
+        >
           {item.title}
         </Text>
         <Text style={[styles.slideDescription, { color: nc.textLight }]}>
@@ -245,13 +239,13 @@ export default function OnboardingScreen() {
           currentIndex === SLIDES.length - 1 ? "Commencer" : "Suivant"
         }
       >
-        <Text style={[styles.nextButtonText, { color: nc.white }]}>
+        <Text style={[styles.nextButtonText, { color: nc.onTodayAccent }]}>
           {currentIndex === SLIDES.length - 1 ? "Commencer" : "Suivant"}
         </Text>
         <FontAwesome
           name={currentIndex === SLIDES.length - 1 ? "rocket" : "arrow-right"}
           size={18}
-          color={nc.white}
+          color={nc.onTodayAccent}
         />
       </TouchableOpacity>
       <InfoModal
@@ -307,7 +301,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   slideDescription: {
     fontSize: 16,
@@ -318,8 +312,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 32,
+    gap: space.xs,
+    marginBottom: space.xxl,
   },
   dot: {
     height: 8,
@@ -330,11 +324,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: 56,
-    borderRadius: 12,
-    marginHorizontal: 20,
+    borderRadius: radius.md,
+    marginHorizontal: space.lg,
     marginBottom: 40,
-    gap: 12,
-    shadowColor: "#000",
+    gap: space.sm,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

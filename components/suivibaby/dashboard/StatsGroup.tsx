@@ -1,10 +1,10 @@
+import { radius, space } from "@/constants/tokens";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { flatInDark } from "@/constants/theme";
-import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
+import { formatTimeSince } from "@/utils/timeSince";
 
 // Enable LayoutAnimation on Android
 if (
@@ -51,8 +52,12 @@ export interface StatsGroupProps {
   backgroundColor?: string;
   /** Border color for the card */
   borderColor?: string;
-  /** Summary displayed when collapsed (e.g., "5 repas • 120ml") */
-  summary: ReactNode;
+  /**
+   * Summary displayed when collapsed (e.g., "5 repas • 120 ml").
+   * Texte seulement : il est aussi lu par VoiceOver/TalkBack (un ReactNode
+   * serait annoncé « [object Object] »).
+   */
+  summary: string;
   /** Optional last activity time (e.g., "00:30") */
   lastActivity?: string;
   /** Optional secondary text (e.g., "il y a 2h") */
@@ -87,27 +92,26 @@ export interface StatsGroupProps {
 // HELPERS
 // ============================================
 
-const getTimeSinceLastActivity = (
-  lastTimestamp: number,
-  currentTime: Date,
-): string | null => {
-  if (!lastTimestamp || isNaN(lastTimestamp)) return null;
+const getTimeSinceLastActivity = formatTimeSince;
 
-  const now = currentTime.getTime();
-  const diffMinutes = Math.floor((now - lastTimestamp) / (1000 * 60));
-
-  if (diffMinutes < 0) return null;
-  if (diffMinutes === 0) return "à l'instant";
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  const remainingMinutes = diffMinutes % 60;
-
-  if (diffHours > 0) {
-    return `il y a ${diffHours}h${remainingMinutes > 0 ? `${remainingMinutes}` : ""}`;
+/** Libellé lu par le lecteur d'écran : titre, résumé puis « il y a … ». */
+export function buildStatsGroupA11yLabel({
+  title,
+  summary,
+  timeSince,
+  timeSinceLabel,
+}: {
+  title: string;
+  summary: string;
+  timeSince?: string;
+  timeSinceLabel?: string;
+}): string {
+  const parts = [title, summary];
+  if (timeSince) {
+    parts.push(timeSinceLabel ? `${timeSinceLabel} ${timeSince}` : timeSince);
   }
-
-  return `il y a ${diffMinutes}min`;
-};
+  return parts.filter(Boolean).join(", ");
+}
 
 // ============================================
 // COMPONENT
@@ -165,6 +169,16 @@ export const StatsGroup = memo(function StatsGroup({
       toggleExpanded();
     }
   }, [onHeaderPress, toggleExpanded]);
+
+  // Un seul élément accessible (P2-11) : l'en-tête porte l'état déplié ; quand
+  // l'en-tête a sa propre action, le dépliage passe par une action nommée.
+  const handleAccessibilityAction = useCallback(
+    (event: { nativeEvent: { actionName: string } }) => {
+      if (event.nativeEvent.actionName === "toggle") toggleExpanded();
+      else if (event.nativeEvent.actionName === "activate") handleHeaderPress();
+    },
+    [toggleExpanded, handleHeaderPress],
+  );
 
   const renderIcon = (
     iconName: string,
@@ -258,8 +272,29 @@ export const StatsGroup = memo(function StatsGroup({
         ]}
         onPress={handleHeaderPress}
         accessibilityRole="button"
-        accessibilityLabel={`${title}: ${summary}`}
-        accessibilityHint="Appuyez pour voir les détails"
+        accessibilityLabel={buildStatsGroupA11yLabel({
+          title,
+          summary,
+          timeSince,
+          timeSinceLabel,
+        })}
+        accessibilityHint={
+          onHeaderPress
+            ? undefined
+            : expanded
+              ? "Masque le détail"
+              : "Affiche le détail"
+        }
+        accessibilityState={{ expanded }}
+        accessibilityActions={
+          onHeaderPress
+            ? [
+                { name: "activate" },
+                { name: "toggle", label: expanded ? "Réduire" : "Développer" },
+              ]
+            : undefined
+        }
+        onAccessibilityAction={onHeaderPress ? handleAccessibilityAction : undefined}
       >
         <View style={[styles.iconContainer, { backgroundColor: getBackgroundTint(color, 0.08) }]}>
           {renderIcon(icon, iconType, 22, color)}
@@ -267,21 +302,15 @@ export const StatsGroup = memo(function StatsGroup({
 
         <View style={styles.headerContent}>
           <Text style={[styles.title, { color: nc.textLight }]}>{title}</Text>
-          {typeof summary === "string" ? (
-            <Text
-              style={[
-                styles.summary,
-                { color: nc.textStrong },
-                isWarning && { color: nc.errorText },
-              ]}
-            >
-              {summary}
-            </Text>
-          ) : (
-            <View style={isWarning ? { opacity: 0.8 } : undefined}>
-              {summary}
-            </View>
-          )}
+          <Text
+            style={[
+              styles.summary,
+              { color: nc.textStrong },
+              isWarning && { color: nc.errorText },
+            ]}
+          >
+            {summary}
+          </Text>
           {(lastActivity || timeSince) && (
             <>
               {timeSince && (
@@ -302,21 +331,39 @@ export const StatsGroup = memo(function StatsGroup({
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable
-            style={styles.expandButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              toggleExpanded();
-            }}
-            hitSlop={8}
-            accessibilityLabel={expanded ? "Réduire" : "Développer"}
-          >
-            <Ionicons
-              name={expanded ? "chevron-up" : "chevron-down"}
-              size={20}
-              color={nc.textMuted}
-            />
-          </Pressable>
+          {onHeaderPress ? (
+            // L'en-tête fait autre chose : le chevron garde son appui au doigt,
+            // mais reste masqué au lecteur d'écran (action « Développer »).
+            <Pressable
+              style={styles.expandButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                toggleExpanded();
+              }}
+              hitSlop={8}
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Ionicons
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={nc.textMuted}
+              />
+            </Pressable>
+          ) : (
+            // Décoratif : tout l'en-tête déplie.
+            <View
+              style={styles.expandButton}
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Ionicons
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={nc.textMuted}
+              />
+            </View>
+          )}
         </View>
       </Pressable>
 
@@ -351,7 +398,12 @@ export const StatsGroup = memo(function StatsGroup({
                 }
                 disabled={isItemDisabled}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.label}: ${item.value} ${item.unit || ""}`}
+                accessibilityLabel={[
+                  `${item.label}, ${item.value}${item.unit ? ` ${item.unit}` : ""}`,
+                  itemTimeSince,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
               >
                 <View
                   style={[
@@ -359,6 +411,8 @@ export const StatsGroup = memo(function StatsGroup({
                     { backgroundColor: getBackgroundTint(item.color, 0.06) },
                   ]}
                 >
+                  {/* La couleur de catégorie reste un repère (pastille), jamais
+                      la couleur du chiffre : corail 2,9:1, doré 1,7:1 sur blanc. */}
                   {renderIcon(item.icon, item.iconType, 16, item.color)}
                 </View>
                 <View style={styles.itemContent}>
@@ -372,7 +426,7 @@ export const StatsGroup = memo(function StatsGroup({
                   )}
                 </View>
                 <View style={styles.itemValue}>
-                  <Text style={[styles.itemValueText, { color: item.color }]}>
+                  <Text style={[styles.itemValueText, { color: nc.textStrong }]}>
                     {item.value}
                   </Text>
                   {item.unit && (
@@ -399,8 +453,8 @@ export const StatsGroup = memo(function StatsGroup({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    shadowColor: "#000",
+    borderRadius: radius.lg,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -410,8 +464,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 12,
+    padding: space.md,
+    gap: space.sm,
   },
   iconContainer: {
     width: 48,
@@ -441,10 +495,10 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   expandButton: {
-    padding: 12,
+    padding: space.sm,
     margin: -8,
   },
   itemsContainer: {
@@ -453,9 +507,10 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    minHeight: 48,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    gap: space.sm,
   },
   itemBorder: {
     borderBottomWidth: 1,
@@ -496,8 +551,8 @@ const styles = StyleSheet.create({
   skeletonRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 12,
+    padding: space.md,
+    gap: space.sm,
   },
   skeletonIcon: {
     width: 48,
@@ -507,7 +562,7 @@ const styles = StyleSheet.create({
   },
   skeletonContent: {
     flex: 1,
-    gap: 8,
+    gap: space.xs,
   },
   skeletonTitle: {
     height: 14,
@@ -518,7 +573,7 @@ const styles = StyleSheet.create({
   skeletonSummary: {
     height: 20,
     width: "70%",
-    borderRadius: 8,
+    borderRadius: radius.sm,
     overflow: "hidden",
   },
   shimmerOverlay: {

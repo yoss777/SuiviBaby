@@ -1,12 +1,15 @@
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity
 } from "react-native";
+import { pressedOpacity, usePressRipple } from "./pressFeedback";
 
 // ============================================
 // TYPES
@@ -31,20 +34,30 @@ export function LoadMoreButton({
   onPress,
   text = "Charger plus de résultats",
   endText = "📅 Fin de l'historique",
-  accentColor = "#4A90E2",
+  accentColor: accentColorProp,
 }: LoadMoreButtonProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const accentColor = accentColorProp ?? Colors[colorScheme].tint;
+  const ripple = usePressRipple();
 
   if (!hasMore) {
     return null;
   }
 
   return (
-    <TouchableOpacity
-      style={[styles.loadMoreButton, { borderColor: accentColor, backgroundColor: nc.backgroundCard }]}
+    <Pressable
+      style={({ pressed }) => [
+        styles.loadMoreButton,
+        { borderColor: accentColor, backgroundColor: nc.backgroundCard },
+        pressedOpacity(pressed),
+      ]}
+      android_ripple={ripple}
       onPress={onPress}
       disabled={loading}
+      accessibilityRole="button"
+      accessibilityLabel={loading ? "Chargement en cours" : text}
+      accessibilityState={{ busy: loading, disabled: loading }}
     >
       {loading ? (
         <ActivityIndicator color={accentColor} size="small" />
@@ -60,7 +73,7 @@ export function LoadMoreButton({
           </Text>
         </>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -73,12 +86,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    padding: 16,
-    marginTop: 8,
+    gap: space.xs,
+    padding: space.md,
+    marginTop: space.xs,
     // marginHorizontal: 16,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: radius.md,
+    overflow: "hidden", // borne le ripple Android au bouton
     // backgroundColor applied dynamically via nc.backgroundCard
   },
   loadMoreText: {
@@ -87,12 +101,11 @@ const styles = StyleSheet.create({
   },
   endContainer: {
     alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.md,
   },
   endText: {
     fontSize: 14,
-    color: "#6b7280",
     fontWeight: "500",
   },
 });

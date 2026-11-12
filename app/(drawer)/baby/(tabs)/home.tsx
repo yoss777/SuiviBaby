@@ -8,21 +8,28 @@ import {
   TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { NursingInProgressBanner } from "@/components/suivibaby/dashboard/NursingInProgressBanner";
 import { ReminderWarningWatcher } from "@/components/suivibaby/dashboard/ReminderWarningWatcher";
 import { flatInDark } from "@/constants/theme";
 import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   getCategoryColors,
   getNeutralColors,
   itemColors,
 } from "@/constants/dashboardColors";
-import { MOMENT_REPAS_LABELS, MOOD_EMOJIS } from "@/constants/dashboardConfig";
+import {
+  MOMENT_REPAS_LABELS,
+  MOOD_EMOJIS,
+  MOOD_LABELS,
+} from "@/constants/dashboardConfig";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useNightMode } from "@/hooks/useNightMode";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useCanManageContent } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -65,7 +72,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { HomeSkeleton } from "@/components/suivibaby/home/HomeSkeleton";
@@ -73,6 +80,7 @@ import { HomeSmartContent } from "@/components/suivibaby/home/HomeSmartContent";
 import { HomeMilestoneCelebration } from "@/components/suivibaby/home/HomeMilestoneCelebration";
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 import { startLoop } from "@/utils/motion";
+import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -177,11 +185,15 @@ interface TodayStats {
 // ============================================
 
 export default function HomeDashboard() {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { push: guardedPush } = useGuardedNavigation();
   const { activeChild, reminderPreferences } = useBaby();
   const { firstTrack } = useLocalSearchParams<{ firstTrack?: string }>();
   const [showFirstTrackGuide, setShowFirstTrackGuide] = useState(firstTrack === "true");
   const colorScheme = useColorScheme() ?? "light";
+  // La nuit (22 h – 7 h), l'Accueil va à l'essentiel : pas de conseils éditoriaux.
+  const { isNightMode, animations: nightAnimations } = useNightMode();
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
@@ -209,11 +221,7 @@ export default function HomeDashboard() {
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const lastBackPressRef = useRef(0);
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: any | null;
-  }>({ visible: false, event: null });
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const softDeletedIdsRef = useRef<Set<string>>(new Set());
   // Keep ref in sync with state for use in closures (scheduleMerge)
   softDeletedIdsRef.current = softDeletedIds;
@@ -362,44 +370,21 @@ export default function HomeDashboard() {
       showToast('Enregistrement en cours...');
       return;
     }
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    setDeleteConfirm({ visible: false, event: null });
-    // P5: soft-delete + undo
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-    const childId = activeChild.id;
+    if (!activeChild?.id || !event?.id) return;
+    // Suppression unitaire immédiate et annulable (toast « Annuler » 8 s), sans
+    // modale préalable : rien n'est perdu tant que le toast est affiché.
     // La suppression part après le délai d'annulation, ou tout de suite si
     // l'app passe en arrière-plan ; « Réessayer » relance sans fermeture périmée.
-    scheduleDelete({
+    const eventId = event.id as string;
+    const childId = activeChild.id;
+    softDeleteNow({
+      id: eventId,
       message: "Événement supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -410,11 +395,6 @@ export default function HomeDashboard() {
       const handleBackPress = () => {
         if (showMilestonesModal) {
           setShowMilestonesModal(false);
-          return true;
-        }
-
-        if (deleteConfirm.visible) {
-          cancelDelete();
           return true;
         }
 
@@ -438,7 +418,7 @@ export default function HomeDashboard() {
         subscription.remove();
         lastBackPressRef.current = 0;
       };
-    }, [cancelDelete, deleteConfirm.visible, showMilestonesModal, showToast]),
+    }, [showMilestonesModal, showToast]),
   );
 
   const formatTime = useCallback((date: Date) => {
@@ -708,7 +688,8 @@ export default function HomeDashboard() {
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const hasActiveWidget = !!sommeilEnCours || !!promenadeEnCours;
-    if (hasActiveWidget) {
+    // Respiration décorative : coupée la nuit et avec « Réduire les animations ».
+    if (hasActiveWidget && nightAnimations.decorative) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(sharedPulseAnim, {
@@ -730,7 +711,7 @@ export default function HomeDashboard() {
     } else {
       sharedPulseAnim.setValue(1);
     }
-  }, [!!sommeilEnCours, !!promenadeEnCours, sharedPulseAnim]);
+  }, [!!sommeilEnCours, !!promenadeEnCours, sharedPulseAnim, nightAnimations.decorative]);
 
   // ============================================
   // STATS GROUPS DATA
@@ -738,7 +719,7 @@ export default function HomeDashboard() {
 
   // Alimentation Group
   const alimentationGroup = useMemo((): {
-    summary: React.ReactNode;
+    summary: string;
     timeSinceTimestamp?: number;
     timeSinceLabel?: string;
     lastTime?: string;
@@ -813,8 +794,8 @@ export default function HomeDashboard() {
         : undefined;
 
     const summaryParts = [`${mealCount} repas`];
-    if (biberonQty > 0) summaryParts.push(`${biberonQty}ml bib`);
-    if (pompageQty > 0) summaryParts.push(`${pompageQty}ml pomp`);
+    if (biberonQty > 0) summaryParts.push(`${biberonQty}\u00A0ml biberon`);
+    if (pompageQty > 0) summaryParts.push(`${pompageQty}\u00A0ml tiré`);
     const summaryNode = summaryParts.join(" · ");
 
     return {
@@ -1106,6 +1087,15 @@ export default function HomeDashboard() {
       sommeilEnCours,
     });
   }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
+
+  // Reprise de la tétée en cours : la feuille Repas reprend le brouillon du chrono.
+  const handleResumeNursing = useCallback(() => {
+    openSheetRaw({
+      ownerId: headerOwnerId.current,
+      formType: "meals",
+      mealType: "tetee",
+    });
+  }, [openSheetRaw]);
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {
@@ -1682,7 +1672,10 @@ export default function HomeDashboard() {
         {/* En-tête avec salutation */}
         <View style={styles.headerRow}>
           <View style={styles.header}>
-            <Text style={[styles.greeting, { color: nc.textStrong }]}>
+            <Text
+              style={[styles.greeting, { color: nc.textStrong }]}
+              accessibilityRole="header"
+            >
               {getGreeting()}
             </Text>
             <Text style={[styles.date, { color: nc.textLight }]}>
@@ -1700,53 +1693,21 @@ export default function HomeDashboard() {
           <FirstTrackGuide onDismiss={() => setShowFirstTrackGuide(false)} />
         )}
 
-        {/* Tips carousel — skeleton while loading (P1) */}
-        {isDataLoaded && smartContent.isLoading && (
-          <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
-            <View
-              style={{
-                height: 140,
-                borderRadius: 12,
-                backgroundColor: nc.borderLight,
-              }}
-              accessibilityLabel="Chargement des conseils"
-            />
-          </View>
+        {/* Tétée en cours (brouillon du chrono) : un appui la reprend */}
+        {canManageContent && (
+          <NursingInProgressBanner
+            childId={activeChild?.id}
+            onResume={handleResumeNursing}
+            colorScheme={colorScheme}
+          />
         )}
-
-        {/* Tips carousel — hero position */}
-        {isDataLoaded &&
-          !smartContent.isLoading &&
-          smartContent.availableTips.length > 0 && (
-            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
-              <TipsCarousel
-                tips={smartContent.availableTips}
-                bookmarkedIds={smartContent.userContent.bookmarks}
-                onRead={(tip) => {
-                  openSheetRaw({
-                    ownerId: activeChild?.id ?? "",
-                    formType: "content" as const,
-                    tipId: tip.id,
-                  });
-                }}
-                onDismiss={smartContent.dismissTip}
-                onBookmark={(tipId) => {
-                  if (smartContent.userContent.bookmarks.includes(tipId)) {
-                    smartContent.removeBookmark(tipId);
-                  } else {
-                    smartContent.bookmarkTip(tipId);
-                  }
-                }}
-                colorScheme={colorScheme}
-              />
-            </View>
-          )}
 
         {/* Résumé du jour */}
         <View style={styles.section}>
           <View>
             <Text
               style={[styles.sectionTitle, { color: nc.textStrong }]}
+              accessibilityRole="header"
             >{`Résumé d'aujourd'hui`}</Text>
           </View>
 
@@ -1853,14 +1814,19 @@ export default function HomeDashboard() {
                   <Text style={[styles.moodLabel, { color: nc.textLight }]}>
                     Humeur du jour
                   </Text>
-                  <View style={styles.moodEmojisRow}>
+                  <View
+                    style={styles.moodEmojisRow}
+                    accessibilityRole="radiogroup"
+                    accessibilityLabel="Humeur du jour"
+                  >
                     {Object.entries(MOOD_EMOJIS).map(([key, emoji]) => {
                       const moodValue = Number(key) as 1 | 2 | 3 | 4 | 5;
                       const isSelected = todayMoodEvent?.humeur === moodValue;
                       return (
-                        <TouchableOpacity
+                        <Pressable
+                          android_ripple={ripple}
                           key={key}
-                          style={[
+                          style={({ pressed }) => [
                             styles.moodEmojiButton,
                             { backgroundColor: nc.backgroundCard },
                             isSelected && [
@@ -1870,14 +1836,20 @@ export default function HomeDashboard() {
                                 borderColor: cat.moments.primary,
                               },
                             ],
+                            pressedOpacity(pressed),
                           ]}
                           onPress={() => handleSetMood(moodValue)}
-                          activeOpacity={0.7}
-                          accessibilityLabel={`Humeur ${moodValue} sur 5`}
-                          accessibilityState={{ selected: isSelected }}
+                          accessibilityRole="radio"
+                          accessibilityLabel={MOOD_LABELS[moodValue]}
+                          accessibilityState={{ checked: isSelected }}
                         >
-                          <Text style={styles.moodEmojiText}>{emoji}</Text>
-                        </TouchableOpacity>
+                          <Text
+                            style={styles.moodEmojiText}
+                            maxFontSizeMultiplier={1.5}
+                          >
+                            {emoji}
+                          </Text>
+                        </Pressable>
                       );
                     })}
                   </View>
@@ -1886,6 +1858,37 @@ export default function HomeDashboard() {
             </StaggeredCard>
           )}
         </View>
+
+        {/* Conseils : sous le résumé du jour (la question de 3 h du matin est
+            « à quelle heure était le dernier repas ? »), masqués la nuit. Pas de
+            squelette réservé : il disparaissait sans conseil et décalait l'écran. */}
+        {isDataLoaded &&
+          !isNightMode &&
+          !smartContent.isLoading &&
+          smartContent.availableTips.length > 0 && (
+            <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+              <TipsCarousel
+                tips={smartContent.availableTips}
+                bookmarkedIds={smartContent.userContent.bookmarks}
+                onRead={(tip) => {
+                  openSheetRaw({
+                    ownerId: activeChild?.id ?? "",
+                    formType: "content" as const,
+                    tipId: tip.id,
+                  });
+                }}
+                onDismiss={smartContent.dismissTip}
+                onBookmark={(tipId) => {
+                  if (smartContent.userContent.bookmarks.includes(tipId)) {
+                    smartContent.removeBookmark(tipId);
+                  } else {
+                    smartContent.bookmarkTip(tipId);
+                  }
+                }}
+                colorScheme={colorScheme}
+              />
+            </View>
+          )}
 
         {/* Smart Content: Insights + Correlations + Milestones */}
         {isDataLoaded && !smartContent.isLoading && (
@@ -1934,18 +1937,7 @@ export default function HomeDashboard() {
         childName={activeChild?.name}
         events={allEventsForInsights}
         weeklyLoaded={weeklyLoaded}
-        blocked={showFirstTrackGuide || showMilestonesModal || deleteConfirm.visible}
-      />
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Supprimer cet événement ?"
-        message="Cette action est irréversible."
-        confirmText="Supprimer"
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmButtonColor={nc.error}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
+        blocked={showFirstTrackGuide || showMilestonesModal}
       />
 
       {/* Milestones Timeline Modal */}
@@ -1960,14 +1952,16 @@ export default function HomeDashboard() {
             <Text style={[styles.milestonesModalTitle, { color: nc.textStrong }]}>
               {"Jalons de développement"}
             </Text>
-            <TouchableOpacity
+            <Pressable
+              android_ripple={rippleBorderless}
+              style={({ pressed }) => pressedOpacity(pressed, 0.2)}
               onPress={() => setShowMilestonesModal(false)}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
             >
               <Ionicons name="close" size={24} color={nc.textStrong} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <MilestoneTimeline
             milestones={smartContent.allMilestones}

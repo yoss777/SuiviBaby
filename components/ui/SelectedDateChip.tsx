@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text } from "react-native";
@@ -44,8 +45,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
     borderWidth: 1,
   },
   text: {

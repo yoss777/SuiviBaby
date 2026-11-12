@@ -1,10 +1,12 @@
 // components/suivibaby/dashboard/PromenadeWidget.tsx
 // Unified layout — same container size whether active or inactive
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { flatInDark } from "@/constants/theme";
 import { eventColors } from "@/constants/eventColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { useAnnounceActiveChange } from "@/hooks/useAnnounceActiveChange";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef } from "react";
@@ -13,10 +15,12 @@ import {
   Easing,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { isNightHour } from "@/utils/decorativeMotion";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
@@ -55,11 +59,14 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   sharedPulseAnim,
 }: PromenadeWidgetProps) {
   // S7.6 : tick à la minute isolé dans le widget (actif seulement si en cours).
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
       ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
       : elapsedMinutesProp;
+  useAnnounceActiveChange(isActive, "Promenade démarrée", "Promenade terminée");
   const nc = getNeutralColors(colorScheme);
   const accentColor = eventColors.activite.dark;
   const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46";
@@ -73,9 +80,11 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     busy.current = false;
   }, [isActive]);
 
+  // Respiration décorative : coupée la nuit (Réduire les animations : startLoop).
+  const pulseAllowed = !isNightHour(currentTime);
   useEffect(() => {
     if (sharedPulseAnim) return;
-    if (isActive) {
+    if (isActive && pulseAllowed) {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(ownPulseAnim, {
@@ -97,7 +106,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     } else {
       ownPulseAnim.setValue(1);
     }
-  }, [isActive, ownPulseAnim, sharedPulseAnim]);
+  }, [isActive, ownPulseAnim, pulseAllowed, sharedPulseAnim]);
 
   const handleStart = useCallback(() => {
     if (busy.current) return;
@@ -169,14 +178,16 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           {isActive ? "Promenade en cours" : "Démarrer une promenade"}
         </Text>
         {!isActive && (
-          <TouchableOpacity
+          <Pressable
+            android_ripple={rippleBorderless}
             onPress={handleStart}
-            style={styles.playButton}
+            style={({ pressed }) => [styles.playButton, pressedOpacity(pressed, 0.2)]}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             accessibilityRole="button"
             accessibilityLabel="Démarrer une promenade"
           >
             <FontAwesome name="play" size={12} color={accentColor} />
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
 
@@ -185,7 +196,8 @@ export const PromenadeWidget = memo(function PromenadeWidget({
         <>
           <Text
             style={[styles.timerValue, { color: textColor }]}
-            accessibilityLiveRegion="polite"
+            // Pas de live region : le minuteur change chaque minute et TalkBack
+            // l'annoncerait en continu. L'annonce se fait au démarrage/à l'arrêt.
           >
             {formatDuration(elapsedMinutes)}
           </Text>
@@ -196,8 +208,12 @@ export const PromenadeWidget = memo(function PromenadeWidget({
           )}
           {showStopButton && (
             <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: accentColor }]}
+              <Pressable
+                android_ripple={ripple}
+                style={({ pressed }) => [
+                  styles.actionButton, { backgroundColor: accentColor },
+                  pressedOpacity(pressed, 0.2),
+                ]}
                 onPress={handleStop}
                 accessibilityRole="button"
                 accessibilityLabel="Terminer la promenade"
@@ -211,23 +227,24 @@ export const PromenadeWidget = memo(function PromenadeWidget({
                 >
                   Terminer
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
               {onEdit && (
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  android_ripple={ripple}
+                  style={({ pressed }) => [
                     styles.editButton,
                     {
                       backgroundColor: colorScheme === "dark" ? `${accentColor}15` : bgColor,
                       borderColor: `${accentColor}40`,
                     },
+                    pressedOpacity(pressed),
                   ]}
                   onPress={handleEdit}
-                  activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityLabel="Ajuster la promenade avant d'enregistrer"
                 >
                   <FontAwesome name="pen-to-square" size={15} color={accentColor} />
-                </TouchableOpacity>
+                </Pressable>
               )}
             </View>
           )}
@@ -239,10 +256,10 @@ export const PromenadeWidget = memo(function PromenadeWidget({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: space.md,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -259,7 +276,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   playButton: {
-    padding: 4,
+    padding: space.xxs,
   },
   timerValue: {
     marginTop: 6,
@@ -267,17 +284,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: space.xxs,
     fontSize: 12,
   },
   actionButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     // Largeur minimale : « Terminer » tient sur une ligne même si la carte est étroite
     minWidth: 96,
     minHeight: 44,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -289,13 +307,14 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
     marginTop: 10,
   },
   editButton: {
+    ...RIPPLE_CLIP,
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",

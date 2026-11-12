@@ -1,4 +1,5 @@
 // components/ui/SuccessAnimation.tsx
+import { radius, space } from "@/constants/tokens";
 import { useEffect } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -13,6 +14,7 @@ import { BlurView } from 'expo-blur';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import * as Haptics from 'expo-haptics';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { neutralColors } from "@/constants/dashboardColors";
 
 interface SuccessAnimationProps {
   visible: boolean;
@@ -26,7 +28,7 @@ export function SuccessAnimation({
   visible,
   onComplete,
   icon = 'check',
-  color = '#22c55e',
+  color = neutralColors.success,
   message,
 }: SuccessAnimationProps) {
   const scale = useSharedValue(0);
@@ -126,7 +128,7 @@ export function SuccessAnimation({
         <Animated.View style={[styles.container, containerStyle]}>
           <View style={[styles.circle, { backgroundColor: color }]}>
             <Animated.View style={iconStyle}>
-              <FontAwesome6 name={icon as any} size={48} color="#fff" solid />
+              <FontAwesome6 name={icon as any} size={48} color={neutralColors.white} solid />
             </Animated.View>
           </View>
           {message && (
@@ -172,26 +174,26 @@ const styles = StyleSheet.create({
   circle: {
     width: 120,
     height: 120,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 12,
   },
   messageContainer: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    marginTop: space.lg,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.sm,
     borderRadius: 14,
     borderWidth: 1,
     maxWidth: 280,
     overflow: 'hidden',
   },
   messageText: {
-    color: '#fff',
+    color: neutralColors.white,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',

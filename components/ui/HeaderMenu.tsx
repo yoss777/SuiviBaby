@@ -1,3 +1,4 @@
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -150,9 +151,9 @@ export function HeaderMenu({ items }: HeaderMenuProps) {
 
 const styles = StyleSheet.create({
   trigger: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.sm,
   },
   backdrop: {
     flex: 1,
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   menu: {
     position: "absolute",
     minWidth: 180,
-    borderRadius: 12,
+    borderRadius: radius.md,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -171,8 +172,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   menuItemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,

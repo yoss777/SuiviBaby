@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/PromoBanner.tsx
 // Contextual promotion banner for the dashboard
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors, promoAccent } from "@/constants/dashboardColors";
 import type { Promotion } from "@/types/promo";
 import { PROMO_TYPE_ICONS, PROMO_TYPE_LABELS } from "@/types/promo";
@@ -11,9 +12,10 @@ import {
   Clipboard,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface PromoBannerProps {
   promo: Promotion;
@@ -34,6 +36,8 @@ export const PromoBanner = memo(function PromoBanner({
   colorScheme = "light",
   transparent = false,
 }: PromoBannerProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const nc = getNeutralColors(colorScheme);
   const typeIcon = PROMO_TYPE_ICONS[promo.type] ?? "tag";
   const typeLabel = PROMO_TYPE_LABELS[promo.type] ?? promo.type;
@@ -56,16 +60,17 @@ export const PromoBanner = memo(function PromoBanner({
   }, [promo.promoCode, onCopyCode]);
 
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      android_ripple={ripple}
+      style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: transparent ? "transparent" : nc.backgroundCard,
           borderColor: PROMO_ACCENT + "40",
         },
+        pressedOpacity(pressed),
       ]}
       onPress={handlePress}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Offre : ${promo.title}`}
       accessibilityHint="Appuyez pour voir les détails de l'offre"
@@ -96,7 +101,9 @@ export const PromoBanner = memo(function PromoBanner({
           </View>
 
           {/* Dismiss */}
-          <TouchableOpacity
+          <Pressable
+            android_ripple={rippleBorderless}
+            style={({ pressed }) => pressedOpacity(pressed, 0.2)}
             onPress={handleDismiss}
             hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             accessibilityRole="button"
@@ -105,7 +112,7 @@ export const PromoBanner = memo(function PromoBanner({
             accessibilityState={{ disabled: false }}
           >
             <FontAwesome name="xmark" size={14} color={nc.textMuted} />
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         {/* Title */}
@@ -127,13 +134,14 @@ export const PromoBanner = memo(function PromoBanner({
         {/* Footer: promo code + CTA */}
         <View style={styles.footer}>
           {promo.promoCode && (
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.codeContainer,
                 { backgroundColor: nc.borderLight + "50" },
+                pressedOpacity(pressed),
               ]}
               onPress={handleCopyCode}
-              activeOpacity={0.7}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
               accessibilityRole="button"
               accessibilityLabel={`Code promo : ${promo.promoCode}. Appuyez pour copier`}
@@ -144,7 +152,7 @@ export const PromoBanner = memo(function PromoBanner({
               <Text style={[styles.codeText, { color: nc.textStrong }]}>
                 {promo.promoCode}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           )}
           <View
             style={[styles.ctaBadge, { backgroundColor: PROMO_ACCENT + "15" }]}
@@ -156,13 +164,13 @@ export const PromoBanner = memo(function PromoBanner({
           </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -172,18 +180,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 12,
+    padding: space.sm,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   iconCircle: {
     width: 28,
@@ -193,9 +201,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   typeBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: space.xs,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   typeText: {
     fontSize: 12,
@@ -207,7 +215,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     lineHeight: 20,
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   description: {
     fontSize: 13,
@@ -220,12 +228,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   codeContainer: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   codeText: {
     fontSize: 12,
@@ -236,7 +245,7 @@ const styles = StyleSheet.create({
   ctaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,

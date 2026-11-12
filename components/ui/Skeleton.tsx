@@ -3,6 +3,7 @@
 // rows. The shimmer is decorative, so it is switched off in night mode and
 // when the OS "reduce motion" setting is on (static blocks remain).
 // Screen readers get a single "Chargement" label instead of empty shapes.
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
@@ -125,18 +126,18 @@ export function SkeletonList({ rows = 3, avatar = false, style }: SkeletonListPr
 
 const styles = StyleSheet.create({
   list: {
-    gap: 12,
+    gap: space.sm,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
   },
   texts: {
     flex: 1,
-    gap: 8,
+    gap: space.xs,
   },
 });

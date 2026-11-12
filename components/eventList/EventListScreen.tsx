@@ -1,5 +1,6 @@
 // Écran générique de liste d'événements (repas, pompages, couches), piloté
 // par une config de module (components/eventList/configs).
+import { space } from "@/constants/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback } from "react";
@@ -29,6 +30,12 @@ import { Colors } from "@/constants/theme";
 import { useEventList } from "@/hooks/eventList/useEventList";
 import { isOptimisticId } from "@/hooks/eventList/useSoftDelete";
 import { formatDayLabel, formatSelectedDateLabel } from "@/utils/dayLabel";
+import {
+  ROW_LONG_PRESS_HINT,
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
 import type { EventGroup } from "@/utils/eventListGrouping";
 
 import { EventListSkeleton } from "./EventListSkeleton";
@@ -120,7 +127,7 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                   <DeleteAction
                     label={config.a11y.deleteAction}
                     onPress={() => requestDelete(item)}
-                    errorColor={nc.error}
+                    errorColor={nc.destructive}
                     whiteColor={nc.white}
                   />
                 )
@@ -134,6 +141,29 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
           <Pressable
             accessibilityRole={canManage ? "button" : undefined}
             accessibilityLabel={canManage ? config.a11y.row : undefined}
+            // Alternative au glissement : actions d'accessibilité et appui long.
+            accessibilityHint={canManage && !selectionMode ? ROW_LONG_PRESS_HINT : undefined}
+            accessibilityActions={
+              selectionMode
+                ? undefined
+                : buildRowAccessibilityActions({ canEdit: canManage, canDelete: deletable })
+            }
+            onAccessibilityAction={(e) =>
+              handleRowAccessibilityAction(e, {
+                onEdit: canManage ? () => openEdit(item) : undefined,
+                onDelete: deletable ? () => requestDelete(item) : undefined,
+              })
+            }
+            onLongPress={
+              canManage && !selectionMode
+                ? () =>
+                    showRowActionMenu({
+                      title: "Actions",
+                      onEdit: () => openEdit(item),
+                      onDelete: deletable ? () => requestDelete(item) : undefined,
+                    })
+                : undefined
+            }
             disabled={!canManage}
             style={({ pressed }) => [
               eventListStyles.sessionCard,
@@ -256,8 +286,8 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
 
   const modalColors =
     config.texts.modalTone === "card"
-      ? { backgroundColor: nc.backgroundCard, textColor: nc.textStrong, confirmButtonColor: nc.error }
-      : { backgroundColor: Colors[colorScheme].background, textColor: Colors[colorScheme].text };
+      ? { backgroundColor: nc.backgroundCard, textColor: nc.textStrong, confirmButtonColor: nc.destructive }
+      : { backgroundColor: Colors[colorScheme].surface, textColor: Colors[colorScheme].text };
 
   const { selectedDate } = filters;
   const batchCount = softDelete.batchDeleteConfirm.ids.length;
@@ -296,17 +326,16 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                 onDayPress={filters.handleDateSelect}
                 markedDates={filters.markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: tint,
-                  selectedDayTextColor:
-                    colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: Colors[colorScheme].onTint,
                   todayTextColor: tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
                   dotColor: tint,
-                  selectedDotColor: nc.white,
+                  selectedDotColor: Colors[colorScheme].onTint,
                   arrowColor: tint,
                   monthTextColor: Colors[colorScheme].text,
                   indicatorColor: tint,
@@ -348,8 +377,8 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
                 accessibilityRole="button"
                 accessibilityLabel={config.empty.ctaA11y}
               >
-                <Ionicons name="add" size={20} color={nc.white} />
-                <Text style={[styles.emptyCtaText, { color: nc.white }]}>{config.empty.ctaLabel}</Text>
+                <Ionicons name="add" size={20} color={Colors[colorScheme].onTint} />
+                <Text style={[styles.emptyCtaText, { color: Colors[colorScheme].onTint }]}>{config.empty.ctaLabel}</Text>
               </Pressable>
             )}
             {loadMoreButton}
@@ -373,16 +402,6 @@ export function EventListScreen<T extends BaseEvent, S extends object>({
         )}
       </SafeAreaView>
       <ConfirmModal
-        visible={softDelete.deleteConfirm.visible}
-        title={config.texts.deleteTitle}
-        message={config.texts.deleteMessage}
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        {...modalColors}
-        onCancel={softDelete.cancelDelete}
-        onConfirm={softDelete.confirmDelete}
-      />
-      <ConfirmModal
         visible={softDelete.batchDeleteConfirm.visible}
         title="Suppression groupée"
         message={config.texts.batchDeleteMessage(batchCount)}
@@ -405,20 +424,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   calendarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderBottomWidth: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
     paddingBottom: 80,
   },
   filterRowPadded: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 16,
+    paddingRight: space.md,
   },
 
   // Expand trigger
@@ -426,8 +445,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 12,
+    gap: space.xxs,
+    paddingVertical: space.sm,
     borderRadius: 14,
     borderWidth: 1,
   },
@@ -441,7 +460,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: space.xxl,
   },
   emptyIconWrapper: {
     width: 80,
@@ -449,7 +468,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   emptyTitle: {
     fontSize: 18,
@@ -465,10 +484,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
     borderRadius: 24,
-    marginTop: 20,
+    marginTop: space.lg,
   },
   emptyCtaText: {
     fontSize: 15,
@@ -479,11 +498,13 @@ const styles = StyleSheet.create({
   deleteAction: {
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    // Pas de hauteur minimale : la hauteur suit celle de la carte (alignée par
+    // marginBottom) ; un minimum faisait dépasser le rouge sous les cartes courtes.
     borderRadius: 14,
-    marginHorizontal: 4,
+    marginHorizontal: space.xxs,
     marginVertical: 1,
-    gap: 4,
+    gap: space.xxs,
   },
   deleteActionText: {
     fontSize: 12,

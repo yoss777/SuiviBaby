@@ -1180,7 +1180,7 @@ export default function ExportScreen() {
             </Text>
             {(isExporting || isLoading) && (
               <View
-                style={[styles.autoDeleteButton, { backgroundColor: nc.error }]}
+                style={[styles.autoDeleteButton, { backgroundColor: nc.destructive }]}
               >
                 <Text
                   style={[
@@ -1445,7 +1445,7 @@ export default function ExportScreen() {
               <Ionicons
                 name="cloud-download"
                 size={20}
-                color={colorScheme === "dark" ? nc.white : nc.backgroundCard}
+                color={nc.onTodayAccent}
               />
               <Text
                 style={[
@@ -1469,7 +1469,7 @@ export default function ExportScreen() {
               : modalConfig.message
           }
           confirmText={modalConfig.confirmText}
-          confirmButtonColor={modalConfig.onConfirm ? nc.error : undefined}
+          confirmButtonColor={modalConfig.onConfirm ? nc.destructive : undefined}
           backgroundColor={nc.backgroundCard}
           textColor={nc.textStrong}
           dismissText={

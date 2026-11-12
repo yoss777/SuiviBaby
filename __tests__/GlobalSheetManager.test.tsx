@@ -1,5 +1,5 @@
 // S8.3 — clé de montage des formulaires dans la feuille globale.
-import { act, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import React from "react";
 import { Text } from "react-native";
 
@@ -9,14 +9,35 @@ import { SheetProvider, useSheetActions } from "@/contexts/SheetContext";
 const mockMounts = jest.fn();
 let mockShouldCrash = false;
 let mockSheetCrash = false;
+const mockSheetProps: { current: Record<string, unknown> } = { current: {} };
 
 jest.mock("@/hooks/use-color-scheme", () => ({ useColorScheme: () => "light" }));
+jest.mock("@gorhom/bottom-sheet", () => {
+  const { View } = require("react-native");
+  return { __esModule: true, default: View, BottomSheetFooter: View };
+});
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+jest.mock("@/contexts/BabyContext", () => ({
+  useBaby: () => ({ activeChild: { id: "c1", name: "Léa" } }),
+}));
+const mockShowAlert = jest.fn();
+jest.mock("@/contexts/ModalContext", () => ({
+  useModal: () => ({ showAlert: mockShowAlert }),
+}));
 jest.mock("@/components/ui/FormBottomSheet", () => {
   const R = require("react");
   return {
-    FormBottomSheet: R.forwardRef(({ children }: any, _ref: any) => {
+    FormBottomSheet: R.forwardRef(({ children, footerComponent: Footer, ...rest }: any, _ref: any) => {
+      mockSheetProps.current = rest;
       if (mockSheetCrash) throw new Error("sheet crash");
-      return children;
+      return (
+        <>
+          {children}
+          {Footer ? <Footer animatedFooterPosition={{ value: 0 }} /> : null}
+        </>
+      );
     }),
   };
 });
@@ -24,12 +45,25 @@ jest.mock("@/components/forms/SoinsForm", () => {
   const R = require("react");
   const { Text: T } = require("react-native");
   return {
-    SoinsForm: ({ editData }: any) => {
+    SoinsForm: ({ editData, onCancel }: any) => {
+      const { Pressable: P } = require("react-native");
+      const { useFormDirtyGuard } = require("@/components/forms/formGuard");
+      const { SheetFooter } = require("@/components/forms/SheetFooter");
+      const [note, setNote] = R.useState("");
+      useFormDirtyGuard({ note });
       R.useEffect(() => {
         mockMounts(editData?.id ?? "new");
       }, []);
       if (mockShouldCrash) throw new Error("form crash");
-      return <T>{`soins:${editData?.id ?? "new"}`}</T>;
+      return (
+        <>
+          <T>{`soins:${editData?.id ?? "new"}`}</T>
+          <P onPress={() => setNote("fièvre")}><T>saisir</T></P>
+          <SheetFooter>
+            <P onPress={onCancel}><T>annuler</T></P>
+          </SheetFooter>
+        </>
+      );
     },
   };
 });
@@ -127,5 +161,47 @@ describe("GlobalSheetManager", () => {
     act(() => actions.openSheet(soins("b")));
     expect(screen.getByText("soins:b")).toBeTruthy();
     spy.mockRestore();
+  });
+
+  it("rappelle l'enfant concerné en haut du formulaire", () => {
+    setup();
+    act(() => actions.openSheet(soins()));
+    expect(screen.getByLabelText("Saisie pour Léa")).toBeTruthy();
+  });
+
+  it("formulaire intact : Annuler ferme sans confirmation", () => {
+    mockShowAlert.mockClear();
+    setup();
+    act(() => actions.openSheet(soins()));
+    fireEvent.press(screen.getByText("annuler"));
+    expect(mockShowAlert).not.toHaveBeenCalled();
+    expect(screen.queryByText("soins:new")).toBeNull();
+  });
+
+  it("formulaire modifié : Annuler demande « Abandonner la saisie ? » avant de fermer", () => {
+    mockShowAlert.mockClear();
+    setup();
+    act(() => actions.openSheet(soins()));
+    fireEvent.press(screen.getByText("saisir"));
+    fireEvent.press(screen.getByText("annuler"));
+    expect(mockShowAlert).toHaveBeenCalledTimes(1);
+    const [title, , buttons] = mockShowAlert.mock.calls[0];
+    expect(title).toBe("Abandonner la saisie ?");
+    // Toujours ouverte tant que l'utilisateur n'a pas confirmé.
+    expect(screen.getByText("soins:new")).toBeTruthy();
+    const discard = buttons.find((b: any) => b.style === "destructive");
+    act(() => discard.onPress());
+    expect(screen.queryByText("soins:new")).toBeNull();
+  });
+
+  it("formulaire modifié : seule la fermeture par glissement est bloquée, pas l'agrandissement", () => {
+    setup();
+    act(() => actions.openSheet(soins()));
+    expect(mockSheetProps.current.enablePanDownToClose).toBe(true);
+    expect(mockSheetProps.current.enablePanGestures).toBe(true);
+    fireEvent.press(screen.getByText("saisir"));
+    expect(mockSheetProps.current.enablePanDownToClose).toBe(false);
+    // Glisser entre les crans (agrandir / réduire) reste possible.
+    expect(mockSheetProps.current.enablePanGestures).toBe(true);
   });
 });

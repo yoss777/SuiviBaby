@@ -8,7 +8,8 @@ import {
   getGalleryViewState,
 } from "@/components/gallery/galleryGrid";
 import { PhotoImage } from "@/components/ui/PhotoImage";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getAccentColors } from "@/components/ui/accentColors";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderLeft, useHeaderRight } from "../../_layout";
+import { useNightMode } from "@/hooks/useNightMode";
 import { startLoop } from "@/utils/motion";
 import { toDate } from "@/utils/date";
 
@@ -109,7 +111,7 @@ const NOTIF_ICON: Record<NotificationType, { name: string; solid: boolean }> = {
   like: { name: 'heart', solid: true },
   comment: { name: 'comment', solid: true },
 };
-const NOTIF_COLOR = '#E8A85A';
+const NOTIF_COLOR = itemColors.jalon;
 
 // ============================================
 // STYLES
@@ -224,7 +226,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   likeOverlayText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -249,14 +251,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: eventColors.jalon.dark,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
     marginTop: 24,
   },
   emptyStateButtonText: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -269,14 +269,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: eventColors.jalon.dark,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
     marginTop: 16,
   },
   retryButtonText: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -322,8 +320,14 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
 
   // Pulse animation for notification badge
   const badgePulse = useRef(new RNAnimated.Value(1)).current;
+  // Pulsation décorative : coupée la nuit et avec « Réduire les animations ».
+  const { animations } = useNightMode();
+  const pulseAllowed = animations.decorative;
   useEffect(() => {
-    if (!notificationType) return;
+    if (!notificationType || !pulseAllowed) {
+      badgePulse.setValue(1);
+      return;
+    }
     const loop = RNAnimated.loop(
       RNAnimated.sequence([
         RNAnimated.timing(badgePulse, { toValue: 1.25, duration: 800, useNativeDriver: true }),
@@ -332,7 +336,7 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
     );
     startLoop(loop);
     return () => loop.stop();
-  }, [notificationType, badgePulse]);
+  }, [notificationType, badgePulse, pulseAllowed]);
 
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -376,7 +380,7 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
           <FontAwesome6
             name={NOTIF_ICON[notificationType].name}
             size={8}
-            color="#fff"
+            color={neutralColors.white}
             solid={NOTIF_ICON[notificationType].solid}
           />
         </RNAnimated.View>
@@ -387,13 +391,13 @@ const PhotoThumbnail = React.memo(function PhotoThumbnail({
         <View style={styles.likeOverlay}>
           {hasLikes && (
             <>
-              <FontAwesome6 name="heart" size={8} color="#fff" solid />
+              <FontAwesome6 name="heart" size={8} color={neutralColors.white} solid />
               <Text style={styles.likeOverlayText}>{likeCount}</Text>
             </>
           )}
           {hasComments && (
             <>
-              <FontAwesome6 name="comment" size={8} color="#fff" solid />
+              <FontAwesome6 name="comment" size={8} color={neutralColors.white} solid />
               <Text style={styles.likeOverlayText}>{commentCount}</Text>
             </>
           )}
@@ -417,6 +421,7 @@ export default function GalleryScreen() {
   const { openSheet, closeSheet, isOpen } = useSheet();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
+  const jalonFill = getAccentColors(eventColors.jalon.dark, colorScheme);
   const { setHeaderLeft } = useHeaderLeft();
   const { setHeaderRight } = useHeaderRight();
   const headerOwnerId = useRef("gallery-header");
@@ -919,9 +924,9 @@ export default function GalleryScreen() {
         <FontAwesome6 name="triangle-exclamation" size={32} color={nc.warning} />
         <Text style={[styles.errorTitle, { color: nc.textStrong }]}>Impossible de charger</Text>
         <Text style={[styles.loadingText, { color: nc.textLight }]}>Vérifiez votre connexion</Text>
-        <Pressable onPress={handleRetry} style={styles.retryButton} accessibilityRole="button" accessibilityLabel="Réessayer le chargement">
-          <FontAwesome6 name="arrow-rotate-right" size={14} color="#fff" />
-          <Text style={styles.retryButtonText}>Réessayer</Text>
+        <Pressable onPress={handleRetry} style={[styles.retryButton, { backgroundColor: jalonFill.filledBg }]} accessibilityRole="button" accessibilityLabel="Réessayer le chargement">
+          <FontAwesome6 name="arrow-rotate-right" size={14} color={jalonFill.filledText} />
+          <Text style={[styles.retryButtonText, { color: jalonFill.filledText }]}>Réessayer</Text>
         </Pressable>
       </View>
     );
@@ -951,9 +956,9 @@ export default function GalleryScreen() {
                 : "Les souvenirs partagés apparaîtront ici"}
             </Text>
             {canManageContent && (
-              <Pressable onPress={handleAddPhoto} style={styles.emptyStateButton} accessibilityRole="button" accessibilityLabel="Ajouter un souvenir photo">
-                <FontAwesome6 name="camera" size={16} color="#fff" />
-                <Text style={styles.emptyStateButtonText}>
+              <Pressable onPress={handleAddPhoto} style={[styles.emptyStateButton, { backgroundColor: jalonFill.filledBg }]} accessibilityRole="button" accessibilityLabel="Ajouter un souvenir photo">
+                <FontAwesome6 name="camera" size={16} color={jalonFill.filledText} />
+                <Text style={[styles.emptyStateButtonText, { color: jalonFill.filledText }]}>
                   Ajouter un souvenir
                 </Text>
               </Pressable>

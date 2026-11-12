@@ -4,7 +4,9 @@
 // relocation, no logic change. Imported as `homeStyles` so the rename
 // stays explicit on the consumer side.
 
+import { radius, space } from "@/constants/tokens";
 import { StyleSheet } from "react-native";
+import { neutralColors } from "@/constants/dashboardColors";
 
 export const homeStyles = StyleSheet.create({
   screen: {
@@ -17,49 +19,50 @@ export const homeStyles = StyleSheet.create({
     paddingBottom: 100,
   },
   headerRow: {
-    marginBottom: 8,
+    marginBottom: space.xs,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginRight: 50,
   },
   header: {
-    padding: 20,
+    padding: space.lg,
     paddingBottom: 10,
   },
+  // Salutation réduite (28 → 22) : le résumé du jour reste le premier repère.
   greeting: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   date: {
     fontSize: 16,
     textTransform: "capitalize",
   },
   section: {
-    marginBottom: 8,
+    marginBottom: space.xs,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: space.lg,
+    marginBottom: space.md,
   },
   sectionTitleInline: {
     marginHorizontal: 0,
     marginBottom: 0,
   },
   statsGroupContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingHorizontal: space.lg,
+    marginBottom: space.sm,
   },
   // Mood card styles
   moodCard: {
-    borderRadius: 16,
+    borderRadius: radius.lg,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -75,11 +78,13 @@ export const homeStyles = StyleSheet.create({
   moodEmojisRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 4,
+    gap: space.xxs,
   },
   moodEmojiButton: {
     flex: 1,
-    height: 44,
+    // minHeight et non height : l'emoji n'est pas coupé en grande taille de texte.
+    minHeight: 44,
+    paddingVertical: space.xxs,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 10,
@@ -94,9 +99,9 @@ export const homeStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
   },
   milestonesModalTitle: {
     fontSize: 20,

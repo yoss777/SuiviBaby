@@ -1,4 +1,4 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
@@ -22,7 +22,7 @@ import {
 import { AddChildModal } from "@/components/suivibaby/AddChildModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getBackgroundTint, getChartColors, getNeutralColors } from "@/constants/dashboardColors";
+import { getBackgroundTint, getChartColors, getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
@@ -303,7 +303,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                     accessibilityRole="button"
                     accessibilityLabel={`Partager ${child.name}`}
                   >
-                    <FontAwesome name="share-alt" size={16} color={nc.todayAccent} />
+                    <FontAwesome name="share-nodes" size={16} color={nc.todayAccent} />
                   </TouchableOpacity>
                 )}
 
@@ -400,7 +400,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel="Ouvrir les paramètres"
         >
           <View style={styles.buttonContent}>
-            <FontAwesome name="cog" size={14} color={Colors[colorScheme].tint} />
+            <FontAwesome name="gear" size={14} color={Colors[colorScheme].tint} />
             <Text
               style={[styles.settingsText, { color: colorScheme === "dark" ? nc.white : Colors[colorScheme].tint }]}
             >
@@ -416,7 +416,7 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel="Déconnexion"
         >
           <View style={styles.buttonContent}>
-            <FontAwesome name="sign-out-alt" size={14} color={nc.error} />
+            <FontAwesome name="right-from-bracket" size={14} color={nc.error} />
             <Text style={[styles.signOutText, { color: nc.errorText }]}>
               Déconnexion
             </Text>
@@ -472,13 +472,13 @@ export function CustomDrawerContent(props: DrawerContentComponentProps) {
                 <Text style={[styles.cancelButtonText, { color: nc.textNormal }]}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: nc.error }]}
+                style={[styles.modalButton, { backgroundColor: nc.destructive }]}
                 onPress={confirmHideChild}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel="Confirmer masquer l'enfant"
               >
-                <Text style={[styles.deleteButtonText, { color: nc.white }]}>Masquer</Text>
+                <Text style={[styles.deleteButtonText, { color: nc.onDestructive }]}>Masquer</Text>
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
   modalContent: {
     borderRadius: 20,
     padding: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,

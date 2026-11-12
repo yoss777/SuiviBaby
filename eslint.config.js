@@ -25,7 +25,7 @@ const dynamicImportSelectors = (node, key) =>
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*'],
+    ignores: ['dist/*', '.claude/**'],
   },
   {
     // Règles React Compiler activées par eslint-config-expo 58 (montée Expo,

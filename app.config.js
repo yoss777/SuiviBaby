@@ -133,6 +133,9 @@ module.exports = ({ config: expoConfig }) => {
     extra: {
       ...expoConfig.extra,
       appEnv,
+      // Écrans d'aperçu internes : uniquement si SHOW_PREVIEWS=true (profil
+      // EAS interne dédié) ; absent ou autre valeur = masqués (stores).
+      showPreviews: process.env.SHOW_PREVIEWS === "true",
       firebase: resolveFirebaseWebConfig(appEnv),
       appCheck: {
         nativeConfigured: nativeAppCheckConfigured,

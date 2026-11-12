@@ -1,4 +1,5 @@
 import { useNetInfo } from "@react-native-community/netinfo";
+import { APP_NAME } from "@/constants/app";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { Drawer } from "expo-router/drawer";
 import {
@@ -15,9 +16,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { CustomDrawerContent } from "@/components/drawer/CustomDrawerContent";
 import { BabySwitcherModal } from "@/components/ui/BabySwitcherModal";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -57,7 +59,7 @@ function BabyHeaderTitle() {
           maxWidth: 200,
         }}
       >
-        {activeChild?.name || "Suivi Enfant"}
+        {activeChild?.name || APP_NAME}
       </Text>
       {hasMultiple && (
         <FontAwesome
@@ -79,7 +81,9 @@ function BabyHeaderTitle() {
         onPress={() => setShowSwitcher(true)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityRole="button"
-        accessibilityLabel="Changer d'enfant"
+        accessibilityLabel={
+          activeChild?.name ? `${activeChild.name}, changer d'enfant` : "Changer d'enfant"
+        }
       >
         {titleContent}
       </Pressable>
@@ -207,12 +211,12 @@ export default function DrawerLayout() {
         <View
           style={[
             styles.container,
-            { backgroundColor: Colors[colorScheme].background },
+            { backgroundColor: getNeutralColors(colorScheme).background },
           ]}
         >
           {isOffline && (
-            <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec" }]}>
-              <Text style={[styles.offlineText, { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" }]} accessibilityRole="alert">Hors ligne</Text>
+            <View style={[styles.offlineBanner, { paddingTop: insets.top, backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : neutralColors.errorBg }]}>
+              <Text style={[styles.offlineText, { color: getNeutralColors(colorScheme).errorText }]} accessibilityRole="alert">Hors ligne</Text>
             </View>
           )}
           {failedWrites > 0 && (
@@ -224,14 +228,14 @@ export default function DrawerLayout() {
                 styles.syncBanner,
                 {
                   paddingTop: isOffline ? 4 : insets.top + 4,
-                  backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : "#fdecec",
+                  backgroundColor: colorScheme === "dark" ? "rgba(153, 27, 27, 0.3)" : neutralColors.errorBg,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.syncText,
-                  { color: colorScheme === "dark" ? "#fca5a5" : "#b42318" },
+                  { color: getNeutralColors(colorScheme).errorText },
                 ]}
               >
                 {failedWrites > 1
@@ -296,14 +300,14 @@ export default function DrawerLayout() {
                     onPress={failed.deleteShown}
                     style={{ marginTop: 12 }}
                   >
-                    <Text style={{ color: "#b42318", fontWeight: "700" }}>Supprimer ces saisies</Text>
+                    <Text style={{ color: getNeutralColors(colorScheme).errorText, fontWeight: "700" }}>Supprimer ces saisies</Text>
                   </Pressable>
                 )}
               </View>
             }
             confirmText="Réessayer"
             dismissText="Fermer"
-            backgroundColor={Colors[colorScheme].background}
+            backgroundColor={Colors[colorScheme].surface}
             textColor={Colors[colorScheme].text}
             allowBackdropDismiss
             onClose={failed.close}
@@ -317,11 +321,12 @@ export default function DrawerLayout() {
               overlayAccessibilityLabel: "Fermer le menu",
               headerLeft: renderDrawerToggle,
               headerTintColor: Colors[colorScheme].text,
+              // En-tête et écran sur le même fond que les écrans (nc.background)
               headerStyle: {
-                backgroundColor: Colors[colorScheme].background,
+                backgroundColor: getNeutralColors(colorScheme).background,
               },
               sceneStyle: {
-                backgroundColor: Colors[colorScheme].background,
+                backgroundColor: getNeutralColors(colorScheme).background,
               },
             }}
           >

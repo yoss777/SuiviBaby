@@ -1,4 +1,4 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     borderRadius: 20,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -349,24 +349,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
     textAlign: "center",
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: eventColors.jalon.dark,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 50,
-  },
-  addButtonPressed: {
-    transform: [{ scale: 0.96 }],
-    opacity: 0.9,
-  },
-  addButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
   },
   toggleButton: {
     flexDirection: "row",

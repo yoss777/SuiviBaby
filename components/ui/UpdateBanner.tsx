@@ -1,7 +1,9 @@
 // components/ui/UpdateBanner.tsx
 // Dismissible banner prompting user to update the app
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { APP_NAME } from "@/constants/app";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -84,7 +86,7 @@ export const UpdateBanner = memo(function UpdateBanner({
       ]}
       accessibilityRole="alert"
       accessibilityLabel={`Nouvelle version ${latestVersion} disponible`}
-      accessibilityHint="Une mise à jour est disponible pour Suivi Baby"
+      accessibilityHint={`Une mise à jour est disponible pour ${APP_NAME}`}
     >
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: tint + "15" }]}>
@@ -108,7 +110,7 @@ export const UpdateBanner = memo(function UpdateBanner({
             accessibilityHint="Ouvre le store pour mettre à jour"
             accessibilityState={{ disabled: false }}
           >
-            <Text style={[styles.installText, { color: nc.background }]}>
+            <Text style={[styles.installText, { color: Colors[colorScheme].onTint }]}>
               {"Installer"}
             </Text>
           </TouchableOpacity>
@@ -139,7 +141,7 @@ const styles = StyleSheet.create({
     zIndex: 9998,
     borderBottomWidth: 1,
     paddingBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
   },
   content: {
     flexDirection: "row",
@@ -167,14 +169,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   installBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
     minHeight: 44,
     justifyContent: "center",
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   installText: {
     fontSize: 12,

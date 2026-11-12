@@ -1,7 +1,7 @@
 // app/(auth)/verify-email.tsx
 // Email verification screen — same visual language as forgot-password.tsx
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -171,7 +171,7 @@ export default function VerifyEmailScreen() {
             accessibilityLabel="J'ai vérifié mon e-mail"
             accessibilityState={{ disabled: checking }}
           >
-            <Text style={styles.mainButtonText}>
+            <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
               {checking ? "Vérification..." : "J'ai vérifié mon e-mail"}
             </Text>
           </TouchableOpacity>
@@ -195,7 +195,7 @@ export default function VerifyEmailScreen() {
             accessibilityHint="Renvoie un email de vérification à votre adresse"
             accessibilityState={{ disabled: !canResend }}
           >
-            <Text style={styles.mainButtonText}>
+            <Text style={[styles.mainButtonText, { color: nc.onTodayAccent }]}>
               {cooldown > 0
                 ? `Renvoyer dans ${cooldown}s`
                 : "Renvoyer l'email"}
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   mainButtonText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 18,
     fontWeight: "600",
   },

@@ -1,20 +1,28 @@
+import { radius, space } from "@/constants/tokens";
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
-import { ThemedText } from "@/components/themed-text";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
 import { SelectedDateChip } from "@/components/ui/SelectedDateChip";
 import { eventColors } from "@/constants/eventColors";
 import { MAX_AUTO_LOAD_ATTEMPTS } from "@/constants/pagination";
-import { getNeutralColors, getBackgroundTint } from "@/constants/dashboardColors";
+import {
+  getBackgroundTint,
+  getNeutralColors,
+  neutralColors,
+} from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -56,6 +64,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { configureLayoutAnimation, startLoop } from "@/utils/motion";
 import { getDateTime, toDate } from "@/utils/date";
+import { formatDecimalFr, toDecimalInputFr } from "@/utils/frenchNumber";
 import { runAfterInteractions } from "@/utils/afterInteractions";
 
 // Enable LayoutAnimation on Android
@@ -111,7 +120,7 @@ const DeleteAction = React.memo(function DeleteAction({
       accessibilityRole="button"
       accessibilityLabel="Supprimer cette mesure"
     >
-      <Ionicons name="trash-outline" size={20} color="#fff" />
+      <Ionicons name="trash-outline" size={20} color={neutralColors.onDestructive} />
       <Text style={styles.deleteActionText}>Supprimer</Text>
     </Pressable>
   );
@@ -273,14 +282,9 @@ export default function GrowthScreen() {
     transformMerged: sortMergedEvents,
   });
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: GrowthEventWithId | null;
-  }>({ visible: false, event: null });
-
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const [precedingEvent, setPrecedingEvent] = useState<GrowthEventWithId | null>(null);
 
@@ -353,7 +357,7 @@ export default function GrowthScreen() {
         const diff = current.poidsKg - prev.poidsKg;
         deltas.push({
           label: "kg",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -361,7 +365,7 @@ export default function GrowthScreen() {
         const diff = current.tailleCm - prev.tailleCm;
         deltas.push({
           label: "cm",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -369,7 +373,7 @@ export default function GrowthScreen() {
         const diff = current.teteCm - prev.teteCm;
         deltas.push({
           label: "PC",
-          value: `${diff > 0 ? "+" : ""}${diff.toFixed(1)}`,
+          value: `${diff > 0 ? "+" : ""}${formatDecimalFr(diff, 1)}`,
           positive: diff >= 0,
         });
       }
@@ -1016,9 +1020,9 @@ export default function GrowthScreen() {
   // ============================================
   const buildDetailParts = (event: GrowthEventWithId) => {
     const parts: { value: string; unit: string }[] = [];
-    if (event.poidsKg) parts.push({ value: `${event.poidsKg}`, unit: "kg" });
-    if (event.tailleCm) parts.push({ value: `${event.tailleCm}`, unit: "cm" });
-    if (event.teteCm) parts.push({ value: `${event.teteCm}`, unit: "cm PC" });
+    if (event.poidsKg) parts.push({ value: toDecimalInputFr(event.poidsKg), unit: "kg" });
+    if (event.tailleCm) parts.push({ value: toDecimalInputFr(event.tailleCm), unit: "cm" });
+    if (event.teteCm) parts.push({ value: toDecimalInputFr(event.teteCm), unit: "cm PC" });
     return parts;
   };
 
@@ -1041,45 +1045,19 @@ export default function GrowthScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Mesure supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerCroissance(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1132,9 +1110,6 @@ export default function GrowthScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const renderEventItem = (event: GrowthEventWithId, isLast = false, isFirstInList = false) => {
     const time = toDate(event.date);
@@ -1176,6 +1151,14 @@ export default function GrowthScreen() {
             ];
           }}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Mesure",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
           accessibilityRole="button"
           accessibilityLabel="Modifier cette mesure"
         >
@@ -1225,13 +1208,14 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#7c3aed", 0.1) }]}>
                         <FontAwesome name="weight-scale" size={10} color="#7c3aed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.poidsKg} kg
+                          {toDecimalInputFr(event.poidsKg)} kg
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1246,13 +1230,14 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint("#2f80ed", 0.1) }]}>
                         <FontAwesome name="ruler-vertical" size={10} color="#2f80ed" />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.tailleCm} cm
+                          {toDecimalInputFr(event.tailleCm)} cm
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1267,13 +1252,14 @@ export default function GrowthScreen() {
                       <View style={[styles.metricPill, { backgroundColor: getBackgroundTint(nc.warning, 0.1) }]}>
                         <MaterialCommunityIcons name="baby-face-outline" size={12} color={nc.warning} />
                         <Text style={[styles.metricPillText, { color: nc.textStrong }]}>
-                          {event.teteCm} cm
+                          {toDecimalInputFr(event.teteCm)} cm
                         </Text>
                       </View>
                       {delta && (
-                        <View style={[styles.deltaBadge, { backgroundColor: delta.positive ? nc.successBg : nc.errorBg }]}>
-                          <Ionicons name={delta.positive ? "trending-up" : "trending-down"} size={10} color={delta.positive ? nc.successText : nc.errorText} />
-                          <Text style={[styles.deltaText, { color: delta.positive ? nc.successText : nc.errorText }]}>
+                        // Écart neutre (P1-20) : une baisse de poids des premiers
+                        // jours est physiologique, pas une erreur. Signe +/− seul.
+                        <View style={[styles.deltaBadge, { backgroundColor: nc.backgroundPressed }]}>
+                          <Text style={[styles.deltaText, { color: nc.textNormal }]}>
                             {delta.value} {delta.label}
                           </Text>
                         </View>
@@ -1415,11 +1401,11 @@ export default function GrowthScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1447,38 +1433,27 @@ export default function GrowthScreen() {
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.croissance.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.croissance.dark}
+              icon={
                 <FontAwesome
                   name="seedling"
                   size={36}
                   color={eventColors.croissance.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucune mesure enregistrée"
-                  : "Aucune mesure pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                Suivez le poids, la taille et le périmètre crânien
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={openAddModal}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une mesure"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
-                </Pressable>
-              )}
+                  : "Aucune mesure pour ce filtre"
+              }
+              subtitle="Suivez le poids, la taille et le périmètre crânien"
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter une mesure", onPress: openAddModal }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   hasMore={hasMore}
@@ -1488,7 +1463,7 @@ export default function GrowthScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1521,17 +1496,6 @@ export default function GrowthScreen() {
         )}
       </SafeAreaView>
 
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message="Voulez-vous vraiment supprimer cette mesure ?"
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
 
       <ConfirmModal
         visible={batchDeleteConfirm.visible}
@@ -1539,7 +1503,7 @@ export default function GrowthScreen() {
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}
@@ -1555,50 +1519,50 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: "row",
     alignItems: "center",
-    paddingRight: 16,
+    paddingRight: space.md,
     gap: 0,
   },
   headerButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: space.xs,
+    paddingVertical: space.xs,
+    borderRadius: radius.sm,
   },
   calendarContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderBottomWidth: 1,
   },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingRight: 16,
+    paddingRight: space.md,
   },
   dateChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
+    gap: space.xxs,
+    paddingHorizontal: space.sm,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: radius.lg,
   },
   dateChipText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 13,
     fontWeight: "600",
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
     paddingBottom: 80,
   },
   dayGroup: {
-    marginBottom: 24,
+    marginBottom: space.xl,
   },
   dayHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: space.sm,
   },
   dayLabel: {
     fontSize: 15,
@@ -1607,7 +1571,7 @@ const styles = StyleSheet.create({
   dayStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
   },
   dayStatItem: {
     alignItems: "flex-end",
@@ -1629,11 +1593,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: space.md,
+    gap: space.sm,
     borderRadius: 14,
     borderWidth: 1,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -1652,7 +1616,7 @@ const styles = StyleSheet.create({
   sessionIconWrapper: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1671,7 +1635,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   metricLines: {
-    gap: 4,
+    gap: space.xxs,
   },
   metricLineRow: {
     flexDirection: "row",
@@ -1687,9 +1651,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: space.xs,
+    paddingVertical: space.xxs,
+    borderRadius: radius.sm,
   },
   metricPillText: {
     fontSize: 12,
@@ -1698,7 +1662,7 @@ const styles = StyleSheet.create({
   deltaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 4,
+    gap: space.xxs,
     marginTop: 2,
   },
   deltaBadge: {
@@ -1717,70 +1681,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 12,
+    gap: space.xxs,
+    paddingVertical: space.sm,
     borderTopWidth: 1,
   },
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
   },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
   deleteAction: {
-    backgroundColor: "#ef4444",
+    backgroundColor: neutralColors.destructive,
     justifyContent: "center",
     alignItems: "center",
     width: 80,
     borderRadius: 14,
-    marginHorizontal: 4,
+    marginHorizontal: space.xxs,
     marginVertical: 1,
-    gap: 4,
+    gap: space.xxs,
   },
   deleteActionText: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 12,
     fontWeight: "700",
   },
   skeletonContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: space.md,
+    paddingTop: space.xs,
   },
   skeletonBlock: {
     borderRadius: 4,
@@ -1795,9 +1721,9 @@ const styles = StyleSheet.create({
   statsBreakdown: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.sm,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   statsBreakdownItem: {
     flexDirection: "row",

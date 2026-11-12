@@ -1,5 +1,6 @@
 // Config de l'écran Pompages (tire-lait) : ligne gauche/droite en ml et
 // résumé du jour.
+import { space } from "@/constants/tokens";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -177,8 +178,6 @@ export const pumpingConfig: EventListConfig<Pompage, PompageSummary> = {
   },
   texts: {
     expandMore: (extra) => `${extra} autre${extra > 1 ? "s" : ""} session${extra > 1 ? "s" : ""}`,
-    deleteTitle: "Suppression",
-    deleteMessage: "Voulez-vous vraiment supprimer ce pompage ?",
     batchDeleteMessage: (n) => `Voulez-vous vraiment supprimer ${n} élément${n > 1 ? "s" : ""} ?`,
     deleted: "Pompage supprimé",
     batchDeleted: (n) => `${n} élément${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""}`,
@@ -194,9 +193,9 @@ const styles = StyleSheet.create({
   },
   statsBreakdown: {
     flexDirection: "row",
-    gap: 16,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.md,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   sessionContent: {
     flex: 1,
@@ -216,12 +215,12 @@ const styles = StyleSheet.create({
   },
   quantityLabels: {
     flexDirection: "row",
-    gap: 16,
+    gap: space.md,
   },
   quantityLabelItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   quantityDot: {
     width: 6,

@@ -1,9 +1,11 @@
-import { ThemedText } from "@/components/themed-text";
 import { flatInDark } from "@/constants/theme";
+import { toDecimalInputFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
 import { HeaderMenu, HeaderMenuItem } from "@/components/ui/HeaderMenu";
@@ -18,6 +20,8 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useCalendarDay, useMinuteTick } from "@/hooks/useMinuteTick";
@@ -99,13 +103,13 @@ const DeleteAction = React.memo(function DeleteAction({
   const nc = getNeutralColors(colorScheme);
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -308,12 +312,7 @@ export default function RoutinesScreen() {
   const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
   const [pendingSleepMode, setPendingSleepMode] = useState<SleepMode>("nap");
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: RoutineEvent | null;
-  }>({ visible: false, event: null });
-
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
   const sortMergedEvents = useCallback(
@@ -1003,46 +1002,20 @@ export default function RoutinesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const eventType = deleteConfirm.event.type;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Événement supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const confirmBatchDelete = useCallback(() => {
     if (!activeChild?.id) return;
@@ -1255,7 +1228,7 @@ export default function RoutinesScreen() {
     const bath = event as any;
     const parts = [
       bath.duree ? `${bath.duree} min` : null,
-      bath.temperatureEau ? `${bath.temperatureEau}°C` : null,
+      bath.temperatureEau ? `${toDecimalInputFr(bath.temperatureEau)}\u00a0°C` : null,
       bath.produits,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : undefined;
@@ -1348,6 +1321,14 @@ export default function RoutinesScreen() {
           ];
         }}
         onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+        // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+        // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+        {...rowActionProps({
+          title: "Routine",
+          onEdit: () => openEditModal(event),
+          onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+          disabled: selectionMode,
+        })}
       >
         {selectionMode && (
           <Pressable
@@ -1653,11 +1634,11 @@ export default function RoutinesScreen() {
                 onDayPress={handleDateSelect}
                 markedDates={markedDates}
                 theme={{
-                  backgroundColor: Colors[colorScheme].background,
-                  calendarBackground: Colors[colorScheme].background,
+                  backgroundColor: Colors[colorScheme].surface,
+                  calendarBackground: Colors[colorScheme].surface,
                   textSectionTitleColor: Colors[colorScheme].text,
                   selectedDayBackgroundColor: Colors[colorScheme].tint,
-                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                  selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                   todayTextColor: Colors[colorScheme].tint,
                   dayTextColor: Colors[colorScheme].text,
                   textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1702,38 +1683,27 @@ export default function RoutinesScreen() {
 
         {Object.values(loaded).every(Boolean) && emptyDelayDone ? (
           groupedEvents.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <View
-                style={[
-                  styles.emptyIconWrapper,
-                  { backgroundColor: `${eventColors.sommeil.dark}15` },
-                ]}
-              >
+            <EmptyState
+              accentColor={eventColors.sommeil.dark}
+              icon={
                 <Ionicons
                   name="bed-outline"
                   size={36}
                   color={eventColors.sommeil.dark}
                 />
-              </View>
-              <ThemedText style={[styles.emptyTitle, { color: nc.textStrong }]}>
-                {events.length === 0
+              }
+              title={
+                events.length === 0
                   ? "Aucune routine enregistrée"
-                  : "Aucune routine pour ce filtre"}
-              </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: nc.textLight }]}>
-                Suivez le sommeil et les bains
-              </ThemedText>
-              {events.length === 0 && (
-                <Pressable
-                  style={[styles.emptyCta, { backgroundColor: Colors[colorScheme].tint }]}
-                  onPress={() => openAddModal("sommeil", "nap")}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ajouter une routine"
-                >
-                  <Ionicons name="add" size={20} color={nc.white} />
-                  <Text style={[styles.emptyCtaText, { color: nc.white }]}>Ajouter une routine</Text>
-                </Pressable>
-              )}
+                  : "Aucune routine pour ce filtre"
+              }
+              subtitle="Suivez le sommeil et les bains"
+              cta={
+                events.length === 0
+                  ? { label: "Ajouter une routine", onPress: () => openAddModal("sommeil", "nap") }
+                  : undefined
+              }
+            >
               {!(selectedFilter === "today" || selectedDate) && (
                 <LoadMoreButton
                   loading={isLoadingMore}
@@ -1742,7 +1712,7 @@ export default function RoutinesScreen() {
                   accentColor={Colors[colorScheme].tint}
                 />
               )}
-            </View>
+            </EmptyState>
           ) : (
             <FlatList
               data={groupedEvents}
@@ -1774,29 +1744,12 @@ export default function RoutinesScreen() {
         )}
       </SafeAreaView>
       <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message={
-          deleteConfirm.event?.type === "sommeil"
-            ? "Voulez-vous vraiment supprimer ce sommeil ?"
-            : deleteConfirm.event?.type === "nettoyage_nez"
-              ? "Voulez-vous vraiment supprimer ce nettoyage de nez ?"
-              : "Voulez-vous vraiment supprimer ce bain ?"
-        }
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
-      <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"
         message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} élément${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
         confirmText="Supprimer"
         cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].background}
+        backgroundColor={Colors[colorScheme].surface}
         textColor={Colors[colorScheme].text}
         onCancel={cancelBatchDelete}
         onConfirm={confirmBatchDelete}
@@ -1969,43 +1922,6 @@ const styles = StyleSheet.create({
   expandTriggerText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  emptyCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
-  },
-  emptyCtaText: {
-    fontSize: 15,
-    fontWeight: "600",
   },
   dateChip: {
     flexDirection: "row",

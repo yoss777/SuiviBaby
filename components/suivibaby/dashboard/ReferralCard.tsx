@@ -1,7 +1,9 @@
 // components/suivibaby/dashboard/ReferralCard.tsx
 // Referral program card with share functionality
 
+import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { APP_NAME } from "@/constants/app";
 import { Colors } from "@/constants/theme";
 import { REFERRAL_TIERS, getReferralTier } from "@/types/promo";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -12,9 +14,10 @@ import {
   Share,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 interface ReferralCardProps {
   referralCode: string;
@@ -31,6 +34,7 @@ export const ReferralCard = memo(function ReferralCard({
   colorScheme = "light",
   transparent = false,
 }: ReferralCardProps) {
+  const ripple = usePressRipple();
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
   const currentTier = getReferralTier(referralCount);
@@ -39,7 +43,7 @@ export const ReferralCard = memo(function ReferralCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await Share.share({
-        message: `Rejoins-moi sur Suivi Baby pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://suivibaby.com/invite/${referralCode}`,
+        message: `Rejoins-moi sur ${APP_NAME} pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://suivibaby.com/invite/${referralCode}`,
       });
     } catch {
       // User cancelled
@@ -126,10 +130,13 @@ export const ReferralCard = memo(function ReferralCard({
 
       {/* Code + actions */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.codeBtn, { backgroundColor: nc.borderLight + "50" }]}
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
+            styles.codeBtn, { backgroundColor: nc.borderLight + "50" },
+            pressedOpacity(pressed),
+          ]}
           onPress={handleCopy}
-          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`Code parrainage : ${referralCode}. Appuyez pour copier`}
           accessibilityHint="Copie le code dans le presse-papier"
@@ -139,22 +146,25 @@ export const ReferralCard = memo(function ReferralCard({
           <Text style={[styles.codeText, { color: nc.textStrong }]}>
             {referralCode}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[styles.shareBtn, { backgroundColor: tint }]}
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
+            styles.shareBtn, { backgroundColor: tint },
+            pressedOpacity(pressed),
+          ]}
           onPress={handleShare}
-          activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel="Partager le code de parrainage"
           accessibilityHint="Ouvre le menu de partage"
           accessibilityState={{ disabled: false }}
         >
-          <FontAwesome name="share-nodes" size={12} color={nc.background} />
-          <Text style={[styles.shareText, { color: nc.background }]}>
+          <FontAwesome name="share-nodes" size={12} color={Colors[colorScheme].onTint} />
+          <Text style={[styles.shareText, { color: Colors[colorScheme].onTint }]}>
             {"Partager"}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
       </View>
     </View>
@@ -163,7 +173,7 @@ export const ReferralCard = memo(function ReferralCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     overflow: "hidden",
     flexDirection: "row",
@@ -184,7 +194,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: space.xs,
   },
   headerTitle: {
     fontSize: 14,
@@ -193,10 +203,10 @@ const styles = StyleSheet.create({
   tierBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   tierText: {
     fontSize: 12,
@@ -210,8 +220,8 @@ const styles = StyleSheet.create({
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    gap: space.xs,
+    marginBottom: space.sm,
   },
   progressBg: {
     flex: 1,
@@ -230,9 +240,10 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
-    gap: 8,
+    gap: space.xs,
   },
   codeBtn: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -249,12 +260,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   shareBtn: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     minHeight: 44,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.md,
     paddingVertical: 10,
     borderRadius: 10,
   },

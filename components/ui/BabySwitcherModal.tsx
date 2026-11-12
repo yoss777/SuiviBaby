@@ -1,4 +1,5 @@
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { radius, space } from "@/constants/tokens";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React from "react";
 import {
   Modal,
@@ -10,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
 import type { Child } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -47,7 +48,7 @@ export function BabySwitcherModal({
           style={[
             styles.content,
             {
-              backgroundColor: Colors[colorScheme].background,
+              backgroundColor: Colors[colorScheme].surface,
               width: Math.min(width * 0.8, 320),
             },
           ]}
@@ -129,9 +130,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   content: {
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: "#000",
+    borderRadius: radius.lg,
+    padding: space.md,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -140,22 +141,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 12,
+    marginBottom: space.sm,
     textAlign: "center",
   },
   childRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.sm,
     borderRadius: 10,
-    gap: 12,
+    gap: space.sm,
     marginVertical: 2,
   },
   avatar: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     justifyContent: "center",
     alignItems: "center",
   },

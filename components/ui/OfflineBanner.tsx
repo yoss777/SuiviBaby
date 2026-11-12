@@ -1,8 +1,10 @@
+import { space } from "@/constants/tokens";
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { neutralColors } from "@/constants/dashboardColors";
 
 export function OfflineBanner() {
   const [isConnected, setIsConnected] = useState(true);
@@ -49,7 +51,8 @@ export function OfflineBanner() {
         {
           paddingTop: insets.top + 4,
           transform: [{ translateY: slideAnim }],
-          backgroundColor: isConnected ? "#16a34a" : "#dc2626",
+          // Texte blanc : green-700 5.0:1, red-600 4.8:1 (green-600 plafonnait à 3.3:1)
+          backgroundColor: isConnected ? neutralColors.successText : neutralColors.destructive,
         },
       ]}
     >
@@ -57,7 +60,7 @@ export function OfflineBanner() {
         <Ionicons
           name={isConnected ? "wifi" : "cloud-offline-outline"}
           size={16}
-          color="#fff"
+          color={neutralColors.white}
         />
         <Text style={styles.text}>
           {isConnected ? "Connexion rétablie" : "Pas de connexion internet"}
@@ -74,16 +77,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
-    paddingBottom: 8,
+    paddingBottom: space.xs,
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: space.xs,
   },
   text: {
-    color: "#fff",
+    color: neutralColors.white,
     fontSize: 13,
     fontWeight: "600",
   },

@@ -1,12 +1,15 @@
 import React from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+
 import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+  getNeutralColors,
+  neutralColors,
+  neutralColorsDark,
+} from "@/constants/dashboardColors";
+import { getReadableTextColor } from "@/constants/theme";
+import { radius, space } from "@/constants/tokens";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { pressedOpacity, usePressRipple } from "./pressFeedback";
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -14,34 +17,43 @@ interface ConfirmModalProps {
   message: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
-  backgroundColor: string;
-  textColor: string;
+  /** Par défaut : surface de carte du thème (nc.backgroundCard). */
+  backgroundColor?: string;
+  /** Par défaut : nc.textStrong. */
+  textColor?: string;
   confirmButtonColor?: string;
   confirmTextColor?: string;
+  /** Par défaut : nc.backgroundPressed (suit le thème). */
   cancelButtonColor?: string;
+  /** Par défaut : nc.textStrong. */
   cancelTextColor?: string;
   allowBackdropDismiss?: boolean;
+  /**
+   * Bouton retour Android : ferme la modale (onCancel) par défaut. false pour
+   * une alerte protégée qui ne doit se fermer que par ses boutons.
+   */
+  dismissOnBack?: boolean;
   onDismiss?: () => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-const getReadableTextColor = (color: string, fallback = "#fff") => {
-  if (!color || !color.startsWith("#")) return fallback;
-  let hex = color.slice(1);
-  if (hex.length === 3) {
-    hex = hex
-      .split("")
-      .map((char) => char + char)
-      .join("");
-  }
-  if (hex.length !== 6) return fallback;
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.7 ? "#1b1b1b" : "#fff";
-};
+/**
+ * Rouge destructif unique de l'app (token `destructive`, red-600) : texte
+ * blanc à 4.83:1, identique en clair et en sombre.
+ */
+export const DESTRUCTIVE_COLOR = neutralColors.destructive;
+
+/**
+ * Anciens appels qui passent `nc.error` (#ef4444, 3.76:1 sous du blanc) pour
+ * « Supprimer » : ramenés au token destructif pour que le bouton ait le même
+ * aspect sur tous les écrans.
+ */
+const normalizeConfirmColor = (color: string) =>
+  color === neutralColors.error || color === neutralColorsDark.error
+    ? DESTRUCTIVE_COLOR
+    : color;
+const NOOP = () => {};
 
 export function ConfirmModal({
   visible,
@@ -51,15 +63,26 @@ export function ConfirmModal({
   cancelText = "Annuler",
   backgroundColor,
   textColor,
-  confirmButtonColor = "#dc3545",
+  confirmButtonColor: confirmButtonColorProp = DESTRUCTIVE_COLOR,
   confirmTextColor,
-  cancelButtonColor = "#f2f2f2",
-  cancelTextColor = "#333",
+  cancelButtonColor,
+  cancelTextColor,
   allowBackdropDismiss = false,
+  dismissOnBack = true,
   onDismiss,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const colorScheme = useColorScheme() ?? "light";
+  const nc = getNeutralColors(colorScheme);
+  const ripple = usePressRipple();
+  const surface = backgroundColor ?? nc.backgroundCard;
+  const ink = textColor ?? nc.textStrong;
+  // Bouton secondaire dérivé du thème : plus de rectangle #f2f2f2 qui éblouit
+  // au milieu d'un écran sombre.
+  const cancelBg = cancelButtonColor ?? nc.backgroundPressed;
+  const cancelInk = cancelTextColor ?? nc.textStrong;
+  const confirmButtonColor = normalizeConfirmColor(confirmButtonColorProp);
   const resolvedConfirmTextColor =
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   return (
@@ -67,47 +90,47 @@ export function ConfirmModal({
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={() => {}}
+      onRequestClose={dismissOnBack ? onCancel : NOOP}
     >
       <Pressable
         style={styles.modalOverlay}
         onPress={allowBackdropDismiss ? onDismiss : undefined}
       >
         <Pressable
-          style={[styles.modalContent, { backgroundColor }]}
+          style={[styles.modalContent, { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}
         >
-          <Text style={[styles.modalTitle, { color: textColor }]}>{title}</Text>
+          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
           {typeof message === "string" ? (
-            <Text style={[styles.modalSubtitle, { color: textColor }]}>
-              {message}
-            </Text>
+            <Text style={[styles.modalSubtitle, { color: ink }]}>{message}</Text>
           ) : (
             <View style={styles.modalMessageContainer}>{message}</View>
           )}
 
           <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.modalButton,
-                styles.cancelButton,
-                { backgroundColor: cancelButtonColor },
+                { backgroundColor: cancelBg },
+                pressedOpacity(pressed),
               ]}
+              android_ripple={ripple}
               onPress={onCancel}
-              activeOpacity={0.7}
+              accessibilityRole="button"
             >
-              <Text style={[styles.cancelButtonText, { color: cancelTextColor }]}>
+              <Text style={[styles.cancelButtonText, { color: cancelInk }]}>
                 {cancelText}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
                 styles.modalButton,
-                styles.confirmButton,
                 { backgroundColor: confirmButtonColor },
+                pressedOpacity(pressed),
               ]}
+              android_ripple={ripple}
               onPress={onConfirm}
-              activeOpacity={0.7}
+              accessibilityRole="button"
             >
               <Text
                 style={[
@@ -117,7 +140,7 @@ export function ConfirmModal({
               >
                 {confirmText}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>
@@ -131,46 +154,44 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 20,
+    padding: space.lg,
   },
   modalContent: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: radius.lg,
+    padding: space.lg,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: space.xs,
     textAlign: "center",
   },
   modalSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   modalMessageContainer: {
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   modalButtons: {
     flexDirection: "row",
-    gap: 12,
+    gap: space.sm,
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: space.sm,
     borderRadius: 10,
     alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: "#f2f2f2",
+    justifyContent: "center",
+    overflow: "hidden", // borne le ripple Android au bouton
   },
   cancelButtonText: {
-    color: "#333",
     fontWeight: "600",
   },
-  confirmButton: {},
   confirmButtonText: {
     fontWeight: "700",
   },

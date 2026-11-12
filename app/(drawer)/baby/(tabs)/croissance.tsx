@@ -1,9 +1,10 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { computeGrowthDeltas, formatGrowthDelta, type GrowthDeltas } from "@/utils/growthDeltas";
 import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { OMSMetric, OMSSex } from "@/constants/omsPercentiles";
 import {
   OMS_BAND_LABELS,
@@ -17,6 +18,14 @@ import { useBaby } from "@/contexts/BabyContext";
 import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
+import {
+  ROW_LONG_PRESS_HINT,
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useChildPermissions } from "@/hooks/useChildPermissions";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -250,6 +259,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     marginTop: 6,
+  },
+  // Écart neutre (comme Plus > Croissance) : couleur atténuée, signe seul.
+  metricDelta: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
   },
   summaryCard: {
     flex: 1,
@@ -537,10 +552,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   deleteAction: {
-    backgroundColor: "#ef4444",
+    backgroundColor: neutralColors.destructive,
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    // Pas de hauteur minimale : la hauteur suit celle de la carte (alignée par
+    // marginBottom) ; un minimum faisait dépasser le rouge sous les cartes courtes.
     borderRadius: 14,
     marginHorizontal: 4,
     marginVertical: 7,
@@ -594,6 +611,8 @@ interface CroissanceRowProps {
   item: CroissanceEntry;
   index: number;
   visibleEntries: CroissanceEntry[];
+  /** Progression par rapport à la mesure précédente du même indicateur. */
+  deltas?: GrowthDeltas;
   canManageContent: boolean;
   palette: any;
   nc: any;
@@ -607,6 +626,7 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
   item,
   index,
   visibleEntries,
+  deltas,
   canManageContent,
   palette,
   nc,
@@ -681,7 +701,28 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
-              accessibilityHint={canManageContent ? "Appuyer pour modifier" : undefined}
+              accessibilityHint={canManageContent ? ROW_LONG_PRESS_HINT : undefined}
+              // Alternative au glissement : actions d'accessibilité et appui long.
+              accessibilityActions={buildRowAccessibilityActions({
+                canEdit: canManageContent,
+                canDelete,
+              })}
+              onAccessibilityAction={(e) =>
+                handleRowAccessibilityAction(e, {
+                  onEdit: canManageContent ? handlePress : undefined,
+                  onDelete: canDelete ? handleDelete : undefined,
+                })
+              }
+              onLongPress={
+                canManageContent
+                  ? () =>
+                      showRowActionMenu({
+                        title: `Mesure du ${currentDayLabel}`,
+                        onEdit: handlePress,
+                        onDelete: canDelete ? handleDelete : undefined,
+                      })
+                  : undefined
+              }
               style={[styles.card, flatInDark(colorScheme), { borderColor: palette.border, backgroundColor: palette.surface }]}
             >
               <View style={styles.cardHeader}>
@@ -698,6 +739,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Taille</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.tailleCm} cm</Text>
+                    {deltas?.tailleCm !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.tailleCm)} cm depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.tailleCm)} cm
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {item.poidsKg ? (
@@ -707,6 +756,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Poids</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.poidsKg} kg</Text>
+                    {deltas?.poidsKg !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.poidsKg)} kg depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.poidsKg)} kg
+                      </Text>
+                    )}
                   </View>
                 ) : null}
                 {item.teteCm ? (
@@ -716,6 +773,14 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
                       <Text style={[styles.metricLabel, { color: palette.ink }]}>Tête</Text>
                     </View>
                     <Text style={[styles.metricValue, { color: palette.ink }]}>{item.teteCm} cm</Text>
+                    {deltas?.teteCm !== undefined && (
+                      <Text
+                        style={[styles.metricDelta, { color: palette.muted }]}
+                        accessibilityLabel={`${formatGrowthDelta(deltas.teteCm)} cm depuis la mesure précédente`}
+                      >
+                        {formatGrowthDelta(deltas.teteCm)} cm
+                      </Text>
+                    )}
                   </View>
                 ) : null}
               </View>
@@ -838,11 +903,7 @@ export default function CroissanceScreen() {
   const [loadError, setLoadError] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: CroissanceEntry | null;
-  }>({ visible: false, event: null });
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
   const [metric, setMetric] = useState<MetricKey>("poids");
   const metricKeys: MetricKey[] = ["taille", "poids", "tete"];
   const [tabsWidth, setTabsWidth] = useState(0);
@@ -1068,49 +1129,19 @@ export default function CroissanceScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Mesure supprimée",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerCroissance(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1236,6 +1267,10 @@ export default function CroissanceScreen() {
     () => filteredEntries.slice(0, visibleCount),
     [filteredEntries, visibleCount],
   );
+  const growthDeltas = useMemo(
+    () => computeGrowthDeltas(filteredEntries, toDate),
+    [filteredEntries, toDate],
+  );
   const hasMore = visibleCount < filteredEntries.length;
 
   const handleShowMore = useCallback(() => {
@@ -1271,6 +1306,7 @@ export default function CroissanceScreen() {
         item={item}
         index={index}
         visibleEntries={visibleEntries}
+        deltas={growthDeltas.get(item.id)}
         canManageContent={canManageContent}
         palette={palette}
         nc={nc}
@@ -1282,6 +1318,7 @@ export default function CroissanceScreen() {
     ),
     [
       visibleEntries,
+      growthDeltas,
       canManageContent,
       palette,
       nc,
@@ -2107,8 +2144,8 @@ export default function CroissanceScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Ajouter une mesure"
                       >
-                        <Ionicons name="add" size={20} color="#fff" />
-                        <Text style={styles.emptyCtaText}>Ajouter une mesure</Text>
+                        <Ionicons name="add" size={20} color={nc.onTodayAccent} />
+                        <Text style={[styles.emptyCtaText, { color: nc.onTodayAccent }]}>Ajouter une mesure</Text>
                       </Pressable>
                     )}
                   </View>
@@ -2145,17 +2182,6 @@ export default function CroissanceScreen() {
         </GestureHandlerRootView>
       </SafeAreaView>
 
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Supprimer cette mesure ?"
-        message="Cette action est irréversible."
-        confirmText="Supprimer"
-        backgroundColor={nc.backgroundCard}
-        textColor={nc.textStrong}
-        confirmButtonColor={nc.error}
-        onConfirm={confirmDelete}
-        onCancel={cancelDelete}
-      />
     </ThemedView>
   );
 }

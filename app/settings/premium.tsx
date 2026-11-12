@@ -6,7 +6,7 @@
 
 import { SkeletonBlock, SkeletonList } from "@/components/ui/Skeleton";
 import { InfoModal } from "@/components/ui/InfoModal";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { usePremium, type PremiumTier } from "@/contexts/PremiumContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     top: 6,
     bottom: 6,
     borderRadius: 10,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 3,
@@ -995,7 +995,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderBottomLeftRadius: 12,
   },
-  planBadgeText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  planBadgeText: { color: neutralColors.white, fontSize: 12, fontWeight: "700" },
   planName: { fontSize: 20, fontWeight: "700", marginBottom: 4 },
   priceRow: { flexDirection: "row", alignItems: "baseline", marginBottom: 2 },
   price: { fontSize: 32, fontWeight: "800" },
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     marginBottom: 8,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

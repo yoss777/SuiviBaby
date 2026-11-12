@@ -1,4 +1,6 @@
+import { radius, space } from "@/constants/tokens";
 import PompagesChart from "@/components/suivibaby/PompagesChart";
+import { APP_NAME } from "@/constants/app";
 import RepasChart from "@/components/suivibaby/RepasChart";
 import { SafeBoundary } from "@/components/SafeBoundary";
 import SommeilChart from "@/components/suivibaby/SommeilChart";
@@ -901,7 +903,7 @@ export default function StatsScreen() {
           ${sommeilRows}
         </table>
 
-        <div class="footer">Généré par Suivi Baby · ${dateStr}</div>
+        <div class="footer">Généré par ${APP_NAME} · ${dateStr}</div>
       </body>
       </html>
     `;
@@ -1125,7 +1127,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.tetees.blue + "40" },
                 ]}
                 onPress={() => handleTabChange("tetees")}
-                accessibilityLabel="Résumé repas, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isTeteesReady
+                    ? `${thisWeekCounts.repas} repas cette semaine`
+                    : "Résumé repas, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="utensils"
@@ -1136,7 +1144,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.tetees.blue },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.repas}
@@ -1154,7 +1162,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.pompages.green + "40" },
                 ]}
                 onPress={() => handleTabChange("pompages")}
-                accessibilityLabel="Résumé pompages, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isPompagesReady
+                    ? `${thisWeekCounts.pompages} pompages cette semaine`
+                    : "Résumé pompages, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="pump-medical"
@@ -1165,7 +1179,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.pompages.green },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.pompages}
@@ -1183,7 +1197,13 @@ export default function StatsScreen() {
                   { borderColor: chartColors.sommeil.purple + "40" },
                 ]}
                 onPress={() => handleTabChange("sommeil")}
-                accessibilityLabel="Résumé sommeil, appuyer pour voir les détails"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isSommeilReady
+                    ? `${thisWeekCounts.sommeil} sommeils cette semaine`
+                    : "Résumé sommeil, chargement"
+                }
+                accessibilityHint="Affiche le détail"
               >
                 <FontAwesome
                   name="bed"
@@ -1194,7 +1214,7 @@ export default function StatsScreen() {
                   <Text
                     style={[
                       styles.resumeValue,
-                      { color: chartColors.sommeil.purple },
+                      { color: nc.textStrong },
                     ]}
                   >
                     {thisWeekCounts.sommeil}
@@ -1374,18 +1394,18 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginHorizontal: 20,
-    paddingVertical: 8,
+    marginHorizontal: space.lg,
+    paddingVertical: space.xs,
     marginBottom: 10,
     position: "relative",
   },
   tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     flex: 1,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   tabLabel: {
     fontSize: 12,
@@ -1416,12 +1436,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
-    gap: 8,
+    gap: space.xs,
   },
   errorTitle: {
     fontSize: 17,
     fontWeight: "600",
-    marginTop: 12,
+    marginTop: space.sm,
     textAlign: "center",
   },
   errorSubtitle: {
@@ -1431,11 +1451,11 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: space.xs,
+    marginTop: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
   },
   retryText: {
     fontSize: 15,
@@ -1444,13 +1464,13 @@ const styles = StyleSheet.create({
   statusNote: {
     fontSize: 12,
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: space.xxs,
   },
   weekLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: space.xs,
   },
   weekLabel: {
     fontSize: 12,
@@ -1462,15 +1482,15 @@ const styles = StyleSheet.create({
   resumeRow: {
     flexDirection: "row",
     gap: 10,
-    marginHorizontal: 20,
+    marginHorizontal: space.lg,
     marginBottom: 10,
   },
   resumeCard: {
     flex: 1,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   resumeValue: {
@@ -1485,7 +1505,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 40,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   pagerWrapper: {
@@ -1499,7 +1519,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 16,
+    paddingVertical: space.md,
   },
   dot: {
     width: 6,

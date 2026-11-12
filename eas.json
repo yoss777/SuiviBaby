@@ -79,6 +79,18 @@
         "image": "latest"
       },
       "node": "22.23.4"
+    },
+    "internal-preview": {
+      "extends": "preview",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "SHOW_PREVIEWS": "true"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "credentialsSource": "remote"
+      }
     }
   },
   "submit": {

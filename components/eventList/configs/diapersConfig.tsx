@@ -1,6 +1,7 @@
 // Config de l'écran Couches (mictions + selles) : deux écouteurs, ligne avec
 // icône/couleur par type et compteurs du jour.
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import { space } from "@/constants/tokens";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -201,7 +202,7 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   layout: { paddedFilterRow: true, calendarButtonInset: true, growList: true },
 
   empty: {
-    renderIcon: (color) => <FontAwesome name="tint" size={36} color={color} />,
+    renderIcon: (color) => <FontAwesome name="droplet" size={36} color={color} />,
     titleNone: "Aucune couche enregistrée",
     titleFiltered: "Aucune couche pour ce filtre",
     subtitle: "Suivez les changes de bébé",
@@ -215,8 +216,6 @@ export const diapersConfig: EventListConfig<Excretion, ExcretionSummary> = {
   },
   texts: {
     expandMore: (extra) => `${extra} autre${extra > 1 ? "s" : ""} excrétion${extra > 1 ? "s" : ""}`,
-    deleteTitle: "Suppression",
-    deleteMessage: "Voulez-vous vraiment supprimer cette couche ?",
     batchDeleteMessage: (n) => `Voulez-vous vraiment supprimer ${n} élément${n > 1 ? "s" : ""} ?`,
     deleted: "Couche supprimée",
     batchDeleted: (n) => `${n} élément${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""}`,
@@ -229,9 +228,9 @@ const styles = StyleSheet.create({
   statsBreakdown: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    gap: space.sm,
+    marginBottom: space.sm,
+    paddingHorizontal: space.xxs,
   },
   sessionContent: {
     flex: 1,

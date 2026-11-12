@@ -1,6 +1,9 @@
 // components/forms/ActivitiesForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 
@@ -9,9 +12,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   ajouterEvenementOptimistic,
@@ -23,12 +26,12 @@ import {
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 
@@ -162,9 +165,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   onDelete,
   promenadeEnCours,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -241,27 +245,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         )
       : duree;
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -276,6 +261,9 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   // ============================================
   // HANDLERS
   // ============================================
+
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ duree, description, dateHeure, isOngoing, heureDebut, heureFin });
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -401,26 +389,18 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     }
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer cette activité ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Activité supprimée"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Activité supprimée",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -438,15 +418,17 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             const config = TYPE_CONFIG[type];
             const active = typeActivite === type;
             return (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={type}
-                style={[
+                style={({ pressed }) => [
                   styles.typeChip,
                   { borderColor: nc.border, backgroundColor: nc.background },
                   active && {
                     backgroundColor: chipActiveColors.bg,
                     borderColor: chipActiveColors.border,
                   },
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -473,7 +455,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
                 >
                   {config.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -508,19 +490,16 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             {"Durée (minutes)"}
           </Text>
           <View style={styles.quantityPickerRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                handlePressIn(() =>
-                  setDuree((value) => Math.max(0, value - 5)),
-                );
-              }}
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                  setDuree((value) => Math.max(0, value - 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer la durée"
             >
@@ -533,23 +512,21 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               >
                 -
               </Text>
-            </TouchableOpacity>
+            </Pressable>
             <Text
               style={[styles.quantityPickerValue, { color: nc.textStrong }]}
             >
               {duree} min
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                handlePressIn(() => setDuree((value) => Math.min(ACTIVITE_DUREE_MAX, value + 5)));
-              }}
-              onPressOut={handlePressOut}
+              {...repeatPress(() => setDuree((value) => Math.min(ACTIVITE_DUREE_MAX, value + 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter la durée"
             >
@@ -562,7 +539,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       )}
@@ -599,12 +576,16 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -613,13 +594,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: chipActiveColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -629,20 +612,23 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: chipActiveColors.filledText,
                 },
               ]}
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.deleteButton,
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
@@ -652,7 +638,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -707,9 +693,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    ...RIPPLE_CLIP,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -733,6 +721,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -746,6 +735,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

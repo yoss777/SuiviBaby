@@ -1,8 +1,10 @@
+import { space } from "@/constants/tokens";
 import {
   DELETE_CHILD_CHOICE,
   LOW_PRIVILEGE_ROLES,
   type OwnershipBlocker,
 } from "@/services/accountDeletionService";
+import { getReadableTextColor } from "@/constants/theme";
 import React, { useEffect, useState } from "react";
 import {
   Modal,
@@ -115,7 +117,7 @@ export function OwnershipTransferModal({
                 accessibilityRole="button"
                 accessibilityLabel="Je confirme le transfert de tous les droits"
               >
-                <Text style={[styles.buttonText, { color: "#fff" }]}>Je confirme</Text>
+                <Text style={[styles.buttonText, { color: getReadableTextColor(accentColor) }]}>Je confirme</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -265,7 +267,7 @@ export function OwnershipTransferModal({
               }
               accessibilityState={{ disabled: !allChosen }}
             >
-              <Text style={[styles.buttonText, { color: "#fff" }]}>Continuer</Text>
+              <Text style={[styles.buttonText, { color: getReadableTextColor(accentColor) }]}>Continuer</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -280,7 +282,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 20,
+    padding: space.lg,
   },
   content: { width: "100%", maxWidth: 420, maxHeight: "85%", borderRadius: 16, padding: 20 },
   title: { fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 8 },
@@ -291,12 +293,12 @@ const styles = StyleSheet.create({
   option: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     borderWidth: 1.5,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.sm,
     minHeight: 48,
-    paddingVertical: 8,
+    paddingVertical: space.xs,
   },
   radio: {
     width: 20,

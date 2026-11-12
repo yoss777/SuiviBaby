@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -8,6 +9,8 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
+
+import { useNightMode } from "@/hooks/useNightMode";
 
 type PulsingAuraProps = {
   color: string;
@@ -20,7 +23,20 @@ export const PulsingAura = ({ color, size = 120 }: PulsingAuraProps) => {
   const opacity1 = useSharedValue(0.6);
   const opacity2 = useSharedValue(0.4);
 
+  // Boucle décorative : coupée la nuit (22 h – 7 h) et avec « Réduire les
+  // animations » ; l'aura reste alors visible, statique.
+  const { animations } = useNightMode();
+  const animate = animations.decorative;
+
   useEffect(() => {
+    if (!animate) {
+      [scale1, scale2, opacity1, opacity2].forEach((v) => cancelAnimation(v));
+      scale1.value = 1;
+      scale2.value = 1;
+      opacity1.value = 0.6;
+      opacity2.value = 0.4;
+      return;
+    }
     // Inner circle — faster, tighter pulse (breathing rhythm)
     scale1.value = withRepeat(
       withSequence(
@@ -52,7 +68,10 @@ export const PulsingAura = ({ color, size = 120 }: PulsingAuraProps) => {
       ),
       -1
     );
-  }, []);
+    return () => {
+      [scale1, scale2, opacity1, opacity2].forEach((v) => cancelAnimation(v));
+    };
+  }, [animate, scale1, scale2, opacity1, opacity2]);
 
   const auraStyle1 = useAnimatedStyle(() => ({
     transform: [{ scale: scale1.value }],

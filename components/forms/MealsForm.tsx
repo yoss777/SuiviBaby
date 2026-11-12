@@ -1,7 +1,7 @@
-import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { getAccentColors } from "@/components/ui/accentColors";
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import {
   ALLERGENES_OPTIONS,
   BIBERON_TYPE_OPTIONS,
@@ -13,6 +13,7 @@ import {
 } from "@/constants/dashboardConfig";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -33,10 +34,35 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { toDateOr } from "@/utils/date";
+import * as Haptics from "expo-haptics";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import {
+  adjustSide,
+  clearNursingTimer,
+  EMPTY_NURSING_TIMER,
+  hasNursingProgress,
+  loadLastBottle,
+  loadNursingTimer,
+  type NursingSide,
+  type NursingTimerState,
+  proposedMealDate,
+  resetSide,
+  resolveNursingDraftOnOpen,
+  saveLastBottle,
+  saveNursingTimer,
+  sideSeconds,
+  toggleSide,
+} from "@/components/forms/nursingTimer";
+import {
+  NursingDraftBanner,
+  NursingElapsedText,
+} from "@/components/forms/NursingTimerDisplay";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -89,12 +115,10 @@ export interface MealsFormProps {
 // ============================================
 
 const MAX_BIBERON_ML = 300;
-
-function formatDuration(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-}
+const DEFAULT_BIBERON_ML = 100;
+const BIBERON_STEP_ML = 10;
+const BIBERON_PRESETS_ML = [60, 90, 120, 150, 180] as const;
+export const NURSING_PAUSED_CLOSE_TOAST = "Tétée en pause — reprenez-la depuis l'accueil";
 
 // ============================================
 // COMPONENT
@@ -110,8 +134,11 @@ export function MealsForm({
   editData,
   onDelete,
 }: MealsFormProps) {
+  const ripple = usePressRipple();
+  const rippleBorderless = { ...ripple, borderless: true };
   const { activeChild } = useBaby();
-  const { showAlert, showConfirm } = useModal();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showToast } = useToast();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
@@ -129,19 +156,42 @@ export function MealsForm({
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
 
-  // Tetee state
-  const [leftSeconds, setLeftSeconds] = useState(
-    editData?.dureeGauche ? editData.dureeGauche * 60 : 0,
-  );
-  const [rightSeconds, setRightSeconds] = useState(
-    editData?.dureeDroite ? editData.dureeDroite * 60 : 0,
-  );
-  const [runningSide, setRunningSide] = useState<"left" | "right" | null>(null);
+  // Tetee state : chrono basé sur des horodatages, persisté par enfant (la
+  // tétée continue d'être chronométrée si la feuille se ferme).
+  const childId = activeChild?.id;
+  const [timer, setTimer] = useState<NursingTimerState>(() => ({
+    ...EMPTY_NURSING_TIMER,
+    leftSeconds: editData?.dureeGauche ? editData.dureeGauche * 60 : 0,
+    rightSeconds: editData?.dureeDroite ? editData.dureeDroite * 60 : 0,
+  }));
+  // Le temps qui défile est affiché par <NursingElapsedText>, qui porte seul
+  // son intervalle : ce formulaire ne se re-rend pas à chaque seconde.
+  const runningSide = timer.runningSide;
+  // Brouillon de tétée trouvé alors que la feuille est ouverte pour un
+  // biberon ou un solide : proposé dans un bandeau, jamais imposé.
+  const [pendingDraft, setPendingDraft] = useState<NursingTimerState | null>(null);
+  const mealTypeRef = useRef(mealType);
+  useEffect(() => {
+    mealTypeRef.current = mealType;
+  }, [mealType]);
+  const timerRef = useRef(timer);
+  useEffect(() => {
+    timerRef.current = timer;
+  }, [timer]);
+  const timerLoadedRef = useRef(isEditing);
+  const submittedRef = useRef(false);
 
   // Biberon state
   const [quantite, setQuantite] = useState<number>(
-    Math.min(editData?.quantite ?? 100, MAX_BIBERON_ML),
+    Math.min(editData?.quantite ?? DEFAULT_BIBERON_ML, MAX_BIBERON_ML),
   );
+  // Tant que la quantité n'a pas été touchée, elle peut être préremplie avec
+  // celle du dernier biberon de l'enfant (chargée de façon asynchrone).
+  const initialQuantiteRef = useRef(quantite);
+  const quantiteTouchedRef = useRef(isEditing);
+  useEffect(() => {
+    if (quantite !== initialQuantiteRef.current) quantiteTouchedRef.current = true;
+  }, [quantite]);
   const [typeBiberon, setTypeBiberon] = useState<BiberonEvent["typeBiberon"]>(
     editData?.typeBiberon ?? "lait_maternel",
   );
@@ -177,27 +227,8 @@ export function MealsForm({
     typeof editData?.aime === "boolean" ? editData.aime : undefined,
   );
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerTickRef = useRef<number | null>(null);
-
-  // ============================================
-  // HANDLERS - Long press acceleration
-  // ============================================
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback(
     (nextDate: Date) => {
@@ -214,56 +245,198 @@ export function MealsForm({
   // HANDLERS - Chronomètre tétée
   // ============================================
 
-  const toggleChrono = (side: "left" | "right") => {
-    setRunningSide((prev) => (prev === side ? null : side));
+  const updateTimer = useCallback(
+    (fn: (state: NursingTimerState, at: number) => NursingTimerState) => {
+      const at = Date.now();
+      setTimer((prev) => fn(prev, at));
+    },
+    [],
+  );
+
+  const toggleChrono = (side: NursingSide) => {
+    const willRun = timer.runningSide !== side;
+    Haptics.impactAsync(
+      willRun ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+    ).catch(() => {});
+    updateTimer((state, at) => toggleSide(state, side, at));
   };
 
-  const resetChrono = (side: "left" | "right") => {
-    if (side === "left") setLeftSeconds(0);
-    else setRightSeconds(0);
-    setRunningSide((prev) => (prev === side ? null : prev));
+  // Remise à zéro : jamais d'un seul geste (bouton écarté de lecture/pause et
+  // confirmation), pour ne pas perdre un minutage en visant la pause.
+  const resetChrono = (side: NursingSide) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    showAlert(
+      side === "left" ? "Remettre à zéro le côté gauche ?" : "Remettre à zéro le côté droit ?",
+      "Le temps compté pour ce côté sera effacé.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Remettre à zéro",
+          style: "destructive",
+          onPress: () => updateTimer((state, at) => resetSide(state, side, at)),
+        },
+      ],
+    );
   };
 
-  // Stop chrono when changing meal type
+  const adjustChrono = (side: NursingSide, deltaSeconds: number) =>
+    updateTimer((state, at) => adjustSide(state, side, deltaSeconds, at));
+
+  const pauseChrono = useCallback(() => {
+    updateTimer((state, at) =>
+      state.runningSide ? toggleSide(state, state.runningSide, at) : state,
+    );
+  }, [updateTimer]);
+
+  // Quitter la tétée pour un autre type met le chrono en pause (temps conservé).
   useEffect(() => {
-    if (mealType !== "tetee") {
-      setRunningSide(null);
+    if (mealType !== "tetee" && timerRef.current.runningSide) {
+      pauseChrono();
     }
-  }, [mealType]);
+  }, [mealType, pauseChrono]);
 
-  // Chrono timer effect
+  // Reprise d'un chrono laissé en cours (feuille fermée, app relancée) et
+  // préremplissage du biberon avec la dernière quantité donnée.
+  const [restoredVersion, setRestoredVersion] = useState(0);
   useEffect(() => {
-    if (!runningSide || mealType !== "tetee" || isEditing) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      timerTickRef.current = null;
+    if (isEditing || !childId) {
+      timerLoadedRef.current = true;
       return;
     }
-
-    timerTickRef.current = Date.now();
-    timerIntervalRef.current = setInterval(() => {
-      const now = Date.now();
-      const lastTick = timerTickRef.current ?? now;
-      const deltaSeconds = Math.floor((now - lastTick) / 1000);
-      if (deltaSeconds <= 0) return;
-      timerTickRef.current = lastTick + deltaSeconds * 1000;
-      if (runningSide === "left") {
-        setLeftSeconds((prev) => prev + deltaSeconds);
-      } else {
-        setRightSeconds((prev) => prev + deltaSeconds);
-      }
-    }, 500);
-
+    let cancelled = false;
+    Promise.all([loadNursingTimer(childId), loadLastBottle(childId)]).then(
+      ([draft, lastBottle]) => {
+        if (cancelled) return;
+        timerLoadedRef.current = true;
+        let restored = false;
+        // Le type demandé à l'ouverture est toujours respecté : une feuille
+        // ouverte pour un biberon reste sur Biberon, la tétée est proposée
+        // dans un bandeau. L'heure n'est jamais modifiée ici (voir
+        // proposedMealDate : l'heure de début ne vaut que pour une tétée).
+        const opening = resolveNursingDraftOnOpen({
+          draft,
+          currentType: mealTypeRef.current,
+          isEditing,
+          formHasProgress: hasNursingProgress(timerRef.current),
+        });
+        if (opening === "resume" && draft) {
+          setTimer(draft);
+        } else if (opening === "offer" && draft) {
+          setPendingDraft(draft);
+        } else if (hasNursingProgress(timerRef.current)) {
+          // Un chrono démarré avant la fin du chargement est enregistré tout de suite.
+          saveNursingTimer(childId, timerRef.current);
+        }
+        if (lastBottle && !quantiteTouchedRef.current) {
+          setQuantite(Math.min(MAX_BIBERON_ML, Math.max(0, lastBottle.quantite)));
+          const lastType = lastBottle.typeBiberon;
+          if (lastType && BIBERON_TYPE_OPTIONS.some((o) => o.value === lastType)) {
+            setTypeBiberon(lastType as BiberonEvent["typeBiberon"]);
+          }
+          restored = true;
+        }
+        if (restored) setRestoredVersion((v) => v + 1);
+      },
+    );
     return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      timerTickRef.current = null;
+      cancelled = true;
     };
-  }, [runningSide, mealType, isEditing]);
+    // Chargé une seule fois par montage (la feuille est remontée à chaque ouverture).
+  }, [isEditing, childId]);
+
+  // Persistance du chrono à chaque changement (nouvelle tétée uniquement).
+  useEffect(() => {
+    if (isEditing || !childId || !timerLoadedRef.current || submittedRef.current) return;
+    saveNursingTimer(childId, timer);
+  }, [timer, isEditing, childId]);
+
+  // Feuille fermée avec une tétée non enregistrée : le dire. En marche, le
+  // chrono continue ; en pause, le brouillon attend sur l'Accueil (bandeau
+  // avec l'heure d'effacement) au lieu de disparaître en silence.
+  useEffect(
+    () => () => {
+      if (isEditing || submittedRef.current) return;
+      if (timerRef.current.runningSide) {
+        showToast("La tétée reste chronométrée : rouvrez Repas pour la terminer.");
+      } else if (hasNursingProgress(timerRef.current)) {
+        showToast(NURSING_PAUSED_CLOSE_TOAST, 4000);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // Reprendre le brouillon proposé dans le bandeau (ou en passant sur Tétée).
+  const resumePendingDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    if (!hasNursingProgress(timerRef.current)) setTimer(pendingDraft);
+    setPendingDraft(null);
+    setMealType("tetee");
+  }, [pendingDraft]);
+
+  const selectMealType = (next: MealType) => {
+    if (next === "tetee" && pendingDraft) {
+      resumePendingDraft();
+      return;
+    }
+    setMealType(next);
+  };
+
+  // Abandonner une tétée lancée par erreur : efface le brouillon (confirmé).
+  const discardNursingDraft = useCallback(() => {
+    if (!childId) return;
+    showAlert(
+      "Abandonner la tétée ?",
+      "Le temps chronométré sera effacé. Rien n'est enregistré dans le journal.",
+      [
+        { text: "Garder", style: "cancel" },
+        {
+          text: "Abandonner",
+          style: "destructive",
+          onPress: () => {
+            setPendingDraft(null);
+            setTimer((prev) => (hasNursingProgress(prev) ? EMPTY_NURSING_TIMER : prev));
+            clearNursingTimer(childId);
+          },
+        },
+      ],
+    );
+  }, [childId, showAlert]);
+
+  // Heure proposée : celle du début du chrono pour une tétée (si l'heure n'a
+  // pas été choisie), sinon celle du formulaire. Jamais pour un autre type.
+  const effectiveDate = proposedMealDate({
+    mealType,
+    timer,
+    dateTouched: dateHeureDirty || isEditing,
+    fallback: dateHeure,
+  });
+
+  // Garde-fou de saisie : seules les valeurs saisies comptent. Le type de
+  // repas (onglet) n'en fait pas partie, et l'heure n'est « modifiée » que si
+  // l'utilisateur l'a choisie. En création, le chrono n'en fait pas partie
+  // non plus : il est déjà sauvegardé et repris à la réouverture.
+  const { resetBaseline } = useFormDirtyGuard({
+    // En édition, changer le type change vraiment l'événement enregistré.
+    mealType: isEditing ? mealType : undefined,
+    dateHeureDirty,
+    quantite,
+    typeBiberon,
+    typeSolide,
+    momentRepas,
+    ingredients,
+    quantiteSolide,
+    nouveauAliment,
+    nomNouvelAliment,
+    allergenes,
+    reaction,
+    aime,
+    leftSeconds: isEditing ? timer.leftSeconds : 0,
+    rightSeconds: isEditing ? timer.rightSeconds : 0,
+  });
+  useEffect(() => {
+    if (restoredVersion > 0) resetBaseline();
+  }, [restoredVersion, resetBaseline]);
 
   // ============================================
   // SUBMIT / DELETE
@@ -274,16 +447,20 @@ export function MealsForm({
 
     setIsSubmitting(true);
 
-    const dateToSave = !isEditing || dateHeureDirty ? dateHeure : undefined;
+    const dateToSave = !isEditing || dateHeureDirty ? effectiveDate : undefined;
 
     if (mealType === "tetee") {
-      const leftMinutes = Math.round(leftSeconds / 60);
-      const rightMinutes = Math.round(rightSeconds / 60);
+      // Temps figé à l'instant de l'envoi (le côté en cours compris).
+      const at = Date.now();
+      const finalLeft = sideSeconds(timer, "left", at);
+      const finalRight = sideSeconds(timer, "right", at);
+      const leftMinutes = Math.round(finalLeft / 60);
+      const rightMinutes = Math.round(finalRight / 60);
       const dataToSave = removeUndefined({
         type: mealType,
         quantite: null,
-        coteGauche: leftSeconds > 0,
-        coteDroit: rightSeconds > 0,
+        coteGauche: finalLeft > 0,
+        coteDroit: finalRight > 0,
         dureeGauche: leftMinutes > 0 ? leftMinutes : undefined,
         dureeDroite: rightMinutes > 0 ? rightMinutes : undefined,
         date: dateToSave,
@@ -300,6 +477,8 @@ export function MealsForm({
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
         showSuccess("meal", "Tétée enregistrée");
+        submittedRef.current = true;
+        clearNursingTimer(activeChild.id);
       }
     } else if (mealType === "biberon") {
       const dataToSave = removeUndefined({
@@ -320,6 +499,7 @@ export function MealsForm({
       } else {
         ajouterEvenementOptimistic(activeChild.id, dataToSave);
         showSuccess("meal", "Biberon enregistré");
+        saveLastBottle(activeChild.id, { quantite, typeBiberon });
       }
     } else if (mealType === "solide") {
       const trimmedIngredients = ingredients.trim();
@@ -377,53 +557,58 @@ export function MealsForm({
     onSuccess();
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer ce repas ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerEvenement(activeChild.id, editData.id);
-          const deletedText =
-            editData.type === "tetee"
-              ? "Tétée supprimée"
-              : editData.type === "biberon"
-                ? "Biberon supprimé"
-                : editData.type === "solide"
-                  ? "Repas solide supprimé"
-                  : null;
-          if (outcome === "queued" || deletedText) {
-            showToast(deleteToastMessage(outcome, deletedText ?? ""));
-          }
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message:
+        editData.type === "tetee"
+          ? "Tétée supprimée"
+          : editData.type === "biberon"
+            ? "Biberon supprimé"
+            : editData.type === "solide"
+              ? "Repas solide supprimé"
+              : "Repas supprimé",
+      run: () => supprimerEvenement(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
   // RENDER
   // ============================================
 
-  const totalSeconds = leftSeconds + rightSeconds;
-
   return (
     <View style={styles.container}>
+      {/* Tétée en cours alors que la feuille est ouverte pour autre chose. */}
+      {pendingDraft && mealType !== "tetee" && (
+        <NursingDraftBanner
+          draft={pendingDraft}
+          colors={{
+            background: accentColors.softBg,
+            border: accentColors.softBorder,
+            text: nc.textStrong,
+            actionText: accentColors.softText,
+            mutedText: nc.textNormal, // ≥ 4.5:1 sur softBg (textLight : 4,21:1)
+          }}
+          onResume={resumePendingDraft}
+          onDiscard={discardNursingDraft}
+          disabled={isSubmitting}
+        />
+      )}
+
       {/* Type selector */}
       <Text style={[styles.categoryLabel, { color: nc.textLight }]}>
         Type de repas
       </Text>
       <View style={styles.typeRow}>
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "tetee" && {
@@ -431,8 +616,9 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
-          onPress={() => setMealType("tetee")}
+          onPress={() => selectMealType("tetee")}
           disabled={isSubmitting}
           accessibilityLabel="Type tétée"
           accessibilityRole="button"
@@ -456,10 +642,11 @@ export function MealsForm({
           >
             Tétée
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "biberon" && {
@@ -467,10 +654,10 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={() => {
-            setMealType("biberon");
-            setRunningSide(null);
+            selectMealType("biberon");
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type biberon"
@@ -495,10 +682,11 @@ export function MealsForm({
           >
             Biberon
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={[
+        <Pressable
+          android_ripple={ripple}
+          style={({ pressed }) => [
             styles.typeChip,
             { backgroundColor: nc.background, borderColor: nc.border },
             mealType === "solide" && {
@@ -506,10 +694,10 @@ export function MealsForm({
               borderColor: accentColors.softBorder,
             },
             isSubmitting && styles.typeChipDisabled,
+            pressedOpacity(pressed, 0.2),
           ]}
           onPress={() => {
-            setMealType("solide");
-            setRunningSide(null);
+            selectMealType("solide");
           }}
           disabled={isSubmitting}
           accessibilityLabel="Type solide"
@@ -534,7 +722,7 @@ export function MealsForm({
           >
             Solide
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* BIBERON FORM */}
@@ -545,9 +733,10 @@ export function MealsForm({
           </Text>
           <View style={styles.biberonTypeGrid}>
             {BIBERON_TYPE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.biberonTypeChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   typeBiberon === option.value && {
@@ -555,6 +744,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setTypeBiberon(option.value)}
                 disabled={isSubmitting}
@@ -579,7 +769,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -587,50 +777,110 @@ export function MealsForm({
             Quantité
           </Text>
           <View style={styles.quantityRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
-                isSubmitting && styles.buttonDisabled,
+                (isSubmitting || quantite <= 0) && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantite((q) => Math.max(0, q - 5)))
-              }
-              onPressOut={handlePressOut}
-              disabled={isSubmitting}
-              accessibilityLabel="Diminuer la quantité"
+              {...repeatPress(() =>
+                setQuantite((q) => Math.max(0, q - BIBERON_STEP_ML)),
+              )}
+              disabled={isSubmitting || quantite <= 0}
+              accessibilityRole="button"
+              accessibilityLabel={`Retirer ${BIBERON_STEP_ML} ml`}
+              accessibilityState={{ disabled: isSubmitting || quantite <= 0 }}
             >
               <Text
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
               >
-                -
+                −
               </Text>
-            </TouchableOpacity>
-            <Text style={[styles.quantityValue, { color: nc.textStrong }]}>
+            </Pressable>
+            <Text
+              style={[styles.quantityValue, { color: nc.textStrong }]}
+              accessible
+              accessibilityRole="adjustable"
+              accessibilityLabel="Quantité du biberon"
+              accessibilityValue={{ text: `${quantite} millilitres` }}
+              accessibilityActions={[
+                { name: "increment", label: "Augmenter" },
+                { name: "decrement", label: "Diminuer" },
+              ]}
+              onAccessibilityAction={(event) => {
+                if (isSubmitting) return;
+                if (event.nativeEvent.actionName === "increment") {
+                  setQuantite((q) => Math.min(MAX_BIBERON_ML, q + BIBERON_STEP_ML));
+                } else if (event.nativeEvent.actionName === "decrement") {
+                  setQuantite((q) => Math.max(0, q - BIBERON_STEP_ML));
+                }
+              }}
+            >
               {quantite} ml
             </Text>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.quantityButton,
                 { backgroundColor: nc.backgroundPressed },
                 quantite >= MAX_BIBERON_ML && styles.quantityButtonDisabled,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantite((q) => Math.min(MAX_BIBERON_ML, q + 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                setQuantite((q) => Math.min(MAX_BIBERON_ML, q + BIBERON_STEP_ML)),
+              )}
               disabled={isSubmitting || quantite >= MAX_BIBERON_ML}
-              accessibilityLabel="Augmenter la quantité"
+              accessibilityRole="button"
+              accessibilityLabel={`Ajouter ${BIBERON_STEP_ML} ml`}
+              accessibilityState={{
+                disabled: isSubmitting || quantite >= MAX_BIBERON_ML,
+              }}
             >
               <Text
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
               >
                 +
               </Text>
-            </TouchableOpacity>
+            </Pressable>
+          </View>
+          {/* Quantités courantes : un seul toucher au lieu de dix appuis. */}
+          <View style={styles.presetRow}>
+            {BIBERON_PRESETS_ML.map((preset) => {
+              const selected = quantite === preset;
+              return (
+                <Pressable
+                  android_ripple={ripple}
+                  key={preset}
+                  style={({ pressed }) => [
+                    styles.presetChip,
+                    { backgroundColor: nc.background, borderColor: nc.border },
+                    selected && {
+                      backgroundColor: accentColors.softBg,
+                      borderColor: accentColors.softBorder,
+                    },
+                    isSubmitting && styles.chipDisabled,
+                    pressedOpacity(pressed, 0.2),
+                  ]}
+                  onPress={() => setQuantite(preset)}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${preset} ml`}
+                  accessibilityState={{ selected, disabled: isSubmitting }}
+                >
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      { color: selected ? accentColors.softText : nc.textNormal },
+                    ]}
+                  >
+                    {preset}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </>
       )}
@@ -642,243 +892,194 @@ export function MealsForm({
             Chronomètre tétée
           </Text>
           <View style={styles.chronoContainer}>
-            {/* Left side */}
-            <View
-              style={[
-                styles.chronoCard,
-                { backgroundColor: nc.background, borderColor: nc.border },
-              ]}
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-                Gauche
-              </Text>
-              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>
-                {formatDuration(leftSeconds)}
-              </Text>
-              {isEditing ? (
-                <View style={styles.chronoAdjustRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setLeftSeconds((prev) => Math.max(0, prev - 60)),
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text
-                    style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
-                  >
-                    {Math.round(leftSeconds / 60)} min
+            {(["left", "right"] as const).map((side) => {
+              const sideLabel = side === "left" ? "gauche" : "droit";
+              // Temps figé (hors segment en cours) : suffit pour les libellés et
+              // l'état des boutons, sans dépendre de l'horloge qui défile.
+              const countedSeconds = side === "left" ? timer.leftSeconds : timer.rightSeconds;
+              const isRunning = runningSide === side;
+              const hasTime = countedSeconds > 0 || isRunning;
+              // Édition : le chrono ne tourne pas, le temps figé est le temps affiché.
+              const minutes = Math.round(countedSeconds / 60);
+              return (
+                <View
+                  key={side}
+                  style={[
+                    styles.chronoCard,
+                    { backgroundColor: nc.background, borderColor: nc.border },
+                    isRunning && { borderColor: accentColors.softBorder },
+                  ]}
+                >
+                  <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
+                    {side === "left" ? "Gauche" : "Droit"}
                   </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setLeftSeconds((prev) => prev + 60))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
+                  <NursingElapsedText
+                    timer={timer}
+                    side={side}
+                    style={[styles.chronoTime, { color: nc.textStrong }]}
+                    a11yPrefix={`Côté ${sideLabel}`}
+                  />
+                  {isEditing ? (
+                    <View style={styles.chronoAdjustRow}>
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
+                          styles.chronoAdjustButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isSubmitting && styles.buttonDisabled,
+                          pressedOpacity(pressed, 0.2),
+                        ]}
+                        {...repeatPress(() => adjustChrono(side, -60))}
+                        disabled={isSubmitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retirer une minute au côté ${sideLabel}`}
+                        accessibilityState={{ disabled: isSubmitting }}
+                      >
+                        <Text
+                          style={[
+                            styles.chronoAdjustButtonText,
+                            { color: nc.textStrong },
+                          ]}
+                        >
+                          −
+                        </Text>
+                      </Pressable>
+                      <Text
+                        style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
+                      >
+                        {minutes} min
+                      </Text>
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
+                          styles.chronoAdjustButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isSubmitting && styles.buttonDisabled,
+                          pressedOpacity(pressed, 0.2),
+                        ]}
+                        {...repeatPress(() => adjustChrono(side, 60))}
+                        disabled={isSubmitting}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ajouter une minute au côté ${sideLabel}`}
+                        accessibilityState={{ disabled: isSubmitting }}
+                      >
+                        <Text
+                          style={[
+                            styles.chronoAdjustButtonText,
+                            { color: nc.textStrong },
+                          ]}
+                        >
+                          +
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View style={styles.chronoControlRow}>
+                      {/* Lecture / pause : grande cible, seule action principale. */}
+                      <Pressable
+                        android_ripple={ripple}
+                        style={({ pressed }) => [
+                          styles.chronoControlButton,
+                          {
+                            backgroundColor: nc.backgroundCard,
+                            borderColor: nc.border,
+                          },
+                          isRunning && {
+                            backgroundColor: accentColors.softBg,
+                            borderColor: accentColors.softBorder,
+                          },
+                          pressedOpacity(pressed, 0.2),
+                        ]}
+                        onPress={() => toggleChrono(side)}
+                        disabled={isSubmitting}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isRunning
+                            ? `Mettre en pause le côté ${sideLabel}`
+                            : countedSeconds > 0
+                              ? `Reprendre le côté ${sideLabel}`
+                              : `Démarrer le côté ${sideLabel}`
+                        }
+                        accessibilityState={{
+                          selected: isRunning,
+                          disabled: isSubmitting,
+                        }}
+                      >
+                        <Ionicons
+                          name={isRunning ? "pause" : "play"}
+                          size={24}
+                          color={isRunning ? accentColors.softText : nc.textStrong}
+                        />
+                      </Pressable>
+                      {/* Remise à zéro : petite, écartée, et confirmée. */}
+                      <Pressable
+                        android_ripple={rippleBorderless}
+                        style={({ pressed }) => [
+                          styles.chronoResetButton,
+                          !hasTime && styles.chronoControlButtonDisabled,
+                          pressedOpacity(pressed, 0.2),
+                        ]}
+                        onPress={() => resetChrono(side)}
+                        disabled={isSubmitting || !hasTime}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remettre à zéro le côté ${sideLabel}`}
+                        accessibilityHint="Demande une confirmation"
+                        accessibilityState={{
+                          disabled: isSubmitting || !hasTime,
+                        }}
+                      >
+                        <Ionicons
+                          name="refresh"
+                          size={18}
+                          color={!hasTime ? nc.textMuted : nc.textLight}
+                        />
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
-              ) : (
-                <View style={styles.chronoControlRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      runningSide === "left" &&
-                        styles.chronoControlButtonActive,
-                    ]}
-                    onPress={() => toggleChrono("left")}
-                    disabled={isSubmitting}
-                  >
-                    <Ionicons
-                      name={runningSide === "left" ? "pause" : "play"}
-                      size={16}
-                      color={runningSide === "left" ? "white" : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      leftSeconds === 0 && styles.chronoControlButtonDisabled,
-                    ]}
-                    onPress={() => resetChrono("left")}
-                    disabled={isSubmitting || leftSeconds === 0}
-                  >
-                    <Ionicons
-                      name="refresh"
-                      size={16}
-                      color={leftSeconds === 0 ? nc.textMuted : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* Right side */}
-            <View
-              style={[
-                styles.chronoCard,
-                { backgroundColor: nc.background, borderColor: nc.border },
-              ]}
-            >
-              <Text style={[styles.chronoLabel, { color: nc.textLight }]}>
-                Droit
-              </Text>
-              <Text style={[styles.chronoTime, { color: nc.textStrong }]}>
-                {formatDuration(rightSeconds)}
-              </Text>
-              {isEditing ? (
-                <View style={styles.chronoAdjustRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() =>
-                        setRightSeconds((prev) => Math.max(0, prev - 60)),
-                      )
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      -
-                    </Text>
-                  </TouchableOpacity>
-                  <Text
-                    style={[styles.chronoAdjustValue, { color: nc.textStrong }]}
-                  >
-                    {Math.round(rightSeconds / 60)} min
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoAdjustButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      isSubmitting && styles.buttonDisabled,
-                    ]}
-                    onPressIn={() =>
-                      handlePressIn(() => setRightSeconds((prev) => prev + 60))
-                    }
-                    onPressOut={handlePressOut}
-                    disabled={isSubmitting}
-                  >
-                    <Text
-                      style={[
-                        styles.chronoAdjustButtonText,
-                        { color: nc.textStrong },
-                      ]}
-                    >
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.chronoControlRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      runningSide === "right" &&
-                        styles.chronoControlButtonActive,
-                    ]}
-                    onPress={() => toggleChrono("right")}
-                    disabled={isSubmitting}
-                  >
-                    <Ionicons
-                      name={runningSide === "right" ? "pause" : "play"}
-                      size={16}
-                      color={runningSide === "right" ? "white" : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.chronoControlButton,
-                      {
-                        backgroundColor: nc.backgroundCard,
-                        borderColor: nc.border,
-                      },
-                      rightSeconds === 0 && styles.chronoControlButtonDisabled,
-                    ]}
-                    onPress={() => resetChrono("right")}
-                    disabled={isSubmitting || rightSeconds === 0}
-                  >
-                    <Ionicons
-                      name="refresh"
-                      size={16}
-                      color={rightSeconds === 0 ? nc.textMuted : nc.textStrong}
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+              );
+            })}
           </View>
 
           <View style={styles.chronoTotalRow}>
             <Text style={[styles.chronoTotalLabel, { color: nc.textLight }]}>
               Total
             </Text>
-            <Text style={[styles.chronoTotalValue, { color: nc.textStrong }]}>
-              {formatDuration(totalSeconds)}
-            </Text>
+            <NursingElapsedText
+              timer={timer}
+              style={[styles.chronoTotalValue, { color: nc.textStrong }]}
+              a11yPrefix="Durée totale"
+            />
           </View>
+          {!isEditing && runningSide && (
+            <Text style={[styles.chronoHint, { color: nc.textLight }]}>
+              Le chrono continue même si vous fermez cette fenêtre.
+            </Text>
+          )}
+          {/* Tétée lancée par erreur : on peut l'abandonner (confirmé). */}
+          {!isEditing && hasNursingProgress(timer) && (
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [styles.chronoDiscardButton, pressedOpacity(pressed, 0.2)]}
+              onPress={discardNursingDraft}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Abandonner la tétée"
+              accessibilityHint="Efface le chrono, demande une confirmation"
+              accessibilityState={{ disabled: isSubmitting }}
+            >
+              <Text style={[styles.chronoDiscardText, { color: nc.textLight }]}>
+                Abandonner la tétée
+              </Text>
+            </Pressable>
+          )}
         </>
       )}
 
@@ -891,9 +1092,10 @@ export function MealsForm({
           </Text>
           <View style={styles.solideTypeGrid}>
             {SOLIDE_TYPE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.solideTypeChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   typeSolide === option.value && {
@@ -901,6 +1103,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setTypeSolide(option.value)}
                 disabled={isSubmitting}
@@ -933,7 +1136,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -943,9 +1146,10 @@ export function MealsForm({
           </Text>
           <View style={styles.momentRepasGrid}>
             {MOMENT_REPAS_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.momentRepasChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   momentRepas === option.value && {
@@ -953,6 +1157,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => {
                   setMomentRepas(option.value);
@@ -988,7 +1193,7 @@ export function MealsForm({
                 >
                   {option.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -998,9 +1203,10 @@ export function MealsForm({
           </Text>
           <View style={styles.quantiteSolideRow}>
             {QUANTITE_SOLIDE_OPTIONS.map((option) => (
-              <TouchableOpacity
+              <Pressable
+                android_ripple={ripple}
                 key={option.value}
-                style={[
+                style={({ pressed }) => [
                   styles.quantiteSolideChip,
                   { backgroundColor: nc.background, borderColor: nc.border },
                   quantiteSolide === option.value && {
@@ -1008,6 +1214,7 @@ export function MealsForm({
                     borderColor: accentColors.softBorder,
                   },
                   isSubmitting && styles.chipDisabled,
+                  pressedOpacity(pressed, 0.2),
                 ]}
                 onPress={() => setQuantiteSolide(option.value)}
                 disabled={isSubmitting}
@@ -1044,7 +1251,7 @@ export function MealsForm({
                 >
                   {option.description}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -1133,9 +1340,10 @@ export function MealsForm({
                 {ALLERGENES_OPTIONS.map((option) => {
                   const isSelected = allergenes.includes(option.value);
                   return (
-                    <TouchableOpacity
+                    <Pressable
+                      android_ripple={ripple}
                       key={option.value}
-                      style={[
+                      style={({ pressed }) => [
                         styles.allergeneChip,
                         {
                           backgroundColor: nc.backgroundPressed,
@@ -1143,6 +1351,7 @@ export function MealsForm({
                         },
                         isSelected && styles.allergeneChipActive,
                         isSubmitting && styles.chipDisabled,
+                        pressedOpacity(pressed, 0.2),
                       ]}
                       onPress={() => {
                         if (isSelected) {
@@ -1171,7 +1380,7 @@ export function MealsForm({
                       >
                         {option.label}
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -1181,9 +1390,10 @@ export function MealsForm({
               </Text>
               <View style={styles.reactionRow}>
                 {REACTION_OPTIONS.map((option) => (
-                  <TouchableOpacity
+                  <Pressable
+                    android_ripple={ripple}
                     key={option.value}
-                    style={[
+                    style={({ pressed }) => [
                       styles.reactionChip,
                       {
                         backgroundColor: nc.backgroundPressed,
@@ -1194,6 +1404,7 @@ export function MealsForm({
                         borderColor: option.color,
                       },
                       isSubmitting && styles.chipDisabled,
+                      pressedOpacity(pressed, 0.2),
                     ]}
                     onPress={() => setReaction(option.value)}
                     disabled={isSubmitting}
@@ -1214,7 +1425,7 @@ export function MealsForm({
                     >
                       {option.label}
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             </>
@@ -1225,12 +1436,14 @@ export function MealsForm({
             A aimé ?
           </Text>
           <View style={styles.aimeRow}>
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.aimeButton,
                 { backgroundColor: nc.backgroundPressed },
                 aime === true && styles.aimeButtonActiveYes,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => setAime(aime === true ? undefined : true)}
               disabled={isSubmitting}
@@ -1244,7 +1457,7 @@ export function MealsForm({
               <FontAwesome
                 name="thumbs-up"
                 size={20}
-                color={aime === true ? "white" : "#22c55e"}
+                color={aime === true ? "white" : nc.successText}
               />
               <Text
                 style={[
@@ -1255,13 +1468,15 @@ export function MealsForm({
               >
                 Oui
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
+            </Pressable>
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.aimeButton,
                 { backgroundColor: nc.backgroundPressed },
                 aime === false && styles.aimeButtonActiveNo,
                 isSubmitting && styles.buttonDisabled,
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => setAime(aime === false ? undefined : false)}
               disabled={isSubmitting}
@@ -1275,7 +1490,7 @@ export function MealsForm({
               <FontAwesome
                 name="thumbs-down"
                 size={20}
-                color={aime === false ? "white" : "#ef4444"}
+                color={aime === false ? "white" : nc.errorText}
               />
               <Text
                 style={[
@@ -1286,28 +1501,35 @@ export function MealsForm({
               >
                 Non
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </>
       )}
 
       {/* DATE/TIME PICKER */}
       <DateTimeSectionRow
-        value={dateHeure}
+        value={effectiveDate}
         onChange={handleDateHeureChange}
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
+        // Un repas, une couche ou un tirage ne se saisit pas au futur : évite
+        // un mauvais jour choisi d'un pouce ensommeillé.
+        maximumDate={new Date()}
       />
 
       {/* ACTION BUTTONS */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -1316,38 +1538,45 @@ export function MealsForm({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={nc.white} />
+              <ActivityIndicator size="small" color={accentColors.filledText} />
             ) : (
               <Text
                 style={[
                   styles.validateText,
                   {
-                    color: nc.white,
+                    color: accentColors.filledText,
                   },
                 ]}
               >
                 {isEditing ? "Enregistrer" : "Ajouter"}
               </Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
-          <TouchableOpacity
-            style={[styles.deleteButton, isSubmitting && styles.buttonDisabled]}
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
+              styles.deleteButton, isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
+            ]}
             onPress={handleDelete}
             disabled={isSubmitting}
             accessibilityLabel="Supprimer"
@@ -1356,7 +1585,7 @@ export function MealsForm({
             <Text style={[styles.deleteText, { color: nc.errorText }]}>
               Supprimer
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -1385,6 +1614,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -1415,6 +1645,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   biberonTypeChip: {
+    ...RIPPLE_CLIP,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
@@ -1449,9 +1680,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    ...RIPPLE_CLIP,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1466,7 +1698,30 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   quantityValue: {
-    fontSize: 16,
+    fontSize: 20,
+    fontWeight: "700",
+    minWidth: 80,
+    textAlign: "center",
+  },
+  presetRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  presetChip: {
+    ...RIPPLE_CLIP,
+    minWidth: 52,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  presetChipText: {
+    fontSize: 15,
     fontWeight: "600",
   },
 
@@ -1496,19 +1751,41 @@ const styles = StyleSheet.create({
   },
   chronoControlRow: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    // Remise à zéro écartée du bouton lecture/pause.
+    gap: 20,
   },
   chronoControlButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    ...RIPPLE_CLIP,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  chronoControlButtonActive: {
-    backgroundColor: eventColors.meal.dark,
-    borderColor: eventColors.meal.dark,
+  chronoResetButton: {
+    ...RIPPLE_CLIP,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chronoHint: {
+    fontSize: 13,
+    textAlign: "center",
+  },
+  chronoDiscardButton: {
+    alignSelf: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+  },
+  chronoDiscardText: {
+    fontSize: 14,
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
   chronoControlButtonDisabled: {
     opacity: 0.5,
@@ -1519,9 +1796,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chronoAdjustButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    ...RIPPLE_CLIP,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1561,6 +1839,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   solideTypeChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1589,6 +1868,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   momentRepasChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1616,6 +1896,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantiteSolideChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1688,6 +1969,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   allergeneChip: {
+    ...RIPPLE_CLIP,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -1721,6 +2003,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   reactionChip: {
+    ...RIPPLE_CLIP,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1749,6 +2032,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   aimeButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -1759,13 +2043,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
+  // Aplats sous texte blanc : green-700 (5.02:1) et destructive red-600 (4.83:1).
   aimeButtonActiveYes: {
-    backgroundColor: "#22c55e",
-    borderColor: "#16a34a",
+    backgroundColor: "#15803d",
+    borderColor: "#166534",
   },
   aimeButtonActiveNo: {
-    backgroundColor: "#ef4444",
-    borderColor: "#dc2626",
+    backgroundColor: neutralColors.destructive,
+    borderColor: "#b91c1c",
   },
   aimeButtonDisabled: {
     opacity: 0.5,
@@ -1788,6 +2073,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -1801,6 +2087,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

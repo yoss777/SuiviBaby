@@ -1,6 +1,7 @@
 import { ThemedView } from "@/components/themed-view";
-import { getNeutralColors } from "@/constants/dashboardColors";
-import { Colors } from "@/constants/theme";
+import { APP_NAME } from "@/constants/app";
+import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
+import { Colors, getReadableTextColor } from "@/constants/theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModal } from "@/contexts/ModalContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -10,7 +11,7 @@ import {
   deleteShareCode,
   listenToActiveShareCode,
 } from "@/services/childSharingService";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { HeaderBackButton } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { isEmailNotVerifiedError, showEmailNotVerifiedAlert } from "@/utils/emailVerification";
@@ -164,7 +165,7 @@ export default function ShareChildScreen() {
           elevation: 5,
         },
         generateButtonText: {
-          color: nc.white,
+          color: nc.onTodayAccent,
           fontSize: 16,
           fontWeight: "600",
         },
@@ -201,7 +202,7 @@ export default function ShareChildScreen() {
           elevation: 5,
         },
         inviteButtonText: {
-          color: nc.white,
+          color: getReadableTextColor(nc.success),
           fontSize: 16,
           fontWeight: "600",
         },
@@ -308,7 +309,7 @@ export default function ShareChildScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await RNShare.share({
-        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app Suivi Baby pour suivre notre enfant en tant que proche. Le code est valide pendant 7 jours.`,
+        message: `Voici le code pour accéder au suivi de ${childName} : ${shareCode}\n\nUtilise ce code dans l'app ${APP_NAME} pour suivre notre enfant en tant que proche. Le code est valide pendant 7 jours.`,
       });
     } catch (error) {
       console.error("Erreur partage:", error);
@@ -428,7 +429,7 @@ export default function ShareChildScreen() {
             contentContainerStyle={styles.scrollContent}
           >
             <View style={dynamicStyles.header}>
-              <FontAwesome name="share-alt" size={48} color={nc.todayAccent} />
+              <FontAwesome name="share-nodes" size={48} color={nc.todayAccent} />
               <Text style={dynamicStyles.title}>Partager {childName}</Text>
               <Text style={dynamicStyles.subtitle}>
                 Invitez un proche à suivre votre enfant : il pourra tout consulter, aimer et commenter les photos
@@ -463,7 +464,7 @@ export default function ShareChildScreen() {
                       accessibilityRole="button"
                       accessibilityLabel="Supprimer le code de partage"
                     >
-                      <FontAwesome name="trash-alt" size={16} color={nc.error} />
+                      <FontAwesome name="trash-can" size={16} color={nc.error} />
                     </TouchableOpacity>
                   </View>
 
@@ -517,13 +518,13 @@ export default function ShareChildScreen() {
                   accessibilityLabel="Générer un code de partage"
                 >
                   {isLoadingCode ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={nc.onTodayAccent} />
                   ) : (
                     <>
                       <FontAwesome
-                        name="plus-circle"
+                        name="circle-plus"
                         size={18}
-                        color={nc.white}
+                        color={nc.onTodayAccent}
                       />
                       <Text style={dynamicStyles.generateButtonText}>
                         Générer un code
@@ -575,13 +576,13 @@ export default function ShareChildScreen() {
                   accessibilityLabel="Envoyer l'invitation par email"
                 >
                   {isLoadingInvite ? (
-                    <ActivityIndicator size="small" color={nc.white} />
+                    <ActivityIndicator size="small" color={getReadableTextColor(nc.success)} />
                   ) : (
                     <>
                       <FontAwesome
                         name="paper-plane"
                         size={18}
-                        color={nc.white}
+                        color={getReadableTextColor(nc.success)}
                       />
                       <Text style={dynamicStyles.inviteButtonText}>
                         Envoyer l&apos;invitation
@@ -603,7 +604,7 @@ export default function ShareChildScreen() {
               accessibilityRole="text"
               accessibilityLabel="Information de sécurité : un code ou une invitation donne toujours le rôle Proche, seul le propriétaire peut passer un proche en Parent"
             >
-              <FontAwesome name="shield-alt" size={20} color={nc.todayAccent} />
+              <FontAwesome name="shield-halved" size={20} color={nc.todayAccent} />
               <Text style={dynamicStyles.infoText}>
                 Un code ou une invitation donne toujours le rôle Proche : il lit
                 tout, aime et commente les photos. Vous pourrez le passer en
@@ -649,7 +650,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -6,
     right: -6,
-    backgroundColor: "#fff",
+    backgroundColor: neutralColors.white,
     borderRadius: 12,
     padding: 4,
   },

@@ -1,6 +1,7 @@
 // components/forms/MilestonesForm.tsx
-import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { useFormScroll } from "@/components/ui/FormScrollContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
@@ -8,9 +9,9 @@ import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
 import { useBaby } from "@/contexts/BabyContext";
+import { useSheetDeleteWithUndo } from "@/hooks/useSheetDeleteWithUndo";
 import { useModal } from "@/contexts/ModalContext";
 import { useSuccessAnimation } from "@/contexts/SuccessAnimationContext";
-import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supprimerJalon } from "@/services/eventsService";
 import {
@@ -18,7 +19,6 @@ import {
   submitMilestone,
 } from "@/services/events/milestonePhoto";
 import { isLocalPhotoUri } from "@/utils/photoStorage";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useState } from "react";
@@ -30,10 +30,11 @@ import {
   Platform,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   View,
 } from "react-native";
 import { toDate } from "@/utils/date";
+import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 
 // Helper to remove undefined values from objects (Firebase doesn't accept undefined)
 function removeUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -161,10 +162,11 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   editData,
   onDelete,
 }) => {
+  const ripple = usePressRipple();
   const { activeChild } = useBaby();
   const formScroll = useFormScroll();
-  const { showAlert, showConfirm } = useModal();
-  const { showToast } = useToast();
+  const { showAlert } = useModal();
+  const deleteFromSheet = useSheetDeleteWithUndo();
   const { showSuccess } = useSuccessAnimation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -322,6 +324,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   // HANDLERS
   // ============================================
 
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ title, description, note, dateHeure, mood, photoUri });
+
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
 
@@ -387,26 +392,18 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
     }
   };
 
+  // Suppression immédiate + toast « Annuler » (8 s), comme dans les listes :
+  // pas de modale « irréversible » (audit UI/UX V3, R-P1-12).
   const handleDelete = () => {
     if (!editData || !activeChild?.id || isSubmitting) return;
-
-    showConfirm(
-      "Supprimer",
-      "Voulez-vous vraiment supprimer ce jalon ?",
-      async () => {
-        try {
-          setIsSubmitting(true);
-          const outcome = await supprimerJalon(activeChild.id, editData.id);
-          showToast(deleteToastMessage(outcome, "Jalon supprimé"));
-          onDelete?.();
-        } catch (error) {
-          console.error("Erreur suppression:", error);
-          showAlert("Erreur", "Impossible de supprimer.");
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-    );
+    const childId = activeChild.id;
+    const id = editData.id;
+    deleteFromSheet({
+      id,
+      message: "Jalon supprimé",
+      run: () => supprimerJalon(childId, id),
+      close: onDelete,
+    });
   };
 
   // ============================================
@@ -421,15 +418,17 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           const config = TYPE_CONFIG[type];
           const active = typeJalon === type;
           return (
-            <TouchableOpacity
+            <Pressable
+              android_ripple={ripple}
               key={type}
-              style={[
+              style={({ pressed }) => [
                 styles.typeChip,
                 { borderColor: nc.border, backgroundColor: nc.background },
                 active && {
                   backgroundColor: accentColors.softBg,
                   borderColor: accentColors.softBorder,
                 },
+                pressedOpacity(pressed, 0.2),
               ]}
               onPress={() => handleTypeChange(type)}
               disabled={isSubmitting}
@@ -451,7 +450,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               >
                 {config.label}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -514,15 +513,17 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             {MOOD_OPTIONS.map((option) => {
               const active = mood === option.value;
               return (
-                <TouchableOpacity
+                <Pressable
+                  android_ripple={ripple}
                   key={option.value}
-                  style={[
+                  style={({ pressed }) => [
                     styles.moodChip,
                     { borderColor: nc.border, backgroundColor: nc.background },
                     active && {
                       backgroundColor: accentColors.softBg,
                       borderColor: accentColors.softBorder,
                     },
+                    pressedOpacity(pressed, 0.2),
                   ]}
                   onPress={() => setMood(option.value)}
                   disabled={isSubmitting}
@@ -544,7 +545,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                   >
                     {option.label}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -598,23 +599,24 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
                 style={[styles.photoPreview, { backgroundColor: nc.background }]}
               />
             )}
-            <TouchableOpacity
-              style={[
+            <Pressable
+              android_ripple={ripple}
+              style={({ pressed }) => [
                 styles.photoRemoveButton,
                 { backgroundColor: nc.backgroundCard },
+                pressedOpacity(pressed, 0.8),
               ]}
               onPress={() => {
                 setPhotoUri(null);
                 setPhotoOriginalUri(null);
                 setPhotoPreviewLoading(false);
               }}
-              activeOpacity={0.8}
               disabled={isSubmitting}
               accessibilityLabel="Retirer la photo"
               hitSlop={8}
             >
               <FontAwesome name="xmark" size={12} color="#dc3545" />
-            </TouchableOpacity>
+            </Pressable>
             {(photoProcessing || photoPreviewLoading || photoUploading) && (
               <Text
                 style={[
@@ -631,23 +633,24 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             )}
           </View>
         ) : (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.photoPlaceholder,
               { borderColor: nc.border, backgroundColor: nc.background },
+              pressedOpacity(pressed, 0.8),
             ]}
             onPress={handlePickPhoto}
-            activeOpacity={0.8}
             disabled={isSubmitting}
             accessibilityLabel="Ajouter une photo"
           >
-            <FontAwesome5 name="camera" size={20} color={nc.textMuted} />
+            <FontAwesome name="camera" size={20} color={nc.textMuted} />
             <Text
               style={[styles.photoPlaceholderText, { color: nc.textLight }]}
             >
               Ajouter une photo
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
 
@@ -680,12 +683,16 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.cancelButton,
               { backgroundColor: nc.background, borderColor: nc.border },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={onCancel}
             disabled={isSubmitting}
@@ -694,13 +701,15 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             <Text style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
-          </TouchableOpacity>
+          </Pressable>
 
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.validateButton,
               { backgroundColor: accentColors.filledBg },
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -710,20 +719,23 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
               style={[
                 styles.validateText,
                 {
-                  color: nc.white,
+                  color: accentColors.filledText,
                 },
               ]}
             >
               {isEditing ? "Enregistrer" : "Ajouter"}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
+        </SheetFooter>
 
         {isEditing && (
-          <TouchableOpacity
-            style={[
+          <Pressable
+            android_ripple={ripple}
+            style={({ pressed }) => [
               styles.deleteButton,
               isSubmitting && styles.buttonDisabled,
+              pressedOpacity(pressed, 0.2),
             ]}
             onPress={handleDelete}
             disabled={isSubmitting}
@@ -731,7 +743,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
           >
             <FontAwesome name="trash" size={14} color={nc.error} />
             <Text style={[styles.deleteText, { color: nc.errorText }]}>Supprimer</Text>
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
     </View>
@@ -816,6 +828,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   moodChip: {
+    ...RIPPLE_CLIP,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
@@ -842,6 +855,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   photoRemoveButton: {
+    ...RIPPLE_CLIP,
     position: "absolute" as const,
     top: -8,
     right: -8,
@@ -857,6 +871,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   photoPlaceholder: {
+    ...RIPPLE_CLIP,
     height: 80,
     borderRadius: 12,
     borderWidth: 1,
@@ -883,6 +898,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cancelButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     borderWidth: 1,
     paddingVertical: 16,
@@ -896,6 +912,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   validateButton: {
+    ...RIPPLE_CLIP,
     flex: 1,
     paddingVertical: 16,
     borderRadius: 14,

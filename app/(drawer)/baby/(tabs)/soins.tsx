@@ -1,5 +1,7 @@
 import { SoinsEditData, SoinsType } from "@/components/forms/SoinsForm";
+import { formatTemperatureFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
+import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { ThemedText } from "@/components/themed-text";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
@@ -17,6 +19,8 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
+import { rowActionProps } from "@/utils/rowActions";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -86,13 +90,13 @@ const DeleteAction = React.memo(function DeleteAction({
 }) {
   return (
     <Pressable
-      style={[styles.deleteAction, { backgroundColor: nc.error }]}
+      style={[styles.deleteAction, { backgroundColor: nc.destructive }]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Supprimer cet événement"
     >
-      <Ionicons name="trash-outline" size={20} color={nc.white} />
-      <Text style={[styles.deleteActionText, { color: nc.white }]}>Supprimer</Text>
+      <Ionicons name="trash-outline" size={20} color={nc.onDestructive} />
+      <Text style={[styles.deleteActionText, { color: nc.onDestructive }]}>Supprimer</Text>
     </Pressable>
   );
 });
@@ -267,7 +271,7 @@ const formatTime = (date: Date) =>
   date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const formatTemperature = (value?: number) =>
-  typeof value === "number" ? `${value}°C` : "";
+  typeof value === "number" ? formatTemperatureFr(value) : "";
 
 // ============================================
 // COMPONENT
@@ -344,14 +348,9 @@ export default function SoinsScreen() {
   const latestVaccinsRef = useRef<HealthEvent[]>([]);
   const latestVitaminesRef = useRef<HealthEvent[]>([]);
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: HealthEvent | null;
-  }>({ visible: false, event: null });
-
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
 
-  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [softDeletedIds, setSoftDeletedIds] = useSoftDeletedIds();
 
   const editIdRef = useRef<string | null>(null);
   const returnToRef = useRef<string | null>(null);
@@ -1108,50 +1107,20 @@ export default function SoinsScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const eventType = deleteConfirm.event.type;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Soin supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(eventId);
-            return next;
-          });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => {
-            const next = new Set(prev);
-            next.add(eventId);
-            return next;
-          });
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete, showToast]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const handleBatchDelete = useCallback(() => {
     if (!activeChild?.id || selectedCount === 0) return;
@@ -1250,6 +1219,14 @@ export default function SoinsScreen() {
             },
           ]}
           onPress={selectionMode ? () => toggleId(event.id) : () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openEditModal(event); }}
+          // Alternative au glissement (WCAG 2.5.1) : appui long + actions
+          // d'accessibilité Modifier / Supprimer (audit V3, R-P1-13).
+          {...rowActionProps({
+            title: "Soin",
+            onEdit: () => openEditModal(event),
+            onDelete: event.id?.startsWith?.("__optimistic_") ? undefined : () => handleEventDelete(event),
+            disabled: selectionMode,
+          })}
         >
           {selectionMode && (
             <Pressable
@@ -1439,11 +1416,11 @@ export default function SoinsScreen() {
                   onDayPress={handleDateSelect}
                   markedDates={markedDates}
                   theme={{
-                    backgroundColor: Colors[colorScheme].background,
-                    calendarBackground: Colors[colorScheme].background,
+                    backgroundColor: Colors[colorScheme].surface,
+                    calendarBackground: Colors[colorScheme].surface,
                     textSectionTitleColor: Colors[colorScheme].text,
                     selectedDayBackgroundColor: Colors[colorScheme].tint,
-                    selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].background : nc.white,
+                    selectedDayTextColor: colorScheme === "dark" ? Colors[colorScheme].surface : nc.white,
                     todayTextColor: Colors[colorScheme].tint,
                     dayTextColor: Colors[colorScheme].text,
                     textDisabledColor: Colors[colorScheme].tabIconDefault,
@@ -1499,8 +1476,8 @@ export default function SoinsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Enregistrer un soin"
                   >
-                    <Ionicons name="add" size={20} color={nc.white} />
-                    <Text style={[styles.emptyCtaText, { color: nc.white }]}>Enregistrer un soin</Text>
+                    <Ionicons name="add" size={20} color={Colors[colorScheme].onTint} />
+                    <Text style={[styles.emptyCtaText, { color: Colors[colorScheme].onTint }]}>Enregistrer un soin</Text>
                   </Pressable>
                 )}
                 {!(selectedFilter === "today" || selectedDate) && (
@@ -1545,23 +1522,12 @@ export default function SoinsScreen() {
           )}
         </SafeAreaView>
         <ConfirmModal
-          visible={deleteConfirm.visible}
-          title="Suppression"
-          message="Voulez-vous vraiment supprimer ce soin ?"
-          confirmText="Supprimer"
-          cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
-          textColor={Colors[colorScheme].text}
-          onCancel={cancelDelete}
-          onConfirm={confirmDelete}
-        />
-        <ConfirmModal
           visible={batchDeleteConfirm.visible}
           title="Suppression groupée"
           message={`Voulez-vous vraiment supprimer ${batchDeleteConfirm.ids.length} soin${batchDeleteConfirm.ids.length > 1 ? "s" : ""} ?`}
           confirmText="Supprimer"
           cancelText="Annuler"
-          backgroundColor={Colors[colorScheme].background}
+          backgroundColor={Colors[colorScheme].surface}
           textColor={Colors[colorScheme].text}
           onCancel={cancelBatchDelete}
           onConfirm={confirmBatchDelete}

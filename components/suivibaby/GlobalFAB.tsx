@@ -1,14 +1,17 @@
-import { getNeutralColors } from "@/constants/dashboardColors";
+import { radius, space } from "@/constants/tokens";
+import { getNeutralColors, neutralColors, itemColors } from "@/constants/dashboardColors";
 import {
   QUICK_ADD_ACTIONS,
   QUICK_ADD_CATEGORIES,
   type QuickAddAction,
   type QuickAddSheetParams,
 } from "@/constants/dashboardConfig";
+import { getQuickActionColors } from "@/constants/quickActionColors";
 import { Colors } from "@/constants/theme";
 import { type FormSheetProps, useSheetActions } from "@/contexts/SheetContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
@@ -64,42 +67,28 @@ const ACTIONS: FabAction[] = [
   {
     key: "more",
     label: "Plus",
-    icon: { type: "fa", name: "ellipsis", color: "#6B7280" },
+    icon: { type: "fa", name: "ellipsis", color: neutralColors.textNormal },
     isMore: true,
   },
 ];
 
-const FAB_ACTION_COLORS: Record<
-  string,
-  { iconColor: string; backgroundColor: string }
-> = {
-  tetee: { iconColor: "#E8785A", backgroundColor: "#FEF5F3" },
-  miction: { iconColor: "#17a2b8", backgroundColor: "#d1ecf1" },
-  vitamine: { iconColor: "#E8A85A", backgroundColor: "#FEF5E7" },
-  more: { iconColor: "#6B7280", backgroundColor: "#F3F4F6" },
-};
+/** Pulsation d'invitation du FAB : une seule fois, à la toute première session. */
+export const FAB_PULSE_SEEN_KEY = "fab_pulse_seen_v1";
+let fabPulseSeenThisSession = false;
 
 const FAB_ACTION_LABELS: Record<string, string> = {
   tetee: "Repas",
   miction: "Change",
 };
 
+// La couleur réelle vient de getQuickActionColors (tokens de catégorie).
 const FAB_ACTION_ICONS: Record<string, QuickAddAction["icon"]> = {
-  tetee: { type: "fa", name: "utensils", color: "#E8785A" },
+  tetee: { type: "fa", name: "utensils", color: itemColors.biberon },
   miction: {
     type: "mc",
     name: "human-baby-changing-table",
-    color: "#17a2b8",
+    color: itemColors.miction,
   },
-};
-
-const getFabActionColors = (action: FabAction) => {
-  return (
-    FAB_ACTION_COLORS[action.key] ?? {
-      iconColor: action.icon.color,
-      backgroundColor: "#F3F4F6",
-    }
-  );
 };
 
 const getFabActionLabel = (action: FabAction) =>
@@ -246,10 +235,27 @@ export const GlobalFAB = ({
   const backdropOpacity = useSharedValue(0);
   const fabBottom = bottom ?? Math.max(insets.bottom + 6, 24);
 
-  // Subtle pulse animation when closed — skip in night mode (less visual noise)
+  // Pulsation d'invitation : uniquement à la première session (jamais ensuite,
+  // ni en mode nuit / animations réduites). Elle attirait l'œil à chaque écran.
+  const [pulseAllowed, setPulseAllowed] = useState(false);
+  useEffect(() => {
+    if (fabPulseSeenThisSession) return;
+    let cancelled = false;
+    AsyncStorage.getItem(FAB_PULSE_SEEN_KEY)
+      .then((seen) => {
+        if (cancelled || seen || fabPulseSeenThisSession) return;
+        fabPulseSeenThisSession = true;
+        setPulseAllowed(true);
+        return AsyncStorage.setItem(FAB_PULSE_SEEN_KEY, "1");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const hasPlayedPulse = useRef(false);
   useEffect(() => {
-    if (!animations.decorative) {
+    if (!animations.decorative || !pulseAllowed) {
       pulseScale.value = 1;
       return;
     }
@@ -268,7 +274,7 @@ export const GlobalFAB = ({
     } else if (isOpen) {
       pulseScale.value = withTiming(1, { duration: 200 });
     }
-  }, [animations.decorative, isOpen, pulseScale]);
+  }, [animations.decorative, isOpen, pulseAllowed, pulseScale]);
 
   useEffect(() => {
     rotation.value = withSpring(isOpen ? 45 : 0, { ...SPRING_V3, damping: 12 });
@@ -448,7 +454,7 @@ export const GlobalFAB = ({
       >
         {/* Action buttons */}
         {ACTIONS.map((action, index) => {
-          const actionColors = getFabActionColors(action);
+          const actionColors = getQuickActionColors(action.key, colorScheme);
           return (
             <ActionButton
               key={action.key}
@@ -456,8 +462,8 @@ export const GlobalFAB = ({
               index={index}
               isOpen={isOpen}
               onPress={() => handleActionPress(action)}
-              labelTextColor={colors.text}
-              labelBackgroundColor={colors.background}
+              labelTextColor={nc.textStrong}
+              labelBackgroundColor={nc.backgroundCard}
               actionBackgroundColor={actionColors.backgroundColor}
               actionIconColor={actionColors.iconColor}
             />
@@ -489,11 +495,7 @@ export const GlobalFAB = ({
             <FontAwesome6
               name="plus"
               size={MAIN_FAB_ICON_SIZE}
-              color={
-                colorScheme === "dark"
-                  ? Colors[colorScheme].background
-                  : nc.white
-              }
+              color={colors.onTint}
             />
           </Animated.View>
         </Pressable>
@@ -525,7 +527,7 @@ const styles = StyleSheet.create({
     borderRadius: MAIN_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -551,7 +553,7 @@ const styles = StyleSheet.create({
     borderRadius: ACTION_FAB_SIZE / 2,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -563,10 +565,10 @@ const styles = StyleSheet.create({
   actionLabelContainer: {
     position: "absolute",
     right: ACTION_LABEL_OFFSET,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.sm,
     paddingVertical: 6,
-    borderRadius: 8,
-    shadowColor: "#000",
+    borderRadius: radius.sm,
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -578,21 +580,21 @@ const styles = StyleSheet.create({
   },
   quickSheetList: {
     gap: 10,
-    paddingBottom: 8,
+    paddingBottom: space.xs,
   },
   quickSheetItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: space.sm,
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   quickSheetIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -605,8 +607,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 12,
-    marginBottom: 4,
-    marginLeft: 4,
+    marginTop: space.sm,
+    marginBottom: space.xxs,
+    marginLeft: space.xxs,
   },
 });

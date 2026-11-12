@@ -2,8 +2,8 @@ import { PulsingAura } from "@/components/moments/PulsingAura";
 import {
   getMoodGradients,
   getNeutralColors,
+  neutralColors,
 } from "@/constants/dashboardColors";
-import { eventColors } from "@/constants/eventColors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo } from "react";
@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -27,6 +28,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SPRING_V3 } from "@/constants/motion";
+import { useNightMode } from "@/hooks/useNightMode";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -106,8 +108,17 @@ const FloatingIcon = ({
 }) => {
   const progress = useSharedValue(0);
   const opacity = useSharedValue(0);
+  // Flottement décoratif : coupé la nuit et avec « Réduire les animations ».
+  const { animations } = useNightMode();
+  const animate = animations.decorative;
 
   useEffect(() => {
+    if (!animate) {
+      cancelAnimation(progress);
+      progress.value = 0;
+      opacity.value = 1;
+      return;
+    }
     opacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
     progress.value = withDelay(
       delay,
@@ -119,7 +130,8 @@ const FloatingIcon = ({
         -1,
       ),
     );
-  }, []);
+    return () => cancelAnimation(progress);
+  }, [animate, delay, opacity, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value * 0.6,
@@ -318,7 +330,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 28,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -363,20 +375,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
   },
-  addMoodButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: eventColors.jalon.dark,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 50,
-  },
-  addMoodButtonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
   updateMoodButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -388,7 +386,7 @@ const styles = StyleSheet.create({
   },
   updateMoodText: {
     fontSize: 13,
-    color: "#666",
+    color: neutralColors.textLight,
     fontWeight: "500",
   },
   buttonPressed: {
@@ -409,7 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,

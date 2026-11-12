@@ -1,5 +1,6 @@
+import { Colors } from "@/constants/theme";
 import { getPendingRequests } from "@/services/babyAttachmentService";
-import FontAwesome from "@expo/vector-icons/FontAwesome5";
+import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -9,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { neutralColors } from "@/constants/dashboardColors";
 
 interface PendingRequest {
   id: string;
@@ -66,7 +68,7 @@ export default function PendingRequestsScreen() {
       <View style={styles.requestCard}>
         <View style={styles.requestHeader}>
           <View style={styles.iconContainer}>
-            <FontAwesome name="baby" size={24} color="#4A90E2" />
+            <FontAwesome name="baby" size={24} color={Colors.light.tint} />
           </View>
           <View style={styles.requestInfo}>
             <Text style={styles.childName}>
@@ -78,14 +80,14 @@ export default function PendingRequestsScreen() {
 
         <View style={styles.requestDetails}>
           <View style={styles.detailRow}>
-            <FontAwesome name="calendar" size={14} color="#666" />
+            <FontAwesome name="calendar" size={14} color={neutralColors.textLight} />
             <Text style={styles.detailText}>
               Demande envoyée le {requestDate}
             </Text>
           </View>
 
           <View style={styles.detailRow}>
-            <FontAwesome name="envelope" size={14} color="#666" />
+            <FontAwesome name="envelope" size={14} color={neutralColors.textLight} />
             <Text style={styles.detailText}>{item.parentEmail}</Text>
           </View>
         </View>
@@ -98,7 +100,7 @@ export default function PendingRequestsScreen() {
         </View>
 
         <View style={styles.infoBox}>
-          <FontAwesome name="info-circle" size={14} color="#0c5460" />
+          <FontAwesome name="circle-info" size={14} color="#0c5460" />
           <Text style={styles.infoText}>
             Vérifiez votre email et cliquez sur le lien de validation pour
             confirmer le rattachement
@@ -111,7 +113,7 @@ export default function PendingRequestsScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
+        <ActivityIndicator size="large" color={Colors.light.tint} />
         <Text style={styles.loadingText}>Chargement des demandes...</Text>
       </View>
     );
@@ -120,7 +122,7 @@ export default function PendingRequestsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <FontAwesome name="clock" size={32} color="#4A90E2" />
+        <FontAwesome name="clock" size={32} color={Colors.light.tint} />
         <Text style={styles.title}>Demandes en attente</Text>
         <Text style={styles.subtitle}>
           {requests.length} demande{requests.length > 1 ? "s" : ""} en attente
@@ -138,12 +140,12 @@ export default function PendingRequestsScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={() => loadRequests(true)}
-            colors={["#4A90E2"]}
+            colors={[Colors.light.tint]}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <FontAwesome name="check-circle" size={64} color="#28a745" />
+            <FontAwesome name="circle-check" size={64} color={neutralColors.successText} />
             <Text style={styles.emptyTitle}>Aucune demande en attente</Text>
             <Text style={styles.emptyText}>
               Toutes vos demandes de rattachement ont été traitées
@@ -158,18 +160,18 @@ export default function PendingRequestsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: neutralColors.background,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#666",
+    color: neutralColors.textLight,
   },
   header: {
     alignItems: "center",
@@ -178,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -188,13 +190,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#212529",
+    color: neutralColors.textStrong,
     marginTop: 12,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: "#6c757d",
+    color: neutralColors.textLight,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -205,7 +207,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    shadowColor: "#000",
+    shadowColor: neutralColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -231,12 +233,12 @@ const styles = StyleSheet.create({
   childName: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#212529",
+    color: neutralColors.textStrong,
     marginBottom: 4,
   },
   simId: {
     fontSize: 14,
-    color: "#6c757d",
+    color: neutralColors.textLight,
     fontFamily: "monospace",
   },
   requestDetails: {
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: "#666",
+    color: neutralColors.textLight,
     flex: 1,
   },
   statusContainer: {
@@ -297,13 +299,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#333",
+    color: neutralColors.textStrong,
     marginTop: 24,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 15,
-    color: "#666",
+    color: neutralColors.textLight,
     textAlign: "center",
     lineHeight: 22,
   },
