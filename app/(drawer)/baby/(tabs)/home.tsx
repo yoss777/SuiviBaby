@@ -9,6 +9,7 @@ import {
   type StatItem,
 } from "@/components/suivibaby/dashboard";
 import { ReminderWarningWatcher } from "@/components/suivibaby/dashboard/ReminderWarningWatcher";
+import { flatInDark } from "@/constants/theme";
 import { FirstTrackGuide } from "@/components/suivibaby/FirstTrackGuide";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
@@ -1842,7 +1843,7 @@ export default function HomeDashboard() {
               <View style={styles.statsGroupContainer}>
                 <View
                   style={[
-                    styles.moodCard,
+                    styles.moodCard, flatInDark(colorScheme),
                     {
                       backgroundColor: cat.moments.background,
                       borderColor: cat.moments.border,

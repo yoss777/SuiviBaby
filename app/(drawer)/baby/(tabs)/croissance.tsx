@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -614,6 +615,7 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
   onEdit,
   onDelete,
 }: CroissanceRowProps) {
+  const colorScheme = useColorScheme() ?? "light";
   const date = toDate(item.date);
   const currentDayLabel = getDayLabel(date);
   const prevEntry = index > 0 ? visibleEntries[index - 1] : null;
@@ -680,7 +682,7 @@ const CroissanceEventRow = React.memo(function CroissanceEventRow({
               accessibilityRole="button"
               accessibilityLabel={`Mesure du ${currentDayLabel}${item.poidsKg ? `, poids ${item.poidsKg} kg` : ""}${item.tailleCm ? `, taille ${item.tailleCm} cm` : ""}${item.teteCm ? `, tour de tête ${item.teteCm} cm` : ""}`}
               accessibilityHint={canManageContent ? "Appuyer pour modifier" : undefined}
-              style={[styles.card, { borderColor: palette.border, backgroundColor: palette.surface }]}
+              style={[styles.card, flatInDark(colorScheme), { borderColor: palette.border, backgroundColor: palette.surface }]}
             >
               <View style={styles.cardHeader}>
                 <View style={styles.cardTitleRow}>
@@ -760,7 +762,7 @@ const CroissanceSkeleton = React.memo(function CroissanceSkeleton({
     <View
       key={key}
       style={[
-        styles.card,
+        styles.card, flatInDark(colorScheme),
         { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
       ]}
     >
