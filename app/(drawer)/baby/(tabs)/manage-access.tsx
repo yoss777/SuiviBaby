@@ -30,7 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBaby } from '@/contexts/BabyContext';
 import { useHeaderLeft } from '../../_layout';
 import { HeaderBackButton } from "expo-router/react-navigation";
-import { Colors } from "@/constants/theme";
+import { Colors, flatInDark } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useModal } from "@/contexts/ModalContext";
 import { getNeutralColors } from "@/constants/dashboardColors";
@@ -49,6 +49,7 @@ function AccessListItem({
   tintColor: string;
 }) {
   const [userId, access] = item;
+  const colorScheme = useColorScheme() ?? "light";
   const { firebaseUser } = useAuth();
   const { childId } = useLocalSearchParams<{ childId: string }>();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -146,7 +147,7 @@ function AccessListItem({
   const ds = dynamicStyles(nc, tintColor);
 
   return (
-    <View style={ds.accessItem}>
+    <View style={[ds.accessItem, flatInDark(colorScheme)]}>
       <View style={ds.accessItemHeader}>
         <View style={ds.accessItemInfo}>
           {userLoading ? (

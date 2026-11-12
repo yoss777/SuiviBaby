@@ -4,6 +4,7 @@ import {
   getNeutralColors,
 } from "@/constants/dashboardColors";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { flatInDark } from "@/constants/theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useRef } from "react";
@@ -146,13 +147,18 @@ export const SleepWidget = memo(function SleepWidget({
   return (
     <Animated.View
       style={[
-        styles.container,
+        styles.container, flatInDark(colorScheme),
         {
           backgroundColor: sleepColors.background,
           borderWidth: isActive ? 2 : 1,
           borderColor: isActive ? sleepColors.primary : sleepColors.border,
         },
         isActive && {
+          // Glow is an iOS shadow. On Android, elevation would tint with the
+          // accent color and show through the translucent active background as
+          // a box inside the card: keep the card flat, the 2 px border and the
+          // pulse already mark the running state.
+          elevation: 0,
           shadowColor: sleepColors.primary,
           shadowOpacity: 0.25,
           shadowRadius: 12,

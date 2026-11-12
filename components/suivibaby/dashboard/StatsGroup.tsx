@@ -1,4 +1,5 @@
 import { useMinuteTick } from "@/hooks/useMinuteTick";
+import { flatInDark } from "@/constants/theme";
 import { getBackgroundTint, getNeutralColors } from "@/constants/dashboardColors";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -208,7 +209,7 @@ export const StatsGroup = memo(function StatsGroup({
     const shimmerBg = colorScheme === "dark" ? nc.shimmerDark : nc.shimmerLight;
 
     return (
-      <View style={[styles.container, { backgroundColor: nc.backgroundCard }]}>
+      <View style={[styles.container, flatInDark(colorScheme), { backgroundColor: nc.backgroundCard }]}>
         <View style={styles.skeletonRow}>
           <View style={[styles.skeletonIcon, { backgroundColor: nc.borderLight }]}>
             <Animated.View
@@ -242,7 +243,7 @@ export const StatsGroup = memo(function StatsGroup({
   }
 
   const containerStyle = [
-    styles.container,
+    styles.container, flatInDark(colorScheme),
     { backgroundColor: backgroundColor ?? nc.backgroundCard },
     borderColor && { borderWidth: 1, borderColor },
   ];

@@ -1,4 +1,5 @@
 import { canManageEvents } from "@/utils/eventPermissions";
+import { flatInDark } from "@/constants/theme";
 import { ThemedView } from "@/components/themed-view";
 import { VOICE_DOCK_INSET } from "@/components/suivibaby/VoiceDock";
 import { PhotoImage } from "@/components/ui/PhotoImage";
@@ -1060,6 +1061,7 @@ const TimelineCard = React.memo(
     // S7.7 : abonnement à l'horloge seulement pour les événements en cours ;
     // un tick de minute ne re-rend plus les autres lignes.
     const nowMs = useOngoingClock(isOngoingEvent(event));
+    const colorScheme = useColorScheme() ?? "light";
     const date = toDate(event.date);
     const config = EVENT_CONFIG[event.type];
     if (!config) return null;
@@ -1252,7 +1254,7 @@ const TimelineCard = React.memo(
           )}
         </View>
         <TouchableOpacity
-          style={[styles.card, { backgroundColor, borderColor }]}
+          style={[styles.card, flatInDark(colorScheme), { backgroundColor, borderColor }]}
           activeOpacity={0.85}
           onPress={onPress}
           disabled={!onPress}

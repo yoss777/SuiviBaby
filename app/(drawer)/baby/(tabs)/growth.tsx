@@ -1,4 +1,5 @@
 import { CroissanceEditData } from "@/components/forms/CroissanceForm";
+import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { ThemedText } from "@/components/themed-text";
 import { DateFilterBar } from "@/components/ui/DateFilterBar";
@@ -153,7 +154,7 @@ const GrowthSkeleton = React.memo(function GrowthSkeleton({
     <View
       key={key}
       style={[
-        styles.sessionCard,
+        styles.sessionCard, flatInDark(colorScheme),
         { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
       ]}
     >
@@ -1159,7 +1160,7 @@ export default function GrowthScreen() {
           style={({ pressed }) => {
             const isSelected = selectionMode && selectedIds.has(event.id);
             return [
-              styles.sessionCard,
+              styles.sessionCard, flatInDark(colorScheme),
               {
                 borderColor: nc.borderLight,
                 backgroundColor: pressed

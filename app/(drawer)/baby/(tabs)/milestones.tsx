@@ -1,4 +1,5 @@
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
+import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { LoadMoreButton } from "@/components/ui/LoadMoreButton";
 import { SelectionToolbar } from "@/components/ui/SelectionToolbar";
@@ -220,7 +221,7 @@ const MilestoneSkeleton = React.memo(function MilestoneSkeleton({
     <View
       key={key}
       style={[
-        styles.sessionCard,
+        styles.sessionCard, flatInDark(colorScheme),
         { borderColor: nc.borderLight, backgroundColor: nc.backgroundCard },
       ]}
     >
@@ -1058,7 +1059,7 @@ export default function MilestonesScreen() {
           style={({ pressed }) => {
             const isSelected = selectionMode && selectedIds.has(event.id);
             return [
-              styles.sessionCard,
+              styles.sessionCard, flatInDark(colorScheme),
               {
                 borderColor: nc.borderLight,
                 backgroundColor: pressed
