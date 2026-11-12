@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import React from "react";
-import { Text } from "react-native";
+import { Modal, Text } from "react-native";
 
 import { ModalProvider, useModal } from "@/contexts/ModalContext";
 
@@ -45,6 +45,22 @@ describe("ModalContext : alerte santé protégée (H1)", () => {
     act(() => modal.showConfirm("Supprimer", "Voulez-vous vraiment ?", jest.fn()));
     expect(screen.queryByText("Voulez-vous vraiment ?")).toBeNull();
     expect(screen.getByText("Appelez le 15")).toBeTruthy();
+  });
+
+  it("le bouton retour Android ne ferme pas une alerte protégée", () => {
+    setup();
+    act(() => modal.showAlert("Température élevée", "Appelez le 15", [{ text: "J'ai compris" }], { dismissible: false }));
+    act(() => screen.UNSAFE_getByType(Modal).props.onRequestClose());
+    expect(screen.getByText("Appelez le 15")).toBeTruthy();
+  });
+
+  it("le bouton retour Android ferme une confirmation ordinaire", () => {
+    setup();
+    const onConfirm = jest.fn();
+    act(() => modal.showConfirm("Supprimer", "Voulez-vous vraiment ?", onConfirm));
+    act(() => screen.UNSAFE_getByType(Modal).props.onRequestClose());
+    expect(screen.queryByText("Voulez-vous vraiment ?")).toBeNull();
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it("hide() extérieur ne ferme pas une alerte protégée", () => {

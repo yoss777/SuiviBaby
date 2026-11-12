@@ -6,7 +6,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 // L'alerte température < 3 mois passe par ConfirmModal (ModalContext) : elle ne
 // doit se fermer que par ses deux boutons.
 describe("ConfirmModal utilisée pour l'alerte température < 3 mois", () => {
-  const setup = () => {
+  const setup = (extra: { dismissOnBack?: boolean } = { dismissOnBack: false }) => {
     const onCancel = jest.fn();
     const onConfirm = jest.fn();
     const onDismiss = jest.fn();
@@ -22,12 +22,13 @@ describe("ConfirmModal utilisée pour l'alerte température < 3 mois", () => {
         onCancel={onCancel}
         onConfirm={onConfirm}
         onDismiss={onDismiss}
+        {...extra}
       />,
     );
     return { onCancel, onConfirm, onDismiss };
   };
 
-  it("n'a pas de fermeture par le bouton retour (onRequestClose vide)", () => {
+  it("n'a pas de fermeture par le bouton retour (dismissOnBack={false})", () => {
     const { onCancel, onConfirm, onDismiss } = setup();
     const modal = screen.UNSAFE_getByType(Modal);
     modal.props.onRequestClose();
@@ -50,5 +51,12 @@ describe("ConfirmModal utilisée pour l'alerte température < 3 mois", () => {
     fireEvent.press(screen.getByText("Appeler le 15"));
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("par défaut, le bouton retour Android annule (modale ordinaire)", () => {
+    const { onCancel, onConfirm } = setup({});
+    screen.UNSAFE_getByType(Modal).props.onRequestClose();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
