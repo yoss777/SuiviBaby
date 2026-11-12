@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { isNightHour } from "@/utils/decorativeMotion";
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
@@ -76,9 +77,11 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     busy.current = false;
   }, [isActive]);
 
+  // Respiration décorative : coupée la nuit (Réduire les animations : startLoop).
+  const pulseAllowed = !isNightHour(currentTime);
   useEffect(() => {
     if (sharedPulseAnim) return;
-    if (isActive) {
+    if (isActive && pulseAllowed) {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(ownPulseAnim, {
@@ -100,7 +103,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     } else {
       ownPulseAnim.setValue(1);
     }
-  }, [isActive, ownPulseAnim, sharedPulseAnim]);
+  }, [isActive, ownPulseAnim, pulseAllowed, sharedPulseAnim]);
 
   const handleStart = useCallback(() => {
     if (busy.current) return;

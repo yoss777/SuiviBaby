@@ -178,8 +178,6 @@ export const pumpingConfig: EventListConfig<Pompage, PompageSummary> = {
   },
   texts: {
     expandMore: (extra) => `${extra} autre${extra > 1 ? "s" : ""} session${extra > 1 ? "s" : ""}`,
-    deleteTitle: "Suppression",
-    deleteMessage: "Voulez-vous vraiment supprimer ce pompage ?",
     batchDeleteMessage: (n) => `Voulez-vous vraiment supprimer ${n} élément${n > 1 ? "s" : ""} ?`,
     deleted: "Pompage supprimé",
     batchDeleted: (n) => `${n} élément${n > 1 ? "s" : ""} supprimé${n > 1 ? "s" : ""}`,

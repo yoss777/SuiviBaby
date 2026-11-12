@@ -8,6 +8,7 @@ import {
   neutralColors,
 } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
+import { isPlusRouteVisible, SHOW_PREVIEWS } from "@/constants/featureFlags";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -239,12 +240,15 @@ export default function PlusScreen() {
 
   const isDark = colorScheme === "dark";
 
-  // Filtrer les sections : retirer les items ownerOnly si pas les droits,
-  // puis exclure les sections vides
+  // Filtrer les sections : retirer les items ownerOnly si pas les droits et
+  // les aperçus internes hors drapeau (jamais en build de store), puis
+  // exclure les sections vides
   const visibleSections = SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => !item.ownerOnly || permissions.canManageAccess,
+      (item) =>
+        (!item.ownerOnly || permissions.canManageAccess) &&
+        isPlusRouteVisible(item.route, SHOW_PREVIEWS),
     ),
   })).filter((section) => section.items.length > 0);
 

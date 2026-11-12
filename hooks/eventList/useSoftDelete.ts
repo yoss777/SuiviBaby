@@ -43,10 +43,6 @@ export function useSoftDelete<T extends { id: string }>({
 }: Options<T>) {
   const scheduleDelete = useDeleteWithUndo();
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
-  const [deleteConfirm, setDeleteConfirm] = useState<{ visible: boolean; item: T | null }>({
-    visible: false,
-    item: null,
-  });
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({
     visible: false,
     ids: [],
@@ -79,28 +75,21 @@ export function useSoftDelete<T extends { id: string }>({
     [scheduleDelete],
   );
 
+  // Suppression unitaire : immédiate et annulable (toast « Annuler »), sans
+  // modale — la confirmation est réservée à la suppression groupée.
   const requestDelete = useCallback(
     (item: T) => {
       if (isOptimisticId(item.id)) {
         showToast(SAVING_TOAST);
         return;
       }
+      if (!childId || !item.id) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setDeleteConfirm({ visible: true, item });
+      const id = item.id;
+      hideAndSchedule([id], texts.deleted, () => supprimerEvenement(childId, id));
     },
-    [showToast],
+    [childId, hideAndSchedule, showToast, texts.deleted],
   );
-
-  const confirmDelete = useCallback(async () => {
-    if (!childId || !deleteConfirm.item?.id) return;
-    const id = deleteConfirm.item.id;
-    setDeleteConfirm({ visible: false, item: null });
-    hideAndSchedule([id], texts.deleted, () => supprimerEvenement(childId, id));
-  }, [childId, deleteConfirm.item, hideAndSchedule, texts.deleted]);
-
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, item: null });
-  }, []);
 
   const requestBatchDelete = useCallback(
     (ids: string[]) => {
@@ -133,11 +122,8 @@ export function useSoftDelete<T extends { id: string }>({
 
   return {
     softDeletedIds,
-    deleteConfirm,
     batchDeleteConfirm,
     requestDelete,
-    confirmDelete,
-    cancelDelete,
     requestBatchDelete,
     confirmBatchDelete,
     cancelBatchDelete,

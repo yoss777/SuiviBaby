@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -27,6 +28,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SPRING_V3 } from "@/constants/motion";
+import { useNightMode } from "@/hooks/useNightMode";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -106,8 +108,17 @@ const FloatingIcon = ({
 }) => {
   const progress = useSharedValue(0);
   const opacity = useSharedValue(0);
+  // Flottement décoratif : coupé la nuit et avec « Réduire les animations ».
+  const { animations } = useNightMode();
+  const animate = animations.decorative;
 
   useEffect(() => {
+    if (!animate) {
+      cancelAnimation(progress);
+      progress.value = 0;
+      opacity.value = 1;
+      return;
+    }
     opacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
     progress.value = withDelay(
       delay,
@@ -119,7 +130,8 @@ const FloatingIcon = ({
         -1,
       ),
     );
-  }, []);
+    return () => cancelAnimation(progress);
+  }, [animate, delay, opacity, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value * 0.6,

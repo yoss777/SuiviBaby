@@ -3,6 +3,7 @@
 
 import { radius, space } from "@/constants/tokens";
 import { getNeutralColors } from "@/constants/dashboardColors";
+import { APP_NAME } from "@/constants/app";
 import { Colors } from "@/constants/theme";
 import { REFERRAL_TIERS, getReferralTier } from "@/types/promo";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
@@ -40,7 +41,7 @@ export const ReferralCard = memo(function ReferralCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       await Share.share({
-        message: `Rejoins-moi sur Suivi Baby pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://suivibaby.com/invite/${referralCode}`,
+        message: `Rejoins-moi sur ${APP_NAME} pour suivre le développement de ton bébé ! Utilise mon code ${referralCode} pour obtenir 1 mois Premium offert. https://suivibaby.com/invite/${referralCode}`,
       });
     } catch {
       // User cancelled

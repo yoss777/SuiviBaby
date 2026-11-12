@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { startLoop } from "@/utils/motion";
+import { isNightHour } from "@/utils/decorativeMotion";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -125,9 +126,11 @@ export const SleepWidget = memo(function SleepWidget({
   const ownPulseAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = sharedPulseAnim ?? ownPulseAnim;
 
+  // Respiration décorative : coupée la nuit (Réduire les animations : startLoop).
+  const pulseAllowed = !isNightHour(currentTime);
   useEffect(() => {
     if (sharedPulseAnim) return;
-    if (isActive) {
+    if (isActive && pulseAllowed) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(ownPulseAnim, {
@@ -149,7 +152,7 @@ export const SleepWidget = memo(function SleepWidget({
     } else {
       ownPulseAnim.setValue(1);
     }
-  }, [isActive, pulseAnim]);
+  }, [isActive, pulseAnim, pulseAllowed]);
 
   // Unified container — same size whether active or inactive
   return (

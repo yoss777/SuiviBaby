@@ -1,5 +1,6 @@
 import { radius, space } from "@/constants/tokens";
 import PompagesChart from "@/components/suivibaby/PompagesChart";
+import { APP_NAME } from "@/constants/app";
 import RepasChart from "@/components/suivibaby/RepasChart";
 import { SafeBoundary } from "@/components/SafeBoundary";
 import SommeilChart from "@/components/suivibaby/SommeilChart";
@@ -902,7 +903,7 @@ export default function StatsScreen() {
           ${sommeilRows}
         </table>
 
-        <div class="footer">Généré par Suivi Baby · ${dateStr}</div>
+        <div class="footer">Généré par ${APP_NAME} · ${dateStr}</div>
       </body>
       </html>
     `;

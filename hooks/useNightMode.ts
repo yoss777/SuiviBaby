@@ -5,6 +5,7 @@
 import { useContext, useMemo } from 'react';
 import { ThemeContext } from '@/contexts/ThemeContext';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { shouldRunDecorativeLoop } from '@/utils/decorativeMotion';
 
 interface NightModeValues {
   isNightMode: boolean;
@@ -34,21 +35,24 @@ export function useNightMode(): NightModeValues {
   // « Réduire les animations » du système : aucune animation, même fonctionnelle
   const reduceMotion = useReduceMotion();
 
-  return useMemo(() => ({
-    isNightMode: isNight,
-    reduceMotion,
-    minButtonSize: isNight ? 56 : 44,
-    fontSize: isNight
-      ? { small: 14, normal: 17, large: 22 }
-      : { small: 12, normal: 15, large: 20 },
-    animations: {
-      decorative: !isNight && !reduceMotion,
-      functional: !reduceMotion,
-    },
-    animationsEnabled: !isNight && !reduceMotion,
-    preferHaptic: isNight,
-    hitSlop: isNight
-      ? { top: 12, bottom: 12, left: 12, right: 12 }
-      : { top: 8, bottom: 8, left: 8, right: 8 },
-  }), [isNight, reduceMotion]);
+  return useMemo(() => {
+    const decorative = shouldRunDecorativeLoop({ isNightMode: isNight, reduceMotion });
+    return {
+      isNightMode: isNight,
+      reduceMotion,
+      minButtonSize: isNight ? 56 : 44,
+      fontSize: isNight
+        ? { small: 14, normal: 17, large: 22 }
+        : { small: 12, normal: 15, large: 20 },
+      animations: {
+        decorative,
+        functional: !reduceMotion,
+      },
+      animationsEnabled: decorative,
+      preferHaptic: isNight,
+      hitSlop: isNight
+        ? { top: 12, bottom: 12, left: 12, right: 12 }
+        : { top: 8, bottom: 8, left: 8, right: 8 },
+    };
+  }, [isNight, reduceMotion]);
 }

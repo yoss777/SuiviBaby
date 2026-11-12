@@ -43,22 +43,19 @@ describe("useSoftDelete", () => {
     const { result } = setup([{ id: "__optimistic_1" }]);
     act(() => result.current.requestDelete({ id: "__optimistic_1" }));
     expect(showToast).toHaveBeenCalledWith("Enregistrement en cours...");
-    expect(result.current.deleteConfirm.visible).toBe(false);
+    expect(mockScheduleDelete).not.toHaveBeenCalled();
+    expect(result.current.softDeletedIds.size).toBe(0);
     expect(isOptimisticId("__optimistic_x")).toBe(true);
     expect(isOptimisticId("abc")).toBe(false);
   });
 
-  it("confirmation simple : masque, planifie, annuler ré-affiche", async () => {
+  it("suppression simple sans modale : masque tout de suite, planifie, annuler ré-affiche", async () => {
     const { result } = setup([{ id: "a" }, { id: "b" }]);
     act(() => result.current.requestDelete({ id: "a" }));
     expect(Haptics.impactAsync).toHaveBeenCalled();
-    expect(result.current.deleteConfirm).toEqual({ visible: true, item: { id: "a" } });
-
-    await act(async () => {
-      await result.current.confirmDelete();
-    });
-    expect(result.current.deleteConfirm.visible).toBe(false);
+    expect(result.current).not.toHaveProperty("deleteConfirm");
     expect(result.current.softDeletedIds.has("a")).toBe(true);
+    expect(mockSupprimer).not.toHaveBeenCalled();
     const params = mockScheduleDelete.mock.calls[0][0];
     expect(params.message).toBe("Repas supprimé");
 

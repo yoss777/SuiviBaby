@@ -24,6 +24,11 @@ import {
   View,
 } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import {
+  buildRowAccessibilityActions,
+  handleRowAccessibilityAction,
+  showRowActionMenu,
+} from "@/utils/rowActions";
 import { getDateTime, isValidDate } from "@/utils/date";
 
 // ============================================
@@ -533,11 +538,32 @@ const EventRow = memo(function EventRow({
               ]}
               activeOpacity={0.85}
               onPress={onEventPress ? handlePress : undefined}
-              disabled={!onEventPress}
+              // Alternative au glissement : appui long et actions d'accessibilité.
+              onLongPress={
+                onEventPress || canDelete
+                  ? () =>
+                      showRowActionMenu({
+                        title: displayLabel,
+                        onEdit: onEventPress ? handlePress : undefined,
+                        onDelete: canDelete ? handleDelete : undefined,
+                      })
+                  : undefined
+              }
+              disabled={!onEventPress && !canDelete}
               accessibilityRole="button"
               accessibilityLabel={`${displayLabel}${displayDetails ? `, ${displayDetails}` : ""}`}
               accessibilityHint={
                 onEventPress ? "Appuyez pour modifier" : undefined
+              }
+              accessibilityActions={buildRowAccessibilityActions({
+                canEdit: !!onEventPress,
+                canDelete,
+              })}
+              onAccessibilityAction={(e) =>
+                handleRowAccessibilityAction(e, {
+                  onEdit: onEventPress ? handlePress : undefined,
+                  onDelete: canDelete ? handleDelete : undefined,
+                })
               }
             >
               <View style={styles.recentTitleRow}>
@@ -908,7 +934,8 @@ const styles = StyleSheet.create({
   deleteAction: {
     justifyContent: "center",
     alignItems: "center",
-    width: 80,
+    width: 88,
+    minHeight: 44,
     marginBottom: 15,
     borderRadius: 14,
     marginHorizontal: space.xxs,

@@ -1,4 +1,5 @@
 import { flatInDark } from "@/constants/theme";
+import { toDecimalInputFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { DateFilterBar, DateFilterValue } from "@/components/ui/DateFilterBar";
 import { QuickAddRow } from "@/components/ui/QuickAddRow";
@@ -18,6 +19,7 @@ import { useSheet } from "@/contexts/SheetContext";
 import { useToast } from "@/contexts/ToastContext";
 import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
+import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useCalendarDay, useMinuteTick } from "@/hooks/useMinuteTick";
@@ -307,11 +309,6 @@ export default function RoutinesScreen() {
   const [pendingEditData, setPendingEditData] = useState<RoutinesEditData | null>(null);
   const [pendingRoutineType, setPendingRoutineType] = useState<RoutineType>("sommeil");
   const [pendingSleepMode, setPendingSleepMode] = useState<SleepMode>("nap");
-
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    visible: boolean;
-    event: RoutineEvent | null;
-  }>({ visible: false, event: null });
 
   const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
@@ -1003,46 +1000,20 @@ export default function RoutinesScreen() {
       showToast('Enregistrement en cours...');
       return;
     }
+    if (!activeChild?.id || !event.id) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setDeleteConfirm({ visible: true, event });
-  }, [showToast]);
-
-  const confirmDelete = useCallback(async () => {
-    if (!activeChild?.id || !deleteConfirm.event?.id) return;
-    const eventId = deleteConfirm.event.id;
-    const eventType = deleteConfirm.event.type;
+    // Suppression immédiate, annulable par le toast « Annuler » (pas de modale).
+    const eventId = event.id;
     const childId = activeChild.id;
-    setDeleteConfirm({ visible: false, event: null });
-
-    // Soft-delete: hide immediately from UI
-    setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-
-    scheduleDelete({
+    softDeleteNow({
+      id: eventId,
       message: "Événement supprimé",
-      onUndo: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
       run: () => supprimerEvenement(childId, eventId),
-      onRestore: () => {
-        setSoftDeletedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(eventId);
-          return next;
-        });
-      },
-      onHide: () => {
-        setSoftDeletedIds((prev) => new Set(prev).add(eventId));
-      },
+      setHiddenIds: setSoftDeletedIds,
+      scheduleDelete,
     });
-  }, [activeChild?.id, deleteConfirm.event, scheduleDelete]);
+  }, [activeChild?.id, scheduleDelete, showToast]);
 
-  const cancelDelete = useCallback(() => {
-    setDeleteConfirm({ visible: false, event: null });
-  }, []);
 
   const confirmBatchDelete = useCallback(() => {
     if (!activeChild?.id) return;
@@ -1255,7 +1226,7 @@ export default function RoutinesScreen() {
     const bath = event as any;
     const parts = [
       bath.duree ? `${bath.duree} min` : null,
-      bath.temperatureEau ? `${bath.temperatureEau}°C` : null,
+      bath.temperatureEau ? `${toDecimalInputFr(bath.temperatureEau)}\u00a0°C` : null,
       bath.produits,
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : undefined;
@@ -1762,23 +1733,6 @@ export default function RoutinesScreen() {
           <RoutinesSkeleton colorScheme={colorScheme} />
         )}
       </SafeAreaView>
-      <ConfirmModal
-        visible={deleteConfirm.visible}
-        title="Suppression"
-        message={
-          deleteConfirm.event?.type === "sommeil"
-            ? "Voulez-vous vraiment supprimer ce sommeil ?"
-            : deleteConfirm.event?.type === "nettoyage_nez"
-              ? "Voulez-vous vraiment supprimer ce nettoyage de nez ?"
-              : "Voulez-vous vraiment supprimer ce bain ?"
-        }
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        backgroundColor={Colors[colorScheme].surface}
-        textColor={Colors[colorScheme].text}
-        onCancel={cancelDelete}
-        onConfirm={confirmDelete}
-      />
       <ConfirmModal
         visible={batchDeleteConfirm.visible}
         title="Suppression groupée"

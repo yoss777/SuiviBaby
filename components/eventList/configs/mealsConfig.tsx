@@ -334,8 +334,6 @@ export const mealsConfig: EventListConfig<Meal, MealSummary> = {
   },
   texts: {
     expandMore: (extra) => `${extra} autre${extra > 1 ? "s" : ""} repas`,
-    deleteTitle: "Supprimer ce repas ?",
-    deleteMessage: "Cette action est irréversible.",
     batchDeleteMessage: (n) => `Supprimer ${n} repas sélectionné${n > 1 ? "s" : ""} ?`,
     deleted: "Repas supprimé",
     batchDeleted: (n) => `${n} repas supprimé${n > 1 ? "s" : ""}`,
