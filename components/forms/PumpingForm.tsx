@@ -14,6 +14,9 @@ import {
 } from "@/services/eventsService";
 
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 
@@ -97,27 +100,8 @@ export function PumpingForm({
   const lastLeftQuantityRef = useRef(quantiteGauche);
   const lastRightQuantityRef = useRef(quantiteDroite);
 
-  // Long press acceleration
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -162,6 +146,9 @@ export function PumpingForm({
   };
 
   // Submit handler
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ useLeftBreast, useRightBreast, quantiteGauche, quantiteDroite, dateHeure });
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
     if (!useLeftBreast && !useRightBreast) {
@@ -293,12 +280,8 @@ export function PumpingForm({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteGauche((q) => Math.max(0, q - 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                  setQuantiteGauche((q) => Math.max(0, q - 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité gauche"
             >
@@ -323,10 +306,7 @@ export function PumpingForm({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() => setQuantiteGauche((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité gauche"
             >
@@ -357,12 +337,8 @@ export function PumpingForm({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() =>
-                  setQuantiteDroite((q) => Math.max(0, q - 5)),
-                )
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() =>
+                  setQuantiteDroite((q) => Math.max(0, q - 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité droite"
             >
@@ -387,10 +363,7 @@ export function PumpingForm({
                 { backgroundColor: nc.backgroundPressed },
                 isSubmitting && styles.quantityButtonDisabled,
               ]}
-              onPressIn={() =>
-                handlePressIn(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))
-              }
-              onPressOut={handlePressOut}
+              {...repeatPress(() => setQuantiteDroite((q) => Math.min(PUMP_MAX, q + 5)))}
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité droite"
             >
@@ -415,10 +388,15 @@ export function PumpingForm({
         colorScheme={colorScheme}
         disabled={isSubmitting}
         onPickerToggle={onFormStepChange}
+        // Un repas, une couche ou un tirage ne se saisit pas au futur : évite
+        // un mauvais jour choisi d'un pouce ensommeillé.
+        maximumDate={new Date()}
       />
 
       {/* Action buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -463,6 +441,7 @@ export function PumpingForm({
             )}
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && onDelete && (
           <TouchableOpacity
@@ -523,9 +502,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },

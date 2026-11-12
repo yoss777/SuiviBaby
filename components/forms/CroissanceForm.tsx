@@ -1,6 +1,9 @@
 // components/forms/CroissanceForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { parseDecimalFr, toDecimalInputFr } from "@/utils/frenchNumber";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { getAccentColors } from "@/components/ui/accentColors";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { eventColors } from "@/constants/eventColors";
@@ -64,12 +67,9 @@ export type CroissanceFormProps = {
 // HELPERS
 // ============================================
 
-const parseNumber = (value: string): number | undefined => {
-  const trimmed = value.trim().replace(",", ".");
-  if (!trimmed) return undefined;
-  const parsed = parseFloat(trimmed);
-  return Number.isNaN(parsed) ? undefined : parsed;
-};
+// Virgule ou point acceptés ; une saisie invalide (« 3,4,5 ») n'est jamais
+// tronquée en silence : elle est refusée par la validation.
+const parseNumber = (value: string): number | undefined => parseDecimalFr(value);
 
 // ============================================
 // COMPONENT
@@ -103,13 +103,13 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
   );
   const [dateHeureDirty, setDateHeureDirty] = useState(false);
   const [tailleCm, setTailleCm] = useState<string>(
-    editData?.tailleCm?.toString() ?? "",
+    toDecimalInputFr(editData?.tailleCm),
   );
   const [poidsKg, setPoidsKg] = useState<string>(
-    editData?.poidsKg?.toString() ?? "",
+    toDecimalInputFr(editData?.poidsKg),
   );
   const [teteCm, setTeteCm] = useState<string>(
-    editData?.teteCm?.toString() ?? "",
+    toDecimalInputFr(editData?.teteCm),
   );
   // ============================================
   // HANDLERS
@@ -120,12 +120,28 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
     setDateHeureDirty(true);
   }, []);
 
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ tailleCm, poidsKg, teteCm, dateHeure });
+
   const handleSubmit = () => {
     if (!activeChild?.id || isSubmitting) return;
 
     const tailleValue = parseNumber(tailleCm);
     const poidsValue = parseNumber(poidsKg);
     const teteValue = parseNumber(teteCm);
+
+    // Un champ rempli mais illisible n'est jamais ignoré en silence.
+    const invalid: string[] = [];
+    if (tailleCm.trim() && tailleValue === undefined) invalid.push("Taille");
+    if (poidsKg.trim() && poidsValue === undefined) invalid.push("Poids");
+    if (teteCm.trim() && teteValue === undefined) invalid.push("Tour de tête");
+    if (invalid.length > 0) {
+      showAlert(
+        "Valeur invalide",
+        `${invalid.join(", ")} : saisissez un nombre, par exemple 3,45.`,
+      );
+      return;
+    }
 
     if (!tailleValue && !poidsValue && !teteValue) {
       showAlert("Attention", "Entrez au moins une mesure.");
@@ -271,6 +287,8 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -309,6 +327,7 @@ export const CroissanceForm: React.FC<CroissanceFormProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && (
           <TouchableOpacity

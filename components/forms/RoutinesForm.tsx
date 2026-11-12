@@ -1,6 +1,10 @@
 // components/forms/RoutinesForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { formatTemperatureFr } from "@/utils/frenchNumber";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
+import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 
@@ -266,27 +270,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     editData?.type === "sommeil" ? (editData.note ?? "") : "",
   );
 
-  // Long press acceleration refs
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePressIn = useCallback((action: () => void) => {
-    action();
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(action, 100);
-    }, 400);
-  }, []);
-
-  const handlePressOut = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  // +/− : un pas au relâchement, répétition accélérée à l'appui long.
+  const repeatPress = useRepeatPress();
 
   const handleDateHeureChange = useCallback((nextDate: Date) => {
     setDateHeure(nextDate);
@@ -364,6 +349,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   // ============================================
   // HANDLERS
   // ============================================
+
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ dateHeure, dureeBain, temperatureEau, produits, noteBain, dateNez, methodeNez, resultatNez, noteNez, heureDebut, heureFin, isOngoing, isNap, location, quality, noteSommeil });
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -890,12 +878,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPressIn={() =>
-              handlePressIn(() =>
-                setDureeBain((value) => Math.max(0, value - 5)),
-              )
-            }
-            onPressOut={handlePressOut}
+            {...repeatPress(() =>
+                setDureeBain((value) => Math.max(0, value - 5)))}
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
@@ -918,10 +902,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPressIn={() =>
-              handlePressIn(() => setDureeBain((value) => Math.min(BAIN_DUREE_MAX, value + 5)))
-            }
-            onPressOut={handlePressOut}
+            {...repeatPress(() => setDureeBain((value) => Math.min(BAIN_DUREE_MAX, value + 5)))}
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
@@ -949,14 +930,10 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPressIn={() =>
-              handlePressIn(() =>
+            {...repeatPress(() =>
                 // Borne UI 32-42°C : couvre les usages réels (chauffe-eau
                 // bébé recommandé ~37°C, marge confort). CF accepte 20-45.
-                setTemperatureEau((value) => Math.max(32, value - 0.5)),
-              )
-            }
-            onPressOut={handlePressOut}
+                setTemperatureEau((value) => Math.max(32, value - 0.5)))}
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
@@ -971,7 +948,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             </Text>
           </TouchableOpacity>
           <Text style={[styles.quantityPickerValue, { color: nc.textStrong }]}>
-            {temperatureEau.toFixed(1)}°C
+            {formatTemperatureFr(temperatureEau)}
           </Text>
           <TouchableOpacity
             style={[
@@ -979,12 +956,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               { backgroundColor: nc.backgroundPressed },
               isSubmitting && styles.quantityButtonDisabled,
             ]}
-            onPressIn={() =>
-              handlePressIn(() =>
-                setTemperatureEau((value) => Math.min(42, value + 0.5)),
-              )
-            }
-            onPressOut={handlePressOut}
+            {...repeatPress(() =>
+                setTemperatureEau((value) => Math.min(42, value + 0.5)))}
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
@@ -1061,6 +1034,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -1099,6 +1074,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && (
           <TouchableOpacity
@@ -1214,9 +1190,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quantityButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    // Cible >= 44 pt (48 dp Android), utilisable d'une main.
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },

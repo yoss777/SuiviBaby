@@ -1,6 +1,8 @@
 // components/forms/MilestonesForm.tsx
 import { deleteToastMessage } from "@/utils/deleteOutcome";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
+import { SheetFooter } from "@/components/forms/SheetFooter";
+import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { useFormScroll } from "@/components/ui/FormScrollContext";
 import { PhotoImage } from "@/components/ui/PhotoImage";
 import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
@@ -321,6 +323,9 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
   // ============================================
   // HANDLERS
   // ============================================
+
+  // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
+  useFormDirtyGuard({ title, description, note, dateHeure, mood, photoUri });
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
@@ -680,6 +685,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
+        {/* Pied collant : Annuler / Ajouter toujours visibles dans la feuille. */}
+        <SheetFooter>
         <View style={styles.primaryRow}>
           <TouchableOpacity
             style={[
@@ -718,6 +725,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             </Text>
           </TouchableOpacity>
         </View>
+        </SheetFooter>
 
         {isEditing && (
           <TouchableOpacity
