@@ -21,6 +21,8 @@ type Dated = { date: unknown };
 interface Params {
   childId: string | undefined;
   childName: string;
+  /** Données du bébé chargées : rien n'est envoyé avant (pas de faux « 0 repas »). */
+  ready: boolean;
   toMs: (value: unknown) => number;
   tetees: (Dated & { dureeGauche?: number; dureeDroite?: number })[];
   biberons: (Dated & { typeBiberon?: string; quantite?: number })[];
@@ -67,7 +69,7 @@ export function useNowWidgetSync(p: Params): void {
 
   // Calculé dans un effet : l'heure courante n'a pas sa place dans le rendu.
   useEffect(() => {
-    if (!p.childId) return;
+    if (!p.childId || !p.ready) return;
     const now = Date.now();
     const [dayStart, dayEnd] = startOfToday(now);
     const inToday = (ms: number) => ms >= dayStart && ms < dayEnd;

@@ -4,8 +4,8 @@
 // métier, il affiche ces valeurs (il ne peut ni lire Firestore ni calculer).
 //
 // Règles (docs/strategie/widget/WIDGET_SPEC.md) :
-// - une session en cours prend la place principale, priorité tétée > sommeil >
-//   promenade ; son chrono est visible de tous, gratuitement ;
+// - toutes les sessions en cours sont listées (tétée, sommeil, promenade), chacune
+//   avec son chrono, visible de tous, gratuitement ; `live` garde la principale ;
 // - au repos : temps depuis le dernier repas, et le prochain sein quand il est
 //   certain (dernière tétée sur un seul sein) ;
 // - la journée (repas, couches, sommeil) est affichée pour tous, comme chez
@@ -51,7 +51,10 @@ export interface WidgetAlerts {
 export interface NowWidgetProps {
   v: 1;
   childName: string;
+  /** Session principale (tétée > sommeil > promenade) : widget iOS, écran verrouillé. */
   live: WidgetLive | null;
+  /** Toutes les sessions en cours, dans cet ordre, chacune avec son chrono. */
+  lives: WidgetLive[];
   lastMealMs: number | null;
   lastMealLabel: string | null;
   nextSide: "G" | "D" | null;
@@ -66,6 +69,7 @@ export const EMPTY_NOW_WIDGET: NowWidgetProps = {
   v: 1,
   childName: "",
   live: null,
+  lives: [],
   lastMealMs: null,
   lastMealLabel: null,
   nextSide: null,
@@ -74,6 +78,19 @@ export const EMPTY_NOW_WIDGET: NowWidgetProps = {
   alerts: { mealAtMs: null, diaperAtMs: null },
   generatedAtMs: 0,
 };
+
+/**
+ * Version envoyée au natif : sans aucun `null` ni `undefined`, à aucun niveau.
+ * Le pont Android d'expo-widgets (Map<String, Any?>) refuse une valeur nulle
+ * dans un sous-objet (« Cannot convert … to a Kotlin type »). Le widget lit
+ * donc une clé absente comme « pas de valeur » (tests `!= null` / truthy).
+ */
+export function toNativeWidgetProps(props: NowWidgetProps): NowWidgetProps {
+  return JSON.parse(JSON.stringify(props, (_key, value) => (value === null ? undefined : value)));
+}
+
+/** Données initiales du widget, déjà au format natif. */
+export const EMPTY_NOW_WIDGET_NATIVE: NowWidgetProps = toNativeWidgetProps(EMPTY_NOW_WIDGET);
 
 export interface NowWidgetInput {
   childName: string;
@@ -165,6 +182,7 @@ export function buildNowWidgetProps(input: NowWidgetInput): NowWidgetProps {
   if (input.sleepStartMs != null) sessions.push(simpleLive("sleep", input.sleepStartMs));
   if (input.walkStartMs != null) sessions.push(simpleLive("walk", input.walkStartMs));
   const live = sessions[0] ? { ...sessions[0], alsoKind: sessions[1]?.kind ?? null } : null;
+  const lives = sessions.map((session, index) => (index === 0 && live ? live : session));
 
   const hours = (h: number) => h * 3600 * 1000;
   const { reminders } = input;
@@ -181,6 +199,7 @@ export function buildNowWidgetProps(input: NowWidgetInput): NowWidgetProps {
     v: 1,
     childName: input.childName,
     live,
+    lives,
     lastMealMs: input.lastMeal?.ms ?? null,
     lastMealLabel: input.lastMeal
       ? `${MEAL_LABEL[input.lastMeal.kind] ?? "Repas"} à ${formatClock(input.lastMeal.ms)}`

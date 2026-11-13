@@ -1,0 +1,129 @@
+diff --git a/node_modules/expo-widgets/android/proguard-rules.pro b/node_modules/expo-widgets/android/proguard-rules.pro
+index 222bdfd..4e802df 100644
+--- a/node_modules/expo-widgets/android/proguard-rules.pro
++++ b/node_modules/expo-widgets/android/proguard-rules.pro
+@@ -1,2 +1,6 @@
+ # WorkManager creates its Room database by reflection during app startup.
+ -keep class * extends androidx.room.RoomDatabase { <init>(); }
++
++# Patch SuiviBaby : chrono natif du widget, instancié par réflexion
++# (classe interne à Glance). Ne pas renommer ni supprimer.
++-keep class androidx.glance.appwidget.EmittableAndroidRemoteViews { *; }
+diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
+index 3df9e4a..fcde3aa 100644
+--- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
++++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
+@@ -4,6 +4,8 @@ package expo.modules.widgets
+ 
+ import android.annotation.SuppressLint
+ import android.content.Context
++import android.content.Intent
++import androidx.glance.appwidget.action.actionStartActivity
+ import android.graphics.Color as AndroidColor
+ import androidx.compose.ui.unit.DpSize
+ import androidx.compose.ui.unit.TextUnit
+@@ -123,10 +125,63 @@ private class WidgetConverterContext(
+ internal fun ReadableMap.toPeekRoot(context: Context, source: InteractionSource, size: DpSize): Emittable {
+   val converterContext = WidgetConverterContext(context, size)
+   return EmittableColumn().also { root ->
++    // Appui sur le widget d'écran d'accueil : ouvre l'app (comme sur iOS).
++    // Les boutons gardent leur propre action, posée sur leurs nœuds.
++    if (source is InteractionSource.Widget) {
++      openAppIntent(context)?.let { intent ->
++        root.modifier = GlanceModifier.fillMaxSize().clickable(actionStartActivity(intent))
++      }
++    }
+     root.children += toPeekNodes(converterContext, source)
+   }
+ }
+ 
++private fun openAppIntent(context: Context): Intent? =
++  runCatching { context.packageManager.getLaunchIntentForPackage(context.packageName) }
++    .getOrNull()
++    ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
++
++/**
++ * Chrono natif (RemoteViews Chronometer) : défile seul, sans rechargement.
++ * Props : startMs (début, ms epoch), pausedAtMs (figé à cette date, optionnel),
++ * color (#RRGGBB), fontSize (sp). Patch SuiviBaby.
++ */
++private fun ReadableMap.toPeekChronometer(converterContext: WidgetConverterContext): Emittable {
++  val props = propsMap() ?: return createErrorText("—")
++  val startMs = props.takeIf { it.hasKey("startMs") && !it.isNull("startMs") }?.getDouble("startMs")?.toLong()
++    ?: return createErrorText("—")
++  val pausedAtMs = props.takeIf { it.hasKey("pausedAtMs") && !it.isNull("pausedAtMs") }?.getDouble("pausedAtMs")?.toLong()
++  val color = props.takeIf { it.hasKey("color") && !it.isNull("color") }?.getString("color")
++  val fontSize = props.takeIf { it.hasKey("fontSize") && !it.isNull("fontSize") }?.getDouble("fontSize")?.toFloat() ?: 28f
++
++  val now = System.currentTimeMillis()
++  val elapsed = ((pausedAtMs ?: now) - startMs).coerceAtLeast(0L)
++  val base = android.os.SystemClock.elapsedRealtime() - elapsed
++  val viewId = R.id.expo_widgets_chronometer
++  val views = android.widget.RemoteViews(converterContext.applicationContext.packageName, R.layout.expo_widgets_chronometer).apply {
++    setChronometer(viewId, base, null, pausedAtMs == null)
++    setTextViewTextSize(viewId, android.util.TypedValue.COMPLEX_UNIT_SP, fontSize)
++    color?.let { runCatching { setTextColor(viewId, AndroidColor.parseColor(it)) } }
++  }
++  // EmittableAndroidRemoteViews est interne à Glance : instanciation par réflexion
++  // (règle -keep dans proguard-rules.pro).
++  return runCatching {
++    val cls = Class.forName("androidx.glance.appwidget.EmittableAndroidRemoteViews")
++    val emittable = cls.getDeclaredConstructor().newInstance() as Emittable
++    cls.getMethod("setRemoteViews", android.widget.RemoteViews::class.java).invoke(emittable, views)
++    emittable
++  }.getOrElse {
++    // Repli : durée figée au moment du rendu.
++    val total = elapsed / 1000
++    val text = if (total >= 3600) {
++      String.format("%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
++    } else {
++      String.format("%d:%02d", total / 60, total % 60)
++    }
++    EmittableText().also { it.text = text }
++  }
++}
++
+ internal fun createErrorRoot(message: String): Emittable = createErrorText(message)
+ 
+ private fun createErrorText(message: String): EmittableText {
+@@ -152,6 +207,7 @@ private fun ReadableMap.toPeekNodes(converterContext: WidgetConverterContext, so
+     "SpacerView" -> listOf(toPeekSpacer(converterContext))
+     "SwitchView" -> listOf(toPeekSwitch(converterContext))
+     "TextView" -> listOf(toPeekText(converterContext))
++    "ChronometerView" -> listOf(toPeekChronometer(converterContext))
+     "Button", "FilledTonalButton", "OutlinedButton", "ElevatedButton", "TextButton" -> listOf(
+       toPeekButton(converterContext, source)
+     )
+diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
+index edabde8..0c1ea8b 100644
+--- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
++++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
+@@ -25,7 +25,11 @@ internal class ExpoWidgetsPeekWidget(
+     val layout = WidgetsLayoutRegistry.layout(appContext, widgetName)
+       ?: return createErrorRoot("No layout found for $widgetName")
+     val props = WidgetsLayoutRegistry.props(appContext, widgetName)
+-    val environment = getWidgetEnvironment(appContext)
++    // Taille réelle (dp) transmise au rendu, pour adapter la mise en page.
++    val environment = getWidgetEnvironment(appContext) + mapOf(
++      "widthDp" to size.width.value.toDouble(),
++      "heightDp" to size.height.value.toDouble()
++    )
+     val node = evaluateLayout(appContext, layout, props, environment)
+ 
+     return node.toPeekRoot(appContext, InteractionSource.Widget(widgetName), size)
+diff --git a/node_modules/expo-widgets/android/src/main/res/layout/expo_widgets_chronometer.xml b/node_modules/expo-widgets/android/src/main/res/layout/expo_widgets_chronometer.xml
+new file mode 100644
+index 0000000..dc5ba98
+--- /dev/null
++++ b/node_modules/expo-widgets/android/src/main/res/layout/expo_widgets_chronometer.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Chrono natif du widget : défile seul, même app fermée (patch SuiviBaby). -->
++<Chronometer xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/expo_widgets_chronometer"
++    android:layout_width="wrap_content"
++    android:layout_height="wrap_content"
++    android:fontFeatureSettings="tnum"
++    android:includeFontPadding="false"
++    android:maxLines="1"
++    android:textStyle="bold" />

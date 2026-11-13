@@ -692,6 +692,7 @@ export default function HomeDashboard() {
     () => ({
       childId: activeChild?.id,
       childName: activeChild?.name ?? "",
+      ready: isDataLoaded,
       toMs: (value: unknown) => toDate(value as any).getTime(),
       tetees: data.tetees,
       biberons: data.biberons,
@@ -708,6 +709,7 @@ export default function HomeDashboard() {
     [
       activeChild?.id,
       activeChild?.name,
+      isDataLoaded,
       data.tetees,
       data.biberons,
       data.solides,

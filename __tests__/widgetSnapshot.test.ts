@@ -3,9 +3,11 @@ import { EMPTY_NURSING_TIMER, toggleSide } from "@/components/forms/nursingTimer
 import {
   buildNowWidgetProps,
   countGroups,
+  EMPTY_NOW_WIDGET_NATIVE,
   formatDuration,
   nextSideFrom,
   type NowWidgetInput,
+  toNativeWidgetProps,
 } from "@/utils/widgetSnapshot";
 
 const T0 = new Date(2026, 10, 13, 14, 0, 0).getTime();
@@ -60,6 +62,15 @@ describe("buildNowWidgetProps", () => {
     expect(p.live?.sinceLabel).toBe("depuis 13:20");
   });
 
+  it("toutes les sessions en cours sont listées, chacune avec son début", () => {
+    const st = toggleSide(EMPTY_NURSING_TIMER, "left", T0 - min(4));
+    const p = buildNowWidgetProps(base({ nursing: st, sleepStartMs: T0 - min(40), walkStartMs: T0 - min(20) }));
+    expect(p.lives.map((l) => l.kind)).toEqual(["nursing", "sleep", "walk"]);
+    expect(p.lives[1].timerStartMs).toBe(T0 - min(40));
+    expect(p.lives[2].timerStartMs).toBe(T0 - min(20));
+    expect(buildNowWidgetProps(base()).lives).toEqual([]);
+  });
+
   it("chrono et état de la journée visibles des comptes gratuits ; rappel des couches Premium seulement", () => {
     const p = buildNowWidgetProps(base({ isPremium: false, walkStartMs: T0 - min(5) }));
     expect(p.live?.kind).toBe("walk");
@@ -87,5 +98,30 @@ describe("aides", () => {
     expect(formatDuration(250)).toBe("4:10");
     expect(formatDuration(3850)).toBe("1:04:10");
     expect(countGroups([0, min(10), min(50), min(51)], min(30))).toBe(2);
+  });
+});
+
+describe("format natif (pont Android)", () => {
+  const hasNull = (v: unknown): boolean =>
+    v === null || v === undefined || (typeof v === "object" && Object.values(v as object).some(hasNull));
+
+  it("aucune valeur nulle, à aucun niveau, y compris au repos et dans l'état initial", () => {
+    const st = toggleSide(EMPTY_NURSING_TIMER, "left", T0 - min(3));
+    for (const p of [
+      buildNowWidgetProps(base()),
+      buildNowWidgetProps(base({ nursing: st, isPremium: false, lastMeal: null, lastNursing: null })),
+    ]) {
+      expect(hasNull(p)).toBe(true); // le format interne en contient bien
+      expect(hasNull(toNativeWidgetProps(p))).toBe(false);
+    }
+    expect(hasNull(EMPTY_NOW_WIDGET_NATIVE)).toBe(false);
+  });
+
+  it("conserve les valeurs présentes", () => {
+    const p = buildNowWidgetProps(base());
+    const n = toNativeWidgetProps(p);
+    expect(n.lastMealMs).toBe(p.lastMealMs);
+    expect(n.alerts.mealAtMs).toBe(p.alerts.mealAtMs);
+    expect(n.day?.sleepMinutes).toBe(310);
   });
 });

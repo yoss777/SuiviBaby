@@ -20,7 +20,7 @@ import {
 } from "@expo/ui/swift-ui/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
 
-import { EMPTY_NOW_WIDGET, type NowWidgetProps } from "@/utils/widgetSnapshot";
+import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps } from "@/utils/widgetSnapshot";
 
 const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) => {
   "widget";
@@ -196,4 +196,4 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   );
 };
 
-export default createWidget("BebeMaintenant", BebeMaintenant, EMPTY_NOW_WIDGET);
+export default createWidget("BebeMaintenant", BebeMaintenant, EMPTY_NOW_WIDGET_NATIVE);

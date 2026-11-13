@@ -5,7 +5,7 @@
 // pour ne pas dépenser le budget de rechargement de WidgetKit.
 import { Platform } from "react-native";
 
-import type { NowWidgetProps } from "@/utils/widgetSnapshot";
+import { type NowWidgetProps, toNativeWidgetProps } from "@/utils/widgetSnapshot";
 
 export const WIDGET_SYNC_DEBOUNCE_MS = 2000;
 
@@ -24,7 +24,8 @@ function getWidget(): WidgetHandle | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     handle = require("@/widgets/BebeMaintenant").default as WidgetHandle;
-  } catch {
+  } catch (error) {
+    if (__DEV__) console.warn("[widget] module indisponible", error);
     handle = null;
   }
   return handle;
@@ -45,10 +46,12 @@ export function pushNowWidget(props: NowWidgetProps): void {
     const widget = getWidget();
     if (!widget) return;
     try {
-      widget.updateSnapshot(props);
+      widget.updateSnapshot(toNativeWidgetProps(props));
       lastKey = key;
-    } catch {
+      if (__DEV__) console.log(`[widget] envoyé : ${props.childName}${props.live ? ` · ${props.live.kind}` : ""}`);
+    } catch (error) {
       // Extension indisponible : on réessaiera au prochain changement.
+      if (__DEV__) console.warn("[widget] envoi impossible", error);
     }
   }, WIDGET_SYNC_DEBOUNCE_MS);
 }
