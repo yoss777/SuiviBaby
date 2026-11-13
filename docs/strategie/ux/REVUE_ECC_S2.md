@@ -39,7 +39,7 @@ Le projet Expo actuel `@yoss7/suivibaby` n'a **aucune clé FCM** : toute notific
 | C5 | Code | Aucun test pour `useNowWidgetSync` ni `widgetSync` | **Corrigé** `389e206` |
 | C6 | Code | Tétée en pause : clé de contenu instable, widget réécrit à chaque passage | **Corrigé** `389e206` |
 | C7 | Code | Lien profond au démarrage à froid effacé avant le chargement des bébés | **Corrigé** `389e206` |
-| N1 | Natif | Chrono en pause : la durée dérive quand le lanceur réapplique les vues | à corriger (patch) |
+| N1 | Natif | Chrono en pause : la durée dérive quand le lanceur réapplique les vues | **Corrigé** `70ff605` (patch) |
 | N2 | Natif | Repli incomplet si un message du widget fait planter le traitement (peut finir en notification) | **Corrigé** `70ff605` |
 | U1 | UI/UX | Rappel repas dépassé non annoncé à TalkBack pendant une session | **Corrigé** `70ff605` |
 | U2 | UI/UX | « 1h51 » au repos se lit comme une heure : dire « il y a » | **Corrigé** `70ff605` |
