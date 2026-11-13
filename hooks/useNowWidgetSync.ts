@@ -10,6 +10,7 @@ import {
   type NursingTimerState,
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
+import { setWidgetChild } from "@/services/pushTokenService";
 import { cancelPendingWidgetPush, pushNowWidget } from "@/services/widgetSync";
 import {
   assembleNowWidgetInput,
@@ -118,6 +119,7 @@ export function useNowWidgetSync(p: Params): void {
       localEnv,
     );
     pushNowWidget({ ...buildNowWidgetProps(input, localEnv), childId: p.childId });
+    setWidgetChild(p.childId);
     // tick : nouvel envoi au retour au premier plan.
   }, [p, nursing, tick]);
 }
