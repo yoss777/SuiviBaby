@@ -24,6 +24,7 @@ import { Box, Column, LazyColumn, Row, Spacer, Text } from "@expo/ui/jetpack-com
 import {
   background,
   cornerRadius,
+  createModifier,
   fillMaxSize,
   height,
   padding,
@@ -76,6 +77,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Redessin programmé (passage à 1 h, rappel dépassé) : ne rend rien.
   const RefreshAt = "RefreshAtView" as unknown as (p: { atMs: number }) => null;
   const HOUR = 3600 * 1000;
+  // Appui sur une zone : ouvre le formulaire de la catégorie dans l'app
+  // (hooks/useWidgetDeepLink.ts). Une version native sans « openUrl » l'ignore
+  // et l'appui ouvre l'app, comme avant.
+  const linkTo = (action: "meal" | "diaper" | "nursing") =>
+    createModifier("openUrl", {
+      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`,
+    });
 
   const clock = (ms: number) => {
     const d = new Date(ms);
@@ -196,8 +204,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       late: boolean,
       sub: string | null,
       ahead: string | null,
+      action: "meal" | "diaper",
     ) => (
-      <Column modifiers={[width(colW)]}>
+      <Column modifiers={[width(colW), linkTo(action)]}>
         {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, late ? `${label} · rappel` : label, sp)}
         {gap(2)}
         {ms ? fixedLine(big, elapsed(ms, late ? C.alert : C.strong, big)) : txt("—", C.soft, big, true)}
@@ -217,9 +226,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
             mealLate,
             props.lastMealMs && mealWord && colW >= 120 ? `${mealWord} ${clock(props.lastMealMs)}` : null,
             upcoming(props.alerts.mealAtMs),
+            "meal",
           )}
           <Spacer modifiers={[width(colGap)]} />
-          {block("Change", CAT.diaper.text, CAT.diaper.dot, day?.lastDiaperMs, diaperLate, null, upcoming(props.alerts.diaperAtMs))}
+          {block("Change", CAT.diaper.text, CAT.diaper.dot, day?.lastDiaperMs, diaperLate, null, upcoming(props.alerts.diaperAtMs), "diaper")}
         </Row>
         {props.nextSide ? gap(8) : null}
         {props.nextSide ? txt(`Prochain sein : ${sideWord(props.nextSide)}`, CAT.nursing.text, 13, true) : null}
@@ -243,7 +253,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const at = `${mealWord && !small ? `${mealWord} ` : "à "}${clock(props.lastMealMs)}`;
     const ahead = upcoming(props.alerts.mealAtMs);
     return (
-      <Column verticalAlignment="center" modifiers={[size(zoneW, h)]}>
+      <Column verticalAlignment="center" modifiers={[size(zoneW, h), linkTo("meal")]}>
         {labelRow(
           mealLate ? C.alert : CAT.meal.text,
           mealLate ? C.alert : CAT.meal.dot,
@@ -281,7 +291,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <Column
         verticalAlignment="center"
-        modifiers={[size(zoneW, zoneH - bandH), background(k.tile), cornerRadius(16), paddingAll(small ? 10 : 12)]}
+        modifiers={[
+          size(zoneW, zoneH - bandH),
+          background(k.tile),
+          cornerRadius(16),
+          paddingAll(small ? 10 : 12),
+          ...(l.kind === "nursing" ? [linkTo("nursing")] : []),
+        ]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, false), small ? 12 : 13)}
         {gap(4)}
@@ -295,7 +311,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const rowTile = (l: WidgetLive, h: number) => {
     const k = CAT[l.kind];
     return (
-      <Column verticalAlignment="center" modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 6, 10, 6)]}>
+      <Column
+        verticalAlignment="center"
+        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 6, 10, 6), ...(l.kind === "nursing" ? [linkTo("nursing")] : [])]}
+      >
         {labelRow(k.text, k.dot, tileTitle(l, !small), 12)}
         {chrono(l, small ? 22 : h >= 58 ? 26 : 22)}
       </Column>
@@ -308,7 +327,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const label =
       l.kind === "nursing" && l.side ? `${k.short} ${l.side}` : small && l.kind === "walk" ? k.short : labelOf(l);
     return (
-      <Row verticalAlignment="center" modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 0, 10, 0)]}>
+      <Row
+        verticalAlignment="center"
+        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 0, 10, 0), ...(l.kind === "nursing" ? [linkTo("nursing")] : [])]}
+      >
         <Row verticalAlignment="center" modifiers={[width(labelW)]}>
           {dot(k.dot)}
           <Spacer modifiers={[width(5)]} />
@@ -356,7 +378,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     }
     const ITEM_H = 40;
     const item = (key: string, dotColor: string, value: string, sub: string | null, late: boolean) => (
-      <Row key={key} verticalAlignment="center" modifiers={[size(Rw, ITEM_H)]}>
+      <Row
+        key={key}
+        verticalAlignment="center"
+        modifiers={[size(Rw, ITEM_H), ...(key === "meal" ? [linkTo("meal")] : key === "diaper" ? [linkTo("diaper")] : [])]}
+      >
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(8)]} />
         <Column>

@@ -10,7 +10,7 @@ index 222bdfd..4e802df 100644
 +# (classe interne à Glance). Ne pas renommer ni supprimer.
 +-keep class androidx.glance.appwidget.EmittableAndroidRemoteViews { *; }
 diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
-index 3df9e4a..8e9eab5 100644
+index 3df9e4a..b21cd48 100644
 --- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 +++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 @@ -4,6 +4,8 @@ package expo.modules.widgets
@@ -178,10 +178,20 @@ index 3df9e4a..8e9eab5 100644
      "Button", "FilledTonalButton", "OutlinedButton", "ElevatedButton", "TextButton" -> listOf(
        toPeekButton(converterContext, source)
      )
-@@ -419,6 +559,9 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
+@@ -419,6 +559,19 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
      "background" -> asRecord<BackgroundParams>(converterContext)?.color?.toGlanceColorProvider()
        ?.let { GlanceModifier.background(it) }
      "cornerRadius" -> asRecord<CornerRadiusParams>(converterContext)?.let { GlanceModifier.cornerRadius(it.radius.dp) }
++    // SuiviBaby : appui sur une zone, ouvre un lien de l'app (lien profond).
++    // setPackage : seule l'app elle-même peut recevoir l'intention.
++    "openUrl" -> this["url"]?.asString()?.takeIf { it.isNotBlank() }?.let { url ->
++      runCatching {
++        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
++          .setPackage(converterContext.applicationContext.packageName)
++          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
++        GlanceModifier.clickable(actionStartActivity(intent))
++      }.getOrNull()
++    }
 +    // SuiviBaby : libellé lu par TalkBack (semantics { contentDescription }).
 +    "semantics" -> this["contentDescription"]?.asString()?.takeIf { it.isNotBlank() }
 +      ?.let { description -> GlanceModifier.semantics { contentDescription = description } }

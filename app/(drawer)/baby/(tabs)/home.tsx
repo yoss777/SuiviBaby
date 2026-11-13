@@ -61,6 +61,7 @@ import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
+import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1174,6 +1175,30 @@ export default function HomeDashboard() {
       mealType: "tetee",
     });
   }, [openSheetRaw]);
+
+  // Appui sur une zone du widget : formulaire de la catégorie.
+  const openFromWidget = useCallback(
+    (action: WidgetDeepLinkAction) => {
+      if (action === "diaper") {
+        openSheetRaw({ ownerId: headerOwnerId.current, formType: "diapers", diapersType: "miction" });
+      } else if (action === "nursing") {
+        handleResumeNursing();
+      } else {
+        // Même type de repas que le dernier noté (tétée, biberon ou solide).
+        const latest = (list: { date: unknown }[]) =>
+          list.reduce((max, e) => Math.max(max, toDate(e.date as any).getTime() || 0), 0);
+        const candidates = [
+          ["tetee", latest(data.tetees)],
+          ["biberon", latest(data.biberons)],
+          ["solide", latest(data.solides)],
+        ] as const;
+        const [mealType] = candidates.reduce((best, c) => (c[1] > best[1] ? c : best), ["biberon", 0] as const);
+        openSheetRaw({ ownerId: headerOwnerId.current, formType: "meals", mealType });
+      }
+    },
+    [openSheetRaw, handleResumeNursing, data.tetees, data.biberons, data.solides],
+  );
+  useWidgetDeepLink({ ready: isDataLoaded, open: openFromWidget });
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {
