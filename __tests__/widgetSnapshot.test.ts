@@ -7,6 +7,7 @@ import {
   formatDuration,
   nextSideFrom,
   type NowWidgetInput,
+  otherEventLabel,
   toNativeWidgetProps,
 } from "@/utils/widgetSnapshot";
 
@@ -71,6 +72,21 @@ describe("buildNowWidgetProps", () => {
     expect(buildNowWidgetProps(base()).lives).toEqual([]);
   });
 
+  it("événements du jour : du plus récent au plus ancien, 15 au plus", () => {
+    const recent = Array.from({ length: 20 }, (_, i) => ({ ms: T0 - min(i * 10), kind: "meal" as const, label: `e${i}` }));
+    const p = buildNowWidgetProps(base({ recent: [...recent].reverse() }));
+    expect(p.recent).toHaveLength(15);
+    expect(p.recent[0].label).toBe("e0");
+    expect(p.recent[14].label).toBe("e14");
+    expect(buildNowWidgetProps(base()).recent).toEqual([]);
+  });
+
+  it("sommeil : sieste ou nuit, comme sur l'Accueil", () => {
+    expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: true })).live?.nap).toBe(true);
+    expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: false })).live?.nap).toBe(false);
+    expect(buildNowWidgetProps(base({ walkStartMs: T0 - min(5) })).live?.nap).toBeNull();
+  });
+
   it("chrono et état de la journée visibles des comptes gratuits ; rappel des couches Premium seulement", () => {
     const p = buildNowWidgetProps(base({ isPremium: false, walkStartMs: T0 - min(5) }));
     expect(p.live?.kind).toBe("walk");
@@ -123,5 +139,73 @@ describe("format natif (pont Android)", () => {
     expect(n.lastMealMs).toBe(p.lastMealMs);
     expect(n.alerts.mealAtMs).toBe(p.alerts.mealAtMs);
     expect(n.day?.sleepMinutes).toBe(310);
+  });
+});
+
+describe("otherEventLabel (fil du jour)", () => {
+  it("nomme vitamines, médicaments, température et soins", () => {
+    expect(otherEventLabel({ type: "vitamine", nomVitamine: "D" })).toBe("Vitamine D");
+    expect(otherEventLabel({ type: "vitamine", nomVitamine: "Vitamine K" })).toBe("Vitamine K");
+    expect(otherEventLabel({ type: "vitamine" })).toBe("Vitamines");
+    expect(otherEventLabel({ type: "medicament", nomMedicament: "Doliprane" })).toBe("Doliprane");
+    expect(otherEventLabel({ type: "temperature", valeur: 37.8 })).toBe("Temp. 37,8 °C");
+    expect(otherEventLabel({ type: "bain" })).toBe("Bain");
+    expect(otherEventLabel({ type: "nettoyage_nez" })).toBe("Soin du nez");
+  });
+
+  it("montre les sommeils et activités finis, pas ceux en cours (déjà en tuile)", () => {
+    expect(otherEventLabel({ type: "sommeil", isNap: true, heureFin: 1, duree: 80 })).toBe("Sieste 1h20");
+    expect(otherEventLabel({ type: "sommeil", isNap: false, heureFin: 1, duree: 45 })).toBe("Nuit 45 min");
+    expect(otherEventLabel({ type: "sommeil", isNap: true })).toBeNull();
+    expect(otherEventLabel({ type: "activite", typeActivite: "promenade", heureDebut: 1 })).toBeNull();
+    expect(otherEventLabel({ type: "activite", typeActivite: "lecture", duree: 10 })).toBe("Lecture 10 min");
+  });
+
+  it("ignore les jalons et types inconnus", () => {
+    expect(otherEventLabel({ type: "jalon" })).toBeNull();
+    expect(otherEventLabel({ type: "inconnu" })).toBeNull();
+  });
+});
+
+describe("module partagé app / serveur", () => {
+  const { assembleNowWidgetInput, zonedEnv } = require("../functions/shared/widget");
+
+  it("zonedEnv : minuit et heure locale de Paris, heure d'été comprise", () => {
+    const paris = zonedEnv("Europe/Paris");
+    const summer = Date.UTC(2026, 6, 14, 22, 30); // 00:30 le 15 juillet à Paris
+    expect(paris.clock(summer)).toBe("00:30");
+    expect(paris.dayBounds(summer)).toEqual([Date.UTC(2026, 6, 14, 22, 0), Date.UTC(2026, 6, 15, 22, 0)]);
+    const winter = Date.UTC(2026, 10, 13, 12, 0);
+    expect(paris.dayBounds(winter)[0]).toBe(Date.UTC(2026, 10, 12, 23, 0));
+  });
+
+  it("assemble les compteurs et le fil avec un emoji par événement", () => {
+    const env = zonedEnv("Europe/Paris");
+    const now = Date.UTC(2026, 10, 13, 17, 0);
+    const at = (h: number, m = 0) => Date.UTC(2026, 10, 13, h - 1, m);
+    const input = assembleNowWidgetInput(
+      {
+        childName: "Léa",
+        nursing: null,
+        tetees: [{ ms: at(8), dureeGauche: 10 }],
+        biberons: [{ ms: at(11), typeBiberon: "lait_infantile", quantite: 120 }, { ms: at(12), typeBiberon: "eau", quantite: 30 }],
+        solides: [],
+        mictions: [{ ms: at(9) }, { ms: at(9, 1) }],
+        selles: [{ ms: Date.UTC(2026, 10, 12, 10) }],
+        others: [{ ms: at(10), type: "vitamine", nomVitamine: "D" }],
+        sleepTotalMinutes: 90,
+        isPremium: false,
+        reminders: { enabled: false, repasHours: 0, changesHours: 0 },
+        now,
+      },
+      env,
+    );
+    expect(input.day.mealsCount).toBe(2);
+    expect(input.day.bottleMl).toBe(120);
+    expect(input.day.diapersCount).toBe(1);
+    expect(input.lastMeal).toEqual({ ms: at(11), kind: "biberon" });
+    expect(input.recent.map((e: { icon: string; label: string }) => `${e.icon} ${e.label}`).sort()).toEqual(
+      ["🍼 Biberon 120 ml", "🍼 Biberon 30 ml", "🤱 Tétée 10 min", "💧 Change · pipi", "💧 Change · pipi", "💊 Vitamine D"].sort(),
+    );
   });
 });

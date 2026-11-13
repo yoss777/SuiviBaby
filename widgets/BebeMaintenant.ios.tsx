@@ -188,7 +188,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {day ? (
         <VStack alignment="leading" spacing={6} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
           {row("Repas", C.meal, `à ${clock(day.lastMealMs)}`, `${day.mealsCount}${day.bottleMl ? ` · ${day.bottleMl} ml` : ""}`, mealLate)}
-          {row("Couches", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} auj.`, diaperLate)}
+          {row("Changes", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} auj.`, diaperLate)}
           {row("Sommeil", C.sleep, sleepLabel(day.sleepMinutes), "", false)}
         </VStack>
       ) : null}

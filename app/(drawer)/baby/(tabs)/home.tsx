@@ -688,6 +688,35 @@ export default function HomeDashboard() {
 
   // Widget d'écran d'accueil « Bébé maintenant » : mêmes données que l'Accueil.
   const { isPremium } = usePremium();
+  // Fil du jour du widget : tout ce qui n'est ni repas ni change.
+  const widgetOthers = useMemo(
+    () => [
+      ...data.vitamines,
+      ...data.medicaments,
+      ...data.temperatures,
+      ...data.symptomes,
+      ...data.vaccins,
+      ...data.bains,
+      ...data.nettoyagesNez,
+      ...data.pompages,
+      ...data.croissances,
+      ...data.activites,
+      ...data.sommeils,
+    ],
+    [
+      data.vitamines,
+      data.medicaments,
+      data.temperatures,
+      data.symptomes,
+      data.vaccins,
+      data.bains,
+      data.nettoyagesNez,
+      data.pompages,
+      data.croissances,
+      data.activites,
+      data.sommeils,
+    ],
+  );
   const widgetParams = useMemo(
     () => ({
       childId: activeChild?.id,
@@ -699,7 +728,11 @@ export default function HomeDashboard() {
       solides: data.solides,
       mictions: data.mictions,
       selles: data.selles,
+      others: widgetOthers,
       sleepStartMs: sleepStartTs,
+      sleepIsNap: sommeilEnCours?.isNap,
+      sleepChildId: (sommeilEnCours as { childId?: string } | undefined)?.childId,
+      walkChildId: (promenadeEnCours as { childId?: string } | undefined)?.childId,
       walkStartMs: promenadeStartTs,
       sleepTotalMinutes: todayStats.sommeil.totalMinutes,
       lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
@@ -715,7 +748,10 @@ export default function HomeDashboard() {
       data.solides,
       data.mictions,
       data.selles,
+      widgetOthers,
       sleepStartTs,
+      sommeilEnCours,
+      promenadeEnCours,
       promenadeStartTs,
       todayStats.sommeil.totalMinutes,
       todayStats.meals.lastAbsoluteTimestamp,

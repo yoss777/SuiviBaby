@@ -10,13 +10,16 @@ import {
   type NursingTimerState,
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
-import { pushNowWidget } from "@/services/widgetSync";
-import { buildNowWidgetProps, countGroups, type NowWidgetInput } from "@/utils/widgetSnapshot";
+import { cancelPendingWidgetPush, pushNowWidget } from "@/services/widgetSync";
+import {
+  assembleNowWidgetInput,
+  buildNowWidgetProps,
+  localEnv,
+  type OtherDayEvent,
+} from "@/utils/widgetSnapshot";
 
-const MEAL_GROUP_MS = 30 * 60 * 1000;
-const CHANGE_GROUP_MS = 2 * 60 * 1000;
-
-type Dated = { date: unknown };
+// childId : chaque événement porte son enfant (garde contre les données d'un autre bébé).
+type Dated = { date: unknown; childId?: string };
 
 interface Params {
   childId: string | undefined;
@@ -29,18 +32,20 @@ interface Params {
   solides: Dated[];
   mictions: Dated[];
   selles: Dated[];
+  /** Autres événements du jour (vitamines, soins, santé, activités, sommeils) : fil du jour. */
+  others?: (Dated & OtherDayEvent)[];
   sleepStartMs: number | undefined;
+  /** Enfant du sommeil en cours (garde au changement de bébé). */
+  sleepChildId?: string;
+  /** Sommeil en cours : sieste ou nuit. */
+  sleepIsNap: boolean | undefined;
   walkStartMs: number | undefined;
+  /** Enfant de la promenade en cours (garde au changement de bébé). */
+  walkChildId?: string;
   sleepTotalMinutes: number;
   lastAbsoluteMealMs: number | undefined;
   isPremium: boolean;
   reminders: { enabled: boolean; thresholds: { repas: number; changes: number } };
-}
-
-function startOfToday(now: number): [number, number] {
-  const d = new Date(now);
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  return [start, start + 24 * 3600 * 1000];
 }
 
 export function useNowWidgetSync(p: Params): void {
@@ -69,64 +74,50 @@ export function useNowWidgetSync(p: Params): void {
 
   // Calculé dans un effet : l'heure courante n'a pas sa place dans le rendu.
   useEffect(() => {
-    if (!p.childId || !p.ready) return;
-    const now = Date.now();
-    const [dayStart, dayEnd] = startOfToday(now);
-    const inToday = (ms: number) => ms >= dayStart && ms < dayEnd;
-    const ms = (e: Dated) => p.toMs(e.date);
-
-    const mealBottles = p.biberons.filter(
-      (e) => !e.typeBiberon || e.typeBiberon === "lait_maternel" || e.typeBiberon === "lait_infantile",
-    );
-    const meals: { ms: number; kind: "tetee" | "biberon" | "solide" }[] = [
-      ...p.tetees.map((e) => ({ ms: ms(e), kind: "tetee" as const })),
-      ...mealBottles.map((e) => ({ ms: ms(e), kind: "biberon" as const })),
-      ...p.solides.map((e) => ({ ms: ms(e), kind: "solide" as const })),
-    ].filter((m) => Number.isFinite(m.ms));
-    const lastMealEvent = meals.reduce<(typeof meals)[number] | null>(
-      (best, m) => (!best || m.ms > best.ms ? m : best),
-      null,
-    );
-    const lastMeal = lastMealEvent
-      ? lastMealEvent
-      : p.lastAbsoluteMealMs
-        ? { ms: p.lastAbsoluteMealMs, kind: "autre" as const }
-        : null;
-
-    const lastTetee = [...p.tetees].sort((a, b) => ms(b) - ms(a))[0];
-    const todayMeals = meals.map((m) => m.ms).filter(inToday);
-    const changes = [...p.mictions, ...p.selles].map(ms).filter((t) => Number.isFinite(t));
-    const todayChanges = changes.filter(inToday);
-    const bottleMl = mealBottles
-      .filter((e) => inToday(ms(e)))
-      .reduce((sum, e) => sum + (typeof e.quantite === "number" ? e.quantite : 0), 0);
-
-    const input: NowWidgetInput = {
-      childName: p.childName,
-      nursing,
-      sleepStartMs: p.sleepStartMs ?? null,
-      walkStartMs: p.walkStartMs ?? null,
-      lastMeal,
-      lastNursing: lastTetee
-        ? { leftMinutes: lastTetee.dureeGauche ?? 0, rightMinutes: lastTetee.dureeDroite ?? 0 }
-        : null,
-      day: {
-        mealsCount: countGroups(todayMeals, MEAL_GROUP_MS),
-        bottleMl,
-        lastMealMs: lastMeal?.ms ?? null,
-        diapersCount: countGroups(todayChanges, CHANGE_GROUP_MS),
-        lastDiaperMs: changes.length ? Math.max(...changes) : null,
-        sleepMinutes: p.sleepTotalMinutes,
+    if (!p.childId || !p.ready) {
+      cancelPendingWidgetPush();
+      return;
+    }
+    // Juste après un changement de bébé, l'Accueil affiche un instant le nom du
+    // nouveau bébé avec les données de l'ancien : on n'envoie rien tant qu'une
+    // seule donnée appartient à un autre enfant.
+    const otherChild = (id: string | undefined) => id != null && id !== p.childId;
+    const stale =
+      [...p.tetees, ...p.biberons, ...p.solides, ...p.mictions, ...p.selles, ...(p.others ?? [])].some((e) => otherChild(e.childId)) ||
+      otherChild(p.sleepChildId) ||
+      otherChild(p.walkChildId);
+    if (stale) {
+      cancelPendingWidgetPush();
+      return;
+    }
+    // Le calcul lui-même vit dans le module partagé avec le serveur.
+    const timed = <T extends Dated>(list: T[]) => list.map((e) => ({ ...e, ms: p.toMs(e.date) }));
+    const input = assembleNowWidgetInput(
+      {
+        childName: p.childName,
+        nursing,
+        tetees: timed(p.tetees),
+        biberons: timed(p.biberons),
+        solides: timed(p.solides),
+        mictions: timed(p.mictions),
+        selles: timed(p.selles),
+        others: timed(p.others ?? []),
+        sleepStartMs: p.sleepStartMs ?? null,
+        sleepIsNap: p.sleepIsNap ?? null,
+        walkStartMs: p.walkStartMs ?? null,
+        sleepTotalMinutes: p.sleepTotalMinutes,
+        lastAbsoluteMealMs: p.lastAbsoluteMealMs ?? null,
+        isPremium: p.isPremium,
+        reminders: {
+          enabled: p.reminders.enabled,
+          repasHours: p.reminders.thresholds.repas,
+          changesHours: p.reminders.thresholds.changes,
+        },
+        now: Date.now(),
       },
-      isPremium: p.isPremium,
-      reminders: {
-        enabled: p.reminders.enabled,
-        repasHours: p.reminders.thresholds.repas,
-        changesHours: p.reminders.thresholds.changes,
-      },
-      now,
-    };
-    pushNowWidget(buildNowWidgetProps(input));
+      localEnv,
+    );
+    pushNowWidget({ ...buildNowWidgetProps(input, localEnv), childId: p.childId });
     // tick : nouvel envoi au retour au premier plan.
   }, [p, nursing, tick]);
 }

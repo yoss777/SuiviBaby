@@ -56,6 +56,12 @@ export function pushNowWidget(props: NowWidgetProps): void {
   }, WIDGET_SYNC_DEBOUNCE_MS);
 }
 
+/** Annule l'envoi en attente (changement de bébé, données pas encore prêtes). */
+export function cancelPendingWidgetPush(): void {
+  if (pending) clearTimeout(pending);
+  pending = null;
+}
+
 /** Tests uniquement. */
 export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   handle = widget === undefined ? undefined : widget;
