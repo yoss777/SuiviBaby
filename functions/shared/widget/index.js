@@ -174,6 +174,41 @@ function otherEventIcon(e) {
 }
 
 // ---------------------------------------------------------------------------
+// Tétée en cours (document partagé children/{c}/live/nursing)
+
+/** Brouillon en pause écarté après 1 h, en cours après 3 h (components/forms/nursingTimer.ts). */
+const NURSING_PAUSED_TTL_MS = 60 * 60 * 1000;
+const NURSING_RUNNING_TTL_MS = 3 * 60 * 60 * 1000;
+
+/** La tétée partagée compte encore : du temps compté ou un côté en cours, et pas expirée. */
+function usableNursing(state, now) {
+  if (!state || typeof state !== "object") return null;
+  const left = Number(state.leftSeconds) || 0;
+  const right = Number(state.rightSeconds) || 0;
+  const side = state.runningSide === "left" || state.runningSide === "right" ? state.runningSide : null;
+  if (left <= 0 && right <= 0 && !side) return null;
+  const ttl = side ? NURSING_RUNNING_TTL_MS : NURSING_PAUSED_TTL_MS;
+  if (typeof state.updatedAt !== "number" || now - state.updatedAt > ttl) return null;
+  return {
+    leftSeconds: left,
+    rightSeconds: right,
+    runningSide: side,
+    runningSince: typeof state.runningSince === "number" ? state.runningSince : null,
+    startedAt: typeof state.startedAt === "number" ? state.startedAt : null,
+  };
+}
+
+/** Minutes de sommeil tombant dans le jour [dayStart, dayEnd[ (sommeil en cours compté jusqu'à now). */
+function sleepMinutesInDay(sleeps, dayStart, dayEnd, now) {
+  return sleeps.reduce((sum, e) => {
+    const start = Number.isFinite(e.startMs) ? e.startMs : e.ms;
+    const end = Number.isFinite(e.endMs) ? e.endMs : now;
+    const minutes = Math.round((Math.min(end, dayEnd) - Math.max(start, dayStart)) / 60000);
+    return sum + Math.max(0, minutes);
+  }, 0);
+}
+
+// ---------------------------------------------------------------------------
 // Construction des props
 
 const EMPTY_NOW_WIDGET = {
@@ -397,6 +432,10 @@ function assembleNowWidgetInput(src, env = localEnv) {
 }
 
 module.exports = {
+  NURSING_PAUSED_TTL_MS,
+  NURSING_RUNNING_TTL_MS,
+  usableNursing,
+  sleepMinutesInDay,
   WIDGET_RECENT_MAX,
   MEAL_GROUP_MS,
   CHANGE_GROUP_MS,

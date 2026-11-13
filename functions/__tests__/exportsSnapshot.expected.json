@@ -289,6 +289,46 @@
       "retry": false
     }
   },
+  "onWidgetEventWrite": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 60,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.written",
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "events/{eventId}"
+      },
+      "retry": false
+    }
+  },
+  "onWidgetLiveWrite": {
+    "availableMemoryMb": 256,
+    "timeoutSeconds": 60,
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "eventTrigger": {
+      "eventType": "google.cloud.firestore.document.v1.written",
+      "eventFilters": {
+        "database": "(default)",
+        "namespace": "(default)"
+      },
+      "eventFilterPathPatterns": {
+        "document": "children/{childId}/live/{sessionId}"
+      },
+      "retry": false
+    }
+  },
   "parseVoiceCommand": {
     "availableMemoryMb": 256,
     "timeoutSeconds": 15,

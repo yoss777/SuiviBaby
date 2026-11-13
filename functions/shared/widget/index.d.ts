@@ -147,3 +147,14 @@ export function nextSideFrom(lastNursing: { leftMinutes: number; rightMinutes: n
 export function buildNowWidgetProps(input: NowWidgetInput, env?: WidgetEnv): NowWidgetProps;
 export function countGroups(timestamps: number[], gapMs: number): number;
 export function assembleNowWidgetInput(src: WidgetSource, env?: WidgetEnv): NowWidgetInput;
+
+export const NURSING_PAUSED_TTL_MS: number;
+export const NURSING_RUNNING_TTL_MS: number;
+/** Tétée partagée encore valable (temps compté ou côté en cours, non expirée), sinon null. */
+export function usableNursing(state: unknown, now: number): WidgetNursingState | null;
+export function sleepMinutesInDay(
+  sleeps: { ms: number; startMs?: number; endMs?: number }[],
+  dayStart: number,
+  dayEnd: number,
+  now: number,
+): number;

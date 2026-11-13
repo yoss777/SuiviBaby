@@ -35,8 +35,12 @@ export const EMPTY_NURSING_TIMER: NursingTimerState = {
  * en marche sans aucune action depuis plus de 3 h (aucune tétée ne dure 3 h
  * d'affilée), n'est plus proposé et s'efface.
  */
-export const PAUSED_DRAFT_TTL_MS = 60 * 60 * 1000;
-export const RUNNING_DRAFT_TTL_MS = 3 * 60 * 60 * 1000;
+// Même règle que le serveur (widget temps réel) : module partagé.
+export {
+  NURSING_PAUSED_TTL_MS as PAUSED_DRAFT_TTL_MS,
+  NURSING_RUNNING_TTL_MS as RUNNING_DRAFT_TTL_MS,
+} from "@/functions/shared/widget";
+import { NURSING_PAUSED_TTL_MS as PAUSED_DRAFT_TTL_MS, NURSING_RUNNING_TTL_MS as RUNNING_DRAFT_TTL_MS } from "@/functions/shared/widget";
 
 function runningExtra(state: NursingTimerState, side: NursingSide, now: number): number {
   if (state.runningSide !== side || state.runningSince == null) return 0;
