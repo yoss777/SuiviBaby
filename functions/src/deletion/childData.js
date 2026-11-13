@@ -48,12 +48,16 @@ async function deleteChildDataBatched(db, childId) {
   // (données sensibles potentiellement). Maintenant purgés en cascade.
   await deleteDocsByFieldBatched(db, "reports", "childId", childId);
 
-  // Access subcollection
-  const accessSnap = await db.collection("children").doc(childId).collection("access").get();
-  if (!accessSnap.empty) {
-    const batch = db.batch();
-    accessSnap.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
+  // Subcollections: Firestore keeps them when the child document is deleted.
+  // access: members ; live: session in progress shared by the household
+  // (tétée en cours, carries the uid of whoever wrote it last).
+  for (const sub of ["access", "live"]) {
+    const snap = await db.collection("children").doc(childId).collection(sub).get();
+    if (!snap.empty) {
+      const batch = db.batch();
+      snap.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
   }
 
   // user_child_access index entries for this child

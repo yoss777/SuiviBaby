@@ -74,6 +74,10 @@ async function purgeUserData(db, uid) {
           await transferOwnership(db, childId, uid, childAccessSnap);
         }
         await db.doc(`children/${childId}/access/${uid}`).delete();
+        // Session in progress last written by the user (live/nursing carries
+        // updatedBy): a transient state, removed rather than anonymised.
+        const liveSnap = await db.collection(`children/${childId}/live`).where("updatedBy", "==", uid).get();
+        await Promise.all(liveSnap.docs.map((d) => d.ref.delete()));
       }
       // Not a member any more (an earlier run removed the access): only the
       // index entry is left. Never delete a child other members still use.
