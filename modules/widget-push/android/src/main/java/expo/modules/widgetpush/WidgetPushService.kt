@@ -11,13 +11,17 @@ import expo.modules.notifications.service.ExpoFirebaseMessagingService
  */
 class WidgetPushService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
-    val consumed = runCatching {
-      WidgetPushHandler.handle(applicationContext, remoteMessage.data, System.currentTimeMillis())
-    }.getOrElse { error ->
-      Log.w("WidgetPush", "message du widget non appliqué", error)
-      // Un message du widget mal formé ne doit jamais devenir une notification.
-      remoteMessage.data["body"]?.contains("\"t\":\"w1\"") == true
+    // Reconnu d'abord : un message du widget, même mal formé, ne doit jamais
+    // repartir vers Expo (notification ou événement JS).
+    if (!WidgetPushHandler.isWidgetMessage(remoteMessage.data)) {
+      super.onMessageReceived(remoteMessage)
+      return
     }
-    if (!consumed) super.onMessageReceived(remoteMessage)
+    runCatching {
+      WidgetPushHandler.handle(applicationContext, remoteMessage.data, System.currentTimeMillis())
+    }.onFailure { error ->
+      Log.w("WidgetPush", "message du widget non appliqué", error)
+      runCatching { WidgetPushHandler.logError(applicationContext, System.currentTimeMillis()) }
+    }
   }
 }

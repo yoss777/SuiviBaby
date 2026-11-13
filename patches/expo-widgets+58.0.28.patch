@@ -10,7 +10,7 @@ index 222bdfd..4e802df 100644
 +# (classe interne à Glance). Ne pas renommer ni supprimer.
 +-keep class androidx.glance.appwidget.EmittableAndroidRemoteViews { *; }
 diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
-index 3df9e4a..b21cd48 100644
+index 3df9e4a..20b805e 100644
 --- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 +++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 @@ -4,6 +4,8 @@ package expo.modules.widgets
@@ -22,7 +22,7 @@ index 3df9e4a..b21cd48 100644
  import android.graphics.Color as AndroidColor
  import androidx.compose.ui.unit.DpSize
  import androidx.compose.ui.unit.TextUnit
-@@ -123,10 +125,145 @@ private class WidgetConverterContext(
+@@ -123,10 +125,150 @@ private class WidgetConverterContext(
  internal fun ReadableMap.toPeekRoot(context: Context, source: InteractionSource, size: DpSize): Emittable {
    val converterContext = WidgetConverterContext(context, size)
    return EmittableColumn().also { root ->
@@ -59,8 +59,18 @@ index 3df9e4a..b21cd48 100644
 +  val elapsed = ((pausedAtMs ?: now) - startMs).coerceAtLeast(0L)
 +  val base = android.os.SystemClock.elapsedRealtime() - elapsed
 +  val viewId = R.id.expo_widgets_chronometer
++  val total = elapsed / 1000
++  val frozenText = if (total >= 3600) {
++    String.format("%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
++  } else {
++    String.format("%d:%02d", total / 60, total % 60)
++  }
 +  val views = android.widget.RemoteViews(converterContext.applicationContext.packageName, R.layout.expo_widgets_chronometer).apply {
 +    setChronometer(viewId, base, null, pausedAtMs == null)
++    // En pause : setBase recalcule le texte à chaque application des vues par
++    // le lanceur (la durée dériverait). Le texte figé est posé après, dans le
++    // même ordre à chaque réapplication.
++    if (pausedAtMs != null) setTextViewText(viewId, frozenText)
 +    setTextViewTextSize(viewId, android.util.TypedValue.COMPLEX_UNIT_SP, fontSize)
 +    color?.let { runCatching { setTextColor(viewId, AndroidColor.parseColor(it)) } }
 +  }
@@ -73,13 +83,8 @@ index 3df9e4a..b21cd48 100644
 +    emittable
 +  }.getOrElse {
 +    // Repli : durée figée au moment du rendu.
-+    val total = elapsed / 1000
-+    val text = if (total >= 3600) {
-+      String.format("%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-+    } else {
-+      String.format("%d:%02d", total / 60, total % 60)
-+    }
-+    EmittableText().also { it.text = text }
++    android.util.Log.w("ExpoWidgets", "chrono natif indisponible, durée figée", it)
++    EmittableText().also { emittable -> emittable.text = frozenText }
 +  }
 +}
 +
@@ -168,7 +173,7 @@ index 3df9e4a..b21cd48 100644
  internal fun createErrorRoot(message: String): Emittable = createErrorText(message)
  
  private fun createErrorText(message: String): EmittableText {
-@@ -152,6 +289,9 @@ private fun ReadableMap.toPeekNodes(converterContext: WidgetConverterContext, so
+@@ -152,6 +294,9 @@ private fun ReadableMap.toPeekNodes(converterContext: WidgetConverterContext, so
      "SpacerView" -> listOf(toPeekSpacer(converterContext))
      "SwitchView" -> listOf(toPeekSwitch(converterContext))
      "TextView" -> listOf(toPeekText(converterContext))
@@ -178,7 +183,7 @@ index 3df9e4a..b21cd48 100644
      "Button", "FilledTonalButton", "OutlinedButton", "ElevatedButton", "TextButton" -> listOf(
        toPeekButton(converterContext, source)
      )
-@@ -419,6 +559,19 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
+@@ -419,6 +564,19 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
      "background" -> asRecord<BackgroundParams>(converterContext)?.color?.toGlanceColorProvider()
        ?.let { GlanceModifier.background(it) }
      "cornerRadius" -> asRecord<CornerRadiusParams>(converterContext)?.let { GlanceModifier.cornerRadius(it.radius.dp) }

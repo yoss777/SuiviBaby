@@ -11,6 +11,7 @@ enum class WidgetPushOutcome(val code: String) {
   STALE_SEQ("seq"),
   OLDER_THAN_APP("app"),
   INVALID("invalid"),
+  ERROR("err"),
 }
 
 object WidgetPushGuards {

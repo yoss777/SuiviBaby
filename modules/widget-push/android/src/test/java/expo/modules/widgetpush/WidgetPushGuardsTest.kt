@@ -48,4 +48,12 @@ class WidgetPushGuardsTest {
     assertNotNull(msg)
     assertEquals(1, WidgetPushHandler.props(msg!!)!!.getInt("v"))
   }
+
+  @Test fun recognisesWidgetMessagesEvenMalformed() {
+    assertEquals(true, WidgetPushHandler.isWidgetMessage(mapOf("t" to "w1")))
+    assertEquals(true, WidgetPushHandler.isWidgetMessage(mapOf("body" to """{"t": "w1", "p": {bad""")))
+    assertEquals(true, WidgetPushHandler.isWidgetMessage(mapOf("body" to """{"t":"w1","c":"c1"}""")))
+    assertEquals(false, WidgetPushHandler.isWidgetMessage(mapOf("body" to """{"type":"reminder"}""")))
+    assertEquals(false, WidgetPushHandler.isWidgetMessage(mapOf("title" to "Rappel")))
+  }
 }

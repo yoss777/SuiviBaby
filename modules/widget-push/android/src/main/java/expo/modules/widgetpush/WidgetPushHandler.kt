@@ -25,6 +25,14 @@ object WidgetPushHandler {
   const val LOG_KEY = "__sb_widget_push_log"
   private const val LOG_MAX = 20
 
+  /** Le message est-il destiné au widget ? (sans dépendre d'un JSON valide) */
+  fun isWidgetMessage(data: Map<String, String>): Boolean {
+    if (data["t"] == "w1") return true
+    val body = data["body"] ?: return false
+    return runCatching { JSONObject(body).optString("t") == "w1" }
+      .getOrElse { Regex("\"t\"\\s*:\\s*\"w1\"").containsMatchIn(body) }
+  }
+
   /** Message du widget, ou null : `body` JSON (Expo Push), sinon données à plat. */
   fun parse(data: Map<String, String>): JSONObject? {
     val body = data["body"]?.let { runCatching { JSONObject(it) }.getOrNull() }
@@ -71,8 +79,9 @@ object WidgetPushHandler {
   private fun isForeground(context: Context): Boolean {
     val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
     val pid = Process.myPid()
+    // VISIBLE aussi : écran partagé ou fenêtre, les écouteurs de l'app tournent.
     return am.runningAppProcesses?.any {
-      it.pid == pid && it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+      it.pid == pid && it.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
     } == true
   }
 
@@ -85,6 +94,12 @@ object WidgetPushHandler {
         .setComponent(component)
         .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
     )
+  }
+
+  /** Échec de traitement d'un message du widget : visible dans le journal de réception. */
+  fun logError(context: Context, receivedAtMs: Long) {
+    val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    appendLog(prefs, receivedAtMs, 0L, WidgetPushOutcome.ERROR)
   }
 
   /** Journal circulaire (mesure de latence, E6) : aucune donnée personnelle. */

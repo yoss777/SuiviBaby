@@ -53,9 +53,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   // Accent (pastille), tuile (session en cours) et texte de catégorie (AA).
   const CAT = {
-    nursing: { label: "Tétée", short: "Tétée", dot: "#D66B8F", tile: dark ? "#393243" : "#FDF0F4", text: dark ? "#E88FAE" : "#A63D62" },
-    sleep: { label: "Sommeil", short: "Sommeil", dot: "#7C6BA4", tile: dark ? "#2c3246" : "#F5F3F8", text: dark ? "#A898D0" : "#5B4A85" },
-    walk: { label: "Promenade", short: "Prom.", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#F3F9EF", text: dark ? "#8BC46B" : "#3F7A2A" },
+    nursing: { label: "Tétée", short: "Tétée", dot: "#D66B8F", tile: dark ? "#393243" : "#FBE1EA", text: dark ? "#E88FAE" : "#A63D62" },
+    sleep: { label: "Sommeil", short: "Sommeil", dot: "#7C6BA4", tile: dark ? "#2c3246" : "#ECE8F4", text: dark ? "#A898D0" : "#5B4A85" },
+    walk: { label: "Promenade", short: "Prom.", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
     meal: { dot: "#E8785A", text: dark ? "#E8785A" : "#A83F23" },
     diaper: { dot: "#5BA4A4", text: dark ? "#5BA4A4" : "#2B6A6A" },
   };
@@ -80,10 +80,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Appui sur une zone : ouvre le formulaire de la catégorie dans l'app
   // (hooks/useWidgetDeepLink.ts). Une version native sans « openUrl » l'ignore
   // et l'appui ouvre l'app, comme avant.
-  const linkTo = (action: "meal" | "diaper" | "nursing") =>
+  const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours" };
+  // Zone cliquable : son lien et son libellé TalkBack.
+  const linkMods = (action: "meal" | "diaper" | "nursing") => [
     createModifier("openUrl", {
       url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`,
-    });
+    }),
+    semantics({ contentDescription: LINK_LABEL[action] }),
+  ];
 
   const clock = (ms: number) => {
     const d = new Date(ms);
@@ -113,7 +117,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // être finie ailleurs sans qu'on le sache ; on dit de quand date l'info.
   const STALE_LIVE_MS = 2 * HOUR;
   const generatedAt = props.generatedAtMs ?? 0;
-  const liveStale = n > 0 && generatedAt > 0 && now - generatedAt > STALE_LIVE_MS;
+  // Données vieilles de plus de 2 h : « màj HH:MM » ; avec une session en cours,
+  // le chrono passe en gris (« à vérifier ») : elle a pu finir ailleurs.
+  const dataStale = generatedAt > 0 && now - generatedAt > STALE_LIVE_MS;
+  const liveStale = n > 0 && dataStale;
   const day = props.day;
 
   // ----- Grille -----
@@ -173,11 +180,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <Chrono
         startMs={l.timerStartMs}
         pausedAtMs={l.pausedAtMs ?? undefined}
-        color={l.pausedAtMs != null ? C.softOnTile : C.strong}
+        color={l.pausedAtMs != null || liveStale ? C.softOnTile : C.strong}
         fontSize={sp}
       />
     ) : (
-      elapsed(l.timerStartMs, C.strong, sp)
+      elapsed(l.timerStartMs, liveStale ? C.softOnTile : C.strong, sp)
     );
   // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
   const labelOf = (l: WidgetLive) =>
@@ -206,8 +213,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       ahead: string | null,
       action: "meal" | "diaper",
     ) => (
-      <Column modifiers={[width(colW), linkTo(action)]}>
-        {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, late ? `${label} · rappel` : label, sp)}
+      <Column modifiers={[width(colW), ...linkMods(action)]}>
+        {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, late ? `${label} · rappel` : ms ? `${label} · il y a` : label, sp)}
         {gap(2)}
         {ms ? fixedLine(big, elapsed(ms, late ? C.alert : C.strong, big)) : txt("—", C.soft, big, true)}
         {gap(2)}
@@ -253,11 +260,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const at = `${mealWord && !small ? `${mealWord} ` : "à "}${clock(props.lastMealMs)}`;
     const ahead = upcoming(props.alerts.mealAtMs);
     return (
-      <Column verticalAlignment="center" modifiers={[size(zoneW, h), linkTo("meal")]}>
+      <Column verticalAlignment="center" modifiers={[size(zoneW, h), ...linkMods("meal")]}>
         {labelRow(
           mealLate ? C.alert : CAT.meal.text,
           mealLate ? C.alert : CAT.meal.dot,
-          mealLate ? "Dernier repas · rappel" : "Dernier repas",
+          mealLate ? "Repas · rappel" : "Repas · il y a",
           sp,
         )}
         {gap(2)}
@@ -296,7 +303,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           background(k.tile),
           cornerRadius(16),
           paddingAll(small ? 10 : 12),
-          ...(l.kind === "nursing" ? [linkTo("nursing")] : []),
+          ...(l.kind === "nursing" ? linkMods("nursing") : []),
         ]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, false), small ? 12 : 13)}
@@ -313,7 +320,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <Column
         verticalAlignment="center"
-        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 6, 10, 6), ...(l.kind === "nursing" ? [linkTo("nursing")] : [])]}
+        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 6, 10, 6), ...(l.kind === "nursing" ? linkMods("nursing") : [])]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, !small), 12)}
         {chrono(l, small ? 22 : h >= 58 ? 26 : 22)}
@@ -329,7 +336,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <Row
         verticalAlignment="center"
-        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 0, 10, 0), ...(l.kind === "nursing" ? [linkTo("nursing")] : [])]}
+        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 0, 10, 0), ...(l.kind === "nursing" ? linkMods("nursing") : [])]}
       >
         <Row verticalAlignment="center" modifiers={[width(labelW)]}>
           {dot(k.dot)}
@@ -376,12 +383,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </Column>
       );
     }
-    const ITEM_H = 40;
+    // Cibles de 48 dp (repas et change ouvrent chacun leur formulaire), 8 dp d'écart.
+    const ITEM_H = 48;
     const item = (key: string, dotColor: string, value: string, sub: string | null, late: boolean) => (
       <Row
         key={key}
         verticalAlignment="center"
-        modifiers={[size(Rw, ITEM_H), ...(key === "meal" ? [linkTo("meal")] : key === "diaper" ? [linkTo("diaper")] : [])]}
+        modifiers={[size(Rw, ITEM_H), ...(key === "meal" ? linkMods("meal") : key === "diaper" ? linkMods("diaper") : [])]}
       >
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(8)]} />
@@ -414,6 +422,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <LazyColumn modifiers={[size(Rw, zoneH)]}>
         {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate && n > 0)}
+        <Spacer key="gap-meal-diaper" modifiers={[height(8)]} />
         {item("diaper", CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate)}
         {item("sleep", CAT.sleep.dot, sleepLabel(day.sleepMinutes), "de sommeil", false)}
         {events.length ? (
@@ -448,16 +457,16 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <Row verticalAlignment="center" modifiers={[width(colW)]}>
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(4)]} />
-        {txt(value, late ? C.alert : C.strong, 13, true)}
+        {txt(value, late ? C.alert : C.strong, 12, true)}
       </Row>
     );
     return (
       <Column>
         {gap(8)}
         <Row>
-          {cell(CAT.meal.dot, `${day.mealsCount}`, mealLate && n > 0)}
-          {cell(CAT.diaper.dot, `${day.diapersCount}`, diaperLate)}
-          {cell(CAT.sleep.dot, sleepLabel(day.sleepMinutes).replace(" min", "m").replace(" h ", "h"), false)}
+          {cell(CAT.meal.dot, `${day.mealsCount} rep.`, mealLate && n > 0)}
+          {cell(CAT.diaper.dot, `${day.diapersCount} ch.`, diaperLate)}
+          {cell(CAT.sleep.dot, `${sleepLabel(day.sleepMinutes).replace(" min", "m")} dodo`, false)}
         </Row>
       </Column>
     );
@@ -468,7 +477,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
     nextMidnight,
-    ...(n > 0 && generatedAt > 0 ? [generatedAt + STALE_LIVE_MS] : []),
+    ...(generatedAt > 0 ? [generatedAt + STALE_LIVE_MS] : []),
     ...(restDual && day?.lastDiaperMs ? [day.lastDiaperMs + HOUR] : []),
     props.alerts.mealAtMs ?? 0,
     props.alerts.diaperAtMs ?? 0,
@@ -488,10 +497,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   );
 
   // « màj 14:02 » à côté du prénom : l'info date de cette heure-là.
-  const staleTag = liveStale ? (
+  const staleTag = dataStale ? (
     <Row verticalAlignment="center">
       <Spacer modifiers={[width(8)]} />
-      {txt(`màj ${clock(generatedAt)}`, C.soft, small ? 11 : 12)}
+      {txt(`${liveStale && !small ? "à vérifier · " : ""}màj ${clock(generatedAt)}`, liveStale ? C.alert : C.soft, small ? 11 : 12)}
     </Row>
   ) : null;
 
@@ -517,11 +526,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   if (props.nextSide && n === 0) a11yParts.push(`Prochain sein : ${sideWord(props.nextSide)}`);
   if (day && !dayStale) {
     a11yParts.push(
-      `Aujourd'hui : ${day.mealsCount} repas, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(day.sleepMinutes)} de sommeil`,
+      `Aujourd'hui : ${day.mealsCount} repas${mealLate ? " (rappel dépassé)" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(day.sleepMinutes)} de sommeil`,
     );
   }
-  if (liveStale) a11yParts.push(`Informations mises à jour à ${clock(generatedAt)}`);
-  a11yParts.push("Toucher pour ouvrir SuiviBaby");
+  if (dataStale) a11yParts.push(`${liveStale ? "À vérifier, informations" : "Informations"} mises à jour à ${clock(generatedAt)}`);
+  a11yParts.push("Toucher le repas ou le change pour noter, ailleurs pour ouvrir SuiviBaby");
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
 
   const container = [fillMaxSize(), background(C.bg), cornerRadius(20), paddingAll(PAD), a11y];
