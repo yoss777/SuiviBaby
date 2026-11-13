@@ -99,6 +99,12 @@ describe("live/nursing", () => {
     await assertFails(setDoc(live(asUser(MOTHER), "sleep"), validDoc(MOTHER)));
   });
 
+  it("sans auteur (versions actuelles) : accepté", async () => {
+    const { updatedBy: _omitted, ...withoutAuthor } = validDoc(MOTHER);
+    await assertSucceeds(setDoc(live(asUser(MOTHER)), withoutAuthor));
+    await assertSucceeds(setDoc(live(asUser(FATHER)), { ...withoutAuthor, runningSide: null, runningSince: null }));
+  });
+
   it("jamais de suppression côté client", async () => {
     await assertSucceeds(setDoc(live(asUser(MOTHER)), validDoc(MOTHER)));
     await assertFails(deleteDoc(live(asUser(MOTHER))));
