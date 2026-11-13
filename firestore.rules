@@ -201,6 +201,37 @@ service cloud.firestore {
         allow delete: if isOwner(childId) && uid != request.auth.uid &&
           uid != childDoc(childId).data.ownerId;
       }
+
+      // Session en cours partagée par le foyer (pour l'instant : la tétée,
+      // document « nursing »). Donnée en cours comme un sommeil ou une
+      // promenade : tout aidant de l'enfant la lit (accueil, widget) ; ceux qui
+      // écrivent des événements la modifient. Une tétée terminée laisse un état
+      // vide horodaté, jamais supprimé côté client.
+      match /live/{sessionId} {
+        function isNumOrNull(x) {
+          return x == null || x is number;
+        }
+        function validLiveNursing(d) {
+          return d.keys().hasOnly(['leftSeconds', 'rightSeconds', 'runningSide', 'runningSince',
+              'startedAt', 'updatedAt', 'v', 'updatedBy', 'serverUpdatedAt']) &&
+            d.leftSeconds is number && d.leftSeconds >= 0 && d.leftSeconds <= 86400 &&
+            d.rightSeconds is number && d.rightSeconds >= 0 && d.rightSeconds <= 86400 &&
+            (d.runningSide == null || d.runningSide in ['left', 'right']) &&
+            isNumOrNull(d.runningSince) &&
+            isNumOrNull(d.startedAt) &&
+            d.updatedAt is number &&
+            d.v == 1 &&
+            d.updatedBy == request.auth.uid &&
+            d.serverUpdatedAt == request.time;
+        }
+
+        allow get: if hasAccess(childId);
+        allow list: if false;
+        allow create, update: if sessionId == 'nursing' &&
+          canWriteEvents(childId) &&
+          validLiveNursing(request.resource.data);
+        allow delete: if false;
+      }
     }
 
     // Events (incluant pumping, tétées, couches, etc.)

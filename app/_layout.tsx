@@ -33,6 +33,7 @@ import { setupNotificationHandler } from "@/services/localNotificationService";
 import { cleanupStaleExports } from "@/services/tempShareService";
 import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService";
 import { retryFailedOptimistic } from "@/services/eventsService";
+import { registerLiveNursingSync } from "@/services/liveNursingService";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { auth, ensureFirebaseAppCheck } from "@/config/firebase";
 import { applyActionCode } from "firebase/auth";
@@ -85,6 +86,9 @@ export const unstable_settings = {
 };
 
 // Wrapper pour GestureHandlerRootView (nécessite style prop)
+// Tétée en cours partagée par le foyer (document Firestore children/{id}/live/nursing).
+registerLiveNursingSync();
+
 function GestureWrapper({ children }: { children: ReactNode }) {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

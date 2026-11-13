@@ -190,11 +190,19 @@ export function nursingDraftLabel(state: NursingTimerState, now: number): string
 // ============================================
 // PERSISTANCE (par enfant)
 // ============================================
+// Le brouillon vit à deux endroits :
+// - AsyncStorage, sur ce téléphone : cache hors ligne, lu sans réseau ;
+// - un document partagé du foyer (adaptateur « remote », Firestore
+//   children/{childId}/live/nursing) : la tétée en cours est une donnée en
+//   cours comme le sommeil ou la promenade, visible de tous les aidants.
+// Une tétée terminée ou abandonnée laisse un état vide horodaté (« pierre
+// tombale ») : un autre appareil sait ainsi que son brouillon local est dépassé.
+// En cas de conflit, l'état le plus récent (updatedAt) l'emporte.
 
 const STORAGE_PREFIX = "@suivibaby_nursing_timer:";
 export const nursingTimerStorageKey = (childId: string) => `${STORAGE_PREFIX}${childId}`;
 
-function isValidState(value: unknown): value is NursingTimerState {
+export function isValidNursingState(value: unknown): value is NursingTimerState {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
   const isNum = (x: unknown) => typeof x === "number" && Number.isFinite(x);
@@ -209,44 +217,152 @@ function isValidState(value: unknown): value is NursingTimerState {
   );
 }
 
-/** Brouillon valide et récent, sinon null (le brouillon périmé est effacé). */
-export async function loadNursingTimer(
-  childId: string,
-  now: number = Date.now(),
-): Promise<NursingTimerState | null> {
+/** Ne garde que les champs du chrono (le document partagé en porte d'autres). */
+export function toNursingState(value: NursingTimerState): NursingTimerState {
+  return {
+    leftSeconds: value.leftSeconds,
+    rightSeconds: value.rightSeconds,
+    runningSide: value.runningSide,
+    runningSince: value.runningSince,
+    startedAt: value.startedAt,
+    updatedAt: value.updatedAt,
+  };
+}
+
+/** Accès au document partagé du foyer (branché au démarrage de l'app). */
+export interface NursingTimerRemote {
+  read(childId: string): Promise<NursingTimerState | null>;
+  write(childId: string, state: NursingTimerState): Promise<void>;
+  subscribe(childId: string, onChange: (state: NursingTimerState | null) => void): () => void;
+}
+
+let remote: NursingTimerRemote | null = null;
+
+export function setNursingTimerRemote(adapter: NursingTimerRemote | null): void {
+  remote = adapter;
+}
+
+/** Délai maximal d'attente du document partagé : hors ligne, le local suffit. */
+export const REMOTE_READ_TIMEOUT_MS = 1500;
+
+/** L'état le plus récent des deux (une pierre tombale compte comme un état). */
+export function pickNewerNursingState(
+  local: NursingTimerState | null,
+  shared: NursingTimerState | null,
+): NursingTimerState | null {
+  if (!local) return shared;
+  if (!shared) return local;
+  return shared.updatedAt > local.updatedAt ? shared : local;
+}
+
+/** Brouillon utilisable : il contient du temps et n'est pas périmé. */
+function usableDraft(state: NursingTimerState | null, now: number): NursingTimerState | null {
+  if (!state || !hasNursingProgress(state) || isNursingDraftStale(state, now)) return null;
+  return state;
+}
+
+async function readLocal(childId: string): Promise<NursingTimerState | null> {
   try {
     const raw = await AsyncStorage.getItem(nursingTimerStorageKey(childId));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!isValidState(parsed) || !hasNursingProgress(parsed) || isNursingDraftStale(parsed, now)) {
-      await AsyncStorage.removeItem(nursingTimerStorageKey(childId));
-      return null;
-    }
-    return parsed;
+    return isValidNursingState(parsed) ? parsed : null;
   } catch {
     return null;
   }
 }
 
-/** Enregistre le brouillon, ou l'efface s'il est vide. Jamais bloquant. */
-export async function saveNursingTimer(childId: string, state: NursingTimerState): Promise<void> {
+async function writeLocal(childId: string, state: NursingTimerState | null): Promise<void> {
   try {
-    if (!hasNursingProgress(state)) {
+    if (!state || !hasNursingProgress(state)) {
       await AsyncStorage.removeItem(nursingTimerStorageKey(childId));
       return;
     }
-    await AsyncStorage.setItem(nursingTimerStorageKey(childId), JSON.stringify(state));
+    await AsyncStorage.setItem(nursingTimerStorageKey(childId), JSON.stringify(toNursingState(state)));
   } catch {
     // Stockage indisponible : le chrono continue en mémoire.
   }
 }
 
-export async function clearNursingTimer(childId: string): Promise<void> {
+async function readRemote(childId: string): Promise<NursingTimerState | null> {
+  if (!remote) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await AsyncStorage.removeItem(nursingTimerStorageKey(childId));
+    return await Promise.race([
+      remote.read(childId),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), REMOTE_READ_TIMEOUT_MS);
+      }),
+    ]);
   } catch {
-    // ignoré
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+}
+
+function writeRemote(childId: string, state: NursingTimerState): void {
+  if (!remote) return;
+  remote.write(childId, toNursingState(state)).catch(() => {
+    // Hors ligne ou sans droit d'écriture : le brouillon local reste la référence.
+  });
+}
+
+/**
+ * Brouillon valide et récent (celui de ce téléphone ou celui du foyer, le plus
+ * récent des deux), sinon null. Le cache local est aligné sur le résultat.
+ */
+export async function loadNursingTimer(
+  childId: string,
+  now: number = Date.now(),
+): Promise<NursingTimerState | null> {
+  const [local, shared] = await Promise.all([readLocal(childId), readRemote(childId)]);
+  const newest = pickNewerNursingState(local, shared);
+  const draft = usableDraft(newest, now);
+  if (!draft) {
+    if (local) await writeLocal(childId, null);
+    return null;
+  }
+  if (draft !== local) await writeLocal(childId, draft);
+  return toNursingState(draft);
+}
+
+/** Enregistre le brouillon (ici et pour le foyer), ou l'efface s'il est vide. Jamais bloquant. */
+export async function saveNursingTimer(childId: string, state: NursingTimerState): Promise<void> {
+  if (!hasNursingProgress(state)) {
+    await clearNursingTimer(childId);
+    return;
+  }
+  await writeLocal(childId, state);
+  writeRemote(childId, state);
+}
+
+/** Efface le brouillon ici et publie une pierre tombale pour les autres aidants. */
+export async function clearNursingTimer(childId: string, now: number = Date.now()): Promise<void> {
+  await writeLocal(childId, null);
+  writeRemote(childId, { ...EMPTY_NURSING_TIMER, updatedAt: now });
+}
+
+/**
+ * Suit la tétée en cours du foyer : appelé avec le brouillon utilisable, ou
+ * null quand il n'y en a plus (terminée ou abandonnée sur un autre appareil).
+ * Le cache local est aligné quand l'état partagé est plus récent.
+ */
+export function subscribeNursingTimer(
+  childId: string,
+  onChange: (state: NursingTimerState | null) => void,
+): () => void {
+  if (!remote) return () => {};
+  return remote.subscribe(childId, (shared) => {
+    void readLocal(childId).then(async (local) => {
+      const newest = pickNewerNursingState(local, shared);
+      if (newest === shared && shared) {
+        await writeLocal(childId, usableDraft(shared, Date.now()));
+      }
+      const draft = usableDraft(newest, Date.now());
+      onChange(draft ? toNursingState(draft) : null);
+    });
+  });
 }
 
 // ============================================
