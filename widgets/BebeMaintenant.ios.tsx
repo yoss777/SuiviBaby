@@ -20,7 +20,7 @@ import {
 } from "@expo/ui/swift-ui/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
 
-import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps } from "@/utils/widgetSnapshot";
+import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps, type WidgetLive } from "@/utils/widgetSnapshot";
 
 const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) => {
   "widget";
@@ -44,27 +44,43 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const now = environment.date ? new Date(environment.date).getTime() : Date.now();
   const family = environment.widgetFamily;
   const live = props.live;
-  const info = live ? KIND[live.kind] : null;
+  // Toutes les sessions en cours (tétée, sommeil, promenade), comme sur Android.
+  const lives: WidgetLive[] = props.lives ?? (live ? [live] : []);
+  // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
+  const labelOf = (l: WidgetLive) =>
+    l.kind === "sleep" ? (l.nap === true ? "Sieste" : l.nap === false ? "Nuit" : "Sommeil") : KIND[l.kind].label;
+  const info = live ? { ...KIND[live.kind], label: labelOf(live) } : null;
   const mealLate = props.alerts.mealAtMs != null && now >= props.alerts.mealAtMs;
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
-  const base = "suivibaby://baby/home";
-  const url = info ? `${base}?focus=${info.path}` : `${base}?focus=meals`;
+  // Appui : la tétée en cours ou le formulaire repas (hooks/useWidgetDeepLink.ts).
+  const child = props.childId ? `&child=${encodeURIComponent(props.childId)}` : "";
+  const url = `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
   const bg = containerBackground(C.bg, "widget");
   const far = new Date(now + 24 * 3600 * 1000);
+  // Compteurs d'un jour passé (minuit franchi sans nouvel envoi) : masqués.
+  const dayStart = props.dayStartMs ?? 0;
+  const nextMidnight = dayStart > 0
+    ? new Date(new Date(dayStart).getFullYear(), new Date(dayStart).getMonth(), new Date(dayStart).getDate() + 1).getTime()
+    : 0;
+  const dayStale = nextMidnight > 0 && now >= nextMidnight;
+  // Info de plus de 2 h : on dit de quand elle date.
+  const generatedAt = props.generatedAtMs ?? 0;
+  const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
 
-  const timer = (size: number) =>
-    live ? (
+  const timerOf = (l: WidgetLive | null, size: number) =>
+    l ? (
       <Text
-        timerInterval={{ lower: new Date(live.timerStartMs), upper: far }}
+        timerInterval={{ lower: new Date(l.timerStartMs), upper: far }}
         countsDown={false}
-        pauseTime={live.pausedAtMs != null ? new Date(live.pausedAtMs) : undefined}
-        modifiers={[font({ size, weight: "bold" }), monospacedDigit(), foregroundStyle(C.strong), minimumScaleFactor(0.7), lineLimit(1)]}
+        pauseTime={l.pausedAtMs != null ? new Date(l.pausedAtMs) : undefined}
+        modifiers={[font({ size, weight: "bold" }), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1)]}
       />
     ) : null;
+  const timer = (size: number) => timerOf(live, size);
 
-  const liveA11y = live
-    ? `${info?.label} en cours${live.side ? `, sein ${live.side === "G" ? "gauche" : "droit"}` : ""}, ${live.sinceLabel}${live.pausedAtMs != null ? ", en pause" : ""}`
-    : "";
+  const a11yOf = (l: WidgetLive) =>
+    `${labelOf(l)} en cours${l.side ? `, sein ${l.side === "G" ? "gauche" : "droit"}` : ""}, ${l.sinceLabel}${l.pausedAtMs != null ? ", en pause" : ""}`;
+  const liveA11y = lives.map(a11yOf).join(". ");
 
   // ----- Écran verrouillé -----
   if (family === "accessoryInline") {
@@ -103,7 +119,22 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   }
 
   // ----- Bloc « Maintenant » (small, et gauche du medium) -----
-  const nowBlock = live ? (
+  const multiBlock = (
+    <VStack alignment="leading" spacing={6} modifiers={[accessibilityLabel(liveA11y)]}>
+      {lives.map((l) => (
+        <VStack key={l.kind} alignment="leading" spacing={0}>
+          <HStack spacing={5}>
+            <Image systemName={KIND[l.kind].symbol as any} color={KIND[l.kind].color} size={11} />
+            <Text modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(C.strong), lineLimit(1)]}>
+              {`${labelOf(l)}${l.side ? ` · ${l.side === "G" ? "gauche" : "droit"}` : ""}${l.pausedAtMs != null ? " · pause" : ""}`}
+            </Text>
+          </HStack>
+          {timerOf(l, lives.length > 2 ? 17 : 20)}
+        </VStack>
+      ))}
+    </VStack>
+  );
+  const nowBlock = lives.length > 1 ? multiBlock : live ? (
     <VStack alignment="leading" spacing={4} modifiers={[accessibilityLabel(liveA11y)]}>
       <HStack spacing={6}>
         <Image systemName={info?.symbol as any} color={info?.color} size={14} />
@@ -178,18 +209,24 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     </HStack>
   );
   const clock = (ms: number | null) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "—");
-  const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}` : `${min} min`);
+  const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
 
   return (
     <HStack spacing={14} alignment="top" modifiers={[bg, widgetURL(url)]}>
       <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
         {nowBlock}
       </VStack>
-      {day ? (
+      {day && dayStale ? (
+        <VStack alignment="leading" spacing={2} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
+          <Text modifiers={[font({ size: 15, weight: "semibold" }), foregroundStyle(C.strong)]}>Nouvelle journée</Text>
+          <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>Mise à jour à la prochaine saisie</Text>
+        </VStack>
+      ) : day ? (
         <VStack alignment="leading" spacing={6} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
-          {row("Repas", C.meal, `à ${clock(day.lastMealMs)}`, `${day.mealsCount}${day.bottleMl ? ` · ${day.bottleMl} ml` : ""}`, mealLate)}
-          {row("Changes", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} auj.`, diaperLate)}
+          {row("Repas", C.meal, `à ${clock(day.lastMealMs)}`, `${day.mealsCount} repas${day.bottleMl ? ` · ${day.bottleMl} ml` : ""}`, mealLate)}
+          {row("Change", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperLate)}
           {row("Sommeil", C.sleep, sleepLabel(day.sleepMinutes), "", false)}
+          {dataStale ? <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>{`màj ${clock(generatedAt)}`}</Text> : null}
         </VStack>
       ) : null}
     </HStack>
