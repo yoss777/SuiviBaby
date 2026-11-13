@@ -22,7 +22,7 @@ export function useWidgetDeepLink(opts: {
   open: (action: WidgetDeepLinkAction) => void;
 }): void {
   const { widget, child } = useLocalSearchParams<{ widget?: string; child?: string }>();
-  const { activeChild, children, setActiveChild } = useBaby();
+  const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { ready, open } = opts;
 
   useEffect(() => {
@@ -36,11 +36,12 @@ export function useWidgetDeepLink(opts: {
     if (child && activeChild?.id !== child) {
       const target = children.find((c) => c.id === child);
       if (target) setActiveChild(target);
-      else clear();
+      // Démarrage à froid : la liste des bébés arrive après le lien.
+      else if (childrenLoaded) clear();
       return;
     }
     if (!ready) return;
     open(widget as WidgetDeepLinkAction);
     clear();
-  }, [widget, child, activeChild?.id, children, setActiveChild, ready, open]);
+  }, [widget, child, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
 }

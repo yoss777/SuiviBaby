@@ -83,6 +83,8 @@ export interface WidgetNursingState {
   runningSide: "left" | "right" | null;
   runningSince: number | null;
   startedAt: number | null;
+  /** Dernière modification (ms) : heure de la pause, ancre stable du chrono figé. */
+  updatedAt?: number;
 }
 
 export interface NowWidgetInput {

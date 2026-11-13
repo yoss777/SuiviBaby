@@ -52,8 +52,12 @@ describe("buildNowWidgetProps", () => {
     let st = toggleSide(EMPTY_NURSING_TIMER, "left", T0 - min(8));
     st = toggleSide(st, "left", T0 - min(2)); // pause après 6 min
     const p = buildNowWidgetProps(base({ nursing: st }));
-    expect(p.live?.pausedAtMs).toBe(T0);
-    expect(p.live?.timerStartMs).toBe(T0 - min(6));
+    // Ancré sur l'heure de la pause : 6 min affichées, quel que soit l'instant du calcul.
+    expect(p.live?.pausedAtMs).toBe(T0 - min(2));
+    expect(p.live?.timerStartMs).toBe(T0 - min(8));
+    const later = buildNowWidgetProps(base({ nursing: st, now: T0 + min(5) }));
+    expect(later.live?.pausedAtMs).toBe(p.live?.pausedAtMs);
+    expect(later.live?.timerStartMs).toBe(p.live?.timerStartMs);
   });
 
   it("priorité tétée > sommeil > promenade, la 2e session est signalée", () => {

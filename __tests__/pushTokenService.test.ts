@@ -18,7 +18,8 @@ jest.mock("@/config/firebase", () => ({ db: {} }));
 import * as Notifications from "expo-notifications";
 import { getDoc, setDoc, updateDoc } from "firebase/firestore";
 
-import { registerPushToken, setWidgetChild } from "@/services/pushTokenService";
+import { registerPushToken, removePushTokens, setWidgetChild } from "@/services/pushTokenService";
+import { getDocs } from "firebase/firestore";
 
 const mocked = <T>(fn: T) => fn as unknown as jest.Mock;
 
@@ -67,9 +68,16 @@ describe("registerPushToken", () => {
 
   it("jeton repris d'un autre compte (doc illisible) : réglage reposé", async () => {
     permission("granted");
-    mocked(getDoc).mockRejectedValue(new Error("permission-denied"));
+    mocked(getDoc).mockRejectedValue(Object.assign(new Error("denied"), { code: "permission-denied" }));
     await registerPushToken("u2");
     expect(mocked(setDoc).mock.calls[0][1]).toMatchObject({ userId: "u2", enabled: true });
+  });
+
+  it("lecture en échec (réseau) : ne touche pas au réglage de l'utilisateur", async () => {
+    permission("granted");
+    mocked(getDoc).mockRejectedValue(Object.assign(new Error("offline"), { code: "unavailable" }));
+    await registerPushToken("u1");
+    expect(mocked(setDoc).mock.calls[0][1]).not.toHaveProperty("enabled");
   });
 });
 
@@ -91,5 +99,23 @@ describe("setWidgetChild", () => {
     setWidgetChild("c2");
     jest.advanceTimersByTime(3000);
     expect(updateDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it("enfant demandé avant l'enregistrement du jeton : écrit par registerPushToken ; réécrit après déconnexion", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0"); // état propre
+    setWidgetChild("c9");
+    await registerPushToken("u1");
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ widgetChildId: "c9" });
+    jest.advanceTimersByTime(3000);
+    expect(updateDoc).not.toHaveBeenCalled(); // déjà écrit
+    await removePushTokens("u1");
+    mocked(updateDoc).mockResolvedValue(undefined);
+    await registerPushToken("u1");
+    setWidgetChild("c9");
+    jest.advanceTimersByTime(3000);
+    expect(updateDoc).toHaveBeenCalledWith(undefined, { widgetChildId: "c9" });
   });
 });

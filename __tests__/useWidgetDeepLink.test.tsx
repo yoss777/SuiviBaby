@@ -10,10 +10,12 @@ jest.mock("expo-router", () => ({
 
 const mockSetActiveChild = jest.fn();
 let mockActive: { id: string } | null = { id: "c1" };
+let mockLoaded = true;
 jest.mock("@/contexts/BabyContext", () => ({
   useBaby: () => ({
     activeChild: mockActive,
     children: [{ id: "c1" }, { id: "c2" }],
+    childrenLoaded: mockLoaded,
     setActiveChild: mockSetActiveChild,
   }),
 }));
@@ -24,6 +26,14 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
   mockActive = { id: "c1" };
+  mockLoaded = true;
+});
+
+it("démarrage à froid : garde le lien tant que les bébés ne sont pas chargés", () => {
+  mockLoaded = false;
+  mockParams = { widget: "meal", child: "zz" };
+  renderHook(() => useWidgetDeepLink({ ready: true, open: jest.fn() }));
+  expect(mockSetParams).not.toHaveBeenCalled();
 });
 
 it("construit le lien attendu par le widget", () => {

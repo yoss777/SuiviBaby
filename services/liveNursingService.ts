@@ -15,6 +15,13 @@ import {
   toNursingState,
 } from "@/components/forms/nursingTimer";
 import { auth, db } from "@/config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
+import { isConnectivityError } from "@/utils/networkError";
+
+/** Hors ligne : attendu (le brouillon local fait foi). Le reste (règles, droits) se voit. */
+function reportUnexpected(error: unknown, operation: string): void {
+  if (!isConnectivityError(error)) captureServiceError(error, { service: "liveNursing", operation });
+}
 
 export const LIVE_NURSING_DOC_ID = "nursing";
 export const LIVE_NURSING_VERSION = 1;
@@ -36,20 +43,28 @@ export const liveNursingRemote: NursingTimerRemote = {
   async write(childId, state) {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
-    await setDoc(liveNursingRef(childId), {
+    try {
+      await setDoc(liveNursingRef(childId), {
       ...toNursingState(state),
       v: LIVE_NURSING_VERSION,
       // Pas d'auteur (seule la mère allaite) : les règles vérifient l'accès.
       serverUpdatedAt: serverTimestamp(),
-    });
+      });
+    } catch (error) {
+      reportUnexpected(error, "write");
+      throw error;
+    }
   },
 
   subscribe(childId, onChange) {
     return onSnapshot(
       liveNursingRef(childId),
       (snap) => onChange(snap.exists() ? parseLiveNursing(snap.data()) : null),
-      () => {
-        // Accès retiré ou hors ligne : on garde l'état connu, sans bruit.
+      (error) => {
+        // Hors ligne : on garde l'état connu. Accès retiré ou règle : signalé,
+        // et plus de tétée affichée (l'état connu n'est plus fiable).
+        reportUnexpected(error, "subscribe");
+        if (!isConnectivityError(error)) onChange(null);
       },
     );
   },

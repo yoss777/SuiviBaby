@@ -50,15 +50,20 @@ interface Params {
 }
 
 export function useNowWidgetSync(p: Params): void {
-  const [nursing, setNursing] = useState<NursingTimerState | null>(null);
+  // Tétée rangée avec son enfant : au changement de bébé, celle de l'ancien
+  // n'est jamais envoyée dans le widget du nouveau.
+  const [nursingOf, setNursingOf] = useState<{ childId: string; state: NursingTimerState | null } | null>(null);
   const [tick, setTick] = useState(0);
 
   // Tétée en cours : document partagé du foyer + brouillon local.
   useEffect(() => {
-    if (!p.childId) return;
+    const childId = p.childId;
+    if (!childId) return;
     let active = true;
-    void loadNursingTimer(p.childId).then((s) => active && setNursing(s));
-    const unsubscribe = subscribeNursingTimer(p.childId, (s) => active && setNursing(s));
+    const set = (state: NursingTimerState | null) => active && setNursingOf({ childId, state });
+    // Lecture impossible : pas de tétée connue, le widget part quand même.
+    void loadNursingTimer(childId).then(set, () => set(null));
+    const unsubscribe = subscribeNursingTimer(childId, set);
     return () => {
       active = false;
       unsubscribe();
@@ -90,10 +95,12 @@ export function useNowWidgetSync(p: Params): void {
       [...p.tetees, ...p.biberons, ...p.solides, ...p.mictions, ...p.selles, ...(p.others ?? [])].some((e) => otherChild(e.childId)) ||
       otherChild(p.sleepChildId) ||
       otherChild(p.walkChildId);
-    if (stale) {
+    // Tétée pas encore lue pour ce bébé : on attend (sinon un faux « pas de tétée »).
+    if (stale || nursingOf?.childId !== p.childId) {
       cancelPendingWidgetPush();
       return;
     }
+    const nursing = nursingOf.state;
     // Le calcul lui-même vit dans le module partagé avec le serveur.
     const timed = <T extends Dated>(list: T[]) => list.map((e) => ({ ...e, ms: p.toMs(e.date) }));
     const input = assembleNowWidgetInput(
@@ -124,5 +131,5 @@ export function useNowWidgetSync(p: Params): void {
     pushNowWidget({ ...buildNowWidgetProps(input, localEnv), childId: p.childId });
     setWidgetChild(p.childId);
     // tick : nouvel envoi au retour au premier plan.
-  }, [p, nursing, tick]);
+  }, [p, nursingOf, tick]);
 }

@@ -195,6 +195,7 @@ function usableNursing(state, now) {
     runningSide: side,
     runningSince: typeof state.runningSince === "number" ? state.runningSince : null,
     startedAt: typeof state.startedAt === "number" ? state.startedAt : null,
+    updatedAt: state.updatedAt,
   };
 }
 
@@ -270,12 +271,15 @@ function nursingLive(state, now, env) {
   const shown = side || (state.rightSeconds > state.leftSeconds ? "right" : "left");
   const shownBase = shown === "left" ? state.leftSeconds : state.rightSeconds;
   const otherSeconds = shown === "left" ? right : left;
-  const timerStartMs = side && state.runningSince ? state.runningSince - shownBase * 1000 : now - shownBase * 1000;
+  // En pause : ancrée sur l'heure de la pause (updatedAt), pas sur « maintenant » :
+  // le contenu reste identique d'un calcul à l'autre (pas de réécriture inutile).
+  const pausedAt = side ? null : typeof state.updatedAt === "number" && state.updatedAt <= now ? state.updatedAt : now;
+  const timerStartMs = side && state.runningSince ? state.runningSince - shownBase * 1000 : pausedAt - shownBase * 1000;
   const startedAt = state.startedAt != null ? state.startedAt : timerStartMs;
   return {
     kind: "nursing",
     timerStartMs,
-    pausedAtMs: side ? null : now,
+    pausedAtMs: pausedAt,
     side: shown === "left" ? "G" : "D",
     otherSideLabel: otherSeconds >= 1 ? `${shown === "left" ? "D" : "G"} ${formatDuration(otherSeconds)}` : null,
     sinceMs: startedAt,

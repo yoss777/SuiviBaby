@@ -6,6 +6,7 @@
 import { Platform } from "react-native";
 
 import { clearWidgetPush, noteAppSnapshot } from "@/modules/widget-push";
+import { captureServiceError } from "@/utils/errorReporting";
 import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps, toNativeWidgetProps } from "@/utils/widgetSnapshot";
 
 export const WIDGET_SYNC_DEBOUNCE_MS = 2000;
@@ -15,6 +16,13 @@ type WidgetHandle = { updateSnapshot: (props: NowWidgetProps) => void };
 let handle: WidgetHandle | null | undefined;
 let lastKey = "";
 let pending: ReturnType<typeof setTimeout> | null = null;
+// Une seule remontée par session et par opération (pas de bruit à chaque envoi).
+const reported = new Set<string>();
+function reportOnce(error: unknown, operation: string): void {
+  if (reported.has(operation)) return;
+  reported.add(operation);
+  captureServiceError(error, { service: "widgetSync", operation });
+}
 
 function getWidget(): WidgetHandle | null {
   if (handle !== undefined) return handle;
@@ -27,6 +35,7 @@ function getWidget(): WidgetHandle | null {
     handle = require("@/widgets/BebeMaintenant").default as WidgetHandle;
   } catch (error) {
     if (__DEV__) console.warn("[widget] module indisponible", error);
+    reportOnce(error, "load");
     handle = null;
   }
   return handle;
@@ -47,15 +56,16 @@ export function pushNowWidget(props: NowWidgetProps): void {
     const widget = getWidget();
     if (!widget) return;
     try {
+      // Android : noté AVANT l'écriture, pour qu'un message serveur arrivé
+      // entre les deux ne revienne jamais avant elle, ni sur un autre bébé.
+      if (props.childId) noteAppSnapshot(props.childId);
       widget.updateSnapshot(toNativeWidgetProps(props));
       lastKey = key;
-      // Android : le récepteur des messages serveur ne revient jamais avant
-      // cette écriture, ni sur un autre bébé.
-      if (props.childId) noteAppSnapshot(props.childId);
       if (__DEV__) console.log(`[widget] envoyé : ${props.childName}${props.live ? ` · ${props.live.kind}` : ""}`);
     } catch (error) {
       // Extension indisponible : on réessaiera au prochain changement.
       if (__DEV__) console.warn("[widget] envoi impossible", error);
+      reportOnce(error, "updateSnapshot");
     }
   }, WIDGET_SYNC_DEBOUNCE_MS);
 }
@@ -89,6 +99,7 @@ export function clearNowWidget(): void {
     widget.updateSnapshot(EMPTY_NOW_WIDGET_NATIVE);
   } catch (error) {
     if (__DEV__) console.warn("[widget] effacement impossible", error);
+    reportOnce(error, "clear");
   }
 }
 
@@ -96,6 +107,7 @@ export function clearNowWidget(): void {
 export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   handle = widget === undefined ? undefined : widget;
   lastKey = "";
+  reported.clear();
   if (pending) clearTimeout(pending);
   pending = null;
 }
