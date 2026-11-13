@@ -81,6 +81,8 @@ import { HomeMilestoneCelebration } from "@/components/suivibaby/home/HomeMilest
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 import { startLoop } from "@/utils/motion";
 import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { usePremium } from "@/contexts/PremiumContext";
+import { useNowWidgetSync } from "@/hooks/useNowWidgetSync";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -683,6 +685,44 @@ export default function HomeDashboard() {
     const start = toDate(promenadeEnCours.heureDebut);
     return isValidDate(start) ? start.getTime() : undefined;
   }, [promenadeEnCours]);
+
+  // Widget d'écran d'accueil « Bébé maintenant » : mêmes données que l'Accueil.
+  const { isPremium } = usePremium();
+  const widgetParams = useMemo(
+    () => ({
+      childId: activeChild?.id,
+      childName: activeChild?.name ?? "",
+      toMs: (value: unknown) => toDate(value as any).getTime(),
+      tetees: data.tetees,
+      biberons: data.biberons,
+      solides: data.solides,
+      mictions: data.mictions,
+      selles: data.selles,
+      sleepStartMs: sleepStartTs,
+      walkStartMs: promenadeStartTs,
+      sleepTotalMinutes: todayStats.sommeil.totalMinutes,
+      lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
+      isPremium,
+      reminders: { enabled: remindersEnabled, thresholds: reminderThresholds },
+    }),
+    [
+      activeChild?.id,
+      activeChild?.name,
+      data.tetees,
+      data.biberons,
+      data.solides,
+      data.mictions,
+      data.selles,
+      sleepStartTs,
+      promenadeStartTs,
+      todayStats.sommeil.totalMinutes,
+      todayStats.meals.lastAbsoluteTimestamp,
+      isPremium,
+      remindersEnabled,
+      reminderThresholds,
+    ],
+  );
+  useNowWidgetSync(widgetParams);
 
   // Shared pulse animation for all active widgets (sleep + promenade sync)
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;

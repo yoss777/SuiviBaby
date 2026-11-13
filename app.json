@@ -236,6 +236,30 @@
           "color": "#0891b2"
         }
       ],
+      [
+        "expo-widgets",
+        {
+          "enableAndroid": true,
+          "widgets": [
+            {
+              "name": "BebeMaintenant",
+              "displayName": "Bébé maintenant",
+              "description": "Tétée, sommeil ou promenade en cours, et dernier repas.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular", "accessoryInline"],
+                "initialLayout": "widgets/BebeMaintenant.ios.tsx"
+              },
+              "android": {
+                "targetCellWidth": 2,
+                "targetCellHeight": 2,
+                "minWidth": 110,
+                "minHeight": 110,
+                "initialLayout": "widgets/BebeMaintenant.android.tsx"
+              }
+            }
+          ]
+        }
+      ],
       "./plugins/withIosPodfileFixes",
       [
         "expo-local-authentication",
