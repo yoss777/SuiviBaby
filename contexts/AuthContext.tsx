@@ -3,6 +3,7 @@ import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
+import { clearNowWidget } from "@/services/widgetSync";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import { clearWeeklyEventsCache } from "@/services/weeklyEventsCache";
@@ -330,6 +331,9 @@ export function AuthProvider({
       // Exports (health data) must not outlive the session on a shared device.
       // Best effort: cleanupStaleExports never throws, the catch is defensive.
       await cleanupStaleExports(0).catch(() => {});
+      // Le widget d'écran d'accueil ne doit pas garder le prénom ni les
+      // données de santé de l'enfant après la déconnexion.
+      clearNowWidget();
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});

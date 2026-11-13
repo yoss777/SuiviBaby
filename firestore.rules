@@ -212,6 +212,8 @@ service cloud.firestore {
           return x == null || x is number;
         }
         function validLiveNursing(d) {
+          // updatedBy : accepté des anciennes versions de l'app (jamais d'auteur
+          // sur une tétée : les versions actuelles ne l'écrivent plus).
           return d.keys().hasOnly(['leftSeconds', 'rightSeconds', 'runningSide', 'runningSince',
               'startedAt', 'updatedAt', 'v', 'updatedBy', 'serverUpdatedAt']) &&
             d.leftSeconds is number && d.leftSeconds >= 0 && d.leftSeconds <= 86400 &&
@@ -221,7 +223,7 @@ service cloud.firestore {
             isNumOrNull(d.startedAt) &&
             d.updatedAt is number &&
             d.v == 1 &&
-            d.updatedBy == request.auth.uid &&
+            (!('updatedBy' in d) || d.updatedBy == request.auth.uid) &&
             d.serverUpdatedAt == request.time;
         }
 

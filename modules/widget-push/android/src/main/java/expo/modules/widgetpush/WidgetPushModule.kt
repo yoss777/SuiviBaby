@@ -20,6 +20,16 @@ class WidgetPushModule : Module() {
         .apply()
     }
 
+    // Déconnexion : le récepteur oublie l'enfant, la séquence et l'heure de
+    // l'app ; il n'appliquera plus rien avant la prochaine écriture de l'app.
+    Function("clear") {
+      prefs.edit()
+        .remove(WidgetPushHandler.CHILD_KEY)
+        .remove(WidgetPushHandler.SEQ_KEY)
+        .remove(WidgetPushHandler.APP_AT_KEY)
+        .apply()
+    }
+
     // Journal de réception (mesure E6) : [{ r, s, o }], sans donnée personnelle.
     Function("readReceiveLog") {
       prefs.getString(WidgetPushHandler.LOG_KEY, "[]") ?: "[]"

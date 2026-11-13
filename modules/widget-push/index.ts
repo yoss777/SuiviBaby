@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 
 type WidgetPushNative = {
   noteAppSnapshot(childId: string): void;
+  clear?(): void;
   readReceiveLog(): string;
 };
 
@@ -29,6 +30,15 @@ export function noteAppSnapshot(childId: string): void {
     getNative()?.noteAppSnapshot(childId);
   } catch {
     // Module absent ou ancien : le récepteur garde ses autres gardes.
+  }
+}
+
+/** Déconnexion : le récepteur n'applique plus rien avant la prochaine écriture de l'app. */
+export function clearWidgetPush(): void {
+  try {
+    getNative()?.clear?.();
+  } catch {
+    // Module absent ou ancien : les jetons de l'appareil sont supprimés à la déconnexion.
   }
 }
 

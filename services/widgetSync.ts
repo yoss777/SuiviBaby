@@ -5,8 +5,8 @@
 // pour ne pas dépenser le budget de rechargement de WidgetKit.
 import { Platform } from "react-native";
 
-import { noteAppSnapshot } from "@/modules/widget-push";
-import { type NowWidgetProps, toNativeWidgetProps } from "@/utils/widgetSnapshot";
+import { clearWidgetPush, noteAppSnapshot } from "@/modules/widget-push";
+import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps, toNativeWidgetProps } from "@/utils/widgetSnapshot";
 
 export const WIDGET_SYNC_DEBOUNCE_MS = 2000;
 
@@ -73,6 +73,23 @@ export function invalidateWidgetKey(): void {
 export function cancelPendingWidgetPush(): void {
   if (pending) clearTimeout(pending);
   pending = null;
+}
+
+/**
+ * Déconnexion : le widget ne doit plus montrer le prénom ni les données de
+ * santé de l'enfant sur un téléphone partagé. Immédiat (pas d'anti-rebond).
+ */
+export function clearNowWidget(): void {
+  cancelPendingWidgetPush();
+  lastKey = "";
+  clearWidgetPush();
+  const widget = getWidget();
+  if (!widget) return;
+  try {
+    widget.updateSnapshot(EMPTY_NOW_WIDGET_NATIVE);
+  } catch (error) {
+    if (__DEV__) console.warn("[widget] effacement impossible", error);
+  }
 }
 
 /** Tests uniquement. */

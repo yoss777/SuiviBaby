@@ -17,7 +17,7 @@ class WidgetPushGuardsTest {
   ) = WidgetPushGuards.decide(childId, seq, v, shown, lastSeq, appAt, fg)
 
   @Test fun appliesAFresherMessageForTheShownChild() = assertEquals(WidgetPushOutcome.APPLIED, decide())
-  @Test fun appliesWhenTheShownChildIsUnknown() = assertEquals(WidgetPushOutcome.APPLIED, decide(shown = null))
+  @Test fun ignoresWhenNoChildIsShown() = assertEquals(WidgetPushOutcome.OTHER_CHILD, decide(shown = null))
   @Test fun ignoresAnotherChild() = assertEquals(WidgetPushOutcome.OTHER_CHILD, decide(shown = "c2"))
   @Test fun ignoresAnOlderOrDuplicateMessage() {
     assertEquals(WidgetPushOutcome.STALE_SEQ, decide(seq = 1_000_000L))

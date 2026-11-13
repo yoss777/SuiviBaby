@@ -39,7 +39,7 @@ export const liveNursingRemote: NursingTimerRemote = {
     await setDoc(liveNursingRef(childId), {
       ...toNursingState(state),
       v: LIVE_NURSING_VERSION,
-      updatedBy: uid,
+      // Pas d'auteur (seule la mère allaite) : les règles vérifient l'accès.
       serverUpdatedAt: serverTimestamp(),
     });
   },
