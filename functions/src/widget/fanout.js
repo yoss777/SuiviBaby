@@ -178,7 +178,7 @@ function widgetMessageData(childId, seq, props) {
  */
 async function fanOutWidget(db, childId, { urgent }) {
   const startedAt = Date.now();
-  const stats = { recipients: 0, devices: 0, sent: 0, skipped: 0, deadTokens: 0, errors: 0 };
+  const stats = { recipients: 0, devices: 0, sent: 0, failed: 0, skipped: 0, deadTokens: 0, errors: 0 };
   const log = (reason) =>
     reminderLib.logJobSummary("widgetFanout", startedAt, { reason, urgent, ...stats });
 
@@ -254,6 +254,7 @@ async function fanOutWidget(db, childId, { urgent }) {
       const data = widgetMessageData(childId, seq, props);
       if (!data) {
         stats.errors++;
+        console.warn("widgetFanout: message too big even without the day feed", { childId });
         continue;
       }
       stats.devices++;
@@ -263,11 +264,12 @@ async function fanOutWidget(db, childId, { urgent }) {
   }
   if (messages.length === 0) return log("no-device");
 
-  const { delivered, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+  const { delivered, failed, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
   stats.sent = delivered;
+  stats.failed = failed;
   stats.errors += chunkErrors;
   if (dead.size > 0) stats.deadTokens = await reminderLib.removeDeadTokens(tokenDocs, dead);
-  return log("sent");
+  return log(delivered === 0 && failed > 0 ? "failed" : "sent");
 }
 
 const TRIGGER_OPTIONS = { region: "europe-west1", memory: "256MiB", timeoutSeconds: 60, retry: false };

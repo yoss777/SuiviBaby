@@ -151,6 +151,20 @@ describe("fanOutWidget", () => {
     expect(pushed()).toHaveLength(0);
   });
 
+  it("envoi refusé par Expo (InvalidCredentials) : journalisé en erreur, motif « failed »", async () => {
+    memoryStore(seed());
+    const logger = require("firebase-functions/logger");
+    const errSpy = jest.spyOn(logger, "error").mockImplementation(() => {});
+    const infoSpy = jest.spyOn(logger, "info").mockImplementation(() => {});
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) =>
+      chunk.map(() => ({ status: "error", message: "Unable to retrieve the FCM server key", details: { error: "InvalidCredentials" } })));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(errSpy).toHaveBeenCalledWith("sendPushWithTickets: tickets in error", expect.objectContaining({ errorsByCode: { InvalidCredentials: 2 }, delivered: 0, failed: 2 }));
+    expect(infoSpy).toHaveBeenCalledWith("widgetFanout: done", expect.objectContaining({ reason: "failed", sent: 0, failed: 2 }));
+    errSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
   it("jeton mort supprimé", async () => {
     const docs = memoryStore(seed());
     expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) =>

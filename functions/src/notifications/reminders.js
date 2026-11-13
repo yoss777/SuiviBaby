@@ -56,7 +56,7 @@ const checkAndSendReminders = onSchedule(
       return;
     }
 
-    const stats = { sent: 0, skipped: 0, skippedQuietHours: 0, errors: 0, deadTokens: 0, fallbackReads: 0 };
+    const stats = { sent: 0, skipped: 0, skippedQuietHours: 0, errors: 0, ticketFailures: 0, deadTokens: 0, fallbackReads: 0 };
 
     // No consent, no processing; accounts being deleted get nothing either.
     const consented = prefsSnapshot.docs.filter((d) => hasValidHealthConsent(d.data()));
@@ -168,9 +168,13 @@ const checkAndSendReminders = onSchedule(
           }));
 
           try {
-            const { delivered, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+            const { delivered, failed, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
             // Lot partiel : les lots livrés comptent (historique ci-dessous), l'échec est signalé.
             if (chunkErrors > 0) stats.errors++;
+            // Tickets refusés (hors appareil désinstallé) : comptés, et journalisés
+            // en erreur par sendPushWithTickets avec leur code.
+            const refused = failed - dead.size;
+            if (refused > 0) stats.ticketFailures = (stats.ticketFailures || 0) + refused;
 
             // Jeton mort (appli désinstallée) : on le supprime pour ne plus l'appeler.
             if (dead.size > 0) {
