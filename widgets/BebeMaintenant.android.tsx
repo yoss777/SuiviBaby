@@ -101,6 +101,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       })()
     : 0;
   const dayStale = nextMidnight > 0 && now >= nextMidnight;
+  // Filet de fraîcheur : une session en cours sans mise à jour depuis 2 h peut
+  // être finie ailleurs sans qu'on le sache ; on dit de quand date l'info.
+  const STALE_LIVE_MS = 2 * HOUR;
+  const generatedAt = props.generatedAtMs ?? 0;
+  const liveStale = n > 0 && generatedAt > 0 && now - generatedAt > STALE_LIVE_MS;
   const day = props.day;
 
   // ----- Grille -----
@@ -437,6 +442,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
     nextMidnight,
+    ...(n > 0 && generatedAt > 0 ? [generatedAt + STALE_LIVE_MS] : []),
     ...(restDual && day?.lastDiaperMs ? [day.lastDiaperMs + HOUR] : []),
     props.alerts.mealAtMs ?? 0,
     props.alerts.diaperAtMs ?? 0,
@@ -454,6 +460,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {txt(name, C.pillText, sp, true)}
     </Box>
   );
+
+  // « màj 14:02 » à côté du prénom : l'info date de cette heure-là.
+  const staleTag = liveStale ? (
+    <Row verticalAlignment="center">
+      <Spacer modifiers={[width(8)]} />
+      {txt(`màj ${clock(generatedAt)}`, C.soft, small ? 11 : 12)}
+    </Row>
+  ) : null;
 
   // Libellé lu par TalkBack sur tout le widget (le clic ouvre l'app).
   const a11yLive = (l: WidgetLive) => {
@@ -480,6 +494,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       `Aujourd'hui : ${day.mealsCount} repas, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(day.sleepMinutes)} de sommeil`,
     );
   }
+  if (liveStale) a11yParts.push(`Informations mises à jour à ${clock(generatedAt)}`);
   a11yParts.push("Toucher pour ouvrir SuiviBaby");
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
 
@@ -488,7 +503,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   if (small) {
     return (
       <Column modifiers={container}>
-        <Row modifiers={[height(HEAD_H)]}>{pill(13)}</Row>
+        <Row verticalAlignment="center" modifiers={[height(HEAD_H)]}>
+          {pill(13)}
+          {staleTag}
+        </Row>
         {gap(HEAD_GAP)}
         {nowZone()}
         {band()}
@@ -500,7 +518,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   return (
     <Column modifiers={container}>
       <Row verticalAlignment="center" modifiers={[height(HEAD_H)]}>
-        <Row modifiers={[width(zoneW)]}>{pill(14)}</Row>
+        <Row verticalAlignment="center" modifiers={[width(zoneW)]}>
+          {pill(14)}
+          {staleTag}
+        </Row>
         {showDay ? <Spacer modifiers={[width(SEP)]} /> : null}
         {showDay ? (
           <Column verticalAlignment="center" modifiers={[size(Rw, HEAD_H)]}>
