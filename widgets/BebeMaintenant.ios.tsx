@@ -162,7 +162,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   }
 
-  // ----- Medium : maintenant à gauche, journée à droite (Premium) -----
+  // ----- Medium : maintenant à gauche, journée à droite (pour tous) -----
   const day = props.day;
   const row = (label: string, color: string, main: string, sub: string, late: boolean) => (
     <HStack spacing={6} alignment="firstTextBaseline">

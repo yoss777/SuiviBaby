@@ -60,10 +60,10 @@ describe("buildNowWidgetProps", () => {
     expect(p.live?.sinceLabel).toBe("depuis 13:20");
   });
 
-  it("le chrono est visible des comptes gratuits ; journée et rappel des couches Premium seulement", () => {
+  it("chrono et état de la journée visibles des comptes gratuits ; rappel des couches Premium seulement", () => {
     const p = buildNowWidgetProps(base({ isPremium: false, walkStartMs: T0 - min(5) }));
     expect(p.live?.kind).toBe("walk");
-    expect(p.day).toBeNull();
+    expect(p.day?.diapersCount).toBe(5);
     expect(p.alerts.diaperAtMs).toBeNull();
     // L'alerte du repas reste disponible en gratuit.
     expect(p.alerts.mealAtMs).toBe(T0 - min(130) + 3 * 3600 * 1000);

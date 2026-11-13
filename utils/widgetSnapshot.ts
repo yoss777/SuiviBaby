@@ -8,7 +8,9 @@
 //   promenade ; son chrono est visible de tous, gratuitement ;
 // - au repos : temps depuis le dernier repas, et le prochain sein quand il est
 //   certain (dernière tétée sur un seul sein) ;
-// - Premium : la journée (repas, couches, sommeil) et les rappels discrets ;
+// - la journée (repas, couches, sommeil) est affichée pour tous, comme chez
+//   les concurrents ; Premium ajoute les rappels discrets (sauf celui du repas,
+//   gratuit) ;
 // - aucune incitation à payer dans le widget ;
 // - jamais d'auteur pour une tétée (seule la mère allaite).
 import type { NursingTimerState } from "@/components/forms/nursingTimer";
@@ -54,7 +56,7 @@ export interface NowWidgetProps {
   lastMealLabel: string | null;
   nextSide: "G" | "D" | null;
   isPremium: boolean;
-  /** Journée et rappels : Premium seulement (null sinon, rien n'est affiché). */
+  /** État de la journée : affiché pour tous. */
   day: WidgetDay | null;
   alerts: WidgetAlerts;
   generatedAtMs: number;
@@ -185,7 +187,7 @@ export function buildNowWidgetProps(input: NowWidgetInput): NowWidgetProps {
       : null,
     nextSide: nextSideFrom(input.lastNursing),
     isPremium: input.isPremium,
-    day: input.isPremium ? input.day : null,
+    day: input.day,
     alerts: { mealAtMs, diaperAtMs },
     generatedAtMs: input.now,
   };

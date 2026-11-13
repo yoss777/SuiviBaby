@@ -445,12 +445,13 @@ Au lancement par lien, l'app bascule sur le bon bébé avant d'ouvrir l'écran.
 - Small : sessions en cours avec chrono en direct (tétée G/D, sommeil, promenade), y compris celles lancées par un autre aidant ; au repos, « Dernier repas il y a… », l'heure et le prochain sein.
 - Écran verrouillé iOS (rectangular, circular, inline), Live Activity et Dynamic Island, notification permanente Android : le chrono de toute session en cours du foyer.
 - Synchronisation entre aidants par push (Live Activity push-to-start, FCM data), puisque le chrono doit être visible de tous.
+- **État de la journée pour tous (décision du fondateur, 13/11/2026)**, comme chez les concurrents : repas (dernier, nombre, ml), couches (dernière, nombre), sommeil du jour, dans le medium et en ligne compacte sur Android.
 - Alerte du repas sur le small, si le parent a réglé ce rappel.
 - **Aucune incitation à payer dans le widget (décision du fondateur, 13/11/2026)** : pas de ligne « Premium », pas de cadenas, pas de flou, pas de lien vers le paywall. Un tap ouvre toujours l'app sur l'écran concerné. La découverte du widget Premium se fait uniquement dans l'app (écran d'aide « Ajouter le widget », page Premium).
-- Medium posé par un compte gratuit : la partie « en cours » (gauche) complète, et à droite le dernier repas et le prochain sein, sans message ni emplacement vide. À l'expiration d'un abonnement, même chose.
+- Medium : complet pour tous (maintenant à gauche, journée à droite).
 
 **Premium (`widgets`)**
-- Medium complet (Repas, Couches, Sommeil du jour) et large (V2).
+- Large (V2).
 - **Rappels discrets** : le widget reprend les rappels réglés par le parent dans Réglages > Notifications (`ReminderPreferences.thresholds` : `repas`, `changes`, `pompages`, `vitamines`, seuils propres à chaque parent). Quand un seuil est dépassé et que ce rappel est activé (rappels activés et seuil > 0 ; par défaut tout est à 0, donc aucune alerte tant que le parent n'a rien réglé), la valeur concernée passe en rouge (`#b91c1c` clair / `#f87171` sombre) avec une petite icône d'alerte, par exemple « Couches · à 09:05 ». Pas de fond rouge, pas de clignotement, pas de badge. L'heure de bascule est planifiée dans la timeline. Les heures calmes ne masquent pas l'alerte visuelle (le widget ne sonne pas).
 - Choix du bébé par widget (plusieurs widgets, un par enfant).
 - Actions directes en V1.5 (changer de sein, terminer, réveil, fin de promenade).

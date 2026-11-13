@@ -30,6 +30,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   const live = props.live;
   const mealLate = props.alerts.mealAtMs != null && props.generatedAtMs >= props.alerts.mealAtMs;
+  const diaperLate = props.alerts.diaperAtMs != null && props.generatedAtMs >= props.alerts.diaperAtMs;
+  const sleepLabel = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`);
   const container = [fillMaxSize(), background(C.bg), cornerRadius(16), paddingAll(14)];
 
   if (live) {
@@ -64,6 +66,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {props.nextSide ? (
         <Text color={C.strong} style={{ fontSize: 13, fontWeight: "600" }}>
           {`Prochain sein : ${props.nextSide === "G" ? "gauche" : "droit"}`}
+        </Text>
+      ) : null}
+      {props.day ? (
+        <Text color={diaperLate ? C.alert : C.soft} style={{ fontSize: 12 }}>
+          {`Couche ${props.day.lastDiaperMs ? `à ${clock(props.day.lastDiaperMs)}` : "—"} · Sommeil ${sleepLabel(props.day.sleepMinutes)}`}
         </Text>
       ) : null}
     </Column>
