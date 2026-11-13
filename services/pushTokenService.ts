@@ -20,7 +20,10 @@ import { db } from "@/config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 
 const COLLECTION = "device_tokens";
-const PROJECT_ID = "0c759940-43b8-4cb3-9dc5-d0faa2eacf41";
+// Projet EAS courant (@yoss7/suivibaby), lu dans app.json : l'ancien identifiant
+// codé en dur datait d'avant le transfert du projet vers le compte yoss7.
+const PROJECT_ID: string | undefined =
+  Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
 
 /** Cache du token courant pour toggle enabled sans re-fetch */
 let cachedToken: string | null = null;
@@ -54,6 +57,7 @@ async function getExpoPushToken(): Promise<string | null> {
     });
   }
 
+  if (!PROJECT_ID) return null;
   const tokenData = await Notifications.getExpoPushTokenAsync({
     projectId: PROJECT_ID,
   });
