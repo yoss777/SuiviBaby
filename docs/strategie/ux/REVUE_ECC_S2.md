@@ -34,26 +34,28 @@ Le projet Expo actuel `@yoss7/suivibaby` n'a **aucune clé FCM** : toute notific
 | S1 | Sécurité / code | Le widget garde prénom et données de santé après déconnexion | **Corrigé** `68d5478` (widget vidé, récepteur réinitialisé) |
 | S2 | Sécurité | `updatedBy` (auteur) stocké dans `live/nursing`, lisible par le foyer | **Corrigé côté app** `68d5478` ; règle tolérante pour les anciennes versions, **déploiement des règles à autoriser** |
 | N0 | Sécurité / natif | Message appliqué si aucun bébé n'est affiché | **Corrigé** `68d5478` |
-| C2-C3 | Code | `setWidgetChild` : cache non remis à zéro à la déconnexion ; aucun nouvel essai si le jeton n'est pas encore connu | à corriger |
-| C4 | Code | Au changement de bébé, la tétée de l'ancien bébé peut partir dans le widget du nouveau | à corriger |
-| C5 | Code | Aucun test pour `useNowWidgetSync` ni `widgetSync` | à corriger |
-| C6 | Code | Tétée en pause : clé de contenu instable, widget réécrit à chaque passage | à corriger |
-| C7 | Code | Lien profond au démarrage à froid effacé avant le chargement des bébés | à corriger |
+| C2-C3 | Code | `setWidgetChild` : cache non remis à zéro à la déconnexion ; aucun nouvel essai si le jeton n'est pas encore connu | **Corrigé** `389e206` |
+| C4 | Code | Au changement de bébé, la tétée de l'ancien bébé peut partir dans le widget du nouveau | **Corrigé** `389e206` |
+| C5 | Code | Aucun test pour `useNowWidgetSync` ni `widgetSync` | **Corrigé** `389e206` |
+| C6 | Code | Tétée en pause : clé de contenu instable, widget réécrit à chaque passage | **Corrigé** `389e206` |
+| C7 | Code | Lien profond au démarrage à froid effacé avant le chargement des bébés | **Corrigé** `389e206` |
 | N1 | Natif | Chrono en pause : la durée dérive quand le lanceur réapplique les vues | à corriger (patch) |
-| N2 | Natif | Repli incomplet si un message du widget fait planter le traitement (peut finir en notification) | à corriger |
-| U1 | UI/UX | Rappel repas dépassé non annoncé à TalkBack pendant une session | à corriger |
-| U2 | UI/UX | « 1h51 » au repos se lit comme une heure : dire « il y a » | à corriger |
-| U3 | UI/UX | Mode clair : tuiles « en cours » invisibles (1,07-1,11:1) | à corriger |
-| U4 | UI/UX | Cibles de la colonne du jour à 40 dp, collées | à corriger |
-| U5 | UI/UX | Zones cliquables sans libellé ; « Toucher pour ouvrir SuiviBaby » devenu faux | à corriger |
-| U6 | UI/UX | Bande 2×2 : couleur seule | à corriger |
-| U7 | UI/UX | Info périmée : le chrono reste en grand et en blanc | à corriger |
+| N2 | Natif | Repli incomplet si un message du widget fait planter le traitement (peut finir en notification) | **Corrigé** `70ff605` |
+| U1 | UI/UX | Rappel repas dépassé non annoncé à TalkBack pendant une session | **Corrigé** `70ff605` |
+| U2 | UI/UX | « 1h51 » au repos se lit comme une heure : dire « il y a » | **Corrigé** `70ff605` |
+| U3 | UI/UX | Mode clair : tuiles « en cours » invisibles (1,07-1,11:1) | **Corrigé** `70ff605` |
+| U4 | UI/UX | Cibles de la colonne du jour à 40 dp, collées | **Corrigé** `70ff605` |
+| U5 | UI/UX | Zones cliquables sans libellé ; « Toucher pour ouvrir SuiviBaby » devenu faux | **Corrigé** `70ff605` |
+| U6 | UI/UX | Bande 2×2 : couleur seule | **Corrigé** `70ff605` |
+| U7 | UI/UX | Info périmée : le chrono reste en grand et en blanc | **Corrigé** `70ff605` |
 | U8 | UI/UX | iOS non aligné (liens morts, une seule session) | planifié S3 |
-| F1 | Silences | Échecs d'envoi au widget invisibles hors développement | à corriger |
-| F2 | Silences | Aucun jeton enregistré sans signal si l'ID de projet manque | à corriger |
-| F3 | Silences | Erreur de lecture confondue avec « jeton d'un autre compte » : peut réactiver des notifications coupées | à corriger |
-| F4 | Silences | Tétée partagée : refus d'écriture et erreurs d'écoute avalés | à corriger |
-| F5 | Silences | Filet de fraîcheur limité aux sessions en cours | à corriger |
+| F1 | Silences | Échecs d'envoi au widget invisibles hors développement | **Corrigé** `389e206` |
+| F2 | Silences | Aucun jeton enregistré sans signal si l'ID de projet manque | **Corrigé** `389e206` |
+| F3 | Silences | Erreur de lecture confondue avec « jeton d'un autre compte » : peut réactiver des notifications coupées | **Corrigé** `389e206` |
+| F4 | Silences | Tétée partagée : refus d'écriture et erreurs d'écoute avalés | **Corrigé** `389e206` |
+| F5 | Silences | Filet de fraîcheur limité aux sessions en cours | **Corrigé** `70ff605` |
+
+Tous les P1 hors iOS (U8, planifié S3) sont corrigés. Vérifications après corrections : 2 001 tests app (un test ancien, hors widget, a échoué une fois sur quatre passages : instable, à isoler), 637 tests Functions, 264 tests de règles, 10 tests Kotlin.
 
 ## P2 retenus (suivi)
 
