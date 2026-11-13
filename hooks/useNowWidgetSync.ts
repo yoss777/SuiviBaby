@@ -11,7 +11,7 @@ import {
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
 import { setWidgetChild } from "@/services/pushTokenService";
-import { cancelPendingWidgetPush, pushNowWidget } from "@/services/widgetSync";
+import { cancelPendingWidgetPush, invalidateWidgetKey, pushNowWidget } from "@/services/widgetSync";
 import {
   assembleNowWidgetInput,
   buildNowWidgetProps,
@@ -68,7 +68,10 @@ export function useNowWidgetSync(p: Params): void {
   // Retour au premier plan : nouvel envoi (minuit passé, brouillon expiré…).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") setTick((t) => t + 1);
+      if (s === "active") {
+        invalidateWidgetKey();
+        setTick((t) => t + 1);
+      }
     });
     return () => sub.remove();
   }, []);

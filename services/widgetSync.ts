@@ -5,6 +5,7 @@
 // pour ne pas dépenser le budget de rechargement de WidgetKit.
 import { Platform } from "react-native";
 
+import { noteAppSnapshot } from "@/modules/widget-push";
 import { type NowWidgetProps, toNativeWidgetProps } from "@/utils/widgetSnapshot";
 
 export const WIDGET_SYNC_DEBOUNCE_MS = 2000;
@@ -48,12 +49,24 @@ export function pushNowWidget(props: NowWidgetProps): void {
     try {
       widget.updateSnapshot(toNativeWidgetProps(props));
       lastKey = key;
+      // Android : le récepteur des messages serveur ne revient jamais avant
+      // cette écriture, ni sur un autre bébé.
+      if (props.childId) noteAppSnapshot(props.childId);
       if (__DEV__) console.log(`[widget] envoyé : ${props.childName}${props.live ? ` · ${props.live.kind}` : ""}`);
     } catch (error) {
       // Extension indisponible : on réessaiera au prochain changement.
       if (__DEV__) console.warn("[widget] envoi impossible", error);
     }
   }, WIDGET_SYNC_DEBOUNCE_MS);
+}
+
+/**
+ * Oublie le dernier contenu envoyé : le récepteur natif a pu réécrire le
+ * widget entre-temps (message serveur), l'app doit pouvoir le réécrire même
+ * à contenu égal. Appelé au retour au premier plan.
+ */
+export function invalidateWidgetKey(): void {
+  lastKey = "";
 }
 
 /** Annule l'envoi en attente (changement de bébé, données pas encore prêtes). */
