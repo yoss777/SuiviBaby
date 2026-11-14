@@ -29,6 +29,8 @@ export interface WidgetDay {
   diapersCount: number;
   lastDiaperMs: number | null;
   sleepMinutes: number;
+  /** Début (borné au jour) du sommeil en cours, compté en plus de sleepMinutes. */
+  sleepRunningFromMs?: number | null;
   /** Aucun repas jamais noté (prouvé par lastEventAt de la fiche de l'enfant). */
   noMealEver?: boolean;
   noDiaperEver?: boolean;

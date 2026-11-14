@@ -469,7 +469,13 @@ function assembleNowWidgetInput(src, env = localEnv) {
       // Aucun jamais (prouvé par la fiche de l'enfant) : « aucun repas noté ».
       noMealEver: !lastMeal && abs.repas === null,
       noDiaperEver: !changes.length && abs.changes === null,
+      // Sommeils terminés du jour ; le sommeil en cours s'ajoute à l'affichage
+      // à partir de sleepRunningFromMs (compteur qui avance tout seul).
       sleepMinutes: src.sleepTotalMinutes || 0,
+      sleepRunningFromMs:
+        src.sleepStartMs != null && Number.isFinite(src.sleepStartMs) && src.sleepStartMs < dayEnd
+          ? Math.min(Math.max(src.sleepStartMs, dayStart), now)
+          : null,
     },
     recent,
     isPremium: !!src.isPremium,

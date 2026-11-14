@@ -63,6 +63,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ? new Date(new Date(dayStart).getFullYear(), new Date(dayStart).getMonth(), new Date(dayStart).getDate() + 1).getTime()
     : 0;
   const dayStale = nextMidnight > 0 && now >= nextMidnight;
+  // Sommeil en cours compté dans le total du jour (jusqu'à l'instant du rendu).
+  const sleepFrom =
+    props.day?.sleepRunningFromMs != null && lives.some((l) => l.kind === "sleep") ? Math.min(props.day.sleepRunningFromMs, now) : null;
+  const sleepNowMin = (props.day?.sleepMinutes ?? 0) + (sleepFrom != null ? Math.max(0, Math.round((now - sleepFrom) / 60000)) : 0);
   // Info de plus de 2 h : on dit de quand elle date.
   const generatedAt = props.generatedAtMs ?? 0;
   const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
@@ -219,7 +223,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <VStack alignment="leading" spacing={6} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
           {row("Repas", C.meal, `à ${clock(day.lastMealMs)}`, `${day.mealsCount} repas${day.bottleMl ? ` · ${day.bottleMl} ml` : ""}`, mealLate)}
           {row("Change", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperLate)}
-          {row("Sommeil", C.sleep, sleepLabel(day.sleepMinutes), "", false)}
+          {row("Sommeil", C.sleep, sleepLabel(sleepNowMin), "", false)}
           {dataStale ? <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>{`màj ${clock(generatedAt)}`}</Text> : null}
         </VStack>
       ) : null}

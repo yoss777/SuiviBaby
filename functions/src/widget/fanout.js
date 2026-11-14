@@ -154,7 +154,14 @@ function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs
       sleepStartMs: split.sleepNow ? split.sleepNow.startMs : null,
       sleepIsNap: split.sleepNow ? split.sleepNow.isNap : null,
       walkStartMs: split.walkNow ? split.walkNow.startMs : null,
-      sleepTotalMinutes: widget.sleepMinutesInDay(split.sleeps, dayStart, dayEnd, nowMs),
+      // Sommeils terminés seulement (comme l'Accueil) : le widget ajoute
+      // lui-même le sommeil en cours, qui avance (day.sleepRunningFromMs).
+      sleepTotalMinutes: widget.sleepMinutesInDay(
+        split.sleeps.filter((s) => Number.isFinite(s.endMs)),
+        dayStart,
+        dayEnd,
+        nowMs,
+      ),
       lastAbsoluteMealMs,
       // getLastEventMillis : null = aucun évènement de la catégorie (prouvé) ;
       // absent (anciens appels) = inconnu.

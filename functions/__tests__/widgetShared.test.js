@@ -101,6 +101,7 @@ describe("assemble + build (fuseau du serveur)", () => {
       diapersCount: 2,
       lastDiaperMs: at(15),
       sleepMinutes: 75,
+      sleepRunningFromMs: at(16),
       noMealEver: false,
       noDiaperEver: false,
     });
@@ -118,6 +119,13 @@ describe("assemble + build (fuseau du serveur)", () => {
     // 10 événements dans les 24 h (jalon compris, comme le home) : les 7 plus récents.
     expect(props.recent).toHaveLength(7);
     expect(props.recent.map((e) => e.label)).toContain("Moment");
+  });
+
+  test("sommeil en cours : début borné au jour, absent sans sommeil", () => {
+    const night = w.assembleNowWidgetInput({ ...base, sleepStartMs: Date.UTC(2026, 10, 12, 21, 0) }, paris);
+    expect(night.day.sleepRunningFromMs).toBe(Date.UTC(2026, 10, 12, 23, 0));
+    const none = w.assembleNowWidgetInput({ ...base, sleepStartMs: null }, paris);
+    expect(none.day.sleepRunningFromMs).toBeNull();
   });
 
   test("tétée en cours et promenade : deux sessions, la tétée d'abord", () => {
