@@ -109,12 +109,20 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours" };
   // Zone cliquable : son lien et son libellé TalkBack.
   // `say` : ce que TalkBack lit avant l'action (ex. « Dernier repas à 19:37 »).
-  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => [
-    createModifier("openUrl", {
-      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`,
-    }),
-    semantics({ contentDescription: say ? `${say}. ${LINK_LABEL[action]}` : LINK_LABEL[action] }),
-  ];
+  // Proche (lecture seule, canWrite=false) : l'appui ouvre l'Accueil, sans
+  // formulaire, et TalkBack dit « Consulter dans SuiviBaby ».
+  const canWrite = props.canWrite !== false;
+  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => {
+    const label = canWrite ? LINK_LABEL[action] : "Consulter dans SuiviBaby";
+    return [
+      createModifier("openUrl", {
+        url: canWrite
+          ? `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`
+          : "suivibaby:///baby/home",
+      }),
+      semantics({ contentDescription: say ? `${say}. ${label}` : label }),
+    ];
+  };
 
   const clock = (ms: number) => {
     const d = new Date(ms);

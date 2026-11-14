@@ -245,7 +245,7 @@ const EMPTY_NOW_WIDGET = {
   lastMealMs: null,
   lastMealLabel: null,
   lastMealKind: null,
-  nextSide: null,
+  canWrite: true,
   isPremium: false,
   day: null,
   recent: [],
@@ -277,18 +277,6 @@ function formatDuration(totalSeconds) {
 }
 
 const MEAL_LABEL = { tetee: "Tétée", biberon: "Biberon", solide: "Repas", autre: "Repas" };
-
-/** Prochain sein, seulement quand il est certain : dernière tétée sur un seul sein. */
-function nextSideFrom(lastNursing) {
-  if (!lastNursing) return null;
-  // Côté noté (coteGauche/coteDroit) : une tétée de moins de 30 s par sein
-  // est enregistrée sans durée (arrondie à 0 min) mais avec son côté.
-  const left = lastNursing.leftMinutes > 0 || lastNursing.left === true;
-  const right = lastNursing.rightMinutes > 0 || lastNursing.right === true;
-  if (left && !right) return "D";
-  if (right && !left) return "G";
-  return null;
-}
 
 function nursingLive(state, now, env) {
   const side = state.runningSide;
@@ -357,7 +345,8 @@ function buildNowWidgetProps(input, env = localEnv) {
       ? `${MEAL_LABEL[input.lastMeal.kind] || "Repas"} à ${env.clock(input.lastMeal.ms)}`
       : null,
     lastMealKind: input.lastMeal ? input.lastMeal.kind : null,
-    nextSide: nextSideFrom(input.lastNursing),
+    // Droit de saisie (Parent) : sans lui, aucune zone n'ouvre de formulaire.
+    canWrite: input.canWrite !== false,
     isPremium: input.isPremium,
     day: input.day,
     recent: [...(input.recent || [])].sort((a, b) => b.ms - a.ms).slice(0, WIDGET_RECENT_MAX),
@@ -479,6 +468,7 @@ function assembleNowWidgetInput(src, env = localEnv) {
     },
     recent,
     isPremium: !!src.isPremium,
+    canWrite: src.canWrite !== false,
     reminders: {
       enabled: !!src.reminders.enabled,
       repasHours: src.reminders.repasHours,
@@ -506,7 +496,6 @@ module.exports = {
   otherEventIcon,
   toNativeWidgetProps,
   formatDuration,
-  nextSideFrom,
   buildNowWidgetProps,
   countGroups,
   assembleNowWidgetInput,

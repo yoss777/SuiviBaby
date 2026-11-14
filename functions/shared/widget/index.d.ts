@@ -75,7 +75,8 @@ export interface NowWidgetProps {
   lastMealMs: number | null;
   lastMealLabel: string | null;
   lastMealKind: MealKind | null;
-  nextSide: "G" | "D" | null;
+  /** Droit de saisie (Parent, propriétaire) ; faux pour un Proche (lecture seule). */
+  canWrite: boolean;
   isPremium: boolean;
   /** État de la journée : affiché pour tous. */
   day: WidgetDay | null;
@@ -111,6 +112,8 @@ export interface NowWidgetInput {
   /** Événements du jour (ordre quelconque) : triés et limités ici. */
   recent?: WidgetEvent[];
   isPremium: boolean;
+  /** Droit de saisie ; absent = vrai (anciens appels). */
+  canWrite?: boolean;
   /** Seuils de rappel du parent, en heures (0 = désactivé). */
   reminders: { enabled: boolean; repasHours: number; changesHours: number };
   now: number;
@@ -142,6 +145,8 @@ export interface WidgetSource {
   /** Fiche de l'enfant (lastEventAt) : ms = connu, null = aucun jamais, absent = inconnu. */
   lastEventAt?: { repas?: number | null; changes?: number | null };
   isPremium: boolean;
+  /** Droit de saisie (owner/admin) ; absent = vrai. */
+  canWrite?: boolean;
   reminders: { enabled: boolean; repasHours: number; changesHours: number };
   now: number;
 }
@@ -167,7 +172,6 @@ export interface LastNursing {
   left?: boolean;
   right?: boolean;
 }
-export function nextSideFrom(lastNursing: LastNursing | null): "G" | "D" | null;
 export function buildNowWidgetProps(input: NowWidgetInput, env?: WidgetEnv): NowWidgetProps;
 export function countGroups(timestamps: number[], gapMs: number): number;
 export function assembleNowWidgetInput(src: WidgetSource, env?: WidgetEnv): NowWidgetInput;

@@ -110,7 +110,7 @@ describe("assemble + build (fuseau du serveur)", () => {
     const props = w.buildNowWidgetProps(input, paris);
     expect(props.lastMealKind).toBe("solide");
     expect(props.lastMealLabel).toBe("Repas à 12:00");
-    expect(props.nextSide).toBe("D");
+    expect(props.canWrite).toBe(true);
     expect(props.dayStartMs).toBe(Date.UTC(2026, 10, 12, 23, 0));
     expect(props.alerts).toEqual({ mealAtMs: at(15), diaperAtMs: at(19) });
     expect(props.live).toMatchObject({ kind: "sleep", nap: true, sinceMs: at(16), sinceLabel: "depuis 16:00" });
@@ -154,8 +154,7 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(JSON.stringify(native)).not.toContain("null");
     expect(JSON.stringify(w.EMPTY_NOW_WIDGET_NATIVE)).not.toContain("null");
     expect(w.formatDuration(3725)).toBe("1:02:05");
-    expect(w.nextSideFrom({ leftMinutes: 0, rightMinutes: 5 })).toBe("G");
-    expect(w.nextSideFrom({ leftMinutes: 5, rightMinutes: 5 })).toBeNull();
+    expect(w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, canWrite: false }, paris), paris).canWrite).toBe(false);
   });
 });
 
