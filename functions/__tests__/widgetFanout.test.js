@@ -93,7 +93,9 @@ describe("fanOutWidget", () => {
     const mum = msgs.find((m) => m.to.endsWith("[m1]")).data.p;
     const dad = msgs.find((m) => m.to.endsWith("[d1]")).data.p;
     // Même état de l'enfant…
-    expect(mum.day).toMatchObject({ mealsCount: 1, bottleMl: 120, diapersCount: 1, sleepMinutes: 60 });
+    // Sieste en cours depuis 16:00 : hors des sommeils terminés, comptée à part (avance seule).
+    expect(mum.day).toMatchObject({ mealsCount: 1, bottleMl: 120, diapersCount: 1, sleepMinutes: 0 });
+    expect(mum.day.sleepRunningFromMs).toBe(mum.live.sinceMs);
     expect(mum.live).toMatchObject({ kind: "sleep", nap: true });
     // …mais l'heure et le jour du fuseau de chaque appareil.
     expect(mum.live.sinceLabel).toBe("depuis 16:00");

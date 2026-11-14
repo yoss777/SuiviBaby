@@ -189,6 +189,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const dataStale = generatedAt > 0 && now - generatedAt > STALE_LIVE_MS;
   const liveStale = n > 0 && dataStale;
   const day = props.day;
+  // Sommeil en cours : il compte dans « de sommeil » et la ligne avance seule
+  // (horloge native partie de « début − sommeils terminés »).
+  const sleepRunning =
+    day?.sleepRunningFromMs != null && lives.some((l) => l.kind === "sleep") ? Math.min(day.sleepRunningFromMs, now) : null;
+  const sleepBaseMs = day && sleepRunning != null ? sleepRunning - day.sleepMinutes * 60000 : null;
+  const sleepNowMin = day ? day.sleepMinutes + (sleepRunning != null ? Math.max(0, Math.round((now - sleepRunning) / 60000)) : 0) : 0;
 
   // ----- Grille -----
   const env = environment as WidgetEnvironment & { widthDp?: number; heightDp?: number };
@@ -488,7 +494,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const ITEM_GAP = 8;
     const TITLE_H = 28;
     const ROW_H = 24;
-    const item = (key: string, dotColor: string, value: string, sub: string | null, late: boolean) => (
+    const item = (key: string, dotColor: string, value: string | React.ReactNode, sub: string | null, late: boolean) => (
       <Row
         key={key}
         verticalAlignment="center"
@@ -497,7 +503,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(8)]} />
         <Column>
-          {txt(value, late ? C.alert : C.strong, 15, true)}
+          {typeof value === "string" ? txt(value, late ? C.alert : C.strong, 15, true) : value}
           {sub ? txt(sub, late ? C.alert : C.soft, 12) : null}
         </Column>
       </Row>
@@ -539,7 +545,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <Spacer key="gap-meal-diaper" modifiers={[height(ITEM_GAP)]} />
         {item("diaper", CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate)}
         <Spacer key="gap-diaper-sleep" modifiers={[height(ITEM_GAP)]} />
-        {item("sleep", CAT.sleep.dot, sleepLabel(day.sleepMinutes), "de sommeil", false)}
+        {item(
+          "sleep",
+          CAT.sleep.dot,
+          sleepBaseMs != null ? fixedLine(15, elapsed(sleepBaseMs, C.strong, 15)) : sleepLabel(day.sleepMinutes),
+          "de sommeil",
+          false,
+        )}
         {events.length ? <Spacer key="gap-sleep-title" modifiers={[height(ITEM_GAP)]} /> : null}
         {events.length ? (
           <Column key="events-title" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
@@ -588,7 +600,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <Row>
           {cell(CAT.meal.dot, `${day.mealsCount} rep.`, mealLate && n > 0)}
           {cell(CAT.diaper.dot, `${day.diapersCount} ch.`, diaperLate)}
-          {cell(CAT.sleep.dot, `${sleepLabel(day.sleepMinutes).replace(" min", "m")} dodo`, false)}
+          {cell(CAT.sleep.dot, `${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`, false)}
         </Row>
       </Column>
     );
@@ -597,6 +609,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Prochain redessin utile : passage à 1 h d'une durée, rappel qui passe au rouge.
   const refreshCandidates = [
     ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
+    // Total de sommeil qui passe 1 h : le format change (« 59 min » → « 1h00 »).
+    ...(sleepBaseMs != null ? [sleepBaseMs + HOUR] : []),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
     nextMidnight,
     midnightFromNow,
@@ -659,7 +673,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   if (restDual && day?.lastDiaperMs) a11yParts.push(a11yLast("Dernier change", day.lastDiaperMs, diaperLate, props.alerts.diaperAtMs));
   if (day && !dayStale) {
     a11yParts.push(
-      `Aujourd'hui : ${day.mealsCount} repas${mealLate ? " (rappel dépassé)" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(day.sleepMinutes)} de sommeil`,
+      `Aujourd'hui : ${day.mealsCount} repas${mealLate ? " (rappel dépassé)" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(sleepNowMin)} de sommeil`,
     );
   }
   if (dataStale) a11yParts.push(`${liveStale ? "À vérifier, informations" : "Informations"} mises à jour à ${clock(generatedAt)}`);
