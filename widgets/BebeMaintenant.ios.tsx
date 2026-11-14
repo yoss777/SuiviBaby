@@ -183,7 +183,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     </VStack>
   );
 
-  if (family !== "systemMedium") {
+  if (family !== "systemMedium" && family !== "systemLarge") {
     return (
       <VStack alignment="leading" modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
         {nowBlock}
@@ -191,7 +191,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   }
 
-  // ----- Medium : maintenant à gauche, journée à droite (pour tous) -----
+  // ----- Medium (et haut du grand) : maintenant à gauche, journée à droite -----
   const day = props.day;
   const row = (label: string, color: string, main: string, sub: string, late: boolean) => (
     <HStack spacing={6} alignment="firstTextBaseline">
@@ -209,8 +209,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const clock = (ms: number | null) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "—");
   const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
 
-  return (
-    <HStack spacing={14} alignment="top" modifiers={[bg, widgetURL(url)]}>
+  const top = (mods: any[]) => (
+    <HStack spacing={14} alignment="top" modifiers={mods}>
       <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
         {nowBlock}
       </VStack>
@@ -228,6 +228,38 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </VStack>
       ) : null}
     </HStack>
+  );
+
+  if (family !== "systemLarge") return top([bg, widgetURL(url)]);
+
+  // ----- Grand : le haut du medium, puis les événements récents (un widget
+  // iOS ne défile pas : le fil n'a de place que dans cette taille) -----
+  const TYPE_COLOR: Record<string, string> = {
+    tetee: "#D66B8F", biberon: "#E8785A", solide: "#E89A5A", pompage: "#6BA47C", croissance: "#E8C45A",
+    miction: "#5BA4A4", selle: "#A47C5B", medicament: "#5A8BE8", temperature: "#E85A5A", symptome: "#E85A8B",
+    vaccin: "#8B7CB4", bain: "#5AADE8", nez: "#6BA4A4", activite: "#8BC46B", jalon: "#E8A85A",
+    sieste: "#7C6BA4", nuit: "#5A6BA4",
+  };
+  const events = (props.recent ?? []).slice(0, 7);
+  const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime();
+  return (
+    <VStack alignment="leading" spacing={10} modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
+      {top([frame({ maxWidth: 10000, alignment: "topLeading" })])}
+      {events.length ? (
+        <VStack alignment="leading" spacing={5}>
+          <Text modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(C.soft)]}>Évènements récents</Text>
+          {events.map((e, i) => (
+            <HStack key={`${e.ms}-${i}`} spacing={6}>
+              <Text modifiers={[font({ size: 9 }), foregroundStyle((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? C.meal : e.kind === "diaper" ? C.diaper : C.soft))]}>●</Text>
+              <Text modifiers={[font({ size: 13 }), monospacedDigit(), foregroundStyle(C.soft)]}>
+                {`${e.ms < todayStart ? "hier " : ""}${clock(e.ms)}`}
+              </Text>
+              <Text modifiers={[font({ size: 13 }), foregroundStyle(C.strong), lineLimit(1)]}>{e.label}</Text>
+            </HStack>
+          ))}
+        </VStack>
+      ) : null}
+    </VStack>
   );
 };
 

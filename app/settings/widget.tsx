@@ -30,7 +30,13 @@ const ADD_STEPS: Step[] =
 const SHOWS: Step[] = [
   { icon: "timer-outline", text: "Les sessions en cours (tétée, sieste ou nuit, promenade), avec un chrono qui avance tout seul." },
   { icon: "time-outline", text: "Au repos : depuis combien de temps bébé a mangé et a été changé." },
-  { icon: "list-outline", text: "La journée : repas, changes, sommeil, et les 7 derniers événements des dernières 24 heures, comme sur l’Accueil." },
+  {
+    icon: "list-outline",
+    text:
+      Platform.OS === "ios"
+        ? "La journée : repas, changes, sommeil. Les 7 derniers événements des dernières 24 heures, comme sur l’Accueil, s’affichent dans la grande taille du widget."
+        : "La journée : repas, changes, sommeil, et les 7 derniers événements des dernières 24 heures, comme sur l’Accueil.",
+  },
   { icon: "people-outline", text: "Le bébé affiché est celui choisi dans l'app." },
 ];
 
