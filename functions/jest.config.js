@@ -14,6 +14,7 @@ module.exports = {
     "*.js",
     "src/**/*.js",
     "lib/**/*.js",
+    "shared/**/*.js",
     "!jest.config.js",
     "!seedUsers.js",
     "!__tests__/**",

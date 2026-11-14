@@ -22,6 +22,7 @@ function seed() {
     [`children/c1/access/${UID}`]: { role: "owner", userId: UID },
     [`user_child_access/${UID}_c1`]: { userId: UID, childId: "c1", role: "owner" },
     "events/e1": { childId: "c1", userId: UID, type: "biberon", photos: ["children/c1/jalons/a.jpg"] },
+    "children/c1/live/nursing": { updatedBy: UID, leftSeconds: 60, rightSeconds: 0, v: 1 },
     "recap_history/r1": { childId: "c1", userId: OTHER },
     // c2: shared with another parent → kept, ownership transferred.
     "children/c2": { name: "Mia", ownerId: UID },
@@ -31,6 +32,7 @@ function seed() {
     [`user_child_access/${OTHER}_c2`]: { userId: OTHER, childId: "c2", role: "admin" },
     "events/e2": { childId: "c2", userId: UID, type: "temperature", valeur: 38.4, photos: ["children/c2/jalons/b.jpg"] },
     "events/e3": { childId: "c2", userId: OTHER, type: "biberon" },
+    "children/c2/live/nursing": { updatedBy: UID, leftSeconds: 30, rightSeconds: 0, v: 1 },
     "shareInvitations/i1": { inviterEmail: "p1@t.com", childId: "c2" },
   };
   // One document per collection that stores data by uid.
@@ -85,6 +87,7 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     expect(docs.has("children/c1")).toBe(false);
     expect(docs.has("events/e1")).toBe(false);
     expect(docs.has("recap_history/r1")).toBe(false);
+    expect(docs.has("children/c1/live/nursing")).toBe(false);
   });
 
   it("keeps a shared child for the other parent, with the user's entries anonymised", async () => {
@@ -95,6 +98,7 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     expect(docs.has(`children/c2/access/${UID}`)).toBe(false);
     expect(docs.get("events/e2")).toEqual({ childId: "c2", userId: DELETED_USER_ID, type: "temperature", valeur: 38.4 });
     expect(docs.get("events/e3")).toMatchObject({ userId: OTHER });
+    expect(docs.has("children/c2/live/nursing")).toBe(false);
   });
 
   it("keeps the account for a retry, without e-mail, when Auth deletion fails", async () => {
@@ -191,6 +195,7 @@ const NOT_PURGED_BY_UID = {
   users: "deleted last by purgeUserData (carries pendingDeletion)",
   children: "deleted with the child when the user was its only member",
   access: "children/{id}/access: removed per member in purgeUserData",
+  live: "children/{id}/live: deleted with the child (deleteChildDataBatched); sessions last written by the user removed in purgeUserData for shared children",
   user_child_access: "index entries removed per child in purgeUserData",
   events: "deleted with the child, or anonymised (DELETED_USER_ID) in shared children",
   shareInvitations: "removed by inviter / invited e-mail in purgeUserData",

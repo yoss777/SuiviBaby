@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
+import { AppState } from "react-native";
 import { auth, db, functions } from "../config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
@@ -416,6 +417,25 @@ export function ecouterEvenements(
     : options?.type ?? "all";
   listenerLog(`[L:${lid}] SETUP type=${tl} wfs=${!!options?.waitForServer} imc=${!!options?.waitForServer}`);
 
+  // Repli sur le cache : livré tout de suite si l'app n'est pas (ou plus) au
+  // premier plan. Android y suspend les minuteries JS : l'attente de 800 ms ne
+  // finirait qu'au retour dans l'app (widget resté sur des données vides).
+  const deliverCachedNow = () => {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+    if (hasReceivedServerSnapshot || fallbackTriggered || cachedEvents == null) return;
+    fallbackTriggered = true;
+    listenerLog(`[L:${lid}] CB ${cachedEvents.length} cached events (background)`);
+    callback(cachedEvents);
+  };
+  const appStateSub = options?.waitForServer
+    ? AppState.addEventListener("change", (state) => {
+        if (state !== "active" && fallbackTimer) deliverCachedNow();
+      })
+    : null;
+
   const unsubscribe = onSnapshot(
     q,
     { includeMetadataChanges: !!options?.waitForServer },
@@ -446,6 +466,10 @@ export function ecouterEvenements(
         !(options.cacheFirst && events.length > 0)
       ) {
         listenerLog(`[L:${lid}] CACHE waiting for server`);
+        if (AppState.currentState !== "active") {
+          deliverCachedNow();
+          return;
+        }
         if (!fallbackTimer && !fallbackTriggered) {
           fallbackTimer = setTimeout(() => {
             listenerLog(`[L:${lid}] FALLBACK after ${waitForServerTimeoutMs}ms server=${hasReceivedServerSnapshot}`);
@@ -474,6 +498,7 @@ export function ecouterEvenements(
       clearTimeout(fallbackTimer);
       fallbackTimer = null;
     }
+    appStateSub?.remove();
     unsubscribe();
   };
 }

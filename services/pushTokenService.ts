@@ -9,6 +9,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   setDoc,
@@ -20,10 +21,35 @@ import { db } from "@/config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 
 const COLLECTION = "device_tokens";
-const PROJECT_ID = "0c759940-43b8-4cb3-9dc5-d0faa2eacf41";
+// Projet EAS courant (@yoss7/suivibaby), lu dans app.json : l'ancien identifiant
+// codé en dur datait d'avant le transfert du projet vers le compte yoss7.
+const PROJECT_ID: string | undefined =
+  Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
 
 /** Cache du token courant pour toggle enabled sans re-fetch */
 let cachedToken: string | null = null;
+
+// Enfant affiché par le widget (setWidgetChild) : souhaité, et dernier écrit.
+let widgetChildTimer: ReturnType<typeof setTimeout> | null = null;
+let desiredWidgetChildId: string | null = null;
+let lastWidgetChildId: string | null = null;
+/** Permission de notification accordée lors du dernier getExpoPushToken. */
+let notificationsGranted = false;
+
+/**
+ * Capacité « widget temps réel » de cette version de l'app, lue par le
+ * serveur avant d'envoyer les données du widget (plan-temps-reel.md, E3) :
+ * 1 = récepteur natif Android présent ; iOS : 0 tant que E7 n'est pas livré.
+ */
+const WIDGET_CAP = Platform.OS === "android" ? 1 : 0;
+
+function deviceTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Obtient le push token Expo.
@@ -36,10 +62,14 @@ async function getExpoPushToken(): Promise<string | null> {
   if (Constants.appOwnership === "expo") return null;
 
   const { status } = await Notifications.getPermissionsAsync();
-  if (status !== "granted") {
+  notificationsGranted = status === "granted";
+  if (!notificationsGranted) {
     const { status: newStatus } =
       await Notifications.requestPermissionsAsync();
-    if (newStatus !== "granted") return null;
+    notificationsGranted = newStatus === "granted";
+    // Android : le jeton sert aussi aux données du widget (messages sans
+    // notification visible), qui n'ont pas besoin de la permission.
+    if (!notificationsGranted && Platform.OS !== "android") return null;
   }
 
   // Android nécessite un channel
@@ -54,6 +84,14 @@ async function getExpoPushToken(): Promise<string | null> {
     });
   }
 
+  if (!PROJECT_ID) {
+    // Sans projet, aucun jeton : ni rappels ni widget en temps réel. À voir.
+    captureServiceError(new Error("EAS projectId missing in app config"), {
+      service: "pushToken",
+      operation: "getExpoPushToken",
+    });
+    return null;
+  }
   const tokenData = await Notifications.getExpoPushTokenAsync({
     projectId: PROJECT_ID,
   });
@@ -75,18 +113,40 @@ export async function registerPushToken(userId: string): Promise<void> {
     const docId = token.replace(/[^a-zA-Z0-9]/g, "_");
     const docRef = doc(db, COLLECTION, docId);
 
+    // Le réglage « notifications » de l'utilisateur ne doit pas être remis à
+    // true à chaque connexion : on ne le pose qu'à la création (ou à la
+    // reprise du jeton par un autre compte, dont le doc n'est pas lisible).
+    let ownExisting = false;
+    try {
+      const snap = await getDoc(docRef);
+      ownExisting = snap.exists() && snap.data().userId === userId;
+    } catch (error) {
+      // permission-denied : le doc appartient à un autre compte (reprise
+      // attendue). Toute autre erreur : on ne touche pas au réglage.
+      const code = (error as { code?: string } | null)?.code;
+      ownExisting = code !== "permission-denied";
+      if (ownExisting) captureServiceError(error, { service: "pushToken", operation: "readTokenDoc" });
+    }
+
     await setDoc(
       docRef,
       {
         userId,
         token,
         platform: Platform.OS as "ios" | "android",
-        enabled: true,
-        registeredAt: Timestamp.now(),
+        ...(ownExisting ? {} : { enabled: notificationsGranted, registeredAt: Timestamp.now() }),
         lastUsedAt: Timestamp.now(),
+        // Widget temps réel (E3) : fuseau pour le « jour », version et capacité.
+        tz: deviceTimeZone(),
+        appVersion: Constants.expoConfig?.version ?? null,
+        widgetCap: WIDGET_CAP,
+        widgetPush: true,
+        // Enfant affiché par le widget, s'il est déjà connu (sinon posé par setWidgetChild).
+        ...(desiredWidgetChildId ? { widgetChildId: desiredWidgetChildId } : {}),
       },
       { merge: true },
     );
+    lastWidgetChildId = desiredWidgetChildId;
   } catch (error) {
     console.error("Erreur registerPushToken:", error);
     captureServiceError(error, { service: "pushToken", operation: "registerPushToken" });
@@ -106,6 +166,11 @@ export async function removePushTokens(userId: string): Promise<void> {
     const snapshot = await getDocs(q);
 
     await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
+    // Docs supprimés : le prochain enregistrement doit réécrire l'enfant du widget.
+    if (widgetChildTimer) clearTimeout(widgetChildTimer);
+    widgetChildTimer = null;
+    lastWidgetChildId = null;
+    desiredWidgetChildId = null;
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
@@ -160,4 +225,28 @@ export async function isDevicePushEnabled(): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+
+/**
+ * Enfant affiché par le widget de cet appareil : le serveur n'envoie à
+ * l'appareil que les données de cet enfant. Anti-rebond de 3 s (changement
+ * de bébé rapide), sans effet tant que le jeton n'est pas connu.
+ */
+export function setWidgetChild(childId: string): void {
+  desiredWidgetChildId = childId;
+  if (childId === lastWidgetChildId) return;
+  if (widgetChildTimer) clearTimeout(widgetChildTimer);
+  widgetChildTimer = setTimeout(() => {
+    widgetChildTimer = null;
+    const docId = getTokenDocId();
+    // Jeton pas encore enregistré : registerPushToken écrira l'enfant souhaité.
+    // Déjà écrit entre-temps (par registerPushToken) : rien à faire.
+    if (!docId || childId === lastWidgetChildId) return;
+    lastWidgetChildId = childId;
+    updateDoc(doc(db, COLLECTION, docId), { widgetChildId: childId }).catch((error) => {
+      lastWidgetChildId = null;
+      captureServiceError(error, { service: "pushToken", operation: "setWidgetChild" });
+    });
+  }, 3000);
 }

@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { onSnapshot } from "firebase/firestore";
+import { AppState } from "react-native";
 import * as offlineQueue from "@/services/offlineQueueService";
 import {
   ajouterEvenement,
@@ -30,7 +31,11 @@ jest.mock("@/config/firebase", () => ({
 const mockCallable = jest.fn();
 (httpsCallable as jest.Mock).mockReturnValue(mockCallable);
 
+const setAppState = (state: string) =>
+  Object.defineProperty(AppState, "currentState", { value: state, configurable: true, writable: true });
+
 beforeEach(() => {
+  setAppState("active");
   jest.clearAllMocks();
   (httpsCallable as jest.Mock).mockReturnValue(mockCallable);
   (offlineQueue.isOnline as jest.Mock).mockResolvedValue(true);
@@ -251,6 +256,35 @@ describe("eventsService", () => {
         expect.objectContaining({ id: "cached1" }),
       ]);
 
+      jest.useRealTimers();
+    });
+
+    it("app hors premier plan : le cache est livré tout de suite (minuteries suspendues)", () => {
+      setAppState("background");
+      const callback = jest.fn();
+      ecouterEvenements("child1", callback, { type: "activite", waitForServer: true });
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+      snapshotCallback(snapshot([{ id: "cached1", childId: "child1", type: "activite" }], true));
+      expect(callback).toHaveBeenCalledWith([expect.objectContaining({ id: "cached1" })]);
+    });
+
+    it("app mise en arrière-plan pendant l'attente : le cache part aussitôt", () => {
+      jest.useFakeTimers();
+      const listeners: ((s: string) => void)[] = [];
+      const spy = jest.spyOn(AppState, "addEventListener").mockImplementation(((_: string, fn: (s: string) => void) => {
+        listeners.push(fn);
+        return { remove: jest.fn() };
+      }) as never);
+      const callback = jest.fn();
+      ecouterEvenements("child1", callback, { type: "activite", waitForServer: true });
+      const snapshotCallback = (onSnapshot as jest.Mock).mock.calls[0][2];
+      snapshotCallback(snapshot([{ id: "cached1", childId: "child1", type: "activite" }], true));
+      expect(callback).not.toHaveBeenCalled();
+      listeners.forEach((fn) => fn("background"));
+      expect(callback).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(800);
+      expect(callback).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
       jest.useRealTimers();
     });
 

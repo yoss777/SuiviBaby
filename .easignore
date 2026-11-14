@@ -61,3 +61,6 @@ app-example
 
 # Store service account keys (eas submit), never uploaded to EAS Build
 secrets/
+
+# Local Expo modules: Gradle build output
+modules/*/android/build/

@@ -1,5 +1,7 @@
-// Indicateur compact « Tétée en cours » de l'Accueil : visible dès qu'un
-// brouillon de chrono tétée existe pour l'enfant actif ; un appui rouvre la
+// Indicateur compact « Tétée en cours » de l'Accueil : visible dès qu'une
+// tétée est chronométrée pour l'enfant actif, sur ce téléphone ou sur celui
+// d'un autre aidant (document partagé du foyer, suivi en temps réel), comme
+// un sommeil ou une promenade en cours ; un appui rouvre la
 // feuille Repas en Tétée, qui reprend le brouillon. Le brouillon est lu via
 // l'API publique de nursingTimer (format inchangé). Le composant porte seul son
 // minuteur : l'Accueil ne se re-rend pas pendant la tétée.
@@ -12,6 +14,7 @@ import {
   isNursingDraftStale,
   loadNursingTimer,
   type NursingTimerState,
+  subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
 import {
   getCategoryColors,
@@ -72,6 +75,21 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
     });
     return () => sub.remove();
   }, [reload]);
+
+  // Tétée lancée, mise en pause ou terminée sur un autre appareil du foyer.
+  useEffect(() => {
+    if (!childId) return;
+    let active = true;
+    const unsubscribe = subscribeNursingTimer(childId, (state) => {
+      if (!active) return;
+      setDraft(state);
+      setNow(Date.now());
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [childId]);
 
   const running = draft?.runningSide != null;
   const hasDraft = draft != null;

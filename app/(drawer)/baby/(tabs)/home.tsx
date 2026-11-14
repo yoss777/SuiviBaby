@@ -61,6 +61,7 @@ import { useFocusEffect } from "expo-router/react-navigation";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
+import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -81,6 +82,8 @@ import { HomeMilestoneCelebration } from "@/components/suivibaby/home/HomeMilest
 import { homeStyles as styles } from "@/components/suivibaby/home/styles";
 import { startLoop } from "@/utils/motion";
 import { pressedOpacity, usePressRipple } from "@/components/ui/pressFeedback";
+import { usePremium } from "@/contexts/PremiumContext";
+import { useNowWidgetSync } from "@/hooks/useNowWidgetSync";
 
 // ============================================
 // SKELETON LOADING (P1)
@@ -684,6 +687,99 @@ export default function HomeDashboard() {
     return isValidDate(start) ? start.getTime() : undefined;
   }, [promenadeEnCours]);
 
+  // Widget d'écran d'accueil « Bébé maintenant » : mêmes données que l'Accueil.
+  const { isPremium } = usePremium();
+  // Fil du jour du widget : tout ce qui n’est ni repas ni change (jalons compris, comme le fil du home).
+  const widgetOthers = useMemo(
+    () => [
+      ...data.vitamines,
+      ...data.medicaments,
+      ...data.temperatures,
+      ...data.symptomes,
+      ...data.vaccins,
+      ...data.bains,
+      ...data.nettoyagesNez,
+      ...data.pompages,
+      ...data.croissances,
+      ...data.activites,
+      ...data.sommeils,
+      ...data.jalons,
+    ],
+    [
+      data.vitamines,
+      data.medicaments,
+      data.temperatures,
+      data.symptomes,
+      data.vaccins,
+      data.bains,
+      data.nettoyagesNez,
+      data.pompages,
+      data.croissances,
+      data.activites,
+      data.sommeils,
+      data.jalons,
+    ],
+  );
+  // Dernier repas / change sur tout l'historique (fiche de l'enfant, tenue par
+  // le serveur) : null = aucun jamais, absent = inconnu (cache, ancienne fiche).
+  const childLastEventAt = (activeChild as { lastEventAt?: Record<string, unknown> } | null)?.lastEventAt;
+  const widgetLastEventAt = useMemo(() => {
+    if (!childLastEventAt || typeof childLastEventAt !== "object") return undefined;
+    const ms = (v: unknown): number | null | undefined => {
+      if (v === null) return null;
+      if (v === undefined) return undefined;
+      const d = toDate(v as any);
+      return isValidDate(d) ? d.getTime() : undefined;
+    };
+    return { repas: ms(childLastEventAt.repas), changes: ms(childLastEventAt.changes) };
+  }, [childLastEventAt]);
+  const widgetParams = useMemo(
+    () => ({
+      childId: activeChild?.id,
+      childName: activeChild?.name ?? "",
+      ready: isDataLoaded,
+      toMs: (value: unknown) => toDate(value as any).getTime(),
+      tetees: data.tetees,
+      biberons: data.biberons,
+      solides: data.solides,
+      mictions: data.mictions,
+      selles: data.selles,
+      others: widgetOthers,
+      sleepStartMs: sleepStartTs,
+      sleepIsNap: sommeilEnCours?.isNap,
+      sleepChildId: (sommeilEnCours as { childId?: string } | undefined)?.childId,
+      walkChildId: (promenadeEnCours as { childId?: string } | undefined)?.childId,
+      walkStartMs: promenadeStartTs,
+      sleepTotalMinutes: todayStats.sommeil.totalMinutes,
+      lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
+      lastEventAt: widgetLastEventAt,
+      isPremium,
+      reminders: { enabled: remindersEnabled, thresholds: reminderThresholds },
+    }),
+    [
+      activeChild?.id,
+      activeChild?.name,
+      isDataLoaded,
+      data.tetees,
+      data.biberons,
+      data.solides,
+      data.mictions,
+      data.selles,
+      widgetOthers,
+      sleepStartTs,
+      sommeilEnCours,
+      promenadeEnCours,
+      promenadeStartTs,
+      todayStats.sommeil.totalMinutes,
+      todayStats.meals.lastAbsoluteTimestamp,
+      widgetLastEventAt,
+      isPremium,
+      remindersEnabled,
+      reminderThresholds,
+    ],
+  );
+  useNowWidgetSync(widgetParams);
+
   // Shared pulse animation for all active widgets (sleep + promenade sync)
   const sharedPulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -1096,6 +1192,30 @@ export default function HomeDashboard() {
       mealType: "tetee",
     });
   }, [openSheetRaw]);
+
+  // Appui sur une zone du widget : formulaire de la catégorie.
+  const openFromWidget = useCallback(
+    (action: WidgetDeepLinkAction) => {
+      if (action === "diaper") {
+        openSheetRaw({ ownerId: headerOwnerId.current, formType: "diapers", diapersType: "miction" });
+      } else if (action === "nursing") {
+        handleResumeNursing();
+      } else {
+        // Même type de repas que le dernier noté (tétée, biberon ou solide).
+        const latest = (list: { date: unknown }[]) =>
+          list.reduce((max, e) => Math.max(max, toDate(e.date as any).getTime() || 0), 0);
+        const candidates = [
+          ["tetee", latest(data.tetees)],
+          ["biberon", latest(data.biberons)],
+          ["solide", latest(data.solides)],
+        ] as const;
+        const [mealType] = candidates.reduce((best, c) => (c[1] > best[1] ? c : best), ["biberon", 0] as const);
+        openSheetRaw({ ownerId: headerOwnerId.current, formType: "meals", mealType });
+      }
+    },
+    [openSheetRaw, handleResumeNursing, data.tetees, data.biberons, data.solides],
+  );
+  useWidgetDeepLink({ ready: isDataLoaded, open: openFromWidget });
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {

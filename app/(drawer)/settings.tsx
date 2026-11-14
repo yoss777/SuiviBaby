@@ -502,6 +502,16 @@ export default function SettingsScreen() {
         },
       },
       {
+        id: "widget",
+        icon: "apps-outline",
+        label: "Widget",
+        description: "Ajouter « Bébé maintenant » à l'écran d'accueil",
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          guardedPush("/settings/widget");
+        },
+      },
+      {
         id: "export",
         icon: "cloud-download-outline",
         label: "Export",

@@ -161,6 +161,10 @@ async function sendPushWithTickets(client, messages) {
   let failed = 0;
   let chunkErrors = 0;
   let firstError = null;
+  // Tickets en erreur par code (InvalidCredentials, MessageTooBig…) : jamais
+  // avalés, une ligne de journal en erreur les rend visibles et alertables.
+  const errorsByCode = {};
+  let firstTicketMessage = null;
   for (const chunk of client.chunkPushNotifications(messages)) {
     // Un lot qui échoue ne doit pas faire oublier les lots déjà livrés : sinon
     // l'historique n'est pas écrit et le prochain passage renotifie ces appareils.
@@ -177,15 +181,24 @@ async function sendPushWithTickets(client, messages) {
       const ticket = Array.isArray(tickets) ? tickets[i] : undefined;
       if (ticket?.status === "error") {
         failed += 1;
+        const code = ticket.details?.error || "unknown";
+        errorsByCode[code] = (errorsByCode[code] || 0) + 1;
+        firstTicketMessage = firstTicketMessage || ticket.message || null;
         if (ticket.details?.error === "DeviceNotRegistered") dead.add(message.to);
       } else {
         delivered += 1;
       }
     });
   }
+  // DeviceNotRegistered seul est attendu (appli désinstallée) ; tout autre
+  // code est une panne (configuration, quota, taille) à voir tout de suite.
+  const unexpected = Object.keys(errorsByCode).filter((c) => c !== "DeviceNotRegistered");
+  if (unexpected.length > 0) {
+    logger.error("sendPushWithTickets: tickets in error", { errorsByCode, firstTicketMessage, delivered, failed });
+  }
   // Rien n'est parti : l'erreur remonte (nouvel essai au passage suivant).
   if (firstError && delivered === 0) throw firstError;
-  return { delivered, failed, dead, chunkErrors };
+  return { delivered, failed, dead, chunkErrors, errorsByCode };
 }
 
 /** Delete the device_tokens documents whose token is dead. */

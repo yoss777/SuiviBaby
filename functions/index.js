@@ -100,3 +100,9 @@ exports.mirrorLegacyPhotoUpload = mediaPhotos.mirrorLegacyPhotoUpload;
 
 const sharedPhotos = require("./src/shared/photos");
 exports.photoRefToPath = sharedPhotos.photoRefToPath;
+
+// Widget « Bébé maintenant » en temps réel (plan-temps-reel.md, E5) :
+// désactivé tant que app_config/widgetPush.enabled n'est pas true.
+const widgetFanout = require("./src/widget/fanout");
+exports.onWidgetEventWrite = widgetFanout.onWidgetEventWrite;
+exports.onWidgetLiveWrite = widgetFanout.onWidgetLiveWrite;

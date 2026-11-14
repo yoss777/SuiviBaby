@@ -1,0 +1,40 @@
+// Récepteur natif des données du widget envoyées par le serveur (temps réel,
+// docs/strategie/widget/design/plan-temps-reel.md, étape E4).
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.widgetpush'
+version = '1.0.0'
+
+expoModule {
+  canBePublished false
+}
+
+android {
+  namespace "expo.modules.widgetpush"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+}
+
+def expoNotificationsVersion = new groovy.json.JsonSlurper()
+  .parse(new File(rootDir, "../node_modules/expo-notifications/package.json")).version
+
+dependencies {
+  // Sous-classe d'ExpoFirebaseMessagingService : les messages qui ne sont pas
+  // pour le widget suivent le chemin d'Expo (rappels, notifications).
+  // Expo 58 fournit expo-notifications précompilé (local-maven-repo) : on
+  // compile contre la même version que l'app, qui l'embarque déjà.
+  compileOnly "host.exp.exponent:expo.modules.notifications:${expoNotificationsVersion}"
+  // Même version que celle d'expo-notifications (build.gradle l. 43).
+  implementation 'com.google.firebase:firebase-messaging:25.0.1'
+
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20250517'
+}
