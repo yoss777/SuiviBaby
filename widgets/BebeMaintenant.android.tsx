@@ -236,7 +236,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const nativeLevel = (environment as WidgetEnvironment & { nativeLevel?: number }).nativeLevel ?? 2;
   // Heure saisie dans le futur (repas noté à 15:45 à 15:44) : on part de maintenant,
   // sinon l'horloge native affiche « 59 min ».
-  const elapsed = (rawStartMs: number, color: string, sp: number, startMs = Math.min(rawStartMs, now)) =>
+  // L'horloge native arrondit le début à la minute la plus proche : un début à
+  // 06:36:40 devenait 06:37, d'où « 59 min » jusqu'à 06:37. On l'envoie déjà
+  // arrondi à la minute inférieure (jamais dans le futur).
+  const elapsed = (
+    rawStartMs: number,
+    color: string,
+    sp: number,
+    startMs = Math.floor(Math.min(rawStartMs, now) / 60000) * 60000,
+  ) =>
     nativeLevel >= 3 ? (
       <Elapsed startMs={startMs} pattern={now - startMs < HOUR ? "m' min'" : "H'h'mm"} color={color} fontSize={sp} />
     ) : (
