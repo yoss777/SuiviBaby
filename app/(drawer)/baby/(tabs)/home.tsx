@@ -754,6 +754,8 @@ export default function HomeDashboard() {
       lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
       lastEventAt: widgetLastEventAt,
       isPremium,
+      // Droits pas encore connus : comme avant (vrai), le widget se corrige au chargement.
+      canWrite: canManageContent || !canManageKnown,
       reminders: { enabled: remindersEnabled, thresholds: reminderThresholds },
     }),
     [
@@ -774,6 +776,8 @@ export default function HomeDashboard() {
       todayStats.meals.lastAbsoluteTimestamp,
       widgetLastEventAt,
       isPremium,
+      canManageContent,
+      canManageKnown,
       remindersEnabled,
       reminderThresholds,
     ],

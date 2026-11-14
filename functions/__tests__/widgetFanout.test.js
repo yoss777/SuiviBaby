@@ -108,6 +108,14 @@ describe("fanOutWidget", () => {
     expect(mum.alerts).toEqual({});
   });
 
+  it("droit de saisie : un Proche (contributor) reçoit canWrite=false", async () => {
+    memoryStore(seed({ "children/c1/access/dad": { role: "contributor" } }));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    const msgs = pushed();
+    expect(msgs.find((m) => m.to.endsWith("[m1]")).data.p.canWrite).toBe(true);
+    expect(msgs.find((m) => m.to.endsWith("[d1]")).data.p.canWrite).toBe(false);
+  });
+
   it("interrupteur : rien sans app_config/widgetPush.enabled, et liste de bêta respectée", async () => {
     memoryStore(seed({ "app_config/widgetPush": { enabled: false } }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: false });

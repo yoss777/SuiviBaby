@@ -54,7 +54,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
   // Appui : la tétée en cours ou le formulaire repas (hooks/useWidgetDeepLink.ts).
   const child = props.childId ? `&child=${encodeURIComponent(props.childId)}` : "";
-  const url = `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
+  // Proche (lecture seule) : l'appui ouvre l'Accueil, sans formulaire.
+  const url =
+    props.canWrite === false
+      ? "suivibaby:///baby/home"
+      : `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
   const bg = containerBackground(C.bg, "widget");
   const far = new Date(now + 24 * 3600 * 1000);
   // Compteurs d'un jour passé (minuit franchi sans nouvel envoi) : masqués.
