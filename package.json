@@ -87,7 +87,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
-    "@firebase/rules-unit-testing": "^5.0.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@react-native/jest-preset": "^0.88.1",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
