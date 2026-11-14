@@ -114,7 +114,13 @@ module.exports = ({ config: expoConfig }) => {
 
   const plugins = [...(expoConfig.plugins || [])];
   if (nativeAppCheckConfigured) {
-    plugins.push("@react-native-firebase/app", "@react-native-firebase/app-check");
+    plugins.push(
+      "@react-native-firebase/app",
+      "@react-native-firebase/app-check",
+      // Gabarit iOS 27 : les plugins officiels ne trouvent plus où appeler
+      // FirebaseApp.configure() (voir le fichier).
+      "./plugins/withFirebaseAppDelegate",
+    );
   }
 
   return {
