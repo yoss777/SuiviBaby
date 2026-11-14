@@ -246,11 +246,11 @@
               "displayName": "Bébé maintenant",
               "description": "Tétée, sommeil ou promenade en cours, et dernier repas.",
               "ios": {
-                "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular", "accessoryInline"],
+                "supportedFamilies": ["systemSmall", "systemMedium", "systemLarge", "accessoryRectangular", "accessoryInline"],
                 "initialLayout": "widgets/BebeMaintenant.ios.tsx"
               },
               "android": {
-                "targetCellWidth": 2,
+                "targetCellWidth": 3,
                 "targetCellHeight": 2,
                 "minWidth": 110,
                 "minHeight": 110,
