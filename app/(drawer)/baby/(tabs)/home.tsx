@@ -30,7 +30,7 @@ import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
 import { softDeleteNow } from "@/utils/softDeleteNow";
-import { useCanManageContent } from "@/hooks/useCanManageContent";
+import { useCanManageContentState } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
 import { useMergedOptimisticEvents } from "@/hooks/useMergedOptimisticEvents";
@@ -219,7 +219,7 @@ export default function HomeDashboard() {
   const [loadError, setLoadError] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dismissedInsightIds, setDismissedInsightIds] = useState<Set<string>>(new Set());
-  const canManageContent = useCanManageContent();
+  const { canManage: canManageContent, known: canManageKnown } = useCanManageContentState();
 
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const lastBackPressRef = useRef(0);
@@ -1196,6 +1196,11 @@ export default function HomeDashboard() {
   // Appui sur une zone du widget : formulaire de la catégorie.
   const openFromWidget = useCallback(
     (action: WidgetDeepLinkAction) => {
+      // Proche (lecture seule) : pas de formulaire, l'Accueil suffit.
+      if (!canManageContent) {
+        showToast("Seuls les parents peuvent faire une saisie");
+        return;
+      }
       if (action === "diaper") {
         openSheetRaw({ ownerId: headerOwnerId.current, formType: "diapers", diapersType: "miction" });
       } else if (action === "nursing") {
@@ -1213,9 +1218,9 @@ export default function HomeDashboard() {
         openSheetRaw({ ownerId: headerOwnerId.current, formType: "meals", mealType });
       }
     },
-    [openSheetRaw, handleResumeNursing, data.tetees, data.biberons, data.solides],
+    [canManageContent, showToast, openSheetRaw, handleResumeNursing, data.tetees, data.biberons, data.solides],
   );
-  useWidgetDeepLink({ ready: isDataLoaded, open: openFromWidget });
+  useWidgetDeepLink({ ready: isDataLoaded && canManageKnown, open: openFromWidget });
 
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback(() => {

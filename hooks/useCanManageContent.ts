@@ -9,10 +9,18 @@ import { canManageEvents } from "@/utils/eventPermissions";
 import { getPermissionsCache } from "@/services/userPreferencesCache";
 
 export function useCanManageContent(): boolean {
+  return useCanManageContentState().canManage;
+}
+
+/**
+ * Même droit, avec `known` : faux tant que les droits chargent sans valeur en
+ * cache (un lien du widget attend la réponse au lieu de refuser à tort).
+ */
+export function useCanManageContentState(): { canManage: boolean; known: boolean } {
   const { firebaseUser } = useAuth();
   const { activeChild } = useBaby();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
   const cached = getPermissionsCache();
-  if (permissions.loading && cached) return cached.canManageContent;
-  return canManageEvents(permissions.role);
+  if (permissions.loading && cached) return { canManage: cached.canManageContent, known: true };
+  return { canManage: canManageEvents(permissions.role), known: !permissions.loading };
 }
