@@ -30,32 +30,36 @@ describe("zonedEnv", () => {
 
 describe("otherEventLabel / otherEventIcon", () => {
   test.each([
-    [{ type: "vitamine" }, "Vitamines", "💊"],
-    [{ type: "vitamine", nomVitamine: "Vitamine K" }, "Vitamine K", "💊"],
-    [{ type: "medicament", nomMedicament: "Doliprane" }, "Doliprane", "💊"],
-    [{ type: "medicament" }, "Médicament", "💊"],
-    [{ type: "temperature", valeur: 37.84 }, "Temp. 37,8 °C", "🌡️"],
-    [{ type: "temperature" }, "Température", "🌡️"],
-    [{ type: "symptome" }, "Symptôme", "🤒"],
-    [{ type: "vaccin", nomVaccin: "ROR" }, "Vaccin ROR", "💉"],
-    [{ type: "vaccin" }, "Vaccin", "💉"],
-    [{ type: "bain" }, "Bain", "🛁"],
-    [{ type: "nettoyage_nez" }, "Soin du nez", "👃"],
-    [{ type: "pompage" }, "Tire-lait", "🥛"],
-    [{ type: "croissance" }, "Mesures", "📏"],
-    [{ type: "activite", typeActivite: "lecture", duree: 15 }, "Lecture 15 min", "📖"],
-    [{ type: "activite", typeActivite: "inconnue" }, "Activité", "🧸"],
-    [{ type: "sommeil", isNap: false, heureFin: 1, duree: 485 }, "Nuit 8h05", "🌙"],
-    [{ type: "sommeil", isNap: true, heureFin: 1 }, "Sieste", "😴"],
+    [{ type: "vitamine" }, "Vitamines", "medicament"],
+    [{ type: "vitamine", nomVitamine: "Vitamine K" }, "Vitamine K", "medicament"],
+    [{ type: "medicament", nomMedicament: "Doliprane" }, "Doliprane", "medicament"],
+    [{ type: "medicament" }, "Médicament", "medicament"],
+    [{ type: "temperature", valeur: 37.84 }, "Temp. 37,8 °C", "temperature"],
+    [{ type: "temperature" }, "Température", "temperature"],
+    [{ type: "symptome" }, "Symptôme", "symptome"],
+    [{ type: "vaccin", nomVaccin: "ROR" }, "Vaccin ROR", "vaccin"],
+    [{ type: "vaccin" }, "Vaccin", "vaccin"],
+    [{ type: "bain" }, "Bain", "bain"],
+    [{ type: "nettoyage_nez" }, "Soin du nez", "nez"],
+    [{ type: "pompage" }, "Tire-lait", "pompage"],
+    [{ type: "croissance" }, "Mesures", "croissance"],
+    [{ type: "activite", typeActivite: "lecture", duree: 15 }, "Lecture 15 min", "activite"],
+    [{ type: "activite", typeActivite: "inconnue" }, "Activité", "activite"],
+    [{ type: "sommeil", isNap: false, heureFin: 1, duree: 485 }, "Nuit 8h05", "nuit"],
+    [{ type: "sommeil", isNap: true, heureFin: 1 }, "Sieste", "sieste"],
+    [{ type: "sommeil", isNap: false }, "Nuit · en cours", "nuit"],
+    [{ type: "activite", typeActivite: "promenade", heureDebut: 1 }, "Promenade · en cours", "activite"],
+    [{ type: "jalon", typeJalon: "humeur", humeur: 4 }, "😄", "jalon"],
+    [{ type: "jalon", typeJalon: "humeur" }, "Humeur du jour", "jalon"],
+    [{ type: "jalon", typeJalon: "dent" }, "Nouvelle dent", "jalon"],
+    [{ type: "jalon", typeJalon: "autre", titre: "Premier bain chez mamie" }, "Autre moment", "jalon"],
   ])("%j", (e, label, icon) => {
     expect(w.otherEventLabel(e)).toBe(label);
     expect(w.otherEventIcon(e)).toBe(icon);
   });
 
-  test("sessions en cours et jalons : absents du fil", () => {
-    expect(w.otherEventLabel({ type: "sommeil" })).toBeNull();
-    expect(w.otherEventLabel({ type: "activite", heureDebut: 1 })).toBeNull();
-    expect(w.otherEventLabel({ type: "jalon" })).toBeNull();
+  test("type inconnu : absent du fil", () => {
+    expect(w.otherEventLabel({ type: "inconnu" })).toBeNull();
   });
 });
 
@@ -98,7 +102,7 @@ describe("assemble + build (fuseau du serveur)", () => {
       lastDiaperMs: at(15),
       sleepMinutes: 75,
     });
-    expect(input.lastNursing).toEqual({ leftMinutes: 12, rightMinutes: 0 });
+    expect(input.lastNursing).toEqual({ leftMinutes: 12, rightMinutes: 0, left: false, right: false });
 
     const props = w.buildNowWidgetProps(input, paris);
     expect(props.lastMealKind).toBe("solide");
@@ -107,9 +111,11 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(props.dayStartMs).toBe(Date.UTC(2026, 10, 12, 23, 0));
     expect(props.alerts).toEqual({ mealAtMs: at(15), diaperAtMs: at(19) });
     expect(props.live).toMatchObject({ kind: "sleep", nap: true, sinceMs: at(16), sinceLabel: "depuis 16:00" });
-    expect(props.recent[0]).toEqual({ ms: at(15), kind: "diaper", icon: "💩", label: "Change · selle" });
+    expect(props.recent[0]).toEqual({ ms: at(15), kind: "diaper", icon: "selle", label: "Change · selle" });
     expect(props.recent.map((e) => e.label)).not.toContain(undefined);
-    expect(props.recent).toHaveLength(8);
+    // 10 événements dans les 24 h (jalon compris, comme le home) : les 7 plus récents.
+    expect(props.recent).toHaveLength(7);
+    expect(props.recent.map((e) => e.label)).toContain("Moment");
   });
 
   test("tétée en cours et promenade : deux sessions, la tétée d'abord", () => {

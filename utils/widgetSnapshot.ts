@@ -20,6 +20,7 @@ export {
   otherEventLabel,
   toNativeWidgetProps,
   WIDGET_RECENT_MAX,
+  WIDGET_RECENT_WINDOW_MS,
   zonedEnv,
 } from "@/functions/shared/widget";
 export type {
@@ -31,6 +32,7 @@ export type {
   WidgetDay,
   WidgetEnv,
   WidgetEvent,
+  WidgetEventIcon,
   WidgetLive,
   WidgetLiveKind,
   WidgetNursingState,

@@ -76,12 +76,12 @@ describe("buildNowWidgetProps", () => {
     expect(buildNowWidgetProps(base()).lives).toEqual([]);
   });
 
-  it("événements du jour : du plus récent au plus ancien, 15 au plus", () => {
+  it("fil : comme le home, du plus récent au plus ancien, 7 au plus", () => {
     const recent = Array.from({ length: 20 }, (_, i) => ({ ms: T0 - min(i * 10), kind: "meal" as const, label: `e${i}` }));
     const p = buildNowWidgetProps(base({ recent: [...recent].reverse() }));
-    expect(p.recent).toHaveLength(15);
+    expect(p.recent).toHaveLength(7);
     expect(p.recent[0].label).toBe("e0");
-    expect(p.recent[14].label).toBe("e14");
+    expect(p.recent[6].label).toBe("e6");
     expect(buildNowWidgetProps(base()).recent).toEqual([]);
   });
 
@@ -112,6 +112,9 @@ describe("aides", () => {
     expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 8 })).toBe("G");
     expect(nextSideFrom({ leftMinutes: 10, rightMinutes: 8 })).toBeNull();
     expect(nextSideFrom(null)).toBeNull();
+    // Tétée très courte : côté noté, durée arrondie à 0 min.
+    expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 0, left: true, right: false })).toBe("D");
+    expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 0, left: true, right: true })).toBeNull();
   });
 
   it("formatDuration et countGroups", () => {
@@ -157,16 +160,17 @@ describe("otherEventLabel (fil du jour)", () => {
     expect(otherEventLabel({ type: "nettoyage_nez" })).toBe("Soin du nez");
   });
 
-  it("montre les sommeils et activités finis, pas ceux en cours (déjà en tuile)", () => {
+  it("sommeils et activités : finis avec leur durée, en cours marqués (comme le home)", () => {
     expect(otherEventLabel({ type: "sommeil", isNap: true, heureFin: 1, duree: 80 })).toBe("Sieste 1h20");
     expect(otherEventLabel({ type: "sommeil", isNap: false, heureFin: 1, duree: 45 })).toBe("Nuit 45 min");
-    expect(otherEventLabel({ type: "sommeil", isNap: true })).toBeNull();
-    expect(otherEventLabel({ type: "activite", typeActivite: "promenade", heureDebut: 1 })).toBeNull();
+    expect(otherEventLabel({ type: "sommeil", isNap: true })).toBe("Sieste · en cours");
+    expect(otherEventLabel({ type: "activite", typeActivite: "promenade", heureDebut: 1 })).toBe("Promenade · en cours");
     expect(otherEventLabel({ type: "activite", typeActivite: "lecture", duree: 10 })).toBe("Lecture 10 min");
   });
 
-  it("ignore les jalons et types inconnus", () => {
-    expect(otherEventLabel({ type: "jalon" })).toBeNull();
+  it("jalons comme le home (humeur en mots, jamais le titre libre) ; types inconnus ignorés", () => {
+    expect(otherEventLabel({ type: "jalon", typeJalon: "humeur", humeur: 2 })).toBe("😐");
+    expect(otherEventLabel({ type: "jalon", typeJalon: "autre", titre: "Chez mamie" })).toBe("Autre moment");
     expect(otherEventLabel({ type: "inconnu" })).toBeNull();
   });
 });
@@ -183,7 +187,7 @@ describe("module partagé app / serveur", () => {
     expect(paris.dayBounds(winter)[0]).toBe(Date.UTC(2026, 10, 12, 23, 0));
   });
 
-  it("assemble les compteurs et le fil avec un emoji par événement", () => {
+  it("assemble les compteurs et le fil avec un pictogramme par événement (24 h glissantes)", () => {
     const env = zonedEnv("Europe/Paris");
     const now = Date.UTC(2026, 10, 13, 17, 0);
     const at = (h: number, m = 0) => Date.UTC(2026, 10, 13, h - 1, m);
@@ -195,8 +199,12 @@ describe("module partagé app / serveur", () => {
         biberons: [{ ms: at(11), typeBiberon: "lait_infantile", quantite: 120 }, { ms: at(12), typeBiberon: "eau", quantite: 30 }],
         solides: [],
         mictions: [{ ms: at(9) }, { ms: at(9, 1) }],
-        selles: [{ ms: Date.UTC(2026, 10, 12, 10) }],
-        others: [{ ms: at(10), type: "vitamine", nomVitamine: "D" }],
+        // Veille : 22:00 dans les 24 h (compté au fil, pas à la journée) ; 11:00, plus de 24 h.
+        selles: [{ ms: Date.UTC(2026, 10, 12, 10) }, { ms: Date.UTC(2026, 10, 12, 21) }],
+        others: [
+          { ms: at(10), type: "vitamine", nomVitamine: "D" },
+          { ms: at(13), type: "jalon", typeJalon: "humeur", humeur: 5 },
+        ],
         sleepTotalMinutes: 90,
         isPremium: false,
         reminders: { enabled: false, repasHours: 0, changesHours: 0 },
@@ -209,7 +217,16 @@ describe("module partagé app / serveur", () => {
     expect(input.day.diapersCount).toBe(1);
     expect(input.lastMeal).toEqual({ ms: at(11), kind: "biberon" });
     expect(input.recent.map((e: { icon: string; label: string }) => `${e.icon} ${e.label}`).sort()).toEqual(
-      ["🍼 Biberon 120 ml", "🍼 Biberon 30 ml", "🤱 Tétée 10 min", "💧 Change · pipi", "💧 Change · pipi", "💊 Vitamine D"].sort(),
+      [
+        "biberon Biberon 120 ml",
+        "biberon Biberon 30 ml",
+        "tetee Tétée 10 min",
+        "miction Change · pipi",
+        "miction Change · pipi",
+        "medicament Vitamine D",
+        "jalon 🥰",
+        "selle Change · selle",
+      ].sort(),
     );
   });
 });

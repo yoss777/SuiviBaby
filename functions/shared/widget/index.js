@@ -20,8 +20,9 @@
 const HOUR = 3600 * 1000;
 const MEAL_GROUP_MS = 30 * 60 * 1000;
 const CHANGE_GROUP_MS = 2 * 60 * 1000;
-/** Nombre maximal d'événements du jour envoyés au widget. */
-const WIDGET_RECENT_MAX = 15;
+/** Fil du jour : comme le home, les 7 derniers événements des dernières 24 h. */
+const WIDGET_RECENT_MAX = 7;
+const WIDGET_RECENT_WINDOW_MS = 24 * HOUR;
 
 // ---------------------------------------------------------------------------
 // Temps local
@@ -86,45 +87,64 @@ function zonedEnv(timeZone) {
 // ---------------------------------------------------------------------------
 // Libellés et icônes du fil du jour
 
-/** Emoji du type d'événement (fil du jour), à côté du libellé : le sens ne tient jamais à la seule icône. */
+/**
+ * Clé du type d'événement (fil du jour) : le widget en tire la couleur de la
+ * pastille, comme la frise de l'Accueil. Le libellé porte toujours le sens.
+ */
 const EVENT_ICON = {
-  tetee: "🤱",
-  biberon: "🍼",
-  solide: "🥣",
-  miction: "💧",
-  selle: "💩",
-  vitamine: "💊",
-  medicament: "💊",
-  temperature: "🌡️",
-  symptome: "🤒",
-  vaccin: "💉",
-  bain: "🛁",
-  nettoyage_nez: "👃",
-  pompage: "🥛",
-  croissance: "📏",
-  activite: "🧸",
-  sieste: "😴",
-  nuit: "🌙",
+  tetee: "tetee",
+  biberon: "biberon",
+  solide: "solide",
+  miction: "miction",
+  selle: "selle",
+  vitamine: "medicament",
+  medicament: "medicament",
+  temperature: "temperature",
+  symptome: "symptome",
+  vaccin: "vaccin",
+  bain: "bain",
+  nettoyage_nez: "nez",
+  pompage: "pompage",
+  croissance: "croissance",
+  activite: "activite",
+  jalon: "jalon",
+  sieste: "sieste",
+  nuit: "nuit",
 };
 
+/** Libellés des activités (ACTIVITY_TYPE_LABELS du home, en court). */
 const ACTIVITY = {
-  tummyTime: ["Tummy time", "🧸"],
-  jeux: ["Jeux", "🧸"],
-  lecture: ["Lecture", "📖"],
-  promenade: ["Promenade", "🌳"],
-  massage: ["Massage", "👐"],
-  musique: ["Musique", "🎵"],
-  eveil: ["Éveil", "🧸"],
-  sortie: ["Sortie", "🌳"],
+  tummyTime: "Tummy time",
+  jeux: "Jeux",
+  lecture: "Lecture",
+  promenade: "Promenade",
+  massage: "Massage",
+  musique: "Musique",
+  eveil: "Éveil",
+  sortie: "Sortie",
 };
+
+/** JALON_TYPE_LABELS du home. « autre » : jamais le titre libre (écran d'accueil, envoi serveur). */
+const JALON = {
+  dent: "Nouvelle dent",
+  pas: "Nouveau pas",
+  sourire: "Nouveau sourire",
+  mot: "Nouveau mot",
+  humeur: "Humeur du jour",
+  photo: "Moment photo",
+  autre: "Autre moment",
+};
+
+/** MOOD_EMOJIS du home (comme le détail de la frise de l'Accueil). */
+const MOOD = { 1: "😢", 2: "😐", 3: "🙂", 4: "😄", 5: "🥰" };
 
 const text = (value) => (typeof value === "string" ? value.trim() : "");
 const minutesLabel = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${pad(m % 60)}` : `${m} min`);
 
 /**
  * Libellé court du fil du jour pour un événement hors repas et changes
- * (« Vitamine D », « Temp. 37,8 °C », « Sieste 1h20 »). null : non affiché
- * (session encore en cours, déjà montrée en tuile ; jalons).
+ * (« Vitamine D », « Temp. 37,8 °C », « Sieste 1h20 », « 😄 » pour une humeur).
+ * null : type inconnu, non affiché.
  */
 function otherEventLabel(e) {
   switch (e.type) {
@@ -152,23 +172,28 @@ function otherEventLabel(e) {
     case "croissance":
       return "Mesures";
     case "activite": {
-      if (e.heureDebut != null && e.heureFin == null) return null;
-      const label = (ACTIVITY[text(e.typeActivite)] || ["Activité"])[0];
+      const label = ACTIVITY[text(e.typeActivite)] || "Activité";
+      if (e.heureDebut != null && e.heureFin == null) return `${label} · en cours`;
       return typeof e.duree === "number" && e.duree > 0 ? `${label} ${minutesLabel(Math.round(e.duree))}` : label;
     }
     case "sommeil": {
-      if (e.heureFin == null) return null;
       const label = e.isNap === false ? "Nuit" : "Sieste";
+      if (e.heureFin == null) return `${label} · en cours`;
       return typeof e.duree === "number" && e.duree > 0 ? `${label} ${minutesLabel(Math.round(e.duree))}` : label;
+    }
+    case "jalon": {
+      const type = text(e.typeJalon);
+      // Humeur : l'emoji seul (choix produit), lu « Humeur … » par TalkBack côté widget.
+      if (type === "humeur" && MOOD[e.humeur]) return MOOD[e.humeur];
+      return JALON[type] || "Moment";
     }
     default:
       return null;
   }
 }
 
-/** Emoji d'un événement hors repas et changes. */
+/** Clé de type (couleur de pastille) d'un événement hors repas et changes. */
 function otherEventIcon(e) {
-  if (e.type === "activite") return (ACTIVITY[text(e.typeActivite)] || [null, EVENT_ICON.activite])[1];
   if (e.type === "sommeil") return e.isNap === false ? EVENT_ICON.nuit : EVENT_ICON.sieste;
   return EVENT_ICON[e.type];
 }
@@ -256,8 +281,10 @@ const MEAL_LABEL = { tetee: "Tétée", biberon: "Biberon", solide: "Repas", autr
 /** Prochain sein, seulement quand il est certain : dernière tétée sur un seul sein. */
 function nextSideFrom(lastNursing) {
   if (!lastNursing) return null;
-  const left = lastNursing.leftMinutes > 0;
-  const right = lastNursing.rightMinutes > 0;
+  // Côté noté (coteGauche/coteDroit) : une tétée de moins de 30 s par sein
+  // est enregistrée sans durée (arrondie à 0 min) mais avec son côté.
+  const left = lastNursing.leftMinutes > 0 || lastNursing.left === true;
+  const right = lastNursing.rightMinutes > 0 || lastNursing.right === true;
   if (left && !right) return "D";
   if (right && !left) return "G";
   return null;
@@ -406,7 +433,7 @@ function assembleNowWidgetInput(src, env = localEnv) {
       const label = otherEventLabel(e);
       return label ? [{ ms: e.ms, kind: "other", icon: otherEventIcon(e), label }] : [];
     }),
-  ].filter((e) => inToday(e.ms));
+  ].filter((e) => e.ms >= now - WIDGET_RECENT_WINDOW_MS);
 
   return {
     childName: src.childName,
@@ -415,7 +442,14 @@ function assembleNowWidgetInput(src, env = localEnv) {
     sleepIsNap: src.sleepIsNap != null ? src.sleepIsNap : null,
     walkStartMs: src.walkStartMs != null ? src.walkStartMs : null,
     lastMeal,
-    lastNursing: lastTetee ? { leftMinutes: lastTetee.dureeGauche || 0, rightMinutes: lastTetee.dureeDroite || 0 } : null,
+    lastNursing: lastTetee
+      ? {
+          leftMinutes: lastTetee.dureeGauche || 0,
+          rightMinutes: lastTetee.dureeDroite || 0,
+          left: lastTetee.coteGauche === true,
+          right: lastTetee.coteDroit === true,
+        }
+      : null,
     day: {
       mealsCount: countGroups(meals.map((m) => m.ms).filter(inToday), MEAL_GROUP_MS),
       bottleMl,
@@ -441,6 +475,7 @@ module.exports = {
   usableNursing,
   sleepMinutesInDay,
   WIDGET_RECENT_MAX,
+  WIDGET_RECENT_WINDOW_MS,
   MEAL_GROUP_MS,
   CHANGE_GROUP_MS,
   EVENT_ICON,

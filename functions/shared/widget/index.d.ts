@@ -32,12 +32,16 @@ export interface WidgetDay {
 }
 
 /** Un événement du jour, pour la liste qui défile (« 🍼 11:57 Biberon 100 ml »). */
+export type WidgetEventIcon =
+  | "tetee" | "biberon" | "solide" | "miction" | "selle" | "medicament" | "temperature" | "symptome"
+  | "vaccin" | "bain" | "nez" | "pompage" | "croissance" | "activite" | "jalon" | "sieste" | "nuit";
+
 export interface WidgetEvent {
   ms: number;
   /** meal / diaper : comptés dans la journée ; other : soins, santé, activités, sommeils finis. */
   kind: "meal" | "diaper" | "other";
-  /** Emoji du type d'événement, toujours accompagné du libellé. */
-  icon?: string;
+  /** Clé du type : couleur de la pastille du fil (le libellé porte le sens). */
+  icon?: WidgetEventIcon;
   label: string;
 }
 
@@ -56,6 +60,8 @@ export interface NowWidgetProps {
   v: 1;
   /** Enfant affiché : distingue deux bébés de même prénom dans l'anti-doublon. */
   childId?: string;
+  /** App seulement : enfant changé, données en chargement (« Mise à jour… »). */
+  loading?: boolean;
   childName: string;
   /** Session principale (tétée > sommeil > promenade). */
   live: WidgetLive | null;
@@ -95,7 +101,7 @@ export interface NowWidgetInput {
   walkStartMs: number | null;
   lastMeal: { ms: number; kind: MealKind } | null;
   /** Dernière tétée : durées par sein (min) pour le prochain sein. */
-  lastNursing: { leftMinutes: number; rightMinutes: number } | null;
+  lastNursing: LastNursing | null;
   day: WidgetDay;
   /** Événements du jour (ordre quelconque) : triés et limités ici. */
   recent?: WidgetEvent[];
@@ -133,19 +139,28 @@ export interface WidgetSource {
   now: number;
 }
 
+/** Fil du jour : 7 événements au plus, sur les dernières 24 h (comme le home). */
 export const WIDGET_RECENT_MAX: number;
+export const WIDGET_RECENT_WINDOW_MS: number;
 export const MEAL_GROUP_MS: number;
 export const CHANGE_GROUP_MS: number;
-export const EVENT_ICON: Record<string, string>;
+export const EVENT_ICON: Record<string, WidgetEventIcon>;
 export const EMPTY_NOW_WIDGET: NowWidgetProps;
 export const EMPTY_NOW_WIDGET_NATIVE: NowWidgetProps;
 export const localEnv: WidgetEnv;
 export function zonedEnv(timeZone: string): WidgetEnv;
 export function otherEventLabel(e: OtherDayEvent): string | null;
-export function otherEventIcon(e: OtherDayEvent): string | undefined;
+export function otherEventIcon(e: OtherDayEvent): WidgetEventIcon | undefined;
 export function toNativeWidgetProps(props: NowWidgetProps): NowWidgetProps;
 export function formatDuration(totalSeconds: number): string;
-export function nextSideFrom(lastNursing: { leftMinutes: number; rightMinutes: number } | null): "G" | "D" | null;
+/** Dernière tétée : durées (min) et côtés notés (une tétée très courte n'a que le côté). */
+export interface LastNursing {
+  leftMinutes: number;
+  rightMinutes: number;
+  left?: boolean;
+  right?: boolean;
+}
+export function nextSideFrom(lastNursing: LastNursing | null): "G" | "D" | null;
 export function buildNowWidgetProps(input: NowWidgetInput, env?: WidgetEnv): NowWidgetProps;
 export function countGroups(timestamps: number[], gapMs: number): number;
 export function assembleNowWidgetInput(src: WidgetSource, env?: WidgetEnv): NowWidgetInput;

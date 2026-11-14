@@ -177,7 +177,7 @@ describe("fanOutWidget", () => {
 
 describe("widgetMessageData", () => {
   it("raccourcit le fil du jour sous la taille limite", () => {
-    const recent = Array.from({ length: 15 }, (_, i) => ({ ms: NOW - i * 60000, kind: "other", icon: "💊", label: "x".repeat(200) }));
+    const recent = Array.from({ length: 15 }, (_, i) => ({ ms: NOW - i * 60000, kind: "other", icon: "medicament", label: "x".repeat(200) }));
     const data = fanout.widgetMessageData("c1", NOW, { v: 1, childName: "Léa", lives: [], recent, alerts: {} });
     expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThanOrEqual(3500);
     expect(data.p.recent.length).toBeLessThan(15);

@@ -35,7 +35,12 @@ import {
 } from "@expo/ui/jetpack-compose/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
 
-import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps, type WidgetLive } from "@/utils/widgetSnapshot";
+import {
+  EMPTY_NOW_WIDGET_NATIVE,
+  type NowWidgetProps,
+  type WidgetEventIcon,
+  type WidgetLive,
+} from "@/utils/widgetSnapshot";
 
 const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) => {
   "widget";
@@ -58,6 +63,27 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     walk: { label: "Promenade", short: "Prom.", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
     meal: { dot: "#E8785A", text: dark ? "#E8785A" : "#A83F23" },
     diaper: { dot: "#5BA4A4", text: dark ? "#5BA4A4" : "#2B6A6A" },
+  };
+  // Pastilles du fil : couleur du type, comme la frise de l'Accueil
+  // (itemColors). Le libellé porte toujours le sens.
+  const TYPE_COLOR: Record<WidgetEventIcon, string> = {
+    tetee: "#D66B8F",
+    biberon: "#E8785A",
+    solide: "#E89A5A",
+    pompage: "#6BA47C",
+    croissance: "#E8C45A",
+    miction: "#5BA4A4",
+    selle: "#A47C5B",
+    medicament: "#5A8BE8",
+    temperature: "#E85A5A",
+    symptome: "#E85A8B",
+    vaccin: "#8B7CB4",
+    bain: "#5AADE8",
+    nez: "#6BA4A4",
+    activite: "#8BC46B",
+    jalon: "#E8A85A",
+    sieste: "#7C6BA4",
+    nuit: "#5A6BA4",
   };
   // Chrono natif Android (défile seul, même app fermée).
   const Chrono = "ChronometerView" as unknown as (p: {
@@ -82,11 +108,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // et l'appui ouvre l'app, comme avant.
   const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours" };
   // Zone cliquable : son lien et son libellé TalkBack.
-  const linkMods = (action: "meal" | "diaper" | "nursing") => [
+  // `say` : ce que TalkBack lit avant l'action (ex. « Dernier repas à 19:37 »).
+  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => [
     createModifier("openUrl", {
       url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`,
     }),
-    semantics({ contentDescription: LINK_LABEL[action] }),
+    semantics({ contentDescription: say ? `${say}. ${LINK_LABEL[action]}` : LINK_LABEL[action] }),
   ];
 
   const clock = (ms: number) => {
@@ -100,6 +127,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   // Rendu à chaque envoi de l'app : l'heure du rendu fait foi pour les rappels.
   const now = Date.now();
+  const DAY = 24 * HOUR;
   const mealLate = props.alerts.mealAtMs != null && now >= props.alerts.mealAtMs;
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
   const lives = props.lives ?? (props.live ? [props.live] : []);
@@ -113,6 +141,45 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       })()
     : 0;
   const dayStale = nextMidnight > 0 && now >= nextMidnight;
+  // Prochain minuit local depuis maintenant (redessin : « hier », « le 11/11 »
+  // restent vrais même la deuxième nuit sans ouvrir l'app).
+  const nowDate = new Date(now);
+  const midnightFromNow = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + 1).getTime();
+  const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime();
+  // Jour d'un « dernier » : « dernier 19:37 », « hier 19:37 », « le 11/11 ».
+  const daysAgo = (ms: number) => {
+    const d = new Date(ms);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return Math.round((todayStart - start) / DAY);
+  };
+  const ddmm = (ms: number) => {
+    const d = new Date(ms);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  // Largeur estimée d'un texte en 12 sp (Roboto) : chiffres 6,9 dp, lettres ≈ 5,2.
+  const textW12 = (t: string) =>
+    [...t].reduce((w, c) => w + (/[0-9]/.test(c) ? 6.9 : c === ":" ? 2.8 : c === "/" ? 3.6 : c === " " || c === "·" ? 3 : 5.2), 0);
+  // « dernier à 19:37 », « dernier hier à 19:37 », « dernier le 11/11 » (L2,
+  // choix de Yoss). Si ça ne tient pas : sans « dernier », puis sans « à » ;
+  // jamais l'heure coupée (sans « … », elle serait fausse : « 19:3 »).
+  const whenShort = (ms: number, room = Infinity) => {
+    const k = daysAgo(ms);
+    const t = clock(ms);
+    const tries =
+      k <= 0
+        ? [`dernier à ${t}`, `à ${t}`, t]
+        : k === 1
+          ? [`dernier hier à ${t}`, `hier à ${t}`, `hier ${t}`]
+          : [`dernier le ${ddmm(ms)}`, `le ${ddmm(ms)}`];
+    return tries.find((x) => textW12(x) * 1.05 <= room) ?? tries[tries.length - 1];
+  };
+  const whenSpoken = (ms: number) => {
+    const k = daysAgo(ms);
+    return k <= 0 ? `à ${clock(ms)}` : k === 1 ? `hier à ${clock(ms)}` : `le ${ddmm(ms)} à ${clock(ms)}`;
+  };
+  // Au-delà de 23 h 50, la durée passe en jours (texte) : l'horloge native
+  // repartirait de « 0h00 » à 24 h ; la marge couvre le retard de l'alarme.
+  const DAYS_FROM_MS = 23 * HOUR + 50 * 60 * 1000;
   // Filet de fraîcheur : une session en cours sans mise à jour depuis 2 h peut
   // être finie ailleurs sans qu'on le sache ; on dit de quand date l'info.
   const STALE_LIVE_MS = 2 * HOUR;
@@ -135,9 +202,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const innerW = Math.floor(W - PAD * 2);
   const innerH = Math.floor(H - PAD * 2);
   const zoneH = innerH - HEAD_H - HEAD_GAP;
-  const SEP = 25;
+  // Séparateur : 9 dp, filet, 9 dp.
+  const SEP_GAP = 9;
+  const SEP = SEP_GAP * 2 + 1;
   const showDay = !small && day != null;
-  const Rw = showDay ? Math.min(150, Math.max(112, Math.round(innerW * 0.36))) : 0;
+  const Rw = showDay ? Math.min(156, Math.max(112, Math.round(innerW * 0.38))) : 0;
   const zoneW = showDay ? innerW - Rw - SEP : innerW;
   const bandH = small && day && n <= 1 ? 26 : 0;
 
@@ -195,51 +264,76 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Rappel réglé, pas encore dépassé : annoncé à l'avance.
   const upcoming = (atMs: number | null | undefined) => (atMs != null && atMs > now ? `rappel à ${clock(atMs)}` : null);
 
-  // Au repos, dernier repas et dernier change côte à côte : les deux questions
-  // de la nuit (« il a mangé quand ? », « changé quand ? »).
+  // Au repos, dernier repas puis dernier change, l'un sous l'autre (P4,
+  // cellule design 17/20) : les deux questions de la nuit. Par bloc :
+  // « ● Dernier repas », puis « il y a 6h58 » ; à droite du chiffre, une
+  // petite pile réservée au rappel. L'heure du dernier est dans la colonne de
+  // droite (« dernier 19:37 »), comme pendant une session.
   const restDual = !small && n === 0 && (!!props.lastMealMs || !!day?.lastDiaperMs);
   const restDualZone = (h: number) => {
-    const colGap = 10;
-    const colW = Math.floor((zoneW - colGap) / 2);
-    const big = zoneH < 108 ? 26 : 30;
     const sp = 12;
+    const big = h >= 150 ? 30 : h >= 120 ? 28 : 24;
+    const bigH = Math.ceil(big * 1.2);
+    // « 14h52 » mesuré ≈ 3 × la taille sur le S21 : colonne fixe, chiffres alignés.
+    const numW = Math.ceil(big * 3);
+    // Glance n'aligne pas les lignes de base : « il y a » remonté au pied du chiffre.
+    const baseLift = big >= 28 ? 3 : 2;
+    // Largeur fixe (« il y a » ≈ 20 dp en 12 sp, marge pour la police agrandie) :
+    // sans elle, Glance place le chiffre différemment d'une ligne à l'autre.
+    const AGO_W = 28;
+    const blockGap = h >= 120 ? 8 : 4;
+    const blockH = Math.max(48, 16 + 2 + bigH);
     const block = (
       label: string,
       accent: string,
       dotColor: string,
       ms: number | null | undefined,
       late: boolean,
-      sub: string | null,
-      ahead: string | null,
+      atMs: number | null | undefined,
       action: "meal" | "diaper",
-    ) => (
-      <Column modifiers={[width(colW), ...linkMods(action)]}>
-        {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, late ? `${label} · rappel` : ms ? `${label} · il y a` : label, sp)}
-        {gap(2)}
-        {ms ? fixedLine(big, elapsed(ms, late ? C.alert : C.strong, big)) : txt("—", C.soft, big, true)}
-        {gap(2)}
-        {txt(ms ? sub ?? `à ${clock(ms)}` : "pas encore", late ? C.alert : C.soft, sp)}
-        {ahead ? txt(ahead, C.soft, sp) : null}
-      </Column>
-    );
+    ) => {
+      const ahead = ms && !late && atMs != null && atMs > now ? clock(atMs) : null;
+      const say = ms
+        ? `${label} ${whenSpoken(ms)}${late ? ", rappel dépassé" : ahead ? `, rappel à ${ahead}` : ""}`
+        : `${label} : pas encore`;
+      const old = ms != null && now - ms >= DAYS_FROM_MS;
+      const tone = late ? C.alert : C.soft;
+      return (
+        <Column key={action} verticalAlignment="center" modifiers={[size(zoneW, blockH), ...linkMods(action, say)]}>
+          {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, label, sp)}
+          {gap(2)}
+          {ms ? (
+            <Row verticalAlignment="bottom">
+              <Box contentAlignment="bottomStart" modifiers={[size(AGO_W, bigH), padding(0, 0, 0, baseLift)]}>
+                {txt("il y a", tone, sp)}
+              </Box>
+              <Spacer modifiers={[width(4)]} />
+              <Box contentAlignment="bottomStart" modifiers={[size(numW, bigH)]}>
+                {old
+                  ? txt(`${Math.max(1, Math.round((now - (ms as number)) / DAY))} j`, late ? C.alert : C.strong, big, true)
+                  : elapsed(ms, late ? C.alert : C.strong, big)}
+              </Box>
+              {late || ahead ? <Spacer modifiers={[width(6)]} /> : null}
+              {late || ahead ? (
+                <Column>
+                  {txt("rappel", tone, sp, late)}
+                  {txt(late ? "dépassé" : (ahead as string), tone, sp)}
+                </Column>
+              ) : null}
+            </Row>
+          ) : (
+            <Box contentAlignment="centerStart" modifiers={[height(bigH)]}>
+              {txt("pas encore", C.soft, 15)}
+            </Box>
+          )}
+        </Column>
+      );
+    };
     return (
       <Column verticalAlignment="center" modifiers={[size(zoneW, h)]}>
-        <Row>
-          {block(
-            "Repas",
-            CAT.meal.text,
-            CAT.meal.dot,
-            props.lastMealMs,
-            mealLate,
-            props.lastMealMs && mealWord && colW >= 120 ? `${mealWord} ${clock(props.lastMealMs)}` : null,
-            upcoming(props.alerts.mealAtMs),
-            "meal",
-          )}
-          <Spacer modifiers={[width(colGap)]} />
-          {block("Change", CAT.diaper.text, CAT.diaper.dot, day?.lastDiaperMs, diaperLate, null, upcoming(props.alerts.diaperAtMs), "diaper")}
-        </Row>
-        {props.nextSide ? gap(8) : null}
-        {props.nextSide ? txt(`Prochain sein : ${sideWord(props.nextSide)}`, CAT.nursing.text, 13, true) : null}
+        {block("Dernier repas", CAT.meal.text, CAT.meal.dot, props.lastMealMs, mealLate, props.alerts.mealAtMs, "meal")}
+        {gap(blockGap)}
+        {block("Dernier change", CAT.diaper.text, CAT.diaper.dot, day?.lastDiaperMs, diaperLate, props.alerts.diaperAtMs, "diaper")}
       </Column>
     );
   };
@@ -270,11 +364,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {gap(2)}
         {fixedLine(big, elapsed(props.lastMealMs, mealLate ? C.alert : C.strong, big))}
         {gap(2)}
-        {props.nextSide && small
-          ? txt(`Prochain sein : ${props.nextSide}`, CAT.nursing.text, sp, true)
-          : txt(ahead && !small ? `${at} · ${ahead}` : at, mealLate ? C.alert : C.soft, sp)}
-        {props.nextSide && !small ? gap(2) : null}
-        {props.nextSide && !small ? txt(`Prochain sein : ${sideWord(props.nextSide)}`, CAT.nursing.text, sp, true) : null}
+        {txt(ahead && !small ? `${at} · ${ahead}` : at, mealLate ? C.alert : C.soft, sp)}
       </Column>
     );
   };
@@ -351,6 +441,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
 
   const nowZone = () => {
+    // Enfant changé dans l'app, données en chargement : jamais l'ancien enfant.
+    if (props.loading) {
+      return (
+        <Column verticalAlignment="center" modifiers={[size(zoneW, zoneH)]}>
+          {txt("Mise à jour…", C.soft, small ? 12 : 14)}
+        </Column>
+      );
+    }
     if (n === 0) return restZone();
     if (n === 1) return singleTile(lives[0]);
     const GAPR = 6;
@@ -367,10 +465,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   };
 
-  // ----- Colonne « Aujourd'hui » (4×2) : liste qui défile -----
+  // ----- Colonne « Aujourd'hui » : liste qui défile -----
   // En haut, les trois résumés (repas, changes, sommeil) ; en dessous, les
-  // événements du jour du plus récent au plus ancien. On fait défiler vers le
-  // haut pour les voir.
+  // 7 derniers évènements des 24 h (comme l'Accueil), le premier visible sans
+  // défiler.
   const dayColumn = () => {
     if (!day) return null;
     if (dayStale) {
@@ -383,8 +481,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </Column>
       );
     }
-    // Cibles de 48 dp (repas et change ouvrent chacun leur formulaire), 8 dp d'écart.
+    // Rythme unique (4×2 comme 4×3) : trois items de 48 dp (repas et change
+    // ouvrent chacun leur formulaire), 8 dp entre eux et sous le sommeil, titre
+    // de 28 dp : 20 dp visibles entre chaque bloc de texte. Lignes du fil de 24 dp.
     const ITEM_H = 48;
+    const ITEM_GAP = 8;
+    const TITLE_H = 28;
+    const ROW_H = 24;
     const item = (key: string, dotColor: string, value: string, sub: string | null, late: boolean) => (
       <Row
         key={key}
@@ -399,52 +502,60 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </Column>
       </Row>
     );
-    // Au repos côte à côte, les heures sont déjà à gauche : pas de doublon.
-    const mealSub = restDual
-      ? day.bottleMl > 0
-        ? `${day.bottleMl} ml de lait`
-        : null
-      : day.lastMealMs
+    // Heure du dernier ici, au repos comme en session (à gauche : « il y a »).
+    // Jour du dernier : « dernier 19:37 », « hier 19:37 », « le 11/11 ».
+    // Place du texte de la sous-ligne : colonne moins pastille et écart.
+    const room = Rw - 16;
+    // Rappel dépassé : « rappel · 19:37 », « rappel · hier 19:37 », sinon « rappel · hier ».
+    const lateSub = (ms: number) => {
+      const k = daysAgo(ms);
+      const t = clock(ms);
+      const tries = k <= 0 ? [`rappel · ${t}`] : k === 1 ? [`rappel · hier ${t}`, "rappel · hier"] : [`rappel · le ${ddmm(ms)}`, "rappel"];
+      return tries.find((x) => textW12(x) * 1.05 <= room) ?? tries[tries.length - 1];
+    };
+    const mealSub = day.lastMealMs
       ? mealLate
-        ? `rappel · ${clock(day.lastMealMs)}`
-        : Rw >= 140 && day.bottleMl > 0
+        ? lateSub(day.lastMealMs)
+        : Rw >= 140 && day.bottleMl > 0 && daysAgo(day.lastMealMs) <= 0
           ? `${clock(day.lastMealMs)} · ${day.bottleMl} ml`
-          : `dernier ${clock(day.lastMealMs)}`
+          : whenShort(day.lastMealMs, room)
       : null;
-    const diaperSub = restDual
-      ? null
-      : day.lastDiaperMs
-      ? diaperLate
-        ? `rappel · ${clock(day.lastDiaperMs)}`
-        : `dernier ${clock(day.lastDiaperMs)}`
-      : null;
+    const diaperSub = day.lastDiaperMs ? (diaperLate ? lateSub(day.lastDiaperMs) : whenShort(day.lastDiaperMs, room)) : null;
     const events = props.recent ?? [];
     return (
       <LazyColumn modifiers={[size(Rw, zoneH)]}>
-        {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate && n > 0)}
-        <Spacer key="gap-meal-diaper" modifiers={[height(8)]} />
+        {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate)}
+        <Spacer key="gap-meal-diaper" modifiers={[height(ITEM_GAP)]} />
         {item("diaper", CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate)}
+        <Spacer key="gap-diaper-sleep" modifiers={[height(ITEM_GAP)]} />
         {item("sleep", CAT.sleep.dot, sleepLabel(day.sleepMinutes), "de sommeil", false)}
+        {events.length ? <Spacer key="gap-sleep-title" modifiers={[height(ITEM_GAP)]} /> : null}
         {events.length ? (
-          <Column key="events-title" modifiers={[size(Rw, 26)]} verticalAlignment="bottom">
-            {txt("Fil du jour", C.soft, 12)}
+          <Column key="events-title" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
+            {txt("Évènements récents", C.soft, 12)}
           </Column>
         ) : null}
-        {events.map((e, i) => (
-          <Row key={`ev-${i}-${e.ms}`} verticalAlignment="center" modifiers={[size(Rw, 24)]}>
-            {e.icon ? (
-              <Box modifiers={[size(18, 24)]} contentAlignment="center">
-                {txt(e.icon, C.strong, 12)}
-              </Box>
-            ) : (
-              dot(e.kind === "meal" ? CAT.meal.dot : e.kind === "diaper" ? CAT.diaper.dot : C.soft)
-            )}
-            <Spacer modifiers={[width(e.icon ? 4 : 8)]} />
-            {txt(clock(e.ms), C.soft, 12)}
-            <Spacer modifiers={[width(6)]} />
-            {txt(e.label, C.strong, 12)}
-          </Row>
-        ))}
+        {events.flatMap((e, i) => {
+          const row = (
+            <Row key={`ev-${i}-${e.ms}`} verticalAlignment="center" modifiers={[size(Rw, ROW_H)]}>
+              {dot((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? CAT.meal.dot : e.kind === "diaper" ? CAT.diaper.dot : C.soft))}
+              <Spacer modifiers={[width(6)]} />
+              {txt(clock(e.ms), C.soft, 12)}
+              <Spacer modifiers={[width(6)]} />
+              {txt(e.label, C.strong, 12)}
+            </Row>
+          );
+          // Comme le home : les événements d'avant minuit sous « Hier ».
+          const firstOfYesterday = e.ms < dayStart && (i === 0 || events[i - 1].ms >= dayStart);
+          return firstOfYesterday
+            ? [
+                <Column key="events-yesterday" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
+                  {txt("Hier", C.soft, 12)}
+                </Column>,
+                row,
+              ]
+            : [row];
+        })}
       </LazyColumn>
     );
   };
@@ -477,6 +588,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
     nextMidnight,
+    midnightFromNow,
+    // Passage en jours (23 h 50) puis à chaque nouveau jour.
+    ...(restDual
+      ? [props.lastMealMs, day?.lastDiaperMs].flatMap((ms) => {
+          if (!ms) return [];
+          const el = now - ms;
+          if (el < DAYS_FROM_MS) return [ms + DAYS_FROM_MS];
+          const k = Math.max(1, Math.round(el / DAY));
+          return [ms + (k + 0.5) * DAY];
+        })
+      : []),
     ...(generatedAt > 0 ? [generatedAt + STALE_LIVE_MS] : []),
     ...(restDual && day?.lastDiaperMs ? [day.lastDiaperMs + HOUR] : []),
     props.alerts.mealAtMs ?? 0,
@@ -516,20 +638,29 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return `${labelOf(l)} en cours, ${l.sinceLabel}`;
   };
   const a11yParts = [name];
+  if (props.loading) a11yParts.push("Mise à jour en cours");
   if (n > 0) a11yParts.push(...lives.map(a11yLive));
   // Le libellé n'est recalculé qu'à chaque rendu : on lit l'heure (toujours
   // juste) plutôt qu'une durée « il y a » qui vieillirait entre deux rendus.
   const a11yLast = (what: string, ms: number, late: boolean, atMs: number | null | undefined) =>
-    `${what} à ${clock(ms)}${late ? ", rappel dépassé" : atMs != null && atMs > now ? `, rappel à ${clock(atMs)}` : ""}`;
+    `${what} ${whenSpoken(ms)}${late ? ", rappel dépassé" : atMs != null && atMs > now ? `, rappel à ${clock(atMs)}` : ""}`;
   if (n === 0 && props.lastMealMs) a11yParts.push(a11yLast("Dernier repas", props.lastMealMs, mealLate, props.alerts.mealAtMs));
   if (restDual && day?.lastDiaperMs) a11yParts.push(a11yLast("Dernier change", day.lastDiaperMs, diaperLate, props.alerts.diaperAtMs));
-  if (props.nextSide && n === 0) a11yParts.push(`Prochain sein : ${sideWord(props.nextSide)}`);
   if (day && !dayStale) {
     a11yParts.push(
       `Aujourd'hui : ${day.mealsCount} repas${mealLate ? " (rappel dépassé)" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(day.sleepMinutes)} de sommeil`,
     );
   }
   if (dataStale) a11yParts.push(`${liveStale ? "À vérifier, informations" : "Informations"} mises à jour à ${clock(generatedAt)}`);
+  // Le fil, lu aussi : les 3 derniers évènements (les plus récents d'abord).
+  const lastEvents = (props.recent ?? []).slice(0, 3);
+  if (lastEvents.length && !props.loading) {
+    a11yParts.push(
+      `Derniers évènements : ${lastEvents
+        .map((e) => `${e.ms < dayStart ? "hier " : ""}${clock(e.ms)}, ${e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label}`)
+        .join(" ; ")}`,
+    );
+  }
   a11yParts.push("Toucher le repas ou le change pour noter, ailleurs pour ouvrir SuiviBaby");
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
 
@@ -567,9 +698,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {gap(HEAD_GAP)}
       <Row>
         {nowZone()}
-        {showDay ? <Spacer modifiers={[width(12)]} /> : null}
+        {showDay ? <Spacer modifiers={[width(SEP_GAP)]} /> : null}
         {showDay ? <Box modifiers={[size(1, zoneH), background(C.rule)]} /> : null}
-        {showDay ? <Spacer modifiers={[width(12)]} /> : null}
+        {showDay ? <Spacer modifiers={[width(SEP_GAP)]} /> : null}
         {showDay ? dayColumn() : null}
       </Row>
       {refresh}

@@ -85,7 +85,7 @@ function splitEvents(eventDocs) {
     const endMs = toMs(e.heureFin);
     switch (e.type) {
       case "tetee":
-        out.tetees.push({ ms, dureeGauche: e.dureeGauche, dureeDroite: e.dureeDroite });
+        out.tetees.push({ ms, dureeGauche: e.dureeGauche, dureeDroite: e.dureeDroite, coteGauche: e.coteGauche, coteDroit: e.coteDroit });
         break;
       case "biberon":
         out.biberons.push({ ms, typeBiberon: e.typeBiberon, quantite: e.quantite });
@@ -120,6 +120,9 @@ function splitEvents(eventDocs) {
           typeActivite: e.typeActivite,
           duree: e.duree,
           isNap: e.isNap,
+          // Jalons : type et humeur seulement (jamais le titre ni la description libres).
+          typeJalon: e.typeJalon,
+          humeur: e.humeur,
           heureDebut: e.heureDebut ?? null,
           heureFin: e.heureFin ?? null,
         });

@@ -88,7 +88,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <Text modifiers={[widgetURL(url)]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
     ) : (
       <Text modifiers={[widgetURL(url)]}>
-        {props.lastMealMs ? `Repas à ${new Date(props.lastMealMs).toTimeString().slice(0, 5)}${props.nextSide ? ` · ${props.nextSide}` : ""}` : "SuiviBaby"}
+        {props.lastMealMs ? `Repas à ${new Date(props.lastMealMs).toTimeString().slice(0, 5)}` : "SuiviBaby"}
       </Text>
     );
   }
@@ -111,7 +111,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
             ) : (
               <Text modifiers={[font({ size: 15 })]}>—</Text>
             )}
-            {props.nextSide ? <Text modifiers={[font({ size: 12 })]}>{`Prochain sein : ${props.nextSide}`}</Text> : null}
           </>
         )}
       </VStack>
@@ -176,11 +175,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       )}
       {props.lastMealLabel ? (
         <Text modifiers={[font({ size: 13 }), foregroundStyle(C.soft), lineLimit(1)]}>{props.lastMealLabel}</Text>
-      ) : null}
-      {props.nextSide ? (
-        <Text modifiers={[font({ size: 13, weight: "semibold" }), foregroundStyle(C.strong)]}>
-          {`Prochain sein : ${props.nextSide === "G" ? "gauche" : "droit"}`}
-        </Text>
       ) : null}
     </VStack>
   );

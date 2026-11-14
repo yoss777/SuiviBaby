@@ -689,7 +689,7 @@ export default function HomeDashboard() {
 
   // Widget d'écran d'accueil « Bébé maintenant » : mêmes données que l'Accueil.
   const { isPremium } = usePremium();
-  // Fil du jour du widget : tout ce qui n'est ni repas ni change.
+  // Fil du jour du widget : tout ce qui n’est ni repas ni change (jalons compris, comme le fil du home).
   const widgetOthers = useMemo(
     () => [
       ...data.vitamines,
@@ -703,6 +703,7 @@ export default function HomeDashboard() {
       ...data.croissances,
       ...data.activites,
       ...data.sommeils,
+      ...data.jalons,
     ],
     [
       data.vitamines,
@@ -716,6 +717,7 @@ export default function HomeDashboard() {
       data.croissances,
       data.activites,
       data.sommeils,
+      data.jalons,
     ],
   );
   const widgetParams = useMemo(

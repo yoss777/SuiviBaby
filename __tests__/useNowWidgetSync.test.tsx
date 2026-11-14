@@ -4,8 +4,12 @@ import { act, renderHook } from "@testing-library/react-native";
 
 const mockPush = jest.fn();
 const mockCancel = jest.fn();
+const mockLoading = jest.fn();
+const mockFlush = jest.fn();
 jest.mock("@/services/widgetSync", () => ({
   pushNowWidget: (p: unknown) => mockPush(p),
+  pushNowWidgetLoading: (c: string, n: string) => mockLoading(c, n),
+  flushPendingWidgetPush: () => mockFlush(),
   cancelPendingWidgetPush: () => mockCancel(),
   invalidateWidgetKey: jest.fn(),
 }));
@@ -60,15 +64,18 @@ it("changement de bébé : jamais la tétée de l'ancien dans le widget du nouve
   await act(async () => mockLoads.a(nursingA));
   mockPush.mockClear();
   rerender(params("b"));
-  // Tétée de B pas encore lue : rien ne part pour B.
+  // Tétée de B pas encore lue : pas de données pour B, mais le widget passe
+  // tout de suite sur B (« Mise à jour… »), jamais l'ancien enfant.
   expect(mockPush).not.toHaveBeenCalled();
+  expect(mockLoading).toHaveBeenLastCalledWith("b", "Basile");
   await act(async () => mockLoads.b(null));
   expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ childId: "b", live: null }));
 });
 
-it("données d'un autre enfant encore affichées : bloqué", async () => {
+it("données d'un autre enfant encore affichées : bloqué ; au démarrage, pas de « Mise à jour… »", async () => {
   renderHook(() => useNowWidgetSync(params("b", { biberons: [{ date: NOW, childId: "a" }] })));
   await act(async () => mockLoads.b(null));
   expect(mockPush).not.toHaveBeenCalled();
   expect(mockCancel).toHaveBeenCalled();
+  expect(mockLoading).not.toHaveBeenCalled();
 });
