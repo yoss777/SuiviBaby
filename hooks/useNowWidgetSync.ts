@@ -51,6 +51,8 @@ interface Params {
   walkChildId?: string;
   sleepTotalMinutes: number;
   lastAbsoluteMealMs: number | undefined;
+  /** Fiche de l'enfant (lastEventAt) : ms = connu, null = aucun jamais, absent = inconnu. */
+  lastEventAt?: { repas?: number | null; changes?: number | null };
   isPremium: boolean;
   reminders: { enabled: boolean; thresholds: { repas: number; changes: number } };
 }
@@ -87,8 +89,10 @@ export function useNowWidgetSync(p: Params): void {
         invalidateWidgetKey();
         setTick((t) => t + 1);
       } else {
-        // Retour rapide à l'écran d'accueil : rien ne reste en attente.
+        // Retour rapide à l'écran d'accueil : rien ne reste en attente, et on
+        // recalcule (la tétée du nouvel enfant n'est plus attendue, voir plus bas).
         flushPendingWidgetPush();
+        setTick((t) => t + 1);
       }
     });
     return () => sub.remove();
@@ -117,11 +121,15 @@ export function useNowWidgetSync(p: Params): void {
       otherChild(p.sleepChildId) ||
       otherChild(p.walkChildId);
     // Tétée pas encore lue pour ce bébé : on attend (sinon un faux « pas de tétée »).
-    if (stale || nursingOf?.childId !== p.childId) {
+    // Tétée pas encore lue : au premier plan on attend ; hors premier plan, la
+    // lecture serveur peut ne jamais aboutir (réseau suspendu) : on envoie sans
+    // tétée connue, l'abonnement corrigera dès qu'elle arrive.
+    const nursingKnown = nursingOf?.childId === p.childId;
+    if (stale || (!nursingKnown && AppState.currentState === "active")) {
       waitForData();
       return;
     }
-    const nursing = nursingOf.state;
+    const nursing = nursingKnown ? nursingOf.state : null;
     // Le calcul lui-même vit dans le module partagé avec le serveur.
     const timed = <T extends Dated>(list: T[]) => list.map((e) => ({ ...e, ms: p.toMs(e.date) }));
     const input = assembleNowWidgetInput(
@@ -139,6 +147,7 @@ export function useNowWidgetSync(p: Params): void {
         walkStartMs: p.walkStartMs ?? null,
         sleepTotalMinutes: p.sleepTotalMinutes,
         lastAbsoluteMealMs: p.lastAbsoluteMealMs ?? null,
+        lastEventAt: p.lastEventAt,
         isPremium: p.isPremium,
         reminders: {
           enabled: p.reminders.enabled,

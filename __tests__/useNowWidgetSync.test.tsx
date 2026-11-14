@@ -1,6 +1,10 @@
 // Hook du widget : au changement de bébé, la tétée de l'ancien n'est jamais
 // envoyée ; données d'un autre enfant bloquées ; envoi après lecture de la tétée.
 import { act, renderHook } from "@testing-library/react-native";
+import { AppState } from "react-native";
+
+const setAppState = (state: string) =>
+  Object.defineProperty(AppState, "currentState", { value: state, configurable: true, writable: true });
 
 const mockPush = jest.fn();
 const mockCancel = jest.fn();
@@ -48,6 +52,7 @@ const params = (childId: string, over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  setAppState("active");
   jest.clearAllMocks();
   for (const k of Object.keys(mockLoads)) delete mockLoads[k];
 });
@@ -78,4 +83,12 @@ it("données d'un autre enfant encore affichées : bloqué ; au démarrage, pas 
   expect(mockPush).not.toHaveBeenCalled();
   expect(mockCancel).toHaveBeenCalled();
   expect(mockLoading).not.toHaveBeenCalled();
+});
+
+it("hors premier plan : n'attend pas la lecture de la tétée (réseau suspendu)", async () => {
+  setAppState("background");
+  renderHook(() => useNowWidgetSync(params("a")));
+  expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ childId: "a", live: null }));
+  await act(async () => mockLoads.a(nursingA));
+  expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ live: expect.objectContaining({ kind: "nursing" }) }));
 });
