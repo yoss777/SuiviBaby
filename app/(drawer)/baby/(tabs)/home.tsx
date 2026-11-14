@@ -720,6 +720,19 @@ export default function HomeDashboard() {
       data.jalons,
     ],
   );
+  // Dernier repas / change sur tout l'historique (fiche de l'enfant, tenue par
+  // le serveur) : null = aucun jamais, absent = inconnu (cache, ancienne fiche).
+  const childLastEventAt = (activeChild as { lastEventAt?: Record<string, unknown> } | null)?.lastEventAt;
+  const widgetLastEventAt = useMemo(() => {
+    if (!childLastEventAt || typeof childLastEventAt !== "object") return undefined;
+    const ms = (v: unknown): number | null | undefined => {
+      if (v === null) return null;
+      if (v === undefined) return undefined;
+      const d = toDate(v as any);
+      return isValidDate(d) ? d.getTime() : undefined;
+    };
+    return { repas: ms(childLastEventAt.repas), changes: ms(childLastEventAt.changes) };
+  }, [childLastEventAt]);
   const widgetParams = useMemo(
     () => ({
       childId: activeChild?.id,
@@ -739,6 +752,7 @@ export default function HomeDashboard() {
       walkStartMs: promenadeStartTs,
       sleepTotalMinutes: todayStats.sommeil.totalMinutes,
       lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
+      lastEventAt: widgetLastEventAt,
       isPremium,
       reminders: { enabled: remindersEnabled, thresholds: reminderThresholds },
     }),
@@ -758,6 +772,7 @@ export default function HomeDashboard() {
       promenadeStartTs,
       todayStats.sommeil.totalMinutes,
       todayStats.meals.lastAbsoluteTimestamp,
+      widgetLastEventAt,
       isPremium,
       remindersEnabled,
       reminderThresholds,

@@ -101,6 +101,8 @@ describe("assemble + build (fuseau du serveur)", () => {
       diapersCount: 2,
       lastDiaperMs: at(15),
       sleepMinutes: 75,
+      noMealEver: false,
+      noDiaperEver: false,
     });
     expect(input.lastNursing).toEqual({ leftMinutes: 12, rightMinutes: 0, left: false, right: false });
 
@@ -146,5 +148,50 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(w.formatDuration(3725)).toBe("1:02:05");
     expect(w.nextSideFrom({ leftMinutes: 0, rightMinutes: 5 })).toBe("G");
     expect(w.nextSideFrom({ leftMinutes: 5, rightMinutes: 5 })).toBeNull();
+  });
+});
+
+describe("dernier repas / change sur tout l'historique (lastEventAt)", () => {
+  const paris = w.zonedEnv("Europe/Paris");
+  const now = Date.UTC(2026, 10, 14, 2, 0);
+  const base = {
+    childName: "Léa",
+    nursing: null,
+    tetees: [],
+    biberons: [],
+    solides: [],
+    mictions: [],
+    selles: [],
+    sleepTotalMinutes: 0,
+    isPremium: false,
+    reminders: { enabled: false, repasHours: 0, changesHours: 0 },
+    now,
+  };
+  const threeDaysAgo = now - 3 * 24 * 3600 * 1000;
+
+  test("hors fenêtre chargée : le dernier connu est repris, pas « aucun »", () => {
+    const input = w.assembleNowWidgetInput({ ...base, lastEventAt: { repas: threeDaysAgo, changes: threeDaysAgo } }, paris);
+    expect(input.lastMeal).toEqual({ ms: threeDaysAgo, kind: "autre" });
+    expect(input.day.lastDiaperMs).toBe(threeDaysAgo);
+    expect(input.day.noMealEver).toBe(false);
+    expect(input.day.noDiaperEver).toBe(false);
+  });
+
+  test("aucun jamais (null prouvé) : noMealEver / noDiaperEver", () => {
+    const input = w.assembleNowWidgetInput({ ...base, lastEventAt: { repas: null, changes: null } }, paris);
+    expect(input.day.noMealEver).toBe(true);
+    expect(input.day.noDiaperEver).toBe(true);
+  });
+
+  test("inconnu (fiche absente) : jamais « aucun »", () => {
+    const input = w.assembleNowWidgetInput(base, paris);
+    expect(input.day.noMealEver).toBe(false);
+    expect(input.day.noDiaperEver).toBe(false);
+  });
+
+  test("un évènement chargé plus récent que la fiche l'emporte", () => {
+    const recent = now - 3600 * 1000;
+    const input = w.assembleNowWidgetInput({ ...base, mictions: [{ ms: recent }], lastEventAt: { repas: null, changes: threeDaysAgo } }, paris);
+    expect(input.day.lastDiaperMs).toBe(recent);
   });
 });

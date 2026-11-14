@@ -133,7 +133,7 @@ function splitEvents(eventDocs) {
 }
 
 /** Données du widget pour un appareil (son fuseau) et son utilisateur (Premium, rappels). */
-function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs, tz, premium, reminders, nowMs }) {
+function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs, lastAbsoluteDiaperMs, tz, premium, reminders, nowMs }) {
   let env;
   try {
     env = widget.zonedEnv(tz || DEFAULT_TZ);
@@ -156,6 +156,12 @@ function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs
       walkStartMs: split.walkNow ? split.walkNow.startMs : null,
       sleepTotalMinutes: widget.sleepMinutesInDay(split.sleeps, dayStart, dayEnd, nowMs),
       lastAbsoluteMealMs,
+      // getLastEventMillis : null = aucun évènement de la catégorie (prouvé) ;
+      // absent (anciens appels) = inconnu.
+      lastEventAt:
+        lastAbsoluteDiaperMs === undefined
+          ? undefined
+          : { repas: lastAbsoluteMealMs ?? null, changes: lastAbsoluteDiaperMs ?? null },
       isPremium: premium,
       reminders,
       now: nowMs,
@@ -211,6 +217,7 @@ async function fanOutWidget(db, childId, { urgent }) {
   const split = splitEvents(eventsSnap.docs);
   const nursing = widget.usableNursing(liveSnap.exists ? liveSnap.data() : null, nowMs);
   const lastAbsoluteMealMs = await reminderLib.getLastEventMillis(db, childId, child, "repas", null);
+  const lastAbsoluteDiaperMs = await reminderLib.getLastEventMillis(db, childId, child, "changes", null);
 
   const messages = [];
   const tokenDocs = [];
@@ -249,6 +256,7 @@ async function fanOutWidget(db, childId, { urgent }) {
         split,
         nursing,
         lastAbsoluteMealMs,
+        lastAbsoluteDiaperMs,
         tz: t.tz,
         premium,
         reminders,

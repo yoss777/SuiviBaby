@@ -513,14 +513,25 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       const tries = k <= 0 ? [`rappel · ${t}`] : k === 1 ? [`rappel · hier ${t}`, "rappel · hier"] : [`rappel · le ${ddmm(ms)}`, "rappel"];
       return tries.find((x) => textW12(x) * 1.05 <= room) ?? tries[tries.length - 1];
     };
+    // Aucun jamais noté (prouvé par la fiche de l'enfant) : « aucun noté » (la
+    // 1re ligne nomme déjà le type) ; inconnu : rien.
+    const NEVER = "aucun noté";
     const mealSub = day.lastMealMs
       ? mealLate
         ? lateSub(day.lastMealMs)
         : Rw >= 140 && day.bottleMl > 0 && daysAgo(day.lastMealMs) <= 0
           ? `${clock(day.lastMealMs)} · ${day.bottleMl} ml`
           : whenShort(day.lastMealMs, room)
-      : null;
-    const diaperSub = day.lastDiaperMs ? (diaperLate ? lateSub(day.lastDiaperMs) : whenShort(day.lastDiaperMs, room)) : null;
+      : day.noMealEver
+        ? NEVER
+        : null;
+    const diaperSub = day.lastDiaperMs
+      ? diaperLate
+        ? lateSub(day.lastDiaperMs)
+        : whenShort(day.lastDiaperMs, room)
+      : day.noDiaperEver
+        ? NEVER
+        : null;
     const events = props.recent ?? [];
     return (
       <LazyColumn modifiers={[size(Rw, zoneH)]}>

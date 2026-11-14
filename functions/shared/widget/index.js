@@ -407,7 +407,17 @@ function assembleNowWidgetInput(src, env = localEnv) {
     ...solides.map((e) => ({ ms: e.ms, kind: "solide" })),
   ];
   const lastMealEvent = meals.reduce((best, m) => (!best || m.ms > best.ms ? m : best), null);
-  const lastMeal = lastMealEvent || (src.lastAbsoluteMealMs ? { ms: src.lastAbsoluteMealMs, kind: "autre" } : null);
+  // Dernier repas / change sur tout l'historique (fiche de l'enfant,
+  // lastEventAt) : nombre = connu, null = aucun jamais, absent = inconnu.
+  const abs = src.lastEventAt || {};
+  const absMeal = Number.isFinite(abs.repas) ? abs.repas : src.lastAbsoluteMealMs || null;
+  const absDiaper = Number.isFinite(abs.changes) ? abs.changes : null;
+  const lastMeal =
+    lastMealEvent && (!absMeal || lastMealEvent.ms >= absMeal)
+      ? lastMealEvent
+      : absMeal
+        ? { ms: absMeal, kind: "autre" }
+        : lastMealEvent;
 
   const lastTetee = [...tetees].sort((a, b) => b.ms - a.ms)[0];
   const changes = [...mictions, ...selles].map((e) => e.ms);
@@ -455,7 +465,10 @@ function assembleNowWidgetInput(src, env = localEnv) {
       bottleMl,
       lastMealMs: lastMeal ? lastMeal.ms : null,
       diapersCount: countGroups(changes.filter(inToday), CHANGE_GROUP_MS),
-      lastDiaperMs: changes.length ? Math.max(...changes) : null,
+      lastDiaperMs: changes.length ? Math.max(...changes, absDiaper || 0) : absDiaper,
+      // Aucun jamais (prouvé par la fiche de l'enfant) : « aucun repas noté ».
+      noMealEver: !lastMeal && abs.repas === null,
+      noDiaperEver: !changes.length && abs.changes === null,
       sleepMinutes: src.sleepTotalMinutes || 0,
     },
     recent,

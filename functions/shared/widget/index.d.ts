@@ -29,6 +29,9 @@ export interface WidgetDay {
   diapersCount: number;
   lastDiaperMs: number | null;
   sleepMinutes: number;
+  /** Aucun repas jamais noté (prouvé par lastEventAt de la fiche de l'enfant). */
+  noMealEver?: boolean;
+  noDiaperEver?: boolean;
 }
 
 /** Un événement du jour, pour la liste qui défile (« 🍼 11:57 Biberon 100 ml »). */
@@ -134,6 +137,8 @@ export interface WidgetSource {
   walkStartMs?: number | null;
   sleepTotalMinutes: number;
   lastAbsoluteMealMs?: number | null;
+  /** Fiche de l'enfant (lastEventAt) : ms = connu, null = aucun jamais, absent = inconnu. */
+  lastEventAt?: { repas?: number | null; changes?: number | null };
   isPremium: boolean;
   reminders: { enabled: boolean; repasHours: number; changesHours: number };
   now: number;
