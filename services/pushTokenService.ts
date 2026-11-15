@@ -18,6 +18,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
+import { widgetPushIosReady } from "@/services/widgetPushIos";
 import { captureServiceError } from "@/utils/errorReporting";
 
 const COLLECTION = "device_tokens";
@@ -39,9 +40,10 @@ let notificationsGranted = false;
 /**
  * Capacité « widget temps réel » de cette version de l'app, lue par le
  * serveur avant d'envoyer les données du widget (plan-temps-reel.md, E3) :
- * 1 = récepteur natif Android présent ; iOS : 0 tant que E7 n'est pas livré.
+ * 1 = récepteur natif Android présent, ou tâche d'arrière-plan iPhone
+ * déclarée (E7, option 1 : notification silencieuse, livraison au mieux).
  */
-const WIDGET_CAP = Platform.OS === "android" ? 1 : 0;
+const WIDGET_CAP = Platform.OS === "android" ? 1 : widgetPushIosReady ? 1 : 0;
 
 function deviceTimeZone(): string | null {
   try {

@@ -34,6 +34,9 @@ import { cleanupStaleExports } from "@/services/tempShareService";
 import { setOnQueueFailure, startAutoSync } from "@/services/offlineQueueService";
 import { retryFailedOptimistic } from "@/services/eventsService";
 import { registerLiveNursingSync } from "@/services/liveNursingService";
+// iPhone : tâche d'arrière-plan du widget, déclarée au démarrage (y compris
+// quand iOS réveille l'app pour une notification silencieuse).
+import "@/services/widgetPushIos";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { auth, ensureFirebaseAppCheck } from "@/config/firebase";
 import { applyActionCode } from "firebase/auth";

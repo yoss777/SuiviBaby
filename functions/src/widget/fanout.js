@@ -4,7 +4,10 @@
 // avec le module partagé (functions/shared/widget, le même code que l'app),
 // pour chaque appareil du foyer dans son fuseau, puis les envoie en message de
 // données (Android). Le récepteur natif (modules/widget-push) les écrit sans
-// démarrer l'app.
+// démarrer l'app. iPhone (E7, option 1) : même message en notification
+// silencieuse (content-available, priorité normale) ; iOS réveille l'app en
+// arrière-plan au mieux (services/widgetPushIos.ts). Activé à part :
+// app_config/widgetPush.ios === true.
 //
 // Sûreté :
 // - désactivé tant que app_config/widgetPush n'a pas enabled: true (bêta :
@@ -247,7 +250,8 @@ async function fanOutWidget(db, childId, { urgent }) {
       .get();
     const devices = devicesSnap.docs.filter((d) => {
       const t = d.data();
-      return t.widgetPush === true && Number(t.widgetCap) >= 1 && t.platform === "android" &&
+      const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true);
+      return t.widgetPush === true && Number(t.widgetCap) >= 1 && platformOk &&
         getExpoModule().Expo.isExpoPushToken(t.token);
     });
     if (devices.length === 0) continue;
@@ -283,7 +287,13 @@ async function fanOutWidget(db, childId, { urgent }) {
       }
       stats.devices++;
       tokenDocs.push({ ref: device.ref, token: t.token });
-      messages.push({ to: t.token, data, priority: urgent ? "high" : "normal", ttl: MESSAGE_TTL_S });
+      // iPhone : notification silencieuse, sans titre ni son. Apple exige la
+      // priorité normale (5) pour une notification d'arrière-plan.
+      messages.push(
+        t.platform === "ios"
+          ? { to: t.token, data, _contentAvailable: true, priority: "normal", ttl: MESSAGE_TTL_S }
+          : { to: t.token, data, priority: urgent ? "high" : "normal", ttl: MESSAGE_TTL_S },
+      );
     }
   }
   if (messages.length === 0) return log("no-device");

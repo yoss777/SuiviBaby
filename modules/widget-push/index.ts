@@ -1,6 +1,9 @@
 // modules/widget-push : pont vers le récepteur natif des données du widget
-// (Android seulement). Sans module natif (iOS, tests, Expo Go) : sans effet.
+// (Android). iPhone : même état, tenu en JS (services/widgetPushIosState.ts).
+// Sans module natif (tests, Expo Go) : sans effet.
 import { Platform } from "react-native";
+
+import { clearIosWidgetPush, noteIosAppSnapshot } from "@/services/widgetPushIosState";
 
 type WidgetPushNative = {
   noteAppSnapshot(childId: string): void;
@@ -27,6 +30,10 @@ function getNative(): WidgetPushNative | null {
 
 /** Enfant affiché et heure de l'écriture faite par l'app (gardes du récepteur). */
 export function noteAppSnapshot(childId: string): void {
+  if (Platform.OS === "ios") {
+    void noteIosAppSnapshot(childId);
+    return;
+  }
   try {
     getNative()?.noteAppSnapshot(childId);
   } catch {
@@ -36,6 +43,10 @@ export function noteAppSnapshot(childId: string): void {
 
 /** Déconnexion : le récepteur n'applique plus rien avant la prochaine écriture de l'app. */
 export function clearWidgetPush(): void {
+  if (Platform.OS === "ios") {
+    void clearIosWidgetPush();
+    return;
+  }
   try {
     getNative()?.clear?.();
   } catch {
