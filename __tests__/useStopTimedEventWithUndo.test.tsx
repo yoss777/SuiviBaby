@@ -64,6 +64,20 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     expect(mockShowUndoToast).toHaveBeenCalledWith("Sommeil terminé", expect.any(Function), undefined, 5000);
   });
 
+  it("arrêt depuis le widget : champ de mesure ajouté à l'écriture (endSource)", () => {
+    const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    const event = sleep();
+
+    result.current(event, { endSource: "widget" });
+
+    expect(modifier).toHaveBeenCalledWith("c1", "ev1", { heureFin: NOW, duree: 90, endSource: "widget" }, event);
+    // Annuler : l'arrêt et sa marque disparaissent.
+    const undo = mockShowUndoToast.mock.calls.at(-1)[1];
+    undo();
+    expect(modifier).toHaveBeenLastCalledWith("c1", "ev1", { heureFin: null, duree: null, endSource: null }, expect.anything());
+  });
+
   it("never records a duration below one minute", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));

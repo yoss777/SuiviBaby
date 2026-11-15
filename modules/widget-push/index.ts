@@ -6,6 +6,7 @@ type WidgetPushNative = {
   noteAppSnapshot(childId: string): void;
   clear?(): void;
   readReceiveLog(): string;
+  moveTaskToBack?(): Promise<boolean>;
 };
 
 let native: WidgetPushNative | null | undefined;
@@ -51,5 +52,18 @@ export function readReceiveLog(): WidgetPushLogEntry[] {
     return raw ? (JSON.parse(raw) as WidgetPushLogEntry[]) : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Android : renvoie l'app en arrière-plan (retour à l'écran d'accueil) après
+ * une action lancée depuis le widget. Sans effet ailleurs ou si le module natif
+ * est trop ancien (client de développement non reconstruit).
+ */
+export async function moveAppToBack(): Promise<boolean> {
+  try {
+    return (await getNative()?.moveTaskToBack?.()) ?? false;
+  } catch {
+    return false;
   }
 }
