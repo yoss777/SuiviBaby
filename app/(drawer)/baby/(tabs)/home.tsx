@@ -62,6 +62,8 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
+import { isNapHour } from "@/utils/sleepPeriod";
+import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -163,6 +165,8 @@ interface TodayStats {
   sommeil: {
     count: number;
     totalMinutes: number;
+    /** Sommeils terminés seulement : le widget ajoute lui-même le sommeil en cours. */
+    finishedMinutes: number;
     lastTime?: string;
     lastTimestamp?: number;
   };
@@ -266,7 +270,7 @@ export default function HomeDashboard() {
       solides: { count: 0 },
     },
     pompages: { count: 0, quantity: 0 },
-    sommeil: { count: 0, totalMinutes: 0 },
+    sommeil: { count: 0, totalMinutes: 0, finishedMinutes: 0 },
     mictions: { count: 0 },
     selles: { count: 0 },
     vitamines: { count: 0 },
@@ -750,7 +754,7 @@ export default function HomeDashboard() {
       sleepChildId: (sommeilEnCours as { childId?: string } | undefined)?.childId,
       walkChildId: (promenadeEnCours as { childId?: string } | undefined)?.childId,
       walkStartMs: promenadeStartTs,
-      sleepTotalMinutes: todayStats.sommeil.totalMinutes,
+      sleepTotalMinutes: todayStats.sommeil.finishedMinutes,
       lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
       lastEventAt: widgetLastEventAt,
       isPremium,
@@ -772,7 +776,7 @@ export default function HomeDashboard() {
       sommeilEnCours,
       promenadeEnCours,
       promenadeStartTs,
-      todayStats.sommeil.totalMinutes,
+      todayStats.sommeil.finishedMinutes,
       todayStats.meals.lastAbsoluteTimestamp,
       widgetLastEventAt,
       isPremium,
@@ -1130,9 +1134,17 @@ export default function HomeDashboard() {
     canManageContent,
   ]);
 
+  // Démarrage en vol : l'événement optimiste n'apparaît dans sommeilEnCours /
+  // promenadeEnCours qu'après le prochain rendu. Sans ce verrou, deux appuis
+  // rapprochés (ou un lien du widget traité deux fois) créaient deux sessions.
+  const startingRef = useRef<{ sleep: number; walk: number }>({ sleep: 0, walk: 0 });
+  const START_LOCK_MS = 10_000;
+
   const handleStartSleep = useCallback(
     (isNap: boolean) => {
       if (!activeChild?.id || sommeilEnCours) return;
+      if (Date.now() - startingRef.current.sleep < START_LOCK_MS) return;
+      startingRef.current.sleep = Date.now();
       ajouterEvenementOptimistic(activeChild.id, {
         type: "sommeil" as const,
         heureDebut: new Date(),
@@ -1198,11 +1210,67 @@ export default function HomeDashboard() {
   }, [openSheetRaw]);
 
   // Appui sur une zone du widget : formulaire de la catégorie.
+
+  // Promenade start/stop handlers
+  const handleStartPromenade = useCallback(() => {
+    if (!activeChild?.id || promenadeEnCours) return;
+    if (Date.now() - startingRef.current.walk < START_LOCK_MS) return;
+    startingRef.current.walk = Date.now();
+    ajouterEvenementOptimistic(activeChild.id, {
+      type: "activite" as const,
+      typeActivite: "promenade",
+      heureDebut: new Date(),
+      date: new Date(),
+    });
+    showToast("Promenade démarrée");
+  }, [activeChild?.id, promenadeEnCours, showToast]);
+
+  const handleStopPromenade = useCallback(() => {
+    stopTimedEventWithUndo(promenadeEnCours);
+  }, [promenadeEnCours, stopTimedEventWithUndo]);
+
   const openFromWidget = useCallback(
-    (action: WidgetDeepLinkAction) => {
+    (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => {
       // Proche (lecture seule) : pas de formulaire, l'Accueil suffit.
       if (!canManageContent) {
         showToast("Seuls les parents peuvent faire une saisie");
+        return;
+      }
+      // Démarrer / arrêter depuis le widget : même effet que les boutons de
+      // l'Accueil (arrêt avec « Annuler » pendant 5 s).
+      if (action === "sleep-start") {
+        if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
+        else handleStartSleep(opts?.nap ?? isNapHour(new Date()));
+        return;
+      }
+      if (action === "sleep-stop") {
+        if (sommeilEnCours) handleStopSleep();
+        else showToast("Aucun sommeil en cours");
+        return;
+      }
+      if (action === "walk-start") {
+        if (promenadeEnCours) showToast("Promenade déjà en cours");
+        else handleStartPromenade();
+        return;
+      }
+      if (action === "walk-stop") {
+        if (promenadeEnCours) handleStopPromenade();
+        else showToast("Aucune promenade en cours");
+        return;
+      }
+      // Arrêter la tétée : le chrono s'arrête à l'instant de l'appui, puis la
+      // feuille Repas s'ouvre pour l'enregistrer (côtés et durées à vérifier).
+      if (action === "nursing-stop") {
+        const childId = activeChild?.id;
+        if (!childId) return;
+        void (async () => {
+          const now = Date.now();
+          const state = await loadNursingTimer(childId, now);
+          if (state?.runningSide) {
+            await saveNursingTimer(childId, toggleSide(state, state.runningSide, now));
+          }
+          handleResumeNursing();
+        })();
         return;
       }
       if (action === "diaper") {
@@ -1222,25 +1290,24 @@ export default function HomeDashboard() {
         openSheetRaw({ ownerId: headerOwnerId.current, formType: "meals", mealType });
       }
     },
-    [canManageContent, showToast, openSheetRaw, handleResumeNursing, data.tetees, data.biberons, data.solides],
+    [
+      canManageContent,
+      showToast,
+      activeChild?.id,
+      sommeilEnCours,
+      promenadeEnCours,
+      handleStartSleep,
+      handleStopSleep,
+      handleStartPromenade,
+      handleStopPromenade,
+      openSheetRaw,
+      handleResumeNursing,
+      data.tetees,
+      data.biberons,
+      data.solides,
+    ],
   );
   useWidgetDeepLink({ ready: isDataLoaded && canManageKnown, open: openFromWidget });
-
-  // Promenade start/stop handlers
-  const handleStartPromenade = useCallback(() => {
-    if (!activeChild?.id || promenadeEnCours) return;
-    ajouterEvenementOptimistic(activeChild.id, {
-      type: "activite" as const,
-      typeActivite: "promenade",
-      heureDebut: new Date(),
-      date: new Date(),
-    });
-    showToast("Promenade démarrée");
-  }, [activeChild?.id, promenadeEnCours, showToast]);
-
-  const handleStopPromenade = useCallback(() => {
-    stopTimedEventWithUndo(promenadeEnCours);
-  }, [promenadeEnCours, stopTimedEventWithUndo]);
 
   const handleEditPromenadeInSheet = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
@@ -1408,6 +1475,7 @@ export default function HomeDashboard() {
       { waitForServer: true },
       handleListenerError,
     );
+
 
     return () => {
       unsubscribe();
@@ -1585,6 +1653,17 @@ export default function HomeDashboard() {
 
       return sum + Math.max(0, todayMinutes);
     }, 0);
+    // Même calcul sans les sommeils en cours (pour le widget, qui ajoute le
+    // sommeil en cours lui-même : sinon il était compté deux fois).
+    const finishedSleepMinutes = todaySommeils.reduce((sum, item) => {
+      if (!item.heureFin) return sum;
+      const start = (item.heureDebut ? toDate(item.heureDebut) : toDate(item.date)).getTime();
+      const end = toDate(item.heureFin).getTime();
+      const todayMinutes = Math.round(
+        (Math.min(end, endOfToday.getTime()) - Math.max(start, startOfToday.getTime())) / 60000,
+      );
+      return sum + Math.max(0, todayMinutes);
+    }, 0);
 
     const lastSommeil =
       todaySommeils.length > 0
@@ -1718,6 +1797,7 @@ export default function HomeDashboard() {
       sommeil: {
         count: todaySommeils.length,
         totalMinutes: totalSleepMinutes,
+        finishedMinutes: finishedSleepMinutes,
         lastTime: formatTime(lastSommeil),
         lastTimestamp: getTimestamp(lastSommeil),
       },

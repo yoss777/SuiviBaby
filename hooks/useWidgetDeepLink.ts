@@ -3,31 +3,59 @@
 // suivibaby:///baby/home?widget=meal|diaper|nursing&child=<id> ouvre
 // directement le formulaire de la catégorie sur l'Accueil, pour le bon bébé.
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useBaby } from "@/contexts/BabyContext";
 
-export type WidgetDeepLinkAction = "meal" | "diaper" | "nursing";
+export type WidgetDeepLinkAction =
+  | "meal"
+  | "diaper"
+  | "nursing"
+  | "nursing-stop"
+  | "sleep-start"
+  | "sleep-stop"
+  | "walk-start"
+  | "walk-stop";
 
-const ACTIONS = new Set<string>(["meal", "diaper", "nursing"]);
+const ACTIONS = new Set<string>([
+  "meal",
+  "diaper",
+  "nursing",
+  "nursing-stop",
+  "sleep-start",
+  "sleep-stop",
+  "walk-start",
+  "walk-stop",
+]);
 
 /** Lien d'une zone du widget (construit aussi dans le widget, runtime isolé). */
-export function widgetDeepLink(action: WidgetDeepLinkAction, childId?: string): string {
-  return `suivibaby:///baby/home?widget=${action}${childId ? `&child=${encodeURIComponent(childId)}` : ""}`;
+export function widgetDeepLink(action: WidgetDeepLinkAction, childId?: string, nap?: boolean): string {
+  return `suivibaby:///baby/home?widget=${action}${childId ? `&child=${encodeURIComponent(childId)}` : ""}${nap === undefined ? "" : `&nap=${nap ? 1 : 0}`}`;
 }
 
 export function useWidgetDeepLink(opts: {
   /** Données de l'Accueil chargées : la feuille s'ouvre sur un état juste. */
   ready: boolean;
-  open: (action: WidgetDeepLinkAction) => void;
+  /** `nap` : sieste (true) ou nuit (false) pour « sleep-start », tel qu'affiché par le widget. */
+  open: (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => void;
 }): void {
-  const { widget, child } = useLocalSearchParams<{ widget?: string; child?: string }>();
+  const { widget, child, nap } = useLocalSearchParams<{ widget?: string; child?: string; nap?: string }>();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { ready, open } = opts;
+  // Un lien n'est traité qu'une fois. router.setParams() n'efface les
+  // paramètres qu'au rendu suivant : entre-temps, l'effet se relance (open
+  // change dès que les données bougent) et démarrait plusieurs siestes ou
+  // promenades pour un seul appui.
+  const handledRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!widget) return;
-    const clear = () => router.setParams({ widget: undefined, child: undefined });
+    if (!widget) {
+      handledRef.current = null;
+      return;
+    }
+    const key = `${widget}|${child ?? ""}|${nap ?? ""}`;
+    if (handledRef.current === key) return;
+    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined });
     if (!ACTIONS.has(widget)) {
       clear();
       return;
@@ -41,7 +69,8 @@ export function useWidgetDeepLink(opts: {
       return;
     }
     if (!ready) return;
-    open(widget as WidgetDeepLinkAction);
+    handledRef.current = key;
+    open(widget as WidgetDeepLinkAction, nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : undefined);
     clear();
-  }, [widget, child, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
+  }, [widget, child, nap, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
 }

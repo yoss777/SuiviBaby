@@ -291,10 +291,15 @@ function nursingLive(state, now, env) {
   const pausedAt = side ? null : typeof state.updatedAt === "number" && state.updatedAt <= now ? state.updatedAt : now;
   const timerStartMs = side && state.runningSince ? state.runningSince - shownBase * 1000 : pausedAt - shownBase * 1000;
   const startedAt = state.startedAt != null ? state.startedAt : timerStartMs;
+  // Règle du brouillon (nursingTimer) : effacé 3 h après la dernière action
+  // s'il tourne, 1 h en pause. Le widget s'en sert pour retirer la tétée seul.
+  const expiresAtMs =
+    typeof state.updatedAt === "number" ? state.updatedAt + (side ? NURSING_RUNNING_TTL_MS : NURSING_PAUSED_TTL_MS) : null;
   return {
     kind: "nursing",
     timerStartMs,
     pausedAtMs: pausedAt,
+    expiresAtMs,
     side: shown === "left" ? "G" : "D",
     otherSideLabel: otherSeconds >= 1 ? `${shown === "left" ? "D" : "G"} ${formatDuration(otherSeconds)}` : null,
     sinceMs: startedAt,
@@ -436,7 +441,9 @@ function assembleNowWidgetInput(src, env = localEnv) {
 
   return {
     childName: src.childName,
-    nursing: src.nursing || null,
+    // Même règle d'expiration que l'app (brouillon oublié) : sans elle, une
+    // tétée gardée en mémoire par l'app restait « en cours » sur le widget.
+    nursing: usableNursing(src.nursing || null, now),
     sleepStartMs: src.sleepStartMs != null ? src.sleepStartMs : null,
     sleepIsNap: src.sleepIsNap != null ? src.sleepIsNap : null,
     walkStartMs: src.walkStartMs != null ? src.walkStartMs : null,

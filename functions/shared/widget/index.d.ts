@@ -8,6 +8,8 @@ export interface WidgetLive {
   timerStartMs: number;
   /** En pause (tétée) : chrono figé à cette date (ms). */
   pausedAtMs: number | null;
+  /** Tétée : heure où le brouillon expire (3 h sans action, 1 h en pause) ; le widget la retire alors. */
+  expiresAtMs?: number | null;
   /** Côté actif ou dernier côté (tétée). */
   side: "G" | "D" | null;
   /** Temps de l'autre côté, figé : « D 4:10 » (tétée). */

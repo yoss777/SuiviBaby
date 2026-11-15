@@ -129,13 +129,24 @@ describe("assemble + build (fuseau du serveur)", () => {
   });
 
   test("tétée en cours et promenade : deux sessions, la tétée d'abord", () => {
-    const nursing = { leftSeconds: 120, rightSeconds: 0, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 45) };
+    const nursing = { leftSeconds: 120, rightSeconds: 0, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 45), updatedAt: at(16, 50) };
     const props = w.buildNowWidgetProps(
       w.assembleNowWidgetInput({ ...base, nursing, walkStartMs: at(16, 30) }, paris),
       paris,
     );
     expect(props.lives.map((l) => l.kind)).toEqual(["nursing", "walk"]);
     expect(props.live).toMatchObject({ side: "D", otherSideLabel: "G 2:00", sinceLabel: "depuis 16:45", alsoKind: "walk" });
+  });
+
+  test("tétée oubliée : même expiration que l'app (3 h sans action en marche, 1 h en pause)", () => {
+    const running = { leftSeconds: 0, rightSeconds: 60, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 49), updatedAt: at(16, 50) };
+    const ok = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, nursing: running }, paris), paris);
+    expect(ok.live).toMatchObject({ kind: "nursing", expiresAtMs: at(19, 50) });
+    // 17:00 + 3 h depuis la dernière action (13:50) dépassées : plus de tétée.
+    const old = { ...running, runningSince: at(13, 50), startedAt: at(13, 45), updatedAt: at(13, 50) };
+    expect(w.assembleNowWidgetInput({ ...base, nursing: old }, paris).nursing).toBeNull();
+    const paused = { leftSeconds: 300, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: at(15, 40), updatedAt: at(15, 50) };
+    expect(w.assembleNowWidgetInput({ ...base, nursing: paused }, paris).nursing).toBeNull();
   });
 
   test("sans Premium : pas de rappel de change ; dernier repas absolu hors du jour", () => {

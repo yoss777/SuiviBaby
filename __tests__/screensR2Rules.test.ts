@@ -136,7 +136,7 @@ describe("indicateur « Tétée en cours »", () => {
     );
     expect(d.running).toBe(true);
     expect(d.totalSeconds).toBe(360);
-    expect(d.label).toBe("Tétée en cours · côté gauche · 6 min");
+    expect(d.label).toBe("Tétée · côté gauche · 6 min");
     expect(d.accessibilityLabel).toBe("Tétée en cours, côté gauche, 6 min. Reprendre la tétée");
   });
 
@@ -151,7 +151,7 @@ describe("indicateur « Tétée en cours »", () => {
       { ...EMPTY_NURSING_TIMER, runningSide: "right", runningSince: now - 20_000, startedAt: now - 20_000, updatedAt: now },
       now,
     );
-    expect(fresh.label).toBe("Tétée en cours · côté droit · moins d'1 min");
+    expect(fresh.label).toBe("Tétée · côté droit · moins d'1 min");
   });
 
   it("l'Accueil affiche l'indicateur et ne réécrit pas le stockage du chrono", () => {
