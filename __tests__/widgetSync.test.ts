@@ -180,6 +180,16 @@ describe("données pas encore chargées au lancement", () => {
     expect(widget.updateSnapshot).not.toHaveBeenCalled();
   });
 
+  it("hors premier plan, minuit passé : le nouveau jour est écrit (pas les compteurs d'hier)", () => {
+    jest.setSystemTime(new Date(2026, 10, 15, 23, 50));
+    pushNowWidget(props({ childName: "hier", day: { ...day, mealsCount: 3 } as any }));
+    expect(mockCalls).toContain("write:hier");
+    jest.setSystemTime(new Date(2026, 10, 16, 0, 5));
+    setAppState("background");
+    pushNowWidget(unloaded());
+    expect(mockCalls).toContain("write:vide");
+  });
+
   it("vraie journée vide : écrite après le délai ; jamais forcée au passage en arrière-plan", () => {
     pushNowWidget(unloaded());
     flushPendingWidgetPush();

@@ -79,6 +79,9 @@ export function widgetContentKey(props: NowWidgetProps): string {
 }
 
 let lastChildId: string | undefined;
+/** Jour calendaire (local) du dernier contenu écrit dans le widget. */
+let lastWrittenDay = "";
+const dayOf = (ms: number) => new Date(ms).toDateString();
 let childSwitchedAt = 0;
 let pendingRun: (() => void) | null = null;
 /** L'envoi en attente est un contenu « pas encore chargé » : jamais forcé. */
@@ -99,6 +102,7 @@ function write(props: NowWidgetProps, key: string): void {
       widget.updateSnapshot(toNativeWidgetProps(props));
     }
     lastKey = key;
+    lastWrittenDay = dayOf(Date.now());
     if (props.childId !== lastChildId) childSwitchedAt = Date.now();
     lastChildId = props.childId;
     if (__DEV__) console.log(`[widget] envoyé : ${props.childName}${props.loading ? " · chargement" : props.live ? ` · ${props.live.kind}` : ""}`);
@@ -140,7 +144,13 @@ export function pushNowWidget(props: NowWidgetProps): void {
     // Hors premier plan, la réponse du serveur ne peut plus arriver (réseau
     // suspendu) : le délai expirait et écrivait « 0 repas » au passage en
     // arrière-plan. Le widget garde ses données précédentes, plus justes.
-    if (AppState.currentState !== "active") return;
+    // Exception : le widget montre encore un autre jour (minuit passé) ; les
+    // compteurs d'hier seraient faux aussi, on écrit le nouveau jour tout de
+    // suite (minuteries suspendues hors premier plan).
+    if (AppState.currentState !== "active") {
+      if (lastWrittenDay && lastWrittenDay !== dayOf(Date.now())) write(props, key);
+      return;
+    }
     // Écrit seulement si rien de mieux n'arrive entre-temps (vraie journée vide).
     pendingUnloaded = true;
     pendingRun = () => write(props, key);
@@ -233,6 +243,7 @@ export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   handle = widget === undefined ? undefined : widget;
   lastKey = "";
   lastChildId = undefined;
+  lastWrittenDay = "";
   childSwitchedAt = 0;
   reported.clear();
   cancelPendingWidgetPush();

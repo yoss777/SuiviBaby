@@ -54,6 +54,7 @@ import {
   buildTodayEventsData,
   getTodayEventsCache,
   getTodayTypes,
+  setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1539,6 +1540,15 @@ export default function HomeDashboard() {
       activeChild.id,
       (events) => {
         setFirestoreEvents(events);
+        // Cache du jour tenu à jour (il amorce la fusion au prochain retour
+        // sur cet enfant) : seulement les évènements d'aujourd'hui, l'écouteur
+        // couvrant aussi hier.
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        setTodayEventsCache(
+          activeChild.id,
+          buildTodayEventsData(events.filter((e: any) => toDate(e.date).getTime() >= startOfToday.getTime())),
+        );
         if (!loadingSet) {
           loadingSet = true;
           setLoading({
