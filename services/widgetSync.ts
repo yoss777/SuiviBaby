@@ -87,6 +87,28 @@ let pendingRun: (() => void) | null = null;
 /** L'envoi en attente est un contenu « pas encore chargé » : jamais forcé. */
 let pendingUnloaded = false;
 
+function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps): void {
+  const dates = widgetTimelineDates(props);
+  const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: dates[dates.length - 1] + 5 * 60_000 });
+  widget.updateTimeline!(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
+}
+
+/**
+ * iPhone : données reçues du serveur (notification silencieuse, app en
+ * arrière-plan). Pas notées comme écriture de l'app ; la prochaine écriture
+ * de l'app repart d'une clé vide (contenu jamais ignoré comme « identique »).
+ */
+export function writeServerWidgetProps(props: NowWidgetProps): void {
+  const widget = getWidget();
+  if (!widget?.updateTimeline || props.loading) return;
+  try {
+    writeIosTimeline(widget, props);
+    lastKey = "";
+  } catch (error) {
+    reportOnce(error, "serverTimeline");
+  }
+}
+
 function write(props: NowWidgetProps, key: string): void {
   const widget = getWidget();
   if (!widget) return;
@@ -95,9 +117,7 @@ function write(props: NowWidgetProps, key: string): void {
     // entre les deux ne revienne jamais avant elle, ni sur un autre bébé.
     if (props.childId) noteAppSnapshot(props.childId);
     if (Platform.OS === "ios" && widget.updateTimeline && !props.loading) {
-      const dates = widgetTimelineDates(props);
-      const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: dates[dates.length - 1] + 5 * 60_000 });
-      widget.updateTimeline(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
+      writeIosTimeline(widget, props);
     } else {
       widget.updateSnapshot(toNativeWidgetProps(props));
     }

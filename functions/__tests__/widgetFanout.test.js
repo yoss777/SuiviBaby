@@ -146,6 +146,22 @@ describe("fanOutWidget", () => {
     expect(pushed()).toHaveLength(0);
   });
 
+  it("iPhone activé (app_config/widgetPush.ios) : notification silencieuse, priorité normale, sans titre", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "ios", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris" },
+    }));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    const ios = pushed().find((m) => m.to === "ExponentPushToken[d1]");
+    expect(ios).toMatchObject({ _contentAvailable: true, priority: "normal", data: { t: "w1", c: "c1" } });
+    expect(ios.title).toBeUndefined();
+    expect(ios.body).toBeUndefined();
+    expect(ios.sound).toBeUndefined();
+    // Android inchangé.
+    expect(pushed().find((m) => m.to === "ExponentPushToken[m1]")).toMatchObject({ priority: "high" });
+    expect(pushed().find((m) => m.to === "ExponentPushToken[m1]")._contentAvailable).toBeUndefined();
+  });
+
   it("tétée partagée en cours (non expirée) et enfant supprimé", async () => {
     memoryStore(seed({
       "children/c1/live/nursing": { leftSeconds: 300, rightSeconds: 0, runningSide: "right", runningSince: NOW - 60000, startedAt: NOW - 400000, updatedAt: NOW - 60000, v: 1, updatedBy: "mum" },

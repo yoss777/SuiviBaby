@@ -52,13 +52,18 @@ const NOTIF_ID_PREFIX = "reminder";
  */
 export function setupNotificationHandler() {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    // Message de données du widget (« w1 », iPhone en notification
+    // silencieuse) : jamais affiché, même app ouverte.
+    handleNotification: async (notification) => {
+      const widgetData = (notification.request.content.data as { t?: string } | undefined)?.t === "w1";
+      return {
+        shouldShowAlert: !widgetData,
+        shouldPlaySound: !widgetData,
+        shouldSetBadge: false,
+        shouldShowBanner: !widgetData,
+        shouldShowList: !widgetData,
+      };
+    },
   });
 }
 
