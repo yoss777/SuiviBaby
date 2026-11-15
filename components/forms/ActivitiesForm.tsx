@@ -103,7 +103,7 @@ const TYPE_CONFIG: Record<
     icon: "book",
   },
   promenade: {
-    label: "Promenade",
+    label: "Balade",
     color: eventColors.activite.dark,
     icon: "person-walking",
   },
@@ -302,7 +302,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
         if (hasOngoing) {
           showAlert(
             "Attention",
-            "Une promenade est déjà en cours. Terminez-la avant d'en commencer une nouvelle.",
+            "Une balade est déjà en cours. Terminez-la avant d'en commencer une nouvelle.",
           );
           setIsSubmitting(false);
           return;
@@ -313,7 +313,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
       if (isChronoMode && isOngoing && isEditing && !isEditingSamePromenade) {
         showAlert(
           "Attention",
-          "Une autre promenade est déjà en cours. Terminez-la d'abord.",
+          "Une autre balade est déjà en cours. Terminez-la d'abord.",
         );
         setIsSubmitting(false);
         return;
@@ -346,7 +346,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           Object.entries(editPayload).filter(([, v]) => v !== undefined),
         );
         modifierEvenementOptimistic(activeChild.id, editData.id, cleanedPayload, editData);
-        showSuccess("activity", "Promenade modifiée");
+        showSuccess("activity", "Balade modifiée");
       } else if (isChronoMode) {
         // Create mode: use removeUndefined (no null needed for new events)
         const data = removeUndefined({
@@ -360,7 +360,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           note: description.trim() || undefined,
         });
         ajouterEvenementOptimistic(activeChild.id, data);
-        showSuccess("activity", "Promenade ajoutée");
+        showSuccess("activity", "Balade ajoutée");
       } else {
         // Non-chrono activities
         const data = removeUndefined({

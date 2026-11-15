@@ -158,7 +158,7 @@ describe("otherEventLabel (fil du jour)", () => {
     expect(otherEventLabel({ type: "sommeil", isNap: true, heureFin: 1, duree: 80 })).toBe("Sieste 1h20");
     expect(otherEventLabel({ type: "sommeil", isNap: false, heureFin: 1, duree: 45 })).toBe("Nuit 45 min");
     expect(otherEventLabel({ type: "sommeil", isNap: true })).toBe("Sieste · en cours");
-    expect(otherEventLabel({ type: "activite", typeActivite: "promenade", heureDebut: 1 })).toBe("Promenade · en cours");
+    expect(otherEventLabel({ type: "activite", typeActivite: "promenade", heureDebut: 1 })).toBe("Balade · en cours");
     expect(otherEventLabel({ type: "activite", typeActivite: "lecture", duree: 10 })).toBe("Lecture 10 min");
   });
 

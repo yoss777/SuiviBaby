@@ -117,7 +117,7 @@ const SECTIONS: Section[] = [
       },
       {
         title: "Activités",
-        subtitle: "Tummy time, jeux, lecture, promenade...",
+        subtitle: "Tummy time, jeux, lecture, balade...",
         icon: "play-circle",
         color: eventColors.activite.dark,
         route: "/baby/activities",

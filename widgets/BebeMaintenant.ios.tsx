@@ -42,7 +42,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const KIND = {
     nursing: { label: "Tétée", symbol: "drop.fill", color: C.nursing, path: "nursing" },
     sleep: { label: "Sommeil", symbol: "moon.zzz.fill", color: C.sleep, path: "sleep" },
-    walk: { label: "Promenade", symbol: "figure.walk", color: C.walk, path: "walk" },
+    walk: { label: "Balade", symbol: "figure.walk", color: C.walk, path: "walk" },
   };
   const now = environment.date ? new Date(environment.date).getTime() : Date.now();
   const family = environment.widgetFamily;
@@ -330,7 +330,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {canWrite && !lives.some((l) => l.kind === "sleep")
         ? headChip(napNow ? "▶ Sieste" : "▶ Nuit", "sleep-start", T.sleepTile, T.sleepText)
         : null}
-      {canWrite && !lives.some((l) => l.kind === "walk") ? headChip("▶ Promenade", "walk-start", T.walkTile, T.walkText) : null}
+      {canWrite && !lives.some((l) => l.kind === "walk") ? headChip("▶ Balade", "walk-start", T.walkTile, T.walkText) : null}
     </HStack>
   );
 

@@ -109,7 +109,7 @@ const TYPE_CONFIG: Record<
     icon: "book",
   },
   promenade: {
-    label: "Promenade",
+    label: "Balade",
     color: eventColors.activite.dark,
     icon: "person-walking",
   },
@@ -1123,7 +1123,7 @@ export default function ActivitiesScreen() {
   const stopTimedPromenadeWithUndo = useStopTimedEventWithUndo<ActivityEventWithId>({
     childId: activeChild?.id,
     getSuccessLabel: (_event, { isUnderOneMinute }) =>
-      `Promenade terminée${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
+      `Balade terminée${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
   });
 
   const handleStopPromenade = useCallback(() => {
@@ -1439,8 +1439,8 @@ export default function ActivitiesScreen() {
               },
               {
                 key: "promenade",
-                label: "Promenade",
-                accessibilityLabel: "Ajouter une promenade",
+                label: "Balade",
+                accessibilityLabel: "Ajouter une balade",
                 icon: <FontAwesome name="person-walking" size={14} color={Colors[colorScheme].tint} />,
                 onPress: () => openAddModal("promenade"),
               },

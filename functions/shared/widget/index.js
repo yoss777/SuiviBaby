@@ -117,7 +117,7 @@ const ACTIVITY = {
   tummyTime: "Tummy time",
   jeux: "Jeux",
   lecture: "Lecture",
-  promenade: "Promenade",
+  promenade: "Balade",
   massage: "Massage",
   musique: "Musique",
   eveil: "Éveil",

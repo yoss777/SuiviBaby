@@ -1163,7 +1163,7 @@ export default function HomeDashboard() {
       if (event.type === "sommeil") {
         return `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${shortSuffix}`;
       }
-      return `Promenade terminée${shortSuffix}`;
+      return `Balade terminée${shortSuffix}`;
     },
   });
 
@@ -1222,7 +1222,7 @@ export default function HomeDashboard() {
       heureDebut: new Date(),
       date: new Date(),
     });
-    showToast("Promenade démarrée");
+    showToast("Balade démarrée");
   }, [activeChild?.id, promenadeEnCours, showToast]);
 
   const handleStopPromenade = useCallback(() => {
@@ -1249,13 +1249,13 @@ export default function HomeDashboard() {
         return;
       }
       if (action === "walk-start") {
-        if (promenadeEnCours) showToast("Promenade déjà en cours");
+        if (promenadeEnCours) showToast("Balade déjà en cours");
         else handleStartPromenade();
         return;
       }
       if (action === "walk-stop") {
         if (promenadeEnCours) handleStopPromenade();
-        else showToast("Aucune promenade en cours");
+        else showToast("Aucune balade en cours");
         return;
       }
       // Arrêter la tétée : le chrono s'arrête à l'instant de l'appui, puis la
