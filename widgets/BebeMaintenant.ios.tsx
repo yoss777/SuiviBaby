@@ -269,6 +269,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     if (days === 1) return `dernier hier à ${clock(ms)}`;
     return `dernier le ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
   };
+  // Rappel dépassé : le jour du dernier, comme Android (« rappel · 11:57 »,
+  // « rappel · hier 11:57 », « rappel · le 13/11 »).
+  const lateWhen = (ms: number) => {
+    const days = Math.round((dayKey(now) - dayKey(ms)) / 86400000);
+    const d = new Date(ms);
+    if (days <= 0) return `rappel · ${clock(ms)}`;
+    if (days === 1) return `rappel · hier ${clock(ms)}`;
+    return `rappel · le ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
   const restBlock = (label: string, color: string, ms: number | null | undefined, late: boolean) => (
     <VStack alignment="leading" spacing={0}>
       <HStack spacing={5}>
@@ -310,8 +319,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </VStack>
       ) : day ? (
         <VStack alignment="leading" spacing={5} modifiers={[frame({ maxWidth: 10000, alignment: "topLeading" })]}>
-          {dayRow(C.meal, `${day.mealsCount} repas`, day.lastMealMs ? (mealLate ? `rappel · ${clock(day.lastMealMs)}` : lastWhen(day.lastMealMs)) : day.noMealEver ? "aucun noté" : null, mealLate)}
-          {dayRow(C.diaper, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, day.lastDiaperMs ? (diaperLate ? `rappel · ${clock(day.lastDiaperMs)}` : lastWhen(day.lastDiaperMs)) : day.noDiaperEver ? "aucun noté" : null, diaperLate)}
+          {dayRow(C.meal, `${day.mealsCount} repas`, day.lastMealMs ? (mealLate ? lateWhen(day.lastMealMs) : lastWhen(day.lastMealMs)) : day.noMealEver ? "aucun noté" : null, mealLate)}
+          {dayRow(C.diaper, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, day.lastDiaperMs ? (diaperLate ? lateWhen(day.lastDiaperMs) : lastWhen(day.lastDiaperMs)) : day.noDiaperEver ? "aucun noté" : null, diaperLate)}
           {dayRow(C.sleep, sleepLabel(sleepNowMin), "de sommeil", false)}
           {dataStale ? <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>{`màj ${clock(generatedAt)}`}</Text> : null}
         </VStack>
