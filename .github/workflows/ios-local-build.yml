@@ -104,6 +104,11 @@ jobs:
         run: echo "::warning::INTERNAL build with preview screens (SHOW_PREVIEWS=true). TestFlight internal testing only, never submit it for App Store review."
 
       - name: Build (eas build --local)
+        # Dossier de travail sans lien symbolique : sous $TMPDIR (/var → /private/var),
+        # le plugin expo-widgets écrit le chemin du layout en /var/… et Metro, qui
+        # résout en /private/var/…, ne trouve plus widgets/BebeMaintenant.ios.tsx.
+        env:
+          EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
         run: |
           npx --yes eas-cli@latest build --local --platform ios --profile production \
             --non-interactive --output "$RUNNER_TEMP/app.ipa"
