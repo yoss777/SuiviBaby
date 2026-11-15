@@ -71,6 +71,37 @@ describe("heures calmes dans les préférences utilisateur", () => {
     });
   });
 
+  it("mise à jour partielle : un seul seuil change, les autres réglages du serveur restent", async () => {
+    // Version serveur : changée depuis un autre appareil (change à 4 h, heures calmes 21:00).
+    (getDoc as jest.Mock).mockResolvedValue(
+      stored({
+        enabled: true,
+        thresholds: { repas: 3, pompages: 0, changes: 4, vitamines: 0 },
+        quietHours: { enabled: true, start: "21:00", end: "07:00", timeZone: "Europe/Paris" },
+      }),
+    );
+    await mettreAJourPreferencesNotifications({ reminders: { thresholds: { repas: 2 } } });
+    const reminders = (updateDoc as jest.Mock).mock.calls[0][1].notifications.reminders;
+    expect(reminders.thresholds).toEqual({ repas: 2, pompages: 0, changes: 4, vitamines: 0 });
+    expect(reminders.enabled).toBe(true);
+    expect(reminders.quietHours).toMatchObject({ start: "21:00", end: "07:00" });
+  });
+
+  it("mise à jour partielle : une heure calme change, l'autre heure et les seuils restent", async () => {
+    (getDoc as jest.Mock).mockResolvedValue(
+      stored({
+        enabled: false,
+        thresholds: { repas: 3, pompages: 0, changes: 4, vitamines: 0 },
+        quietHours: { enabled: true, start: "21:00", end: "07:00", timeZone: "Europe/Paris" },
+      }),
+    );
+    await mettreAJourPreferencesNotifications({ reminders: { quietHours: { end: "06:00", timeZone: "America/Montreal" } } });
+    const reminders = (updateDoc as jest.Mock).mock.calls[0][1].notifications.reminders;
+    expect(reminders.quietHours).toEqual({ enabled: true, start: "21:00", end: "06:00", timeZone: "America/Montreal" });
+    expect(reminders.enabled).toBe(false);
+    expect(reminders.thresholds.changes).toBe(4);
+  });
+
   describe("synchroniserFuseauHoraire (au démarrage)", () => {
     it("ne fait rien si le fuseau stocké est celui de l'appareil", async () => {
       (getDoc as jest.Mock).mockResolvedValue(
