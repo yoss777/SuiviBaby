@@ -6,7 +6,6 @@ import { SheetFooter } from "@/components/forms/SheetFooter";
 import { useFormDirtyGuard } from "@/components/forms/formGuard";
 import { useRepeatPress } from "@/components/forms/useRepeatPress";
 import { NUMERIC_BOUNDS } from "@/utils/eventBounds";
-import { PRIMARY_TYPE_CHIP, PRIMARY_TYPE_CHIP_TEXT } from "@/components/forms/formTokens";
 
 const BAIN_DUREE_MAX = NUMERIC_BOUNDS.bain.duree.max;
 import { getAccentColors } from "@/components/ui/accentColors";
@@ -26,6 +25,7 @@ import {
 } from "@/services/eventsService";
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React, { useCallback, useRef, useState } from "react";
 import {
   StyleSheet,
@@ -198,6 +198,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     return initialSleepMode === "night" ? "night" : "nap";
   };
 
+  // Deux formulaires pour le parent : ouvert en sommeil, Sieste / Nuit ;
+  // ouvert en bain ou nez, Bain / Nez. Les autres types n'ont pas de sens ici.
+  const scope: "sleep" | "hygiene" = (() => {
+    const t = getInitialSheetType();
+    return t === "bain" || t === "nez" ? "hygiene" : "sleep";
+  })();
+
   // Form state
   const [sheetType, setSheetType] = useState<"nap" | "night" | "bain" | "nez">(
     getInitialSheetType(),
@@ -304,6 +311,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   // ============================================
 
   const handleSelectType = (next: "nap" | "night" | "bain" | "nez") => {
+    if ((scope === "sleep") !== (next === "nap" || next === "night")) return;
     if (isEditingBain && next !== "bain") return;
     if (isEditingNez && next !== "nez") return;
     if (isEditingSommeil && (next === "bain" || next === "nez")) return;
@@ -543,12 +551,16 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
   const renderTypePicker = () => (
     <View style={styles.typeRow}>
-      {[
-        { key: "nap", label: "Sieste" },
-        { key: "night", label: "Nuit" },
-        { key: "bain", label: "Bain" },
-        { key: "nez", label: "Nez" },
-      ].map((item) => {
+      {(scope === "sleep"
+        ? [
+            { key: "nap", label: "Sieste", icon: "sun", lib: "fa6" },
+            { key: "night", label: "Nuit", icon: "moon", lib: "fa6" },
+          ]
+        : [
+            { key: "bain", label: "Bain", icon: "bath", lib: "fa6" },
+            { key: "nez", label: "Nez", icon: "eyedropper", lib: "mci" },
+          ]
+      ).map((item) => {
         const active = sheetType === item.key;
         const isDisabled = isEditingBain
           ? item.key !== "bain"
@@ -574,9 +586,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             onPress={() => handleSelectType(item.key as any)}
             accessibilityLabel={item.label}
             accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            hitSlop={8}
+            accessibilityState={{ selected: active, disabled: isDisabled || isSubmitting }}
           >
+            {item.lib === "mci" ? (
+              <MaterialCommunityIcons name={item.icon as any} size={18} color={active ? chipActiveColors.text : nc.textLight} />
+            ) : (
+              <FontAwesome name={item.icon as any} size={15} color={active ? chipActiveColors.text : nc.textLight} />
+            )}
             <Text
               style={[
                 styles.typeChipText,
@@ -1119,17 +1135,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   // Type selector
+  // Deux grands boutons, même gabarit que Repas / Change.
   typeRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
     paddingBottom: 8,
   },
   typeChip: {
-    ...PRIMARY_TYPE_CHIP,
-    borderWidth: 1,
+    ...RIPPLE_CLIP,
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   typeChipActive: {
     // backgroundColor and borderColor applied inline
@@ -1138,7 +1160,9 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   typeChipText: {
-    ...PRIMARY_TYPE_CHIP_TEXT,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
   typeChipTextActive: {
     fontWeight: "700",
