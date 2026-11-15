@@ -37,3 +37,20 @@ Suite de la consultation (`SYNTHESE.md`, 6 cellules + board, vote unanime R2).
 
 - Libellé gardé : « ▶ Sieste » / « ▶ Nuit » selon l'heure (cellules : Sieste/Nuit 14 + 16, Dodo 17 + 13, Sommeil 12 + 12, Repos 10 + 8). Le bouton annonce ce qui sera enregistré.
 - Nuit de 19:00 à 8:00 (avant : 6:00), dans l'app et les deux widgets (`utils/sleepPeriod.ts`).
+
+
+## Suivi (mis à jour le 2026-11-15)
+
+| Élément | État |
+|---|---|
+| Lot 1 : droit de saisie (Proche) | **fait**, PR #84 (fusionnée via #85), serveur déployé |
+| Boutons du widget : démarrer / arrêter sommeil et promenade, arrêter la tétée (ouvrent l'app) | **fait**, PR #85 |
+| Règles métier : une session par type, tétée oubliée 1 h 40 / 40 min, sommeil compté une fois | **fait**, PR #85, serveur déployé |
+| Fin de sommeil le lendemain, bandeau tétée sur 2 lignes, Notifications immédiates et écritures partielles, unité « min », pas de « 0 repas » au lancement, nuit 19:00-8:00 | **fait**, PR #85 |
+| Chrono O2 (secondes la 1re minute puis minutes ; tétée mm:ss), timeline iPhone | décidé, **à faire** |
+| Lot 2 : contenu partagé v2 | **à faire** |
+| Lot 3 : Android sans défilement | **à faire** |
+| Lot 4 : iPhone (petit / moyen avec fil et « ▾ » / grand) | **à faire** (grand format avec fil déjà livré en 1.0.17) |
+| Lot 5 : accessibilité (police agrandie, troncatures) | **à faire** |
+| Boutons sans ouvrir l'app | à décider (4 à 6 j) |
+| E7 temps réel iPhone, notification permanente / Live Activity | **à faire** (plan S3-S5) |
