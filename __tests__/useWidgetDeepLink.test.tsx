@@ -108,3 +108,10 @@ it("arrêter la tétée : action reconnue", () => {
   renderHook(() => useWidgetDeepLink({ ready: true, open }));
   expect(open).toHaveBeenCalledWith("nursing-stop", undefined);
 });
+
+it("ligne sommeil du widget : action reconnue", () => {
+  mockParams = { widget: "sleep", child: "c1" };
+  const open = jest.fn();
+  renderHook(() => useWidgetDeepLink({ ready: true, open }));
+  expect(open).toHaveBeenCalledWith("sleep", undefined);
+});

@@ -1343,6 +1343,19 @@ export default function HomeDashboard() {
         })();
         return;
       }
+      // Ligne « sommeil » du widget : le sommeil en cours à modifier, sinon
+      // un nouveau sommeil (sieste ou nuit selon l'heure, comme l'Accueil).
+      if (action === "sleep") {
+        if (sommeilEnCours) handleEditSleepInSheet();
+        else
+          openSheetRaw({
+            ownerId: headerOwnerId.current,
+            formType: "routines",
+            routineType: "sommeil",
+            sleepMode: isNapHour(new Date()) ? "nap" : "night",
+          });
+        return;
+      }
       if (action === "diaper") {
         openSheetRaw({ ownerId: headerOwnerId.current, formType: "diapers", diapersType: "miction" });
       } else if (action === "nursing") {
@@ -1374,6 +1387,7 @@ export default function HomeDashboard() {
       scheduleWidgetBack,
       openSheetRaw,
       handleResumeNursing,
+      handleEditSleepInSheet,
       data.tetees,
       data.biberons,
       data.solides,

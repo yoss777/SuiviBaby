@@ -1,6 +1,6 @@
 // hooks/useWidgetDeepLink.ts
 // Appui sur une zone du widget « Bébé maintenant » : le lien
-// suivibaby:///baby/home?widget=meal|diaper|nursing&child=<id> ouvre
+// suivibaby:///baby/home?widget=meal|diaper|nursing|sleep&child=<id> ouvre
 // directement le formulaire de la catégorie sur l'Accueil, pour le bon bébé.
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -11,6 +11,7 @@ export type WidgetDeepLinkAction =
   | "meal"
   | "diaper"
   | "nursing"
+  | "sleep"
   | "nursing-stop"
   | "sleep-start"
   | "sleep-stop"
@@ -21,6 +22,7 @@ const ACTIONS = new Set<string>([
   "meal",
   "diaper",
   "nursing",
+  "sleep",
   "nursing-stop",
   "sleep-start",
   "sleep-stop",
