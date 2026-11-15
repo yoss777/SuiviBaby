@@ -47,10 +47,13 @@ Suite de la consultation (`SYNTHESE.md`, 6 cellules + board, vote unanime R2).
 | Boutons du widget : démarrer / arrêter sommeil et promenade, arrêter la tétée (ouvrent l'app) | **fait**, PR #85 |
 | Règles métier : une session par type, tétée oubliée 1 h 40 / 40 min, sommeil compté une fois | **fait**, PR #85, serveur déployé |
 | Fin de sommeil le lendemain, bandeau tétée sur 2 lignes, Notifications immédiates et écritures partielles, unité « min », pas de « 0 repas » au lancement, nuit 19:00-8:00 | **fait**, PR #85 |
-| Chrono O2 (secondes la 1re minute puis minutes ; tétée mm:ss), timeline iPhone | décidé, **à faire** |
+| Chrono : minutes dès le départ sur les deux OS (secondes de la 1re minute abandonnées : redessin Android non fiable), tétée mm:ss, timeline iPhone | **fait**, PR #88 (iPhone non vu sur appareil) |
 | Lot 2 : contenu partagé v2 | **à faire** |
 | Lot 3 : Android sans défilement | **à faire** |
 | Lot 4 : iPhone (petit / moyen avec fil et « ▾ » / grand) | **à faire** (grand format avec fil déjà livré en 1.0.17) |
 | Lot 5 : accessibilité (police agrandie, troncatures) | **à faire** |
 | Boutons sans ouvrir l'app | à décider (4 à 6 j) |
 | E7 temps réel iPhone, notification permanente / Live Activity | **à faire** (plan S3-S5) |
+
+| « Balade » partout (app + widget) | **fait**, PR #88 |
+| iPhone : en-tête comme Android | **fait**, PR #88 (non vu sur appareil) |
