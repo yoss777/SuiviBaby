@@ -8,6 +8,9 @@
 import { HStack, Image, Link, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
+  background,
+  clipShape,
+  padding,
   containerBackground,
   font,
   foregroundStyle,
@@ -95,8 +98,22 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const generatedAt = props.generatedAtMs ?? 0;
   const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
 
+  // Durées à la minute (« 45 min », « 1h08 ») comme Android, calculées depuis
+  // l'heure de l'entrée de timeline (services/widgetSync.ts). Hors timeline
+  // (ancienne app, timeline épuisée) : compteurs natifs d'iOS, avec secondes.
+  const inTimeline = props.timelineEndMs != null && now < props.timelineEndMs;
+  const minutesText = (startMs: number) => {
+    const m = Math.max(0, Math.floor((now - startMs) / 60000));
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+  };
+  // Sommeil, promenade : « 0 min » dès le départ, comme Android (pas de
+  // secondes la 1re minute : non fiable sur Android, même comportement voulu).
   const timerOf = (l: WidgetLive | null, size: number) =>
-    l ? (
+    l && l.kind !== "nursing" && inTimeline ? (
+      <Text modifiers={[font({ size, weight: "bold" }), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1)]}>
+        {minutesText(l.timerStartMs)}
+      </Text>
+    ) : l ? (
       <Text
         timerInterval={{ lower: new Date(l.timerStartMs), upper: far }}
         countsDown={false}
@@ -193,13 +210,22 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     </VStack>
   ) : (
     <VStack alignment="leading" spacing={4}>
-      <Text modifiers={[font({ size: 12, weight: "medium" }), foregroundStyle(C.soft), lineLimit(1)]}>{props.childName}</Text>
+      {family === "systemSmall" ? (
+        <Text modifiers={[font({ size: 12, weight: "medium" }), foregroundStyle(C.soft), lineLimit(1)]}>{props.childName}</Text>
+      ) : null}
       <HStack spacing={4}>
         {mealLate ? <Image systemName="exclamationmark.circle.fill" color={C.alert} size={12} /> : null}
         <Text modifiers={[font({ size: 13 }), foregroundStyle(mealLate ? C.alert : C.soft)]}>Dernier repas</Text>
       </HStack>
       <Spacer />
-      {props.lastMealMs ? (
+      {props.lastMealMs && inTimeline ? (
+        <HStack spacing={4} alignment="lastTextBaseline">
+          <Text modifiers={[font({ size: 13 }), foregroundStyle(C.soft)]}>il y a</Text>
+          <Text modifiers={[font({ size: 28, weight: "bold" }), monospacedDigit(), foregroundStyle(C.strong), minimumScaleFactor(0.6), lineLimit(1)]}>
+            {minutesText(props.lastMealMs)}
+          </Text>
+        </HStack>
+      ) : props.lastMealMs ? (
         <Text
           date={new Date(props.lastMealMs)}
           dateStyle="relative"
@@ -210,12 +236,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       )}
       {props.lastMealLabel ? (
         <Text modifiers={[font({ size: 13 }), foregroundStyle(C.soft), lineLimit(1)]}>{props.lastMealLabel}</Text>
-      ) : null}
-      {canWrite && family !== "systemSmall" ? (
-        <HStack spacing={12}>
-          {chip(napNow ? "▶ Sieste" : "▶ Nuit", "sleep-start", C.sleep)}
-          {chip("▶ Promenade", "walk-start", C.walk)}
-        </HStack>
       ) : null}
     </VStack>
   );
@@ -267,7 +287,61 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     </HStack>
   );
 
-  if (family !== "systemLarge") return top([bg, widgetURL(url)]);
+  // En-tête comme sur Android : prénom dans une pastille à gauche, boutons
+  // « ▶ Sieste/Nuit » et « ▶ Promenade » à droite (Parent, hors session du même type).
+  const T = {
+    pillBg: dark ? "#1e3a5f" : "#e0f0f5",
+    pillText: dark ? "#bfdbfe" : "#075f80",
+    sleepTile: dark ? "#2c3246" : "#ECE8F4",
+    sleepText: dark ? "#A898D0" : "#5B4A85",
+    walkTile: dark ? "#2e3f3e" : "#E6F2DE",
+    walkText: dark ? "#8BC46B" : "#3F7A2A",
+  };
+  const headChip = (label: string, action: string, tile: string, text: string) => (
+    <Link
+      key={action}
+      destination={actionUrl(action)}
+      label={label}
+      modifiers={[
+        font({ size: 12, weight: "semibold" }),
+        foregroundStyle(text),
+        lineLimit(1),
+        padding({ top: 4, bottom: 4, leading: 9, trailing: 9 }),
+        background(tile),
+        clipShape("capsule"),
+      ]}
+    />
+  );
+  const header = (
+    <HStack spacing={6}>
+      <Text
+        modifiers={[
+          font({ size: 14, weight: "bold" }),
+          foregroundStyle(T.pillText),
+          lineLimit(1),
+          padding({ top: 4, bottom: 4, leading: 10, trailing: 10 }),
+          background(T.pillBg),
+          clipShape("capsule"),
+        ]}
+      >
+        {props.childName}
+      </Text>
+      <Spacer />
+      {canWrite && !lives.some((l) => l.kind === "sleep")
+        ? headChip(napNow ? "▶ Sieste" : "▶ Nuit", "sleep-start", T.sleepTile, T.sleepText)
+        : null}
+      {canWrite && !lives.some((l) => l.kind === "walk") ? headChip("▶ Promenade", "walk-start", T.walkTile, T.walkText) : null}
+    </HStack>
+  );
+
+  if (family !== "systemLarge") {
+    return (
+      <VStack alignment="leading" spacing={8} modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
+        {header}
+        {top([frame({ maxWidth: 10000, alignment: "topLeading" })])}
+      </VStack>
+    );
+  }
 
   // ----- Grand : le haut du medium, puis les événements récents (un widget
   // iOS ne défile pas : le fil n'a de place que dans cette taille) -----
@@ -281,6 +355,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const todayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime();
   return (
     <VStack alignment="leading" spacing={10} modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
+      {header}
       {top([frame({ maxWidth: 10000, alignment: "topLeading" })])}
       {events.length ? (
         <VStack alignment="leading" spacing={5}>

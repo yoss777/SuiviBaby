@@ -311,6 +311,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         fontSize={sp}
       />
     ) : (
+      // Sommeil, promenade : « 0 min », « 45 min », « 1h08 », horloge native
+      // qui avance seule. Les secondes de la 1re minute ont été essayées : le
+      // redessin à 1 min dépend d'une alarme Android non exacte, qui n'arrivait
+      // pas (secondes restées affichées après 4 min sur le S21).
       elapsed(l.timerStartMs, liveStale ? C.softOnTile : C.strong, sp)
     );
   // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
