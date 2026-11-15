@@ -462,17 +462,8 @@ export function SoinsForm({
           setMedicamentVoie("orale");
         },
       },
-      {
-        label: "Sérum physio",
-        onPress: () => {
-          setIncludeTemperature(false);
-          setIncludeSymptome(false);
-          setSelectedType("medicament");
-          setMedicamentName("Sérum physiologique");
-          setMedicamentDosage("");
-          setMedicamentVoie("topique");
-        },
-      },
+      // Pas de « Sérum physio » ici : le lavage de nez se note dans Bain / Nez
+      // (méthode « Sérum physiologique »), sans doublon entre les deux.
     ];
 
     const vaccinItems = [
