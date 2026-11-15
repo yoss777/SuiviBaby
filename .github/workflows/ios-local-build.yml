@@ -36,6 +36,14 @@ on:
         required: true
         default: true
         type: boolean
+      profile:
+        description: "EAS profile: production (TestFlight) or development (dev client to install on a registered iPhone, never submitted)"
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - development
       show_previews:
         description: "INTERNAL ONLY: show preview screens (SHOW_PREVIEWS=true). Never submit such a build for App Store review."
         required: false
@@ -51,7 +59,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build iOS (production) and submit
+    name: Build iOS (${{ inputs.profile }}) and submit
     # Expo 58 needs Xcode 26.4+: macos-15 tops out at Xcode 26.3.
     runs-on: macos-26
     timeout-minutes: 120
@@ -110,12 +118,13 @@ jobs:
         env:
           EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
         run: |
-          npx --yes eas-cli@latest build --local --platform ios --profile production \
+          npx --yes eas-cli@latest build --local --platform ios --profile "${{ inputs.profile }}" \
             --non-interactive --output "$RUNNER_TEMP/app.ipa"
           ls -l "$RUNNER_TEMP/app.ipa"
 
       - name: Submit to App Store Connect
-        if: ${{ inputs.submit }}
+        # A development client is never sent to App Store Connect.
+        if: ${{ inputs.submit && inputs.profile == 'production' }}
         run: |
           npx --yes eas-cli@latest submit --platform ios --profile production \
             --path "$RUNNER_TEMP/app.ipa" --non-interactive

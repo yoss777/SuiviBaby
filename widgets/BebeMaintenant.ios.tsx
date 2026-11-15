@@ -250,37 +250,69 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   // ----- Medium (et haut du grand) : maintenant à gauche, journée à droite -----
   const day = props.day;
-  const row = (label: string, color: string, main: string, sub: string, late: boolean) => (
-    <HStack spacing={6} alignment="firstTextBaseline">
-      <Text modifiers={[font({ size: 9 }), foregroundStyle(color)]}>●</Text>
-      <VStack alignment="leading" spacing={0}>
-        <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>{label}</Text>
-        <HStack spacing={4}>
-          {late ? <Image systemName="exclamationmark.circle.fill" color={C.alert} size={11} /> : null}
-          <Text modifiers={[font({ size: 15, weight: "semibold" }), monospacedDigit(), foregroundStyle(late ? C.alert : C.strong)]}>{main}</Text>
-        </HStack>
-        {sub ? <Text modifiers={[font({ size: 11 }), monospacedDigit(), foregroundStyle(C.soft)]}>{sub}</Text> : null}
-      </VStack>
-    </HStack>
-  );
   const clock = (ms: number | null) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "—");
   const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
 
+  // Moyen et grand, au repos : comme Android. À gauche « Dernier repas · il y a
+  // 3h57 » et « Dernier change · il y a 2 j » ; à droite « 1 repas / dernier à
+  // 10:35 », « 0 change / dernier le 13/11 », « 1h00 / de sommeil ».
+  const agoText = (ms: number) =>
+    now - ms >= (23 * 60 + 50) * 60000 ? `${Math.max(1, Math.round((now - ms) / 86400000))} j` : minutesText(ms);
+  const dayKey = (ms: number) => {
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  const lastWhen = (ms: number) => {
+    const days = Math.round((dayKey(now) - dayKey(ms)) / 86400000);
+    const d = new Date(ms);
+    if (days <= 0) return `dernier à ${clock(ms)}`;
+    if (days === 1) return `dernier hier à ${clock(ms)}`;
+    return `dernier le ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const restBlock = (label: string, color: string, ms: number | null | undefined, late: boolean) => (
+    <VStack alignment="leading" spacing={0}>
+      <HStack spacing={5}>
+        <Text modifiers={[font({ size: 9 }), foregroundStyle(late ? C.alert : color)]}>●</Text>
+        <Text modifiers={[font({ size: 13, weight: "semibold" }), foregroundStyle(late ? C.alert : color), lineLimit(1)]}>{label}</Text>
+      </HStack>
+      {ms ? (
+        <HStack spacing={4} alignment="lastTextBaseline">
+          <Text modifiers={[font({ size: 12 }), foregroundStyle(late ? C.alert : C.soft)]}>il y a</Text>
+          <Text modifiers={[font({ size: 26, weight: "bold" }), monospacedDigit(), foregroundStyle(late ? C.alert : C.strong), minimumScaleFactor(0.7), lineLimit(1)]}>
+            {agoText(ms)}
+          </Text>
+        </HStack>
+      ) : (
+        <Text modifiers={[font({ size: 15 }), foregroundStyle(C.soft)]}>pas encore</Text>
+      )}
+    </VStack>
+  );
+  const dayRow = (color: string, main: string, sub: string | null, late: boolean) => (
+    <HStack spacing={6} alignment="firstTextBaseline">
+      <Text modifiers={[font({ size: 9 }), foregroundStyle(late ? C.alert : color)]}>●</Text>
+      <VStack alignment="leading" spacing={0}>
+        <Text modifiers={[font({ size: 14, weight: "semibold" }), monospacedDigit(), foregroundStyle(late ? C.alert : C.strong), lineLimit(1)]}>{main}</Text>
+        {sub ? <Text modifiers={[font({ size: 11 }), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), lineLimit(1)]}>{sub}</Text> : null}
+      </VStack>
+    </HStack>
+  );
   const top = (mods: any[]) => (
-    <HStack spacing={14} alignment="top" modifiers={mods}>
-      <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
-        {nowBlock}
+    <HStack spacing={12} alignment="top" modifiers={mods}>
+      <VStack alignment="leading" spacing={6} modifiers={[frame({ maxWidth: 10000, alignment: "topLeading" })]}>
+        {lives.length
+          ? nowBlock
+          : [restBlock("Dernier repas", C.meal, props.lastMealMs, mealLate), restBlock("Dernier change", C.diaper, day?.lastDiaperMs, diaperLate)]}
       </VStack>
       {day && dayStale ? (
-        <VStack alignment="leading" spacing={2} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
-          <Text modifiers={[font({ size: 15, weight: "semibold" }), foregroundStyle(C.strong)]}>Nouvelle journée</Text>
-          <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>Mise à jour à la prochaine saisie</Text>
+        <VStack alignment="leading" spacing={2} modifiers={[frame({ maxWidth: 10000, alignment: "topLeading" })]}>
+          <Text modifiers={[font({ size: 14, weight: "semibold" }), foregroundStyle(C.strong)]}>Nouvelle journée</Text>
+          <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>Mise à jour à la prochaine saisie</Text>
         </VStack>
       ) : day ? (
-        <VStack alignment="leading" spacing={6} modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
-          {row("Repas", C.meal, `à ${clock(day.lastMealMs)}`, `${day.mealsCount} repas${day.bottleMl ? ` · ${day.bottleMl} ml` : ""}`, mealLate)}
-          {row("Change", C.diaper, `à ${clock(day.lastDiaperMs)}`, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperLate)}
-          {row("Sommeil", C.sleep, sleepLabel(sleepNowMin), "", false)}
+        <VStack alignment="leading" spacing={5} modifiers={[frame({ maxWidth: 10000, alignment: "topLeading" })]}>
+          {dayRow(C.meal, `${day.mealsCount} repas`, day.lastMealMs ? (mealLate ? `rappel · ${clock(day.lastMealMs)}` : lastWhen(day.lastMealMs)) : day.noMealEver ? "aucun noté" : null, mealLate)}
+          {dayRow(C.diaper, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, day.lastDiaperMs ? (diaperLate ? `rappel · ${clock(day.lastDiaperMs)}` : lastWhen(day.lastDiaperMs)) : day.noDiaperEver ? "aucun noté" : null, diaperLate)}
+          {dayRow(C.sleep, sleepLabel(sleepNowMin), "de sommeil", false)}
           {dataStale ? <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>{`màj ${clock(generatedAt)}`}</Text> : null}
         </VStack>
       ) : null}
@@ -303,28 +335,30 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       destination={actionUrl(action)}
       label={label}
       modifiers={[
-        font({ size: 12, weight: "semibold" }),
+        font({ size: 11, weight: "semibold" }),
         foregroundStyle(text),
         lineLimit(1),
-        padding({ top: 4, bottom: 4, leading: 9, trailing: 9 }),
+        padding({ top: 3, bottom: 3, leading: 8, trailing: 8 }),
         background(tile),
         clipShape("capsule"),
       ]}
     />
   );
+  // Le prénom seul, comme Android (« Abebech » plutôt que le nom complet coupé).
+  const firstName = props.childName ? props.childName.trim().split(/\s+/)[0] : "SuiviBaby";
   const header = (
     <HStack spacing={6}>
       <Text
         modifiers={[
-          font({ size: 14, weight: "bold" }),
+          font({ size: 13, weight: "bold" }),
           foregroundStyle(T.pillText),
           lineLimit(1),
-          padding({ top: 4, bottom: 4, leading: 10, trailing: 10 }),
+          padding({ top: 3, bottom: 3, leading: 9, trailing: 9 }),
           background(T.pillBg),
           clipShape("capsule"),
         ]}
       >
-        {props.childName}
+        {firstName}
       </Text>
       <Spacer />
       {canWrite && !lives.some((l) => l.kind === "sleep")
@@ -336,7 +370,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   if (family !== "systemLarge") {
     return (
-      <VStack alignment="leading" spacing={8} modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
+      <VStack alignment="leading" spacing={6} modifiers={[bg, widgetURL(url), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })]}>
         {header}
         {top([frame({ maxWidth: 10000, alignment: "topLeading" })])}
       </VStack>
