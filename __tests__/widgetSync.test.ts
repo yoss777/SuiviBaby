@@ -173,6 +173,13 @@ describe("données pas encore chargées au lancement", () => {
     expect(mockCalls.filter((c) => c.startsWith("write:"))).toEqual(["write:chargé"]);
   });
 
+  it("hors premier plan : jamais écrit (le serveur ne répondra plus), le widget garde ses données", () => {
+    setAppState("background");
+    pushNowWidget(unloaded());
+    jest.advanceTimersByTime(WIDGET_UNLOADED_GRACE_MS * 2);
+    expect(widget.updateSnapshot).not.toHaveBeenCalled();
+  });
+
   it("vraie journée vide : écrite après le délai ; jamais forcée au passage en arrière-plan", () => {
     pushNowWidget(unloaded());
     flushPendingWidgetPush();

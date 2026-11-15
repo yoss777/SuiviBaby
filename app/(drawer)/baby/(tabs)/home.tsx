@@ -1487,6 +1487,10 @@ export default function HomeDashboard() {
     // Si on a le cache, l'utiliser immédiatement sans afficher de loading
     if (cached) {
       setData((prev) => ({ ...prev, ...cached }));
+      // La fusion part du cache, pas d'une liste vide : une re-fusion avant la
+      // réponse du serveur (waitForServer, focus de l'onglet) remplaçait les
+      // données du cache par « 0 repas / 0 change », écrit aussi dans le widget.
+      setFirestoreEvents(Object.values(cached).flat());
       setLoading({
         tetees: false,
         biberons: false,

@@ -137,6 +137,10 @@ export function pushNowWidget(props: NowWidgetProps): void {
   if (key === lastKey) return;
   cancelPendingWidgetPush();
   if (looksUnloaded(props)) {
+    // Hors premier plan, la réponse du serveur ne peut plus arriver (réseau
+    // suspendu) : le délai expirait et écrivait « 0 repas » au passage en
+    // arrière-plan. Le widget garde ses données précédentes, plus justes.
+    if (AppState.currentState !== "active") return;
     // Écrit seulement si rien de mieux n'arrive entre-temps (vraie journée vide).
     pendingUnloaded = true;
     pendingRun = () => write(props, key);
