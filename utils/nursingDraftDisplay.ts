@@ -17,8 +17,10 @@ export interface NursingDraftDisplay {
   running: boolean;
   /** Secondes comptées, deux côtés et segment en cours compris. */
   totalSeconds: number;
-  /** Ligne courte affichée : « Tétée · côté gauche · 6 min » (« Tétée en pause · 6 min »). */
+  /** Titre : « Tétée en cours » ou « Tétée en pause ». */
   label: string;
+  /** Ligne sous le titre : « côté gauche · 6 min » (en pause : « 6 min »). */
+  detail: string;
   /**
    * Tétée en pause : heure à laquelle le brouillon sera effacé s'il n'est ni
    * repris ni enregistré (« Effacée à 14:35 sans reprise »). null en marche.
@@ -42,12 +44,13 @@ export function describeNursingDraft(state: NursingTimerState, now: number): Nur
     totalSeconds < 60 ? "moins d'1 min" : formatElapsedMinutes(Math.floor(totalSeconds / 60));
   const status = running ? "Tétée en cours" : "Tétée en pause";
   const side = state.runningSide ? `côté ${SIDE_LABEL[state.runningSide]}` : null;
-  // Ligne affichée sur une seule ligne : le point de couleur dit déjà « en
-  // cours », on garde « Tétée » ; « en pause » reste écrit.
-  const label = [running ? "Tétée" : status, side, elapsed].filter(Boolean).join(" · ");
+  // Deux lignes, pour que le côté et le temps restent entiers : le titre,
+  // puis « côté gauche · 6 min ».
+  const label = status;
+  const detail = [side, elapsed].filter(Boolean).join(" · ");
   const expiresAt = nursingDraftExpiresAt(state);
   const expiryLabel = running ? null : `Effacée à ${clock(expiresAt)} sans reprise`;
   const expiringSoon = !running && expiresAt - now <= NURSING_EXPIRY_WARNING_MS;
   const accessibilityLabel = `${[status, side, elapsed, expiryLabel].filter(Boolean).join(", ")}. Reprendre la tétée`;
-  return { running, totalSeconds, label, expiryLabel, expiringSoon, accessibilityLabel };
+  return { running, totalSeconds, label, detail, expiryLabel, expiringSoon, accessibilityLabel };
 }

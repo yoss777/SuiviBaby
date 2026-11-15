@@ -142,6 +142,9 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
         <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={1}>
           {display.label}
         </Text>
+        <Text style={[styles.detail, { color: nc.textNormal }]} numberOfLines={1}>
+          {display.detail}
+        </Text>
         {display.expiryLabel && (
           <Text
             style={[styles.expiry, { color: display.expiringSoon ? nc.errorText : nc.textNormal }]}
@@ -184,6 +187,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  detail: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   expiry: {
     fontSize: 13,

@@ -201,9 +201,13 @@ function otherEventIcon(e) {
 // ---------------------------------------------------------------------------
 // Tétée en cours (document partagé children/{c}/live/nursing)
 
-/** Brouillon en pause écarté après 1 h, en cours après 3 h (components/forms/nursingTimer.ts). */
-const NURSING_PAUSED_TTL_MS = 60 * 60 * 1000;
-const NURSING_RUNNING_TTL_MS = 3 * 60 * 60 * 1000;
+/**
+ * Brouillon en pause écarté après 40 min, en cours après 1 h 40 sans action
+ * (components/forms/nursingTimer.ts). Décidé par Yoss le 2026-11-15 (avant :
+ * 1 h et 3 h, jugés trop longs : une tétée oubliée restait affichée en cours).
+ */
+const NURSING_PAUSED_TTL_MS = 40 * 60 * 1000;
+const NURSING_RUNNING_TTL_MS = 100 * 60 * 1000;
 
 /** La tétée partagée compte encore : du temps compté ou un côté en cours, et pas expirée. */
 function usableNursing(state, now) {
@@ -291,8 +295,8 @@ function nursingLive(state, now, env) {
   const pausedAt = side ? null : typeof state.updatedAt === "number" && state.updatedAt <= now ? state.updatedAt : now;
   const timerStartMs = side && state.runningSince ? state.runningSince - shownBase * 1000 : pausedAt - shownBase * 1000;
   const startedAt = state.startedAt != null ? state.startedAt : timerStartMs;
-  // Règle du brouillon (nursingTimer) : effacé 3 h après la dernière action
-  // s'il tourne, 1 h en pause. Le widget s'en sert pour retirer la tétée seul.
+  // Règle du brouillon (nursingTimer) : effacé 1 h 40 après la dernière action
+  // s'il tourne, 40 min en pause. Le widget s'en sert pour retirer la tétée seul.
   const expiresAtMs =
     typeof state.updatedAt === "number" ? state.updatedAt + (side ? NURSING_RUNNING_TTL_MS : NURSING_PAUSED_TTL_MS) : null;
   return {

@@ -25,16 +25,16 @@ const paused: NursingTimerState = {
 };
 
 describe("expiration des brouillons", () => {
-  it("en pause : expire au-delà d'1 h sans action", () => {
-    expect(PAUSED_DRAFT_TTL_MS).toBe(60 * MIN);
-    expect(isNursingDraftStale(paused, paused.updatedAt + 59 * MIN)).toBe(false);
-    expect(isNursingDraftStale(paused, paused.updatedAt + 61 * MIN)).toBe(true);
+  it("en pause : expire au-delà de 40 min sans action", () => {
+    expect(PAUSED_DRAFT_TTL_MS).toBe(40 * MIN);
+    expect(isNursingDraftStale(paused, paused.updatedAt + 39 * MIN)).toBe(false);
+    expect(isNursingDraftStale(paused, paused.updatedAt + 41 * MIN)).toBe(true);
   });
 
-  it("en marche : expire au-delà de 3 h sans action", () => {
-    expect(RUNNING_DRAFT_TTL_MS).toBe(180 * MIN);
-    expect(isNursingDraftStale(running, T0 + 2 * 60 * MIN)).toBe(false);
-    expect(isNursingDraftStale(running, T0 + 3 * 60 * MIN + 1)).toBe(true);
+  it("en marche : expire au-delà d'1 h 40 sans action", () => {
+    expect(RUNNING_DRAFT_TTL_MS).toBe(100 * MIN);
+    expect(isNursingDraftStale(running, T0 + 99 * MIN)).toBe(false);
+    expect(isNursingDraftStale(running, T0 + 100 * MIN + 1)).toBe(true);
   });
 });
 

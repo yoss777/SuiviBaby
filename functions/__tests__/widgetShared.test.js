@@ -138,14 +138,14 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(props.live).toMatchObject({ side: "D", otherSideLabel: "G 2:00", sinceLabel: "depuis 16:45", alsoKind: "walk" });
   });
 
-  test("tétée oubliée : même expiration que l'app (3 h sans action en marche, 1 h en pause)", () => {
+  test("tétée oubliée : même expiration que l'app (1 h 40 sans action en marche, 40 min en pause)", () => {
     const running = { leftSeconds: 0, rightSeconds: 60, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 49), updatedAt: at(16, 50) };
     const ok = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, nursing: running }, paris), paris);
-    expect(ok.live).toMatchObject({ kind: "nursing", expiresAtMs: at(19, 50) });
-    // 17:00 + 3 h depuis la dernière action (13:50) dépassées : plus de tétée.
-    const old = { ...running, runningSince: at(13, 50), startedAt: at(13, 45), updatedAt: at(13, 50) };
+    expect(ok.live).toMatchObject({ kind: "nursing", expiresAtMs: at(18, 30) });
+    // 17:00 : 1 h 40 depuis la dernière action (15:10) dépassée : plus de tétée.
+    const old = { ...running, runningSince: at(15, 10), startedAt: at(15, 5), updatedAt: at(15, 10) };
     expect(w.assembleNowWidgetInput({ ...base, nursing: old }, paris).nursing).toBeNull();
-    const paused = { leftSeconds: 300, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: at(15, 40), updatedAt: at(15, 50) };
+    const paused = { leftSeconds: 300, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: at(16, 10), updatedAt: at(16, 15) };
     expect(w.assembleNowWidgetInput({ ...base, nursing: paused }, paris).nursing).toBeNull();
   });
 

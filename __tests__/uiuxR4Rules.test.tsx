@@ -371,9 +371,9 @@ describe("tétée : contraste, lecteur d'écran, brouillon en pause", () => {
     const now = new Date(2026, 10, 12, 14, 0).getTime();
     const paused = { ...EMPTY_NURSING_TIMER, leftSeconds: 600, startedAt: now, updatedAt: now };
     const d = describeNursingDraft(paused, now);
-    expect(d.expiryLabel).toBe("Effacée à 15:00 sans reprise");
+    expect(d.expiryLabel).toBe("Effacée à 14:40 sans reprise");
     expect(d.expiringSoon).toBe(false);
-    expect(d.accessibilityLabel).toContain("Effacée à 15:00 sans reprise");
+    expect(d.accessibilityLabel).toContain("Effacée à 14:40 sans reprise");
     const late = describeNursingDraft(paused, now + PAUSED_DRAFT_TTL_MS - 5 * 60_000);
     expect(late.expiringSoon).toBe(true);
 
