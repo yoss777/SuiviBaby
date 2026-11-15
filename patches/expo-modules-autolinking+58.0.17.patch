@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-modules-autolinking/build/platforms/apple/moduleScanner.js b/node_modules/expo-modules-autolinking/build/platforms/apple/moduleScanner.js
+index 093a8f5..2e28d3b 100644
+--- a/node_modules/expo-modules-autolinking/build/platforms/apple/moduleScanner.js
++++ b/node_modules/expo-modules-autolinking/build/platforms/apple/moduleScanner.js
+@@ -136,8 +136,11 @@ async function scanExpoModulesAsync(scanner, packageRoots) {
+     }
+     let output;
+     try {
++        // SuiviBaby : 5 s ne suffit pas sur les runners GitHub macOS (build iOS
++        // échoué : « scan-modules timed out after 5000 ms »). Réglable par
++        // EXPO_MODULES_SCAN_TIMEOUT_MS, 60 s par défaut.
+         output = await scanner.scanModules(roots, {
+-            timeout: 5000
++            timeout: Number(process.env.EXPO_MODULES_SCAN_TIMEOUT_MS) || 60000
+         });
+     } catch (error) {
+         console.warn(`warning: Scanning for Expo modules failed, only modules declared in expo-module.config.json will be linked: ${error.message ?? error}`);
