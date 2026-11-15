@@ -54,6 +54,7 @@ import {
   buildTodayEventsData,
   getTodayEventsCache,
   getTodayTypes,
+  setTodayEventsCache,
 } from "@/services/todayEventsCache";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1487,6 +1488,10 @@ export default function HomeDashboard() {
     // Si on a le cache, l'utiliser immédiatement sans afficher de loading
     if (cached) {
       setData((prev) => ({ ...prev, ...cached }));
+      // La fusion part du cache, pas d'une liste vide : une re-fusion avant la
+      // réponse du serveur (waitForServer, focus de l'onglet) remplaçait les
+      // données du cache par « 0 repas / 0 change », écrit aussi dans le widget.
+      setFirestoreEvents(Object.values(cached).flat());
       setLoading({
         tetees: false,
         biberons: false,
@@ -1535,6 +1540,15 @@ export default function HomeDashboard() {
       activeChild.id,
       (events) => {
         setFirestoreEvents(events);
+        // Cache du jour tenu à jour (il amorce la fusion au prochain retour
+        // sur cet enfant) : seulement les évènements d'aujourd'hui, l'écouteur
+        // couvrant aussi hier.
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        setTodayEventsCache(
+          activeChild.id,
+          buildTodayEventsData(events.filter((e: any) => toDate(e.date).getTime() >= startOfToday.getTime())),
+        );
         if (!loadingSet) {
           loadingSet = true;
           setLoading({
