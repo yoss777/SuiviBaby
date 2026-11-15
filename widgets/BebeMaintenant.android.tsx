@@ -129,7 +129,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Sieste ou nuit selon l'heure, même règle que utils/sleepPeriod.ts.
   const napNow = (() => {
     const h = new Date(Date.now()).getHours();
-    return h >= 6 && h < 19;
+    return h >= 8 && h < 19;
   })();
   const ACTION_SAY = {
     "sleep-start": napNow ? "Démarrer une sieste" : "Démarrer la nuit",
@@ -356,6 +356,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         : `${label} : pas encore`;
       const old = ms != null && now - ms >= DAYS_FROM_MS;
       const tone = late ? C.alert : C.soft;
+      // Moins d'1 h : « 16 min » est plus large que « 6h58 » ; dans la boîte
+      // fixe, l'unité passait à la ligne et disparaissait (« 16 »). Chiffre un
+      // peu plus petit et boîte plus large ; redessin prévu au passage à 1 h.
+      const underHour = ms != null && !old && now - ms < HOUR;
+      const numSp = underHour ? Math.round(big * 0.8) : big;
+      const boxW = underHour ? Math.ceil(numSp * 3.8) : numW;
       return (
         <Column key={action} verticalAlignment="center" modifiers={[size(zoneW, blockH), ...linkMods(action, say)]}>
           {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, label, sp)}
@@ -366,10 +372,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
                 {txt("il y a", tone, sp)}
               </Box>
               <Spacer modifiers={[width(4)]} />
-              <Box contentAlignment="bottomStart" modifiers={[size(numW, bigH)]}>
+              <Box contentAlignment="bottomStart" modifiers={[size(boxW, bigH)]}>
                 {old
                   ? txt(`${Math.max(1, Math.round((now - (ms as number)) / DAY))} j`, late ? C.alert : C.strong, big, true)
-                  : elapsed(ms, late ? C.alert : C.strong, big)}
+                  : elapsed(ms, late ? C.alert : C.strong, numSp)}
               </Box>
               {late || ahead ? <Spacer modifiers={[width(6)]} /> : null}
               {late || ahead ? (
@@ -483,10 +489,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {labelRow(k.text, k.dot, tileTitle(l, !small), 12)}
         {canWrite && stopOf(l) ? (
           <Row verticalAlignment="center">
-            <Box contentAlignment="centerStart" modifiers={[width(zoneW - 20 - (small ? 34 : 84))]}>
-              {chrono(l, small ? 22 : h >= 58 ? 26 : 22)}
+            {/* Bouton compact « ■ » : « ■ Arrêter » prenait la place de l'unité
+                (« 42 min » devenait « 42 »). */}
+            <Box contentAlignment="centerStart" modifiers={[width(zoneW - 20 - 40)]}>
+              {chrono(l, small ? 20 : h >= 58 ? 24 : 20)}
             </Box>
-            {stopChip(l, small ? 24 : 26, small)}
+            <Spacer modifiers={[width(6)]} />
+            {stopChip(l, small ? 24 : 26, true)}
           </Row>
         ) : (
           chrono(l, small ? 22 : h >= 58 ? 26 : 22)

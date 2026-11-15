@@ -22,6 +22,7 @@ jest.mock("@/services/pushTokenService", () => ({
 jest.mock("@/services/userPreferencesService", () => ({
   obtenirPreferencesNotifications: (...a: unknown[]) => mockObtenir(...a),
   mettreAJourPreferencesNotifications: (...a: unknown[]) => mockMettreAJour(...a),
+  obtenirPreferencesNotificationsEnCache: () => Promise.resolve(null),
 }));
 jest.mock("expo-notifications", () => ({
   getPermissionsAsync: jest.fn(() => Promise.resolve({ status: "granted" })),

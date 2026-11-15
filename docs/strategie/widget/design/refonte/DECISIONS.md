@@ -26,3 +26,14 @@ Suite de la consultation (`SYNTHESE.md`, 6 cellules + board, vote unanime R2).
 | 4. iPhone | prototype « il y a 6h58 », petit / moyen (+ fil 3 lignes + « ▾ ») / grand (7 lignes, « dernier à ») | 2 j |
 | 5. Accessibilité | police à 130/150/200 %, troncatures, VoiceOver/TalkBack par zone | 0,5 j |
 | 6. Build et mesure | 1.0.18, retours sur appareils, Sentry, indicateurs | — |
+
+## Chrono du widget (2026-11-15, audit design / architectes / plateformes)
+
+- Sommeil, promenade et « il y a » : secondes pendant la 1re minute, puis minutes seules (« 45 min », « 1h08 »), sur les deux OS (option O2).
+- Tétée : « mm:ss » comme Android aujourd'hui, sur les deux OS.
+- iPhone : passage par la timeline expo-widgets (une entrée par minute préparée par l'app), le compteur natif `timerInterval` gardant toujours les secondes.
+
+## Bouton sommeil du widget (2026-11-15)
+
+- Libellé gardé : « ▶ Sieste » / « ▶ Nuit » selon l'heure (cellules : Sieste/Nuit 14 + 16, Dodo 17 + 13, Sommeil 12 + 12, Repos 10 + 8). Le bouton annonce ce qui sera enregistré.
+- Nuit de 19:00 à 8:00 (avant : 6:00), dans l'app et les deux widgets (`utils/sleepPeriod.ts`).

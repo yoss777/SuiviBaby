@@ -64,11 +64,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       : `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
   const bg = containerBackground(C.bg, "widget");
   // Démarrer / arrêter sieste-nuit et promenade (Parent, moyen et grand) :
-  // le lien ouvre l'app, qui agit tout de suite. Nuit de 19:00 à 6:00.
+  // le lien ouvre l'app, qui agit tout de suite. Nuit de 19:00 à 8:00.
   const canWrite = props.canWrite !== false;
   const napNow = (() => {
     const hour = new Date(environment.date ? new Date(environment.date).getTime() : Date.now()).getHours();
-    return hour >= 6 && hour < 19;
+    return hour >= 8 && hour < 19;
   })();
   const actionUrl = (action: string) =>
     `suivibaby:///baby/home?widget=${action}${child}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}`;
