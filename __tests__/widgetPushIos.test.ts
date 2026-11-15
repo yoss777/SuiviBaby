@@ -76,8 +76,27 @@ it("app au premier plan, autre enfant, ou déconnexion : rien n'est écrit", asy
   expect(mockWrite).not.toHaveBeenCalled();
 });
 
-it("iPhone : la tâche d'arrière-plan est déclarée au chargement (capacité annoncée au serveur)", () => {
-  expect(Platform.OS).toBe("ios");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  expect(require("@/services/widgetPushIos").widgetPushIosReady).toBe(true);
+describe("capacité annoncée au serveur", () => {
+  const load = (register: () => Promise<unknown>) => {
+    let mod: typeof import("@/services/widgetPushIos") | undefined;
+    jest.isolateModules(() => {
+      jest.doMock("expo-task-manager", () => ({ defineTask: jest.fn() }));
+      jest.doMock("expo-notifications", () => ({
+        registerTaskAsync: register,
+        BackgroundNotificationTaskResult: { NewData: 0, NoData: 1, Failed: 2 },
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mod = require("@/services/widgetPushIos");
+    });
+    return mod!;
+  };
+
+  it("iPhone, tâche enregistrée : 1", async () => {
+    expect(Platform.OS).toBe("ios");
+    expect(await load(() => Promise.resolve()).widgetPushIosCap()).toBe(1);
+  });
+
+  it("enregistrement refusé (binaire sans mode d'arrière-plan) : 0", async () => {
+    expect(await load(() => Promise.reject(new Error("E_BACKGROUND_REMOTE_NOTIFICATIONS_DISABLED"))).widgetPushIosCap()).toBe(0);
+  });
 });

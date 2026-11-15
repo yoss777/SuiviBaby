@@ -53,8 +53,16 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
   return "ok";
 }
 
-/** Vrai si la tâche est déclarée (iPhone, modules natifs présents). */
-export let widgetPushIosReady = false;
+// Enregistrement de la tâche : résolu à vrai seulement s'il réussit. Un
+// binaire sans le mode « remote-notification » (construit avant l'ajout de
+// enableBackgroundRemoteNotifications) le refuse : l'app n'annonce alors
+// aucune capacité au serveur.
+let readyPromise: Promise<boolean> = Promise.resolve(false);
+
+/** Capacité « widget temps réel » de l'iPhone : 1 si la tâche est enregistrée. */
+export async function widgetPushIosCap(): Promise<number> {
+  return (await readyPromise) ? 1 : 0;
+}
 
 if (Platform.OS === "ios") {
   try {
@@ -62,16 +70,22 @@ if (Platform.OS === "ios") {
     const TaskManager = require("expo-task-manager") as typeof import("expo-task-manager");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Notifications = require("expo-notifications") as typeof import("expo-notifications");
-    TaskManager.defineTask(WIDGET_PUSH_IOS_TASK, async ({ data, error }) => {
-      if (error) return;
+    const BackgroundNotificationResult = Notifications.BackgroundNotificationTaskResult;
+    TaskManager.defineTask(WIDGET_PUSH_IOS_TASK, async ({ error, data }) => {
+      // Le résultat règle le budget de réveils qu'iOS accorde à l'app.
+      if (error) return BackgroundNotificationResult.Failed;
       try {
-        await handleWidgetPushIos(data);
+        const decision = await handleWidgetPushIos(data);
+        return decision === "ok" ? BackgroundNotificationResult.NewData : BackgroundNotificationResult.NoData;
       } catch (e) {
         if (__DEV__) console.warn("[widget] message serveur iPhone", e);
+        return BackgroundNotificationResult.Failed;
       }
     });
-    void Notifications.registerTaskAsync(WIDGET_PUSH_IOS_TASK).catch(() => {});
-    widgetPushIosReady = true;
+    readyPromise = Notifications.registerTaskAsync(WIDGET_PUSH_IOS_TASK).then(
+      () => true,
+      () => false,
+    );
   } catch {
     // Client sans expo-task-manager (ancien client de développement) : pas de temps réel.
   }

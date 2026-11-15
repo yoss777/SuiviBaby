@@ -4,7 +4,13 @@
 // disque : la tâche d'arrière-plan peut démarrer dans un JS tout neuf.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const KEY = "widgetPushIos:v1";
+// Une clé par champ : deux écritures simultanées (l'app et la tâche
+// d'arrière-plan) ne s'écrasent jamais l'une l'autre.
+const K = {
+  shown: "widgetPushIos:shown",
+  seq: "widgetPushIos:seq",
+  appAt: "widgetPushIos:appAt",
+} as const;
 
 export type WidgetPushIosState = {
   /** Enfant affiché par le widget (écrit par l'app) ; null : rien n'est appliqué. */
@@ -15,40 +21,45 @@ export type WidgetPushIosState = {
   appWriteAtMs: number;
 };
 
-const EMPTY: WidgetPushIosState = { shownChildId: null, lastSeq: 0, appWriteAtMs: 0 };
-
 export async function readWidgetPushIosState(): Promise<WidgetPushIosState> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
-    return raw ? { ...EMPTY, ...(JSON.parse(raw) as Partial<WidgetPushIosState>) } : EMPTY;
+    const [shown, seq, appAt] = await Promise.all([
+      AsyncStorage.getItem(K.shown),
+      AsyncStorage.getItem(K.seq),
+      AsyncStorage.getItem(K.appAt),
+    ]);
+    return { shownChildId: shown || null, lastSeq: Number(seq) || 0, appWriteAtMs: Number(appAt) || 0 };
   } catch {
-    return EMPTY;
+    return { shownChildId: null, lastSeq: 0, appWriteAtMs: 0 };
   }
 }
 
-async function patch(next: Partial<WidgetPushIosState>): Promise<void> {
+async function set(key: string, value: string): Promise<void> {
   try {
-    const cur = await readWidgetPushIosState();
-    await AsyncStorage.setItem(KEY, JSON.stringify({ ...cur, ...next }));
+    await AsyncStorage.setItem(key, value);
   } catch {
     // Disque indisponible : le message suivant sera refusé (enfant inconnu), sans dégât.
   }
 }
 
-/** L'app vient d'écrire le widget pour cet enfant. */
-export function noteIosAppSnapshot(childId: string, nowMs = Date.now()): Promise<void> {
-  return patch({ shownChildId: childId, appWriteAtMs: nowMs });
+/**
+ * L'app vient d'écrire le widget pour cet enfant. L'heure d'abord : si
+ * l'écriture de l'enfant échoue, la garde « plus ancien que l'app » tient.
+ */
+export async function noteIosAppSnapshot(childId: string, nowMs = Date.now()): Promise<void> {
+  await set(K.appAt, String(nowMs));
+  await set(K.shown, childId);
 }
 
 /** Message serveur appliqué. */
 export function noteIosAppliedSeq(seq: number): Promise<void> {
-  return patch({ lastSeq: seq });
+  return set(K.seq, String(seq));
 }
 
 /** Déconnexion : plus rien n'est appliqué avant la prochaine écriture de l'app. */
 export async function clearIosWidgetPush(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(KEY);
+    await Promise.all(Object.values(K).map((k) => AsyncStorage.removeItem(k)));
   } catch {
     // Sans effet : les jetons de l'appareil sont supprimés à la déconnexion.
   }

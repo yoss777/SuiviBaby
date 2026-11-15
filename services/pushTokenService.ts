@@ -18,7 +18,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
-import { widgetPushIosReady } from "@/services/widgetPushIos";
+import { widgetPushIosCap } from "@/services/widgetPushIos";
 import { captureServiceError } from "@/utils/errorReporting";
 
 const COLLECTION = "device_tokens";
@@ -41,9 +41,9 @@ let notificationsGranted = false;
  * Capacité « widget temps réel » de cette version de l'app, lue par le
  * serveur avant d'envoyer les données du widget (plan-temps-reel.md, E3) :
  * 1 = récepteur natif Android présent, ou tâche d'arrière-plan iPhone
- * déclarée (E7, option 1 : notification silencieuse, livraison au mieux).
+ * enregistrée (E7, option 1 : notification silencieuse, livraison au mieux).
  */
-const WIDGET_CAP = Platform.OS === "android" ? 1 : widgetPushIosReady ? 1 : 0;
+const widgetCap = (): Promise<number> => (Platform.OS === "android" ? Promise.resolve(1) : widgetPushIosCap());
 
 function deviceTimeZone(): string | null {
   try {
@@ -141,7 +141,7 @@ export async function registerPushToken(userId: string): Promise<void> {
         // Widget temps réel (E3) : fuseau pour le « jour », version et capacité.
         tz: deviceTimeZone(),
         appVersion: Constants.expoConfig?.version ?? null,
-        widgetCap: WIDGET_CAP,
+        widgetCap: await widgetCap(),
         widgetPush: true,
         // Enfant affiché par le widget, s'il est déjà connu (sinon posé par setWidgetChild).
         ...(desiredWidgetChildId ? { widgetChildId: desiredWidgetChildId } : {}),
