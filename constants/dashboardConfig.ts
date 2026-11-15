@@ -228,7 +228,7 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   tummyTime: "Tummy Time",
   jeux: "Jeux",
   lecture: "Lecture",
-  promenade: "Promenade",
+  promenade: "Balade",
   massage: "Massage",
   musique: "Musique",
   eveil: "Éveil sensoriel",

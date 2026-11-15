@@ -48,7 +48,7 @@ describe("otherEventLabel / otherEventIcon", () => {
     [{ type: "sommeil", isNap: false, heureFin: 1, duree: 485 }, "Nuit 8h05", "nuit"],
     [{ type: "sommeil", isNap: true, heureFin: 1 }, "Sieste", "sieste"],
     [{ type: "sommeil", isNap: false }, "Nuit · en cours", "nuit"],
-    [{ type: "activite", typeActivite: "promenade", heureDebut: 1 }, "Promenade · en cours", "activite"],
+    [{ type: "activite", typeActivite: "promenade", heureDebut: 1 }, "Balade · en cours", "activite"],
     [{ type: "jalon", typeJalon: "humeur", humeur: 4 }, "😄", "jalon"],
     [{ type: "jalon", typeJalon: "humeur" }, "Humeur du jour", "jalon"],
     [{ type: "jalon", typeJalon: "dent" }, "Nouvelle dent", "jalon"],

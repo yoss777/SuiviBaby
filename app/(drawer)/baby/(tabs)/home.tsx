@@ -63,6 +63,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { isNapHour } from "@/utils/sleepPeriod";
+import { moveAppToBack } from "@/modules/widget-push";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -205,7 +206,7 @@ export default function HomeDashboard() {
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
-  const { showToast } = useToast();
+  const { showToast, showActionToast } = useToast();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -1141,17 +1142,20 @@ export default function HomeDashboard() {
   const START_LOCK_MS = 10_000;
 
   const handleStartSleep = useCallback(
-    (isNap: boolean) => {
-      if (!activeChild?.id || sommeilEnCours) return;
-      if (Date.now() - startingRef.current.sleep < START_LOCK_MS) return;
+    (isNap: boolean, fromWidget = false) => {
+      if (!activeChild?.id || sommeilEnCours) return false;
+      if (Date.now() - startingRef.current.sleep < START_LOCK_MS) return false;
       startingRef.current.sleep = Date.now();
       ajouterEvenementOptimistic(activeChild.id, {
         type: "sommeil" as const,
         heureDebut: new Date(),
         date: new Date(),
         isNap,
+        // Mesure de l'usage des boutons du widget (décision du 2026-11-15).
+        ...(fromWidget ? { source: "widget" } : {}),
       });
-      showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
+      if (!fromWidget) showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
+      return true;
     },
     [activeChild?.id, sommeilEnCours, showToast],
   );
@@ -1163,7 +1167,7 @@ export default function HomeDashboard() {
       if (event.type === "sommeil") {
         return `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${shortSuffix}`;
       }
-      return `Promenade terminée${shortSuffix}`;
+      return `Balade terminée${shortSuffix}`;
     },
   });
 
@@ -1212,22 +1216,68 @@ export default function HomeDashboard() {
   // Appui sur une zone du widget : formulaire de la catégorie.
 
   // Promenade start/stop handlers
-  const handleStartPromenade = useCallback(() => {
-    if (!activeChild?.id || promenadeEnCours) return;
-    if (Date.now() - startingRef.current.walk < START_LOCK_MS) return;
+  const handleStartPromenade = useCallback((fromWidget = false) => {
+    if (!activeChild?.id || promenadeEnCours) return false;
+    if (Date.now() - startingRef.current.walk < START_LOCK_MS) return false;
     startingRef.current.walk = Date.now();
     ajouterEvenementOptimistic(activeChild.id, {
       type: "activite" as const,
       typeActivite: "promenade",
       heureDebut: new Date(),
       date: new Date(),
+      ...(fromWidget ? { source: "widget" } : {}),
     });
-    showToast("Promenade démarrée");
+    if (!fromWidget) showToast("Balade démarrée");
+    return true;
   }, [activeChild?.id, promenadeEnCours, showToast]);
 
   const handleStopPromenade = useCallback(() => {
     stopTimedEventWithUndo(promenadeEnCours);
   }, [promenadeEnCours, stopTimedEventWithUndo]);
+
+  // Session démarrée depuis le widget : « Annuler » la supprime. Lue au
+  // moment de l'appui sur Annuler (l'événement optimiste a pu recevoir son id).
+  const runningRef = useRef({ sommeilEnCours, promenadeEnCours });
+  runningRef.current = { sommeilEnCours, promenadeEnCours };
+  const undoWidgetStart = useCallback(
+    (kind: "sleep" | "walk") => {
+      cancelWidgetBack();
+      const childId = activeChild?.id;
+      const event = kind === "sleep" ? runningRef.current.sommeilEnCours : runningRef.current.promenadeEnCours;
+      if (!childId || !event?.id) return;
+      if (String(event.id).startsWith("__optimistic_")) {
+        showToast("Enregistrement en cours, réessayez dans un instant");
+        return;
+      }
+      const eventId = event.id as string;
+      softDeleteNow({
+        id: eventId,
+        message: kind === "sleep" ? "Sommeil annulé" : "Balade annulée",
+        run: () => supprimerEvenement(childId, eventId),
+        setHiddenIds: setSoftDeletedIds,
+        scheduleDelete,
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeChild?.id, scheduleDelete, showToast],
+  );
+
+  // Android : après une action lancée depuis le widget, retour à l'écran
+  // d'accueil au bout de 5 s si l'écran n'est pas touché entre-temps.
+  const widgetBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelWidgetBack = useCallback(() => {
+    if (widgetBackTimerRef.current) clearTimeout(widgetBackTimerRef.current);
+    widgetBackTimerRef.current = null;
+  }, []);
+  const scheduleWidgetBack = useCallback(() => {
+    if (Platform.OS !== "android") return;
+    cancelWidgetBack();
+    widgetBackTimerRef.current = setTimeout(() => {
+      widgetBackTimerRef.current = null;
+      void moveAppToBack();
+    }, 5500);
+  }, [cancelWidgetBack]);
+  useEffect(() => cancelWidgetBack, [cancelWidgetBack]);
 
   const openFromWidget = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => {
@@ -1238,24 +1288,44 @@ export default function HomeDashboard() {
       }
       // Démarrer / arrêter depuis le widget : même effet que les boutons de
       // l'Accueil (arrêt avec « Annuler » pendant 5 s).
+      // Démarrage depuis le widget : message « … démarrée · Annuler » avec
+      // vibration, marqué source "widget" (mesure), puis retour à l'écran
+      // d'accueil après 5 s sans toucher l'écran (Android).
       if (action === "sleep-start") {
         if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
-        else handleStartSleep(opts?.nap ?? isNapHour(new Date()));
+        else {
+          const nap = opts?.nap ?? isNapHour(new Date());
+          if (handleStartSleep(nap, true)) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            showActionToast(nap ? "Sieste démarrée" : "Nuit démarrée", "Annuler", () => undoWidgetStart("sleep"), 5000);
+            scheduleWidgetBack();
+          }
+        }
         return;
       }
       if (action === "sleep-stop") {
-        if (sommeilEnCours) handleStopSleep();
-        else showToast("Aucun sommeil en cours");
+        if (sommeilEnCours) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" });
+          scheduleWidgetBack();
+        } else showToast("Aucun sommeil en cours");
         return;
       }
       if (action === "walk-start") {
-        if (promenadeEnCours) showToast("Promenade déjà en cours");
-        else handleStartPromenade();
+        if (promenadeEnCours) showToast("Balade déjà en cours");
+        else if (handleStartPromenade(true)) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk"), 5000);
+          scheduleWidgetBack();
+        }
         return;
       }
       if (action === "walk-stop") {
-        if (promenadeEnCours) handleStopPromenade();
-        else showToast("Aucune promenade en cours");
+        if (promenadeEnCours) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" });
+          scheduleWidgetBack();
+        } else showToast("Aucune balade en cours");
         return;
       }
       // Arrêter la tétée : le chrono s'arrête à l'instant de l'appui, puis la
@@ -1297,9 +1367,11 @@ export default function HomeDashboard() {
       sommeilEnCours,
       promenadeEnCours,
       handleStartSleep,
-      handleStopSleep,
       handleStartPromenade,
-      handleStopPromenade,
+      stopTimedEventWithUndo,
+      showActionToast,
+      undoWidgetStart,
+      scheduleWidgetBack,
       openSheetRaw,
       handleResumeNursing,
       data.tetees,
@@ -1852,7 +1924,7 @@ export default function HomeDashboard() {
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} onTouchStart={cancelWidgetBack}>
       <ReminderWarningWatcher
         childId={activeChild?.id}
         remindersEnabled={remindersEnabled}
@@ -1973,7 +2045,7 @@ export default function HomeDashboard() {
                       ? formatTime(toDate(sommeilEnCours.heureDebut))
                       : undefined
                   }
-                  onStartSleep={handleStartSleep}
+                  onStartSleep={(isNap: boolean) => handleStartSleep(isNap)}
                   onStopSleep={handleStopSleep}
                   onEditSleep={handleEditSleepInSheet}
                   showStopButton={canManageContent}
@@ -1996,7 +2068,7 @@ export default function HomeDashboard() {
                       ? formatTime(toDate(promenadeEnCours.heureDebut))
                       : undefined
                   }
-                  onStart={handleStartPromenade}
+                  onStart={() => handleStartPromenade()}
                   onStop={handleStopPromenade}
                   onEdit={handleEditPromenadeInSheet}
                   showStopButton={canManageContent}

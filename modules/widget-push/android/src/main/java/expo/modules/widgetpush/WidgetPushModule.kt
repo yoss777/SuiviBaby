@@ -1,6 +1,7 @@
 package expo.modules.widgetpush
 
 import android.content.Context
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -29,6 +30,12 @@ class WidgetPushModule : Module() {
         .remove(WidgetPushHandler.APP_AT_KEY)
         .apply()
     }
+
+    // Après une action lancée depuis un bouton du widget : l'app repasse en
+    // arrière-plan, le parent retombe sur l'écran d'accueil (vrai si fait).
+    AsyncFunction("moveTaskToBack") {
+      appContext.currentActivity?.moveTaskToBack(true) ?: false
+    }.runOnQueue(Queues.MAIN)
 
     // Journal de réception (mesure E6) : [{ r, s, o }], sans donnée personnelle.
     Function("readReceiveLog") {

@@ -28,7 +28,7 @@ const ADD_STEPS: Step[] =
       ];
 
 const SHOWS: Step[] = [
-  { icon: "timer-outline", text: "Les sessions en cours (tétée, sieste ou nuit, promenade), avec un chrono qui avance tout seul." },
+  { icon: "timer-outline", text: "Les sessions en cours (tétée, sieste ou nuit, balade), avec un chrono qui avance tout seul." },
   { icon: "time-outline", text: "Au repos : depuis combien de temps bébé a mangé et a été changé." },
   {
     icon: "list-outline",

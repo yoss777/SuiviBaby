@@ -88,6 +88,11 @@ export interface NowWidgetProps {
   /** Minuit local (ms) du jour des compteurs : le widget les masque le lendemain. */
   dayStartMs: number;
   generatedAtMs: number;
+  /**
+   * iPhone : fin de la timeline préparée par l'app (une entrée par minute). Au-delà,
+   * le widget revient aux compteurs natifs (avec secondes) faute d'entrée plus récente.
+   */
+  timelineEndMs?: number;
 }
 
 /** Tétée en cours (forme de NursingTimerState, sans dépendance à l'app). */

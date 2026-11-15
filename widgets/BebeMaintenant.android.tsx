@@ -60,7 +60,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const CAT = {
     nursing: { label: "Tétée", short: "Tétée", dot: "#D66B8F", tile: dark ? "#393243" : "#FBE1EA", text: dark ? "#E88FAE" : "#A63D62" },
     sleep: { label: "Sommeil", short: "Sommeil", dot: "#7C6BA4", tile: dark ? "#2c3246" : "#ECE8F4", text: dark ? "#A898D0" : "#5B4A85" },
-    walk: { label: "Promenade", short: "Prom.", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
+    walk: { label: "Balade", short: "Balade", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
     meal: { dot: "#E8785A", text: dark ? "#E8785A" : "#A83F23" },
     diaper: { dot: "#5BA4A4", text: dark ? "#5BA4A4" : "#2B6A6A" },
   };
@@ -134,8 +134,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const ACTION_SAY = {
     "sleep-start": napNow ? "Démarrer une sieste" : "Démarrer la nuit",
     "sleep-stop": "Arrêter le sommeil",
-    "walk-start": "Démarrer une promenade",
-    "walk-stop": "Arrêter la promenade",
+    "walk-start": "Démarrer une balade",
+    "walk-stop": "Arrêter la balade",
     "nursing-stop": "Arrêter la tétée et l'enregistrer",
   };
   const timedMods = (action: keyof typeof ACTION_SAY) => [
@@ -311,6 +311,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         fontSize={sp}
       />
     ) : (
+      // Sommeil, promenade : « 0 min », « 45 min », « 1h08 », horloge native
+      // qui avance seule. Les secondes de la 1re minute ont été essayées : le
+      // redessin à 1 min dépend d'une alarme Android non exacte, qui n'arrivait
+      // pas (secondes restées affichées après 4 min sur le S21).
       elapsed(l.timerStartMs, liveStale ? C.softOnTile : C.strong, sp)
     );
   // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
@@ -778,7 +782,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   }
   a11yParts.push(
     canWrite
-      ? "Toucher le repas ou le change pour noter, les boutons pour démarrer ou arrêter un sommeil ou une promenade, ailleurs pour ouvrir SuiviBaby"
+      ? "Toucher le repas ou le change pour noter, les boutons pour démarrer ou arrêter un sommeil ou une balade, ailleurs pour ouvrir SuiviBaby"
       : "Toucher pour consulter dans SuiviBaby",
   );
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
@@ -795,7 +799,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const sleepOn = lives.some((l) => l.kind === "sleep");
     const walkOn = lives.some((l) => l.kind === "walk");
     const sleepChip = sleepOn ? null : { action: "sleep-start" as const, label: napNow ? "▶ Sieste" : "▶ Nuit", tile: CAT.sleep.tile, text: CAT.sleep.text };
-    for (const walkLabel of ["▶ Promenade", "▶ Balade"]) {
+    for (const walkLabel of ["▶ Balade"]) {
       const walkChip = walkOn ? null : { action: "walk-start" as const, label: walkLabel, tile: CAT.walk.tile, text: CAT.walk.text };
       const chips = [sleepChip, walkChip].filter(Boolean) as { action: "sleep-start" | "walk-start"; label: string; tile: string; text: string }[];
       const total = chips.reduce((sum, c, i) => sum + chipW(c.label) + (i ? CHIP_GAP : 0), 0);

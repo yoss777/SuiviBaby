@@ -66,7 +66,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     startTimestamp !== undefined
       ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
       : elapsedMinutesProp;
-  useAnnounceActiveChange(isActive, "Promenade démarrée", "Promenade terminée");
+  useAnnounceActiveChange(isActive, "Balade démarrée", "Balade terminée");
   const nc = getNeutralColors(colorScheme);
   const accentColor = eventColors.activite.dark;
   const textColor = colorScheme === "dark" ? "#A7F3D0" : "#065F46";
@@ -158,8 +158,8 @@ export const PromenadeWidget = memo(function PromenadeWidget({
       accessibilityRole={isActive ? "timer" : undefined}
       accessibilityLabel={
         isActive
-          ? `Promenade en cours depuis ${formatDuration(elapsedMinutes)}`
-          : "Démarrer une promenade"
+          ? `Balade en cours depuis ${formatDuration(elapsedMinutes)}`
+          : "Démarrer une balade"
       }
     >
       {/* Header row */}
@@ -175,7 +175,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
             { color: isActive ? textColor : nc.textStrong },
           ]}
         >
-          {isActive ? "Promenade en cours" : "Démarrer une promenade"}
+          {isActive ? "Balade en cours" : "Démarrer une balade"}
         </Text>
         {!isActive && (
           <Pressable
@@ -184,7 +184,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
             style={({ pressed }) => [styles.playButton, pressedOpacity(pressed, 0.2)]}
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             accessibilityRole="button"
-            accessibilityLabel="Démarrer une promenade"
+            accessibilityLabel="Démarrer une balade"
           >
             <FontAwesome name="play" size={12} color={accentColor} />
           </Pressable>
@@ -216,7 +216,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
                 ]}
                 onPress={handleStop}
                 accessibilityRole="button"
-                accessibilityLabel="Terminer la promenade"
+                accessibilityLabel="Terminer la balade"
               >
                 <Text
                   style={[styles.actionButtonText, { color: nc.backgroundCard }]}
@@ -241,7 +241,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
                   ]}
                   onPress={handleEdit}
                   accessibilityRole="button"
-                  accessibilityLabel="Ajuster la promenade avant d'enregistrer"
+                  accessibilityLabel="Ajuster la balade avant d'enregistrer"
                 >
                   <FontAwesome name="pen-to-square" size={15} color={accentColor} />
                 </Pressable>

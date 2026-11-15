@@ -18,6 +18,7 @@ import {
   WIDGET_SYNC_DEBOUNCE_MS,
   WIDGET_UNLOADED_GRACE_MS,
   looksUnloaded,
+  widgetTimelineDates,
 } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import { AppState } from "react-native";
@@ -178,5 +179,25 @@ describe("données pas encore chargées au lancement", () => {
     expect(widget.updateSnapshot).not.toHaveBeenCalled();
     jest.advanceTimersByTime(WIDGET_UNLOADED_GRACE_MS);
     expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("timeline iPhone (durées à la minute)", () => {
+  it("une entrée par minute pendant 1 h, puis toutes les 5 min jusqu'à 4 h, alignées sur le début de la session", () => {
+    const now = 1_000_000_000_000;
+    const start = now - 20_000; // sieste lancée il y a 20 s
+    const dates = widgetTimelineDates(
+      props({ lives: [{ kind: "sleep", timerStartMs: start, sinceMs: start, sinceLabel: "depuis 10:00" } as any] }),
+      now,
+    );
+    expect(dates[0]).toBe(now);
+    expect(dates).toContain(now + 60 * 60_000);
+    expect(dates).toContain(now + 65 * 60_000);
+    expect(dates[dates.length - 1]).toBe(now + 4 * 3600_000);
+    expect(dates).toContain(start + 60_000);
+    expect(new Set(dates).size).toBe(dates.length);
+    expect(dates).toContain(start + 2 * 60_000);
+    expect(dates.length).toBeLessThan(170);
   });
 });

@@ -19,7 +19,30 @@ export const WIDGET_SYNC_DEBOUNCE_MS = 2000;
 /** Après un changement d'enfant, ses données arrivent par vagues : envois immédiats pendant ce délai. */
 export const WIDGET_CHILD_SWITCH_WINDOW_MS = 15000;
 
-type WidgetHandle = { updateSnapshot: (props: NowWidgetProps) => void };
+type WidgetHandle = {
+  updateSnapshot: (props: NowWidgetProps) => void;
+  updateTimeline?: (entries: { date: Date; props: NowWidgetProps }[]) => void;
+};
+
+/**
+ * iPhone : dates des entrées de timeline. Le compteur natif d'iOS affiche
+ * toujours les secondes ; pour « 45 min » / « 1h08 » (comme Android), l'app
+ * prépare une entrée par minute pendant 1 h (alignée sur le début de chaque
+ * session en cours), puis toutes les 5 min jusqu'à 4 h.
+ * Les entrées préparées ne consomment pas le budget de rechargement d'iOS.
+ */
+export function widgetTimelineDates(props: NowWidgetProps, now = Date.now()): number[] {
+  const dates = new Set<number>([now]);
+  for (let k = 1; k <= 60; k++) dates.add(now + k * 60_000);
+  for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
+  // Passage exact à chaque minute d'une session en cours (« 0 min » → « 1 min »).
+  for (const l of props.lives ?? []) {
+    if (l.kind === "nursing") continue;
+    const next = l.timerStartMs + Math.ceil((now - l.timerStartMs + 1) / 60_000) * 60_000;
+    for (let k = 0; k < 60; k++) dates.add(next + k * 60_000);
+  }
+  return [...dates].sort((a, b) => a - b);
+}
 
 let handle: WidgetHandle | null | undefined;
 let lastKey = "";
@@ -68,7 +91,13 @@ function write(props: NowWidgetProps, key: string): void {
     // Android : noté AVANT l'écriture, pour qu'un message serveur arrivé
     // entre les deux ne revienne jamais avant elle, ni sur un autre bébé.
     if (props.childId) noteAppSnapshot(props.childId);
-    widget.updateSnapshot(toNativeWidgetProps(props));
+    if (Platform.OS === "ios" && widget.updateTimeline && !props.loading) {
+      const dates = widgetTimelineDates(props);
+      const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: dates[dates.length - 1] + 5 * 60_000 });
+      widget.updateTimeline(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
+    } else {
+      widget.updateSnapshot(toNativeWidgetProps(props));
+    }
     lastKey = key;
     if (props.childId !== lastChildId) childSwitchedAt = Date.now();
     lastChildId = props.childId;

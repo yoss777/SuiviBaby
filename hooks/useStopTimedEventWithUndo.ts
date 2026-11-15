@@ -25,7 +25,8 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
   const { showUndoToast } = useToast();
 
   return useCallback(
-    (event: TEvent | null | undefined) => {
+    // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
+    (event: TEvent | null | undefined, extra?: Record<string, unknown>) => {
       if (!childId || !event?.id) return;
       const start = toDate(event.heureDebut);
       const heureFin = new Date();
@@ -41,7 +42,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       modifierEvenementOptimistic(
         childId,
         event.id,
-        duree === undefined ? { heureFin } : { heureFin, duree },
+        { ...(duree === undefined ? { heureFin } : { heureFin, duree }), ...(extra ?? {}) },
         snapshot,
       );
 
@@ -54,7 +55,9 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         modifierEvenementOptimistic(
           childId,
           event.id!,
-          { heureFin: null, duree: null } as any,
+          // Les champs ajoutés à l'arrêt (endSource…) sont retirés aussi :
+          // sinon la mesure compterait un arrêt annulé.
+          { heureFin: null, duree: null, ...Object.fromEntries(Object.keys(extra ?? {}).map((k) => [k, null])) } as any,
           duree === undefined ? { ...snapshot, heureFin } : { ...snapshot, heureFin, duree },
         );
       }, undefined, 5000);
