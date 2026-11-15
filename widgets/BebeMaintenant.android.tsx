@@ -109,12 +109,53 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours" };
   // Zone cliquable : son lien et son libellé TalkBack.
   // `say` : ce que TalkBack lit avant l'action (ex. « Dernier repas à 19:37 »).
-  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => [
+  // Proche (lecture seule, canWrite=false) : l'appui ouvre l'Accueil, sans
+  // formulaire, et TalkBack dit « Consulter dans SuiviBaby ».
+  const canWrite = props.canWrite !== false;
+  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => {
+    const label = canWrite ? LINK_LABEL[action] : "Consulter dans SuiviBaby";
+    return [
+      createModifier("openUrl", {
+        url: canWrite
+          ? `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`
+          : "suivibaby:///baby/home",
+      }),
+      semantics({ contentDescription: say ? `${say}. ${label}` : label }),
+    ];
+  };
+
+  // Démarrer / arrêter sieste-nuit et promenade (Parent seulement) : l'appui
+  // ouvre l'app, qui agit tout de suite (hooks/useWidgetDeepLink.ts).
+  // Sieste ou nuit selon l'heure, même règle que utils/sleepPeriod.ts.
+  const napNow = (() => {
+    const h = new Date(Date.now()).getHours();
+    return h >= 8 && h < 19;
+  })();
+  const ACTION_SAY = {
+    "sleep-start": napNow ? "Démarrer une sieste" : "Démarrer la nuit",
+    "sleep-stop": "Arrêter le sommeil",
+    "walk-start": "Démarrer une promenade",
+    "walk-stop": "Arrêter la promenade",
+    "nursing-stop": "Arrêter la tétée et l'enregistrer",
+  };
+  const timedMods = (action: keyof typeof ACTION_SAY) => [
     createModifier("openUrl", {
-      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}`,
+      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}`,
     }),
-    semantics({ contentDescription: say ? `${say}. ${LINK_LABEL[action]}` : LINK_LABEL[action] }),
+    semantics({ contentDescription: ACTION_SAY[action] }),
   ];
+  const stopOf = (l: WidgetLive) =>
+    l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : l.kind === "nursing" ? "nursing-stop" : null;
+  // Bouton « ■ Arrêter » (ou « ■ » quand la tuile est étroite), sur fond blanc
+  // ou sombre pour se détacher de la tuile colorée.
+  const stopChip = (l: WidgetLive, h: number, compact: boolean) => (
+    <Box
+      contentAlignment="center"
+      modifiers={[height(h), background(C.bg), cornerRadius(h / 2), padding(compact ? 8 : 10, 0, compact ? 8 : 10, 0), ...timedMods(stopOf(l) as "sleep-stop")]}
+    >
+      {txt(compact ? "■" : "■ Arrêter", CAT[l.kind].text, 12, true)}
+    </Box>
+  );
 
   const clock = (ms: number) => {
     const d = new Date(ms);
@@ -130,7 +171,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const DAY = 24 * HOUR;
   const mealLate = props.alerts.mealAtMs != null && now >= props.alerts.mealAtMs;
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
-  const lives = props.lives ?? (props.live ? [props.live] : []);
+  // Tétée oubliée (brouillon expiré : 3 h sans action, 1 h en pause) : retirée
+  // à l'heure dite, comme dans l'app, même sans nouvel envoi.
+  const allLives = props.lives ?? (props.live ? [props.live] : []);
+  const lives = allLives.filter((l) => !(l.expiresAtMs != null && now >= l.expiresAtMs));
   const n = lives.length;
   // Compteurs d'un jour passé (minuit franchi sans nouvel envoi) : masqués.
   const dayStart = props.dayStartMs ?? 0;
@@ -312,6 +356,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         : `${label} : pas encore`;
       const old = ms != null && now - ms >= DAYS_FROM_MS;
       const tone = late ? C.alert : C.soft;
+      // Moins d'1 h : « 16 min » est plus large que « 6h58 » ; dans la boîte
+      // fixe, l'unité passait à la ligne et disparaissait (« 16 »). Chiffre un
+      // peu plus petit et boîte plus large ; redessin prévu au passage à 1 h.
+      const underHour = ms != null && !old && now - ms < HOUR;
+      const numSp = underHour ? Math.round(big * 0.8) : big;
+      const boxW = underHour ? Math.ceil(numSp * 3.8) : numW;
       return (
         <Column key={action} verticalAlignment="center" modifiers={[size(zoneW, blockH), ...linkMods(action, say)]}>
           {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, label, sp)}
@@ -322,10 +372,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
                 {txt("il y a", tone, sp)}
               </Box>
               <Spacer modifiers={[width(4)]} />
-              <Box contentAlignment="bottomStart" modifiers={[size(numW, bigH)]}>
+              <Box contentAlignment="bottomStart" modifiers={[size(boxW, bigH)]}>
                 {old
                   ? txt(`${Math.max(1, Math.round((now - (ms as number)) / DAY))} j`, late ? C.alert : C.strong, big, true)
-                  : elapsed(ms, late ? C.alert : C.strong, big)}
+                  : elapsed(ms, late ? C.alert : C.strong, numSp)}
               </Box>
               {late || ahead ? <Spacer modifiers={[width(6)]} /> : null}
               {late || ahead ? (
@@ -415,6 +465,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {chrono(l, chronoSp)}
         {under ? gap(2) : null}
         {under ? txt(under, C.softOnTile, small ? 12 : 13) : null}
+        {canWrite && !small && stopOf(l) ? gap(6) : null}
+        {canWrite && !small && stopOf(l) ? (
+          stopChip(l, 26, false)
+        ) : null}
       </Column>
     );
   };
@@ -424,10 +478,28 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <Column
         verticalAlignment="center"
-        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 6, 10, 6), ...(l.kind === "nursing" ? linkMods("nursing") : [])]}
+        modifiers={[
+          size(zoneW, h),
+          background(k.tile),
+          cornerRadius(12),
+          padding(10, 6, 10, 6),
+          ...(l.kind === "nursing" ? linkMods("nursing") : []),
+        ]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, !small), 12)}
-        {chrono(l, small ? 22 : h >= 58 ? 26 : 22)}
+        {canWrite && stopOf(l) ? (
+          <Row verticalAlignment="center">
+            {/* Bouton compact « ■ » : « ■ Arrêter » prenait la place de l'unité
+                (« 42 min » devenait « 42 »). */}
+            <Box contentAlignment="centerStart" modifiers={[width(zoneW - 20 - 40)]}>
+              {chrono(l, small ? 20 : h >= 58 ? 24 : 20)}
+            </Box>
+            <Spacer modifiers={[width(6)]} />
+            {stopChip(l, small ? 24 : 26, true)}
+          </Row>
+        ) : (
+          chrono(l, small ? 22 : h >= 58 ? 26 : 22)
+        )}
       </Column>
     );
   };
@@ -440,16 +512,24 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <Row
         verticalAlignment="center"
-        modifiers={[size(zoneW, h), background(k.tile), cornerRadius(12), padding(10, 0, 10, 0), ...(l.kind === "nursing" ? linkMods("nursing") : [])]}
+        modifiers={[
+          size(zoneW, h),
+          background(k.tile),
+          cornerRadius(12),
+          padding(10, 0, 10, 0),
+          ...(l.kind === "nursing" ? linkMods("nursing") : []),
+        ]}
       >
         <Row verticalAlignment="center" modifiers={[width(labelW)]}>
           {dot(k.dot)}
           <Spacer modifiers={[width(5)]} />
           {txt(label, k.text, small ? 11 : 12, true)}
         </Row>
-        <Box contentAlignment="centerEnd" modifiers={[width(zoneW - 20 - labelW)]}>
+        <Box contentAlignment="centerEnd" modifiers={[width(zoneW - 20 - labelW - (canWrite && stopOf(l) ? 34 : 0))]}>
           {chrono(l, small ? 16 : h >= 36 ? 20 : 16)}
         </Box>
+        {canWrite && stopOf(l) ? <Spacer modifiers={[width(6)]} /> : null}
+        {canWrite && stopOf(l) ? stopChip(l, Math.min(24, h - 4), true) : null}
       </Row>
     );
   };
@@ -617,6 +697,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Prochain redessin utile : passage à 1 h d'une durée, rappel qui passe au rouge.
   const refreshCandidates = [
     ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
+    // Expiration d'une tétée oubliée : redessin pour la retirer.
+    ...lives.filter((l) => l.expiresAtMs != null).map((l) => l.expiresAtMs as number),
     // Total de sommeil qui passe 1 h : le format change (« 59 min » → « 1h00 »).
     ...(sleepBaseMs != null ? [sleepBaseMs + HOUR] : []),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
@@ -694,8 +776,33 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         .join(" ; ")}`,
     );
   }
-  a11yParts.push("Toucher le repas ou le change pour noter, ailleurs pour ouvrir SuiviBaby");
+  a11yParts.push(
+    canWrite
+      ? "Toucher le repas ou le change pour noter, les boutons pour démarrer ou arrêter un sommeil ou une promenade, ailleurs pour ouvrir SuiviBaby"
+      : "Toucher pour consulter dans SuiviBaby",
+  );
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
+
+  // Boutons « ▶ Sieste / ▶ Nuit » et « ▶ Promenade » dans l'en-tête de la
+  // colonne de droite (à la place de « Aujourd'hui »), pour un Parent, hors
+  // session du même type. L'arrêt est dans la tuile de la session.
+  const CHIP_SP = 11;
+  const CHIP_PAD = 7;
+  const CHIP_GAP = 4;
+  const chipW = (label: string) => Math.ceil(textW12(label) * (CHIP_SP / 12) * 1.25) + 2 * CHIP_PAD;
+  const startChips = (() => {
+    if (!canWrite || props.loading) return [] as { action: "sleep-start" | "walk-start"; label: string; tile: string; text: string }[];
+    const sleepOn = lives.some((l) => l.kind === "sleep");
+    const walkOn = lives.some((l) => l.kind === "walk");
+    const sleepChip = sleepOn ? null : { action: "sleep-start" as const, label: napNow ? "▶ Sieste" : "▶ Nuit", tile: CAT.sleep.tile, text: CAT.sleep.text };
+    for (const walkLabel of ["▶ Promenade", "▶ Balade"]) {
+      const walkChip = walkOn ? null : { action: "walk-start" as const, label: walkLabel, tile: CAT.walk.tile, text: CAT.walk.text };
+      const chips = [sleepChip, walkChip].filter(Boolean) as { action: "sleep-start" | "walk-start"; label: string; tile: string; text: string }[];
+      const total = chips.reduce((sum, c, i) => sum + chipW(c.label) + (i ? CHIP_GAP : 0), 0);
+      if (total <= Rw) return chips;
+    }
+    return sleepChip && chipW(sleepChip.label) <= Rw ? [sleepChip] : [];
+  })();
 
   const container = [fillMaxSize(), background(C.bg), cornerRadius(20), paddingAll(PAD), a11y];
 
@@ -723,9 +830,25 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         </Row>
         {showDay ? <Spacer modifiers={[width(SEP)]} /> : null}
         {showDay ? (
-          <Column verticalAlignment="center" modifiers={[size(Rw, HEAD_H)]}>
-            {txt("Aujourd'hui", C.soft, 12)}
-          </Column>
+          startChips.length ? (
+            <Row verticalAlignment="center" modifiers={[size(Rw, HEAD_H)]}>
+              {startChips.map((c, i) => (
+                <Row key={c.action} verticalAlignment="center">
+                  {i > 0 ? <Spacer modifiers={[width(CHIP_GAP)]} /> : null}
+                  <Box
+                    contentAlignment="center"
+                    modifiers={[height(HEAD_H - 2), background(c.tile), cornerRadius((HEAD_H - 2) / 2), padding(CHIP_PAD, 0, CHIP_PAD, 0), ...timedMods(c.action)]}
+                  >
+                    {txt(c.label, c.text, CHIP_SP, true)}
+                  </Box>
+                </Row>
+              ))}
+            </Row>
+          ) : (
+            <Column verticalAlignment="center" modifiers={[size(Rw, HEAD_H)]}>
+              {txt("Aujourd'hui", C.soft, 12)}
+            </Column>
+          )
         ) : null}
       </Row>
       {gap(HEAD_GAP)}

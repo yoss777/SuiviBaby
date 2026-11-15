@@ -31,9 +31,9 @@ export const EMPTY_NURSING_TIMER: NursingTimerState = {
 };
 
 /**
- * Expiration d'un brouillon oublié : un chrono en pause depuis plus d'1 h, ou
- * en marche sans aucune action depuis plus de 3 h (aucune tétée ne dure 3 h
- * d'affilée), n'est plus proposé et s'efface.
+ * Expiration d'un brouillon oublié : un chrono en pause depuis plus de 40 min,
+ * ou en marche sans aucune action depuis plus d'1 h 40 (une tétée dure en
+ * général 10 à 40 min ; changer de côté est une action et relance le délai).
  */
 // Même règle que le serveur (widget temps réel) : module partagé.
 export {

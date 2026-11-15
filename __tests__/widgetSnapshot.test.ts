@@ -5,7 +5,6 @@ import {
   countGroups,
   EMPTY_NOW_WIDGET_NATIVE,
   formatDuration,
-  nextSideFrom,
   type NowWidgetInput,
   otherEventLabel,
   toNativeWidgetProps,
@@ -33,7 +32,7 @@ describe("buildNowWidgetProps", () => {
     const p = buildNowWidgetProps(base());
     expect(p.live).toBeNull();
     expect(p.lastMealLabel).toBe("Tétée à 11:50");
-    expect(p.nextSide).toBe("D");
+    expect(p.canWrite).toBe(true);
   });
 
   it("tétée en cours : chrono du côté actif, autre côté figé, sans auteur", () => {
@@ -107,14 +106,9 @@ describe("buildNowWidgetProps", () => {
 });
 
 describe("aides", () => {
-  it("prochain sein seulement quand il est certain", () => {
-    expect(nextSideFrom({ leftMinutes: 10, rightMinutes: 0 })).toBe("D");
-    expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 8 })).toBe("G");
-    expect(nextSideFrom({ leftMinutes: 10, rightMinutes: 8 })).toBeNull();
-    expect(nextSideFrom(null)).toBeNull();
-    // Tétée très courte : côté noté, durée arrondie à 0 min.
-    expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 0, left: true, right: false })).toBe("D");
-    expect(nextSideFrom({ leftMinutes: 0, rightMinutes: 0, left: true, right: true })).toBeNull();
+  it("droit de saisie : faux seulement si l'app le dit (Proche)", () => {
+    expect(buildNowWidgetProps(base({ canWrite: false })).canWrite).toBe(false);
+    expect(buildNowWidgetProps(base({})).canWrite).toBe(true);
   });
 
   it("formatDuration et countGroups", () => {

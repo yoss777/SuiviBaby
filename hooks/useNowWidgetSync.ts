@@ -54,6 +54,8 @@ interface Params {
   /** Fiche de l'enfant (lastEventAt) : ms = connu, null = aucun jamais, absent = inconnu. */
   lastEventAt?: { repas?: number | null; changes?: number | null };
   isPremium: boolean;
+  /** Droit de saisie (Parent) : faux pour un Proche, le widget n'ouvre alors aucun formulaire. */
+  canWrite: boolean;
   reminders: { enabled: boolean; thresholds: { repas: number; changes: number } };
 }
 
@@ -149,6 +151,7 @@ export function useNowWidgetSync(p: Params): void {
         lastAbsoluteMealMs: p.lastAbsoluteMealMs ?? null,
         lastEventAt: p.lastEventAt,
         isPremium: p.isPremium,
+        canWrite: p.canWrite,
         reminders: {
           enabled: p.reminders.enabled,
           repasHours: p.reminders.thresholds.repas,

@@ -29,6 +29,20 @@ describe("validateAndCreateEvent", () => {
     expect(await fns.validateAndCreateEvent(auth("u1", data))).toEqual(first);
     expect([...docs.keys()].filter((p) => p.startsWith("events/"))).toHaveLength(1);
   });
+  it("jamais deux sommeils ni deux promenades en cours pour un enfant", async () => {
+    const { memoryStore } = require("./memoryFirestore");
+    const docs = memoryStore({ "children/c1/access/u1": { role: "owner" } });
+    const start = "2026-11-14T22:10:00.000Z";
+    const first = await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", isNap: false, heureDebut: start, date: start, idempotencyKey: "s1" }));
+    const second = await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", isNap: false, heureDebut: start, date: start, idempotencyKey: "s2" }));
+    expect(second).toEqual({ id: first.id, alreadyRunning: true });
+    const walk = { childId: "c1", type: "activite", typeActivite: "promenade", heureDebut: start, date: start };
+    const w1 = await fns.validateAndCreateEvent(auth("u1", { ...walk, idempotencyKey: "w1" }));
+    expect(await fns.validateAndCreateEvent(auth("u1", { ...walk, idempotencyKey: "w2" }))).toEqual({ id: w1.id, alreadyRunning: true });
+    // Un sommeil terminé (avec heureFin) reste toujours accepté.
+    await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", heureDebut: start, heureFin: start, date: start, idempotencyKey: "s3" }));
+    expect([...docs.keys()].filter((k) => k.startsWith("events/"))).toHaveLength(3);
+  });
   it("converts heureDebut and heureFin on create", async () => {
     access();
     const add = jest.fn().mockResolvedValue({ id: "e1" });

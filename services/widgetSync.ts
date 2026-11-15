@@ -58,6 +58,8 @@ export function widgetContentKey(props: NowWidgetProps): string {
 let lastChildId: string | undefined;
 let childSwitchedAt = 0;
 let pendingRun: (() => void) | null = null;
+/** L'envoi en attente est un contenu « pas encore chargé » : jamais forcé. */
+let pendingUnloaded = false;
 
 function write(props: NowWidgetProps, key: string): void {
   const widget = getWidget();
@@ -84,10 +86,39 @@ function write(props: NowWidgetProps, key: string): void {
  * - app hors premier plan : Android y suspend les minuteries JS, un envoi
  *   différé ne partirait qu'au retour dans l'app.
  */
+/**
+ * Données manifestement pas encore chargées : un repas ou un change dans les
+ * dernières 24 h (fiche de l'enfant) mais un fil vide et des compteurs à 0.
+ * Au lancement, l'écouteur peut livrer un cache vide avant la réponse du
+ * serveur ; le widget affichait alors « 0 repas » quelques secondes.
+ */
+export function looksUnloaded(props: NowWidgetProps, now = Date.now()): boolean {
+  const day = props.day;
+  if (!day || (props.recent?.length ?? 0) > 0 || (props.lives?.length ?? 0) > 0) return false;
+  if (day.mealsCount > 0 || day.diapersCount > 0 || day.sleepMinutes > 0) return false;
+  const recentMs = [props.lastMealMs, day.lastDiaperMs].filter((ms): ms is number => typeof ms === "number");
+  return recentMs.some((ms) => now - ms < 24 * 3600 * 1000);
+}
+
+/** Attente avant d'écrire un contenu « pas encore chargé » (remplacé si les données arrivent). */
+export const WIDGET_UNLOADED_GRACE_MS = 5000;
+
 export function pushNowWidget(props: NowWidgetProps): void {
   const key = widgetContentKey(props);
   if (key === lastKey) return;
   cancelPendingWidgetPush();
+  if (looksUnloaded(props)) {
+    // Écrit seulement si rien de mieux n'arrive entre-temps (vraie journée vide).
+    pendingUnloaded = true;
+    pendingRun = () => write(props, key);
+    pending = setTimeout(() => {
+      pending = null;
+      const run = pendingRun;
+      pendingRun = null;
+      run?.();
+    }, WIDGET_UNLOADED_GRACE_MS);
+    return;
+  }
   const immediate =
     props.childId !== lastChildId ||
     lastKey.includes('"loading":true') ||
@@ -118,6 +149,9 @@ export function pushNowWidgetLoading(childId: string, childName: string): void {
 /** App mise en arrière-plan : l'envoi en attente part maintenant (pas dans 2 s). */
 export function flushPendingWidgetPush(): void {
   if (!pending) return;
+  // Contenu « pas encore chargé » : on ne le force pas en partant, le widget
+  // garde ses données précédentes (plus justes).
+  if (pendingUnloaded) return;
   clearTimeout(pending);
   pending = null;
   const run = pendingRun;
@@ -139,6 +173,7 @@ export function cancelPendingWidgetPush(): void {
   if (pending) clearTimeout(pending);
   pending = null;
   pendingRun = null;
+  pendingUnloaded = false;
 }
 
 /**

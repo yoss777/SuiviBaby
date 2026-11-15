@@ -86,6 +86,26 @@ const formatDuration = (minutes: number): string => {
 // COMPONENT
 // ============================================
 
+/**
+ * Heure de fin choisie dans le sélecteur d'heure. Plus tôt que le début :
+ * c'est le lendemain (nuit à cheval sur minuit, ex. début samedi 21:39, fin
+ * 00:00 → dimanche 00:00), si l'événement a une date de fin. Avant, l'heure
+ * était remplacée sans prévenir par « début + 1 min ». Sans date de fin
+ * (événement d'un seul jour), la fin reste au plus tôt 1 min après le début.
+ */
+export function resolveEndTime(heureDebut: Date, picked: Date, heureFin: Date | null, withEndDate: boolean): Date {
+  const fin = new Date(heureDebut);
+  fin.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+  // Date de fin déjà choisie : on garde son jour.
+  if (withEndDate && heureFin) fin.setFullYear(heureFin.getFullYear(), heureFin.getMonth(), heureFin.getDate());
+  if (fin.getTime() > heureDebut.getTime()) return fin;
+  if (!withEndDate) return new Date(heureDebut.getTime() + 60000);
+  const next = new Date(heureDebut);
+  next.setDate(next.getDate() + 1);
+  next.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+  return next;
+}
+
 export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   colorScheme,
   disabled = false,
@@ -216,10 +236,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
 
   const handleHeureFinTimeChange = (date: Date) => {
     if (!onHeureFinChange) return;
-    // Ensure heureFin is after heureDebut
-    const fin =
-      date > heureDebut ? date : new Date(heureDebut.getTime() + 60000);
-    onHeureFinChange(fin);
+    onHeureFinChange(resolveEndTime(heureDebut, date, heureFin ?? null, !!showEndDate));
   };
 
   const defaultStartDateLabel = showEndDate ? "Date début" : "Date";
@@ -327,7 +344,8 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           disabled={disabled}
           onChange={handleHeureFinTimeChange}
           onPickerToggle={onPickerToggle}
-          minimumDate={heureFinMinimumDate ?? heureDebut}
+          // Avec une date de fin, toute heure est permise (le lendemain est déduit).
+          minimumDate={heureFinMinimumDate ?? (showEndDate ? undefined : heureDebut)}
           maximumDate={heureFinMaximumDate}
         />
       )}

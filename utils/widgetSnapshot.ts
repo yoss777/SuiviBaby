@@ -15,7 +15,6 @@ export {
   formatDuration,
   localEnv,
   MEAL_GROUP_MS,
-  nextSideFrom,
   otherEventIcon,
   otherEventLabel,
   toNativeWidgetProps,

@@ -133,7 +133,7 @@ function splitEvents(eventDocs) {
 }
 
 /** Données du widget pour un appareil (son fuseau) et son utilisateur (Premium, rappels). */
-function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs, lastAbsoluteDiaperMs, tz, premium, reminders, nowMs }) {
+function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs, lastAbsoluteDiaperMs, tz, premium, canWrite, reminders, nowMs }) {
   let env;
   try {
     env = widget.zonedEnv(tz || DEFAULT_TZ);
@@ -170,6 +170,7 @@ function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs
           ? undefined
           : { repas: lastAbsoluteMealMs ?? null, changes: lastAbsoluteDiaperMs ?? null },
       isPremium: premium,
+      canWrite: canWrite !== false,
       reminders,
       now: nowMs,
     },
@@ -207,6 +208,10 @@ async function fanOutWidget(db, childId, { urgent }) {
   const child = childSnap.data();
 
   const accessSnap = await db.collection(`children/${childId}/access`).get();
+  // Droit de saisie par membre (owner/admin) : un Proche reçoit canWrite=false.
+  const writers = new Set(
+    accessSnap.docs.filter((d) => ["owner", "admin"].includes(d.data()?.role)).map((d) => d.id),
+  );
   let members = accessSnap.docs.map((d) => d.id).filter((uid) => !allowUids || allowUids.has(uid));
   if (members.length === 0) return log("no-member");
   const leaving = await usersWithPendingDeletion(db, members);
@@ -266,6 +271,7 @@ async function fanOutWidget(db, childId, { urgent }) {
         lastAbsoluteDiaperMs,
         tz: t.tz,
         premium,
+        canWrite: writers.has(uid),
         reminders,
         nowMs,
       });

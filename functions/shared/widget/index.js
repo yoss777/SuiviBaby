@@ -201,9 +201,13 @@ function otherEventIcon(e) {
 // ---------------------------------------------------------------------------
 // Tétée en cours (document partagé children/{c}/live/nursing)
 
-/** Brouillon en pause écarté après 1 h, en cours après 3 h (components/forms/nursingTimer.ts). */
-const NURSING_PAUSED_TTL_MS = 60 * 60 * 1000;
-const NURSING_RUNNING_TTL_MS = 3 * 60 * 60 * 1000;
+/**
+ * Brouillon en pause écarté après 40 min, en cours après 1 h 40 sans action
+ * (components/forms/nursingTimer.ts). Décidé par Yoss le 2026-11-15 (avant :
+ * 1 h et 3 h, jugés trop longs : une tétée oubliée restait affichée en cours).
+ */
+const NURSING_PAUSED_TTL_MS = 40 * 60 * 1000;
+const NURSING_RUNNING_TTL_MS = 100 * 60 * 1000;
 
 /** La tétée partagée compte encore : du temps compté ou un côté en cours, et pas expirée. */
 function usableNursing(state, now) {
@@ -245,7 +249,7 @@ const EMPTY_NOW_WIDGET = {
   lastMealMs: null,
   lastMealLabel: null,
   lastMealKind: null,
-  nextSide: null,
+  canWrite: true,
   isPremium: false,
   day: null,
   recent: [],
@@ -278,18 +282,6 @@ function formatDuration(totalSeconds) {
 
 const MEAL_LABEL = { tetee: "Tétée", biberon: "Biberon", solide: "Repas", autre: "Repas" };
 
-/** Prochain sein, seulement quand il est certain : dernière tétée sur un seul sein. */
-function nextSideFrom(lastNursing) {
-  if (!lastNursing) return null;
-  // Côté noté (coteGauche/coteDroit) : une tétée de moins de 30 s par sein
-  // est enregistrée sans durée (arrondie à 0 min) mais avec son côté.
-  const left = lastNursing.leftMinutes > 0 || lastNursing.left === true;
-  const right = lastNursing.rightMinutes > 0 || lastNursing.right === true;
-  if (left && !right) return "D";
-  if (right && !left) return "G";
-  return null;
-}
-
 function nursingLive(state, now, env) {
   const side = state.runningSide;
   const left = state.leftSeconds + (side === "left" && state.runningSince ? (now - state.runningSince) / 1000 : 0);
@@ -303,10 +295,15 @@ function nursingLive(state, now, env) {
   const pausedAt = side ? null : typeof state.updatedAt === "number" && state.updatedAt <= now ? state.updatedAt : now;
   const timerStartMs = side && state.runningSince ? state.runningSince - shownBase * 1000 : pausedAt - shownBase * 1000;
   const startedAt = state.startedAt != null ? state.startedAt : timerStartMs;
+  // Règle du brouillon (nursingTimer) : effacé 1 h 40 après la dernière action
+  // s'il tourne, 40 min en pause. Le widget s'en sert pour retirer la tétée seul.
+  const expiresAtMs =
+    typeof state.updatedAt === "number" ? state.updatedAt + (side ? NURSING_RUNNING_TTL_MS : NURSING_PAUSED_TTL_MS) : null;
   return {
     kind: "nursing",
     timerStartMs,
     pausedAtMs: pausedAt,
+    expiresAtMs,
     side: shown === "left" ? "G" : "D",
     otherSideLabel: otherSeconds >= 1 ? `${shown === "left" ? "D" : "G"} ${formatDuration(otherSeconds)}` : null,
     sinceMs: startedAt,
@@ -357,7 +354,8 @@ function buildNowWidgetProps(input, env = localEnv) {
       ? `${MEAL_LABEL[input.lastMeal.kind] || "Repas"} à ${env.clock(input.lastMeal.ms)}`
       : null,
     lastMealKind: input.lastMeal ? input.lastMeal.kind : null,
-    nextSide: nextSideFrom(input.lastNursing),
+    // Droit de saisie (Parent) : sans lui, aucune zone n'ouvre de formulaire.
+    canWrite: input.canWrite !== false,
     isPremium: input.isPremium,
     day: input.day,
     recent: [...(input.recent || [])].sort((a, b) => b.ms - a.ms).slice(0, WIDGET_RECENT_MAX),
@@ -447,7 +445,9 @@ function assembleNowWidgetInput(src, env = localEnv) {
 
   return {
     childName: src.childName,
-    nursing: src.nursing || null,
+    // Même règle d'expiration que l'app (brouillon oublié) : sans elle, une
+    // tétée gardée en mémoire par l'app restait « en cours » sur le widget.
+    nursing: usableNursing(src.nursing || null, now),
     sleepStartMs: src.sleepStartMs != null ? src.sleepStartMs : null,
     sleepIsNap: src.sleepIsNap != null ? src.sleepIsNap : null,
     walkStartMs: src.walkStartMs != null ? src.walkStartMs : null,
@@ -479,6 +479,7 @@ function assembleNowWidgetInput(src, env = localEnv) {
     },
     recent,
     isPremium: !!src.isPremium,
+    canWrite: src.canWrite !== false,
     reminders: {
       enabled: !!src.reminders.enabled,
       repasHours: src.reminders.repasHours,
@@ -506,7 +507,6 @@ module.exports = {
   otherEventIcon,
   toNativeWidgetProps,
   formatDuration,
-  nextSideFrom,
   buildNowWidgetProps,
   countGroups,
   assembleNowWidgetInput,

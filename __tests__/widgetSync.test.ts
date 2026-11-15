@@ -16,6 +16,8 @@ import {
   pushNowWidgetLoading,
   WIDGET_CHILD_SWITCH_WINDOW_MS,
   WIDGET_SYNC_DEBOUNCE_MS,
+  WIDGET_UNLOADED_GRACE_MS,
+  looksUnloaded,
 } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import { AppState } from "react-native";
@@ -149,4 +151,32 @@ it("app hors premier plan : envoi immédiat (minuteries suspendues par Android)"
   setAppState("background");
   pushNowWidget(props({ childName: "B" }));
   expect(mockCalls).toEqual(["note:c1", "write:B"]);
+});
+
+
+describe("données pas encore chargées au lancement", () => {
+  const day = { mealsCount: 0, bottleMl: 0, lastMealMs: null, diapersCount: 0, lastDiaperMs: null, sleepMinutes: 0 };
+  const unloaded = () => props({ childName: "vide", lastMealMs: Date.now() - 20 * 60_000, day: { ...day } as any, recent: [] });
+
+  it("repère un repas récent avec un fil vide et des compteurs à 0", () => {
+    expect(looksUnloaded(unloaded())).toBe(true);
+    expect(looksUnloaded(props({ day: { ...day } as any, recent: [] }))).toBe(false);
+    expect(looksUnloaded(props({ lastMealMs: Date.now() - 20 * 60_000, day: { ...day, mealsCount: 1 } as any }))).toBe(false);
+  });
+
+  it("lancement à froid : pas de « 0 repas », les vraies données arrivées remplacent", () => {
+    pushNowWidget(unloaded());
+    expect(widget.updateSnapshot).not.toHaveBeenCalled();
+    pushNowWidget(props({ childName: "chargé", day: { ...day, mealsCount: 1 } as any }));
+    jest.advanceTimersByTime(WIDGET_UNLOADED_GRACE_MS);
+    expect(mockCalls.filter((c) => c.startsWith("write:"))).toEqual(["write:chargé"]);
+  });
+
+  it("vraie journée vide : écrite après le délai ; jamais forcée au passage en arrière-plan", () => {
+    pushNowWidget(unloaded());
+    flushPendingWidgetPush();
+    expect(widget.updateSnapshot).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(WIDGET_UNLOADED_GRACE_MS);
+    expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
+  });
 });

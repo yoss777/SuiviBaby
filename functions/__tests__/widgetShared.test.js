@@ -110,7 +110,7 @@ describe("assemble + build (fuseau du serveur)", () => {
     const props = w.buildNowWidgetProps(input, paris);
     expect(props.lastMealKind).toBe("solide");
     expect(props.lastMealLabel).toBe("Repas à 12:00");
-    expect(props.nextSide).toBe("D");
+    expect(props.canWrite).toBe(true);
     expect(props.dayStartMs).toBe(Date.UTC(2026, 10, 12, 23, 0));
     expect(props.alerts).toEqual({ mealAtMs: at(15), diaperAtMs: at(19) });
     expect(props.live).toMatchObject({ kind: "sleep", nap: true, sinceMs: at(16), sinceLabel: "depuis 16:00" });
@@ -129,13 +129,24 @@ describe("assemble + build (fuseau du serveur)", () => {
   });
 
   test("tétée en cours et promenade : deux sessions, la tétée d'abord", () => {
-    const nursing = { leftSeconds: 120, rightSeconds: 0, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 45) };
+    const nursing = { leftSeconds: 120, rightSeconds: 0, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 45), updatedAt: at(16, 50) };
     const props = w.buildNowWidgetProps(
       w.assembleNowWidgetInput({ ...base, nursing, walkStartMs: at(16, 30) }, paris),
       paris,
     );
     expect(props.lives.map((l) => l.kind)).toEqual(["nursing", "walk"]);
     expect(props.live).toMatchObject({ side: "D", otherSideLabel: "G 2:00", sinceLabel: "depuis 16:45", alsoKind: "walk" });
+  });
+
+  test("tétée oubliée : même expiration que l'app (1 h 40 sans action en marche, 40 min en pause)", () => {
+    const running = { leftSeconds: 0, rightSeconds: 60, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 49), updatedAt: at(16, 50) };
+    const ok = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, nursing: running }, paris), paris);
+    expect(ok.live).toMatchObject({ kind: "nursing", expiresAtMs: at(18, 30) });
+    // 17:00 : 1 h 40 depuis la dernière action (15:10) dépassée : plus de tétée.
+    const old = { ...running, runningSince: at(15, 10), startedAt: at(15, 5), updatedAt: at(15, 10) };
+    expect(w.assembleNowWidgetInput({ ...base, nursing: old }, paris).nursing).toBeNull();
+    const paused = { leftSeconds: 300, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: at(16, 10), updatedAt: at(16, 15) };
+    expect(w.assembleNowWidgetInput({ ...base, nursing: paused }, paris).nursing).toBeNull();
   });
 
   test("sans Premium : pas de rappel de change ; dernier repas absolu hors du jour", () => {
@@ -154,8 +165,7 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(JSON.stringify(native)).not.toContain("null");
     expect(JSON.stringify(w.EMPTY_NOW_WIDGET_NATIVE)).not.toContain("null");
     expect(w.formatDuration(3725)).toBe("1:02:05");
-    expect(w.nextSideFrom({ leftMinutes: 0, rightMinutes: 5 })).toBe("G");
-    expect(w.nextSideFrom({ leftMinutes: 5, rightMinutes: 5 })).toBeNull();
+    expect(w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, canWrite: false }, paris), paris).canWrite).toBe(false);
   });
 });
 

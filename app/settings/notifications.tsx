@@ -29,6 +29,7 @@ import {
 import {
   mettreAJourPreferencesNotifications,
   obtenirPreferencesNotifications,
+  obtenirPreferencesNotificationsEnCache,
 } from "@/services/userPreferencesService";
 import {
   DEFAULT_QUIET_HOURS,
@@ -80,39 +81,53 @@ export default function NotificationsScreen() {
     onConfirm: undefined as undefined | (() => void),
   });
 
+  // Préférences reçues (cache de l'appareil, puis serveur) appliquées à l'écran.
+  // Une fois que l'utilisateur a touché un réglage, la réponse serveur tardive
+  // ne l'écrase plus.
+  const touchedRef = useRef(false);
+  const applyPreferences = useCallback((preferences: Awaited<ReturnType<typeof obtenirPreferencesNotifications>>) => {
+      setEmailEnabled(preferences.email);
+      setMarketing(preferences.marketing);
+      setUpdates(preferences.updates);
+      setTips(preferences.tips);
+      setInsightsEnabled(preferences.insights ?? true);
+      setCorrelationsEnabled(preferences.correlations ?? true);
+      const loadedThresholds = {
+        repas: preferences.reminders?.thresholds?.repas ?? 0,
+        pompages: preferences.reminders?.thresholds?.pompages ?? 0,
+        changes: preferences.reminders?.thresholds?.changes ?? 0,
+        vitamines: preferences.reminders?.thresholds?.vitamines ?? 0,
+      };
+      const allDisabled = Object.values(loadedThresholds).every(
+        (value) => value === 0,
+      );
+      setRemindersEnabled(
+        allDisabled ? false : (preferences.reminders?.enabled ?? true),
+      );
+      setReminderThresholds(loadedThresholds);
+      const loadedQuietHours = normalizeQuietHours(preferences.reminders?.quietHours);
+      savedQuietHoursRef.current = loadedQuietHours;
+      quietHoursRef.current = loadedQuietHours;
+      setQuietHours(loadedQuietHours);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
+    // Affichage immédiat avec les préférences déjà sur l'appareil : avant,
+    // l'écran restait sur le squelette jusqu'à la réponse du serveur.
+    void obtenirPreferencesNotificationsEnCache().then((cached) => {
+      if (!isMounted || !cached || touchedRef.current) return;
+      applyPreferences(cached);
+      setIsLoading(false);
+    });
+    void isDevicePushEnabled().then((on) => {
+      if (isMounted && !touchedRef.current) setPushEnabled(on);
+    });
     const loadPreferences = async () => {
       try {
-        const [preferences, devicePushOn] = await Promise.all([
-          obtenirPreferencesNotifications(),
-          isDevicePushEnabled(),
-        ]);
-        if (!isMounted) return;
-        setPushEnabled(devicePushOn);
-        setEmailEnabled(preferences.email);
-        setMarketing(preferences.marketing);
-        setUpdates(preferences.updates);
-        setTips(preferences.tips);
-        setInsightsEnabled(preferences.insights ?? true);
-        setCorrelationsEnabled(preferences.correlations ?? true);
-        const loadedThresholds = {
-          repas: preferences.reminders?.thresholds?.repas ?? 0,
-          pompages: preferences.reminders?.thresholds?.pompages ?? 0,
-          changes: preferences.reminders?.thresholds?.changes ?? 0,
-          vitamines: preferences.reminders?.thresholds?.vitamines ?? 0,
-        };
-        const allDisabled = Object.values(loadedThresholds).every(
-          (value) => value === 0,
-        );
-        setRemindersEnabled(
-          allDisabled ? false : (preferences.reminders?.enabled ?? true),
-        );
-        setReminderThresholds(loadedThresholds);
-        const loadedQuietHours = normalizeQuietHours(preferences.reminders?.quietHours);
-        savedQuietHoursRef.current = loadedQuietHours;
-        quietHoursRef.current = loadedQuietHours;
-        setQuietHours(loadedQuietHours);
+        const preferences = await obtenirPreferencesNotifications();
+        if (!isMounted || touchedRef.current) return;
+        applyPreferences(preferences);
       } catch (error) {
         if (!isMounted) return;
         setModalConfig({
@@ -131,7 +146,7 @@ export default function NotificationsScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [applyPreferences]);
 
   // P17a: Memoize callback
   const closeModal = useCallback(() => {
@@ -191,6 +206,7 @@ export default function NotificationsScreen() {
     value: boolean,
   ) => {
     if (isLoading) return;
+    touchedRef.current = true;
     const previousValue = {
       push: pushEnabled,
       email: emailEnabled,
@@ -282,6 +298,7 @@ export default function NotificationsScreen() {
   const updateReminders = async (
     next: Partial<typeof reminderThresholds> | { enabled: boolean },
   ) => {
+    touchedRef.current = true;
     const previousEnabled = remindersEnabled;
     const previousThresholds = reminderThresholds;
 
@@ -297,11 +314,10 @@ export default function NotificationsScreen() {
     setReminderThresholds(nextThresholds);
 
     try {
+      // Seule la clé touchée part (interrupteur ou un seuil) : le serveur la
+      // fusionne avec sa version, sans réécrire les autres seuils affichés.
       await mettreAJourPreferencesNotifications({
-        reminders: {
-          enabled: nextEnabled,
-          thresholds: nextThresholds,
-        },
+        reminders: "enabled" in next ? { enabled: nextEnabled } : { thresholds: next },
       });
       // P6: Toast on save success
       showToast("Rappel mis à jour");
@@ -323,16 +339,19 @@ export default function NotificationsScreen() {
     reminderThresholdsRef.current = reminderThresholds;
   }, [remindersEnabled, reminderThresholds]);
 
+  // Champs des heures calmes touchés depuis le dernier enregistrement : seuls
+  // eux partent (sinon l'écran réécrivait aussi les autres, peut-être anciens).
+  const quietPatchRef = useRef<Partial<QuietHours>>({});
   const saveQuietHours = useCallback(
     async (value: QuietHours) => {
+      const patch = quietPatchRef.current;
+      quietPatchRef.current = {};
       try {
         await mettreAJourPreferencesNotifications({
           reminders: {
-            enabled: remindersEnabledRef.current,
-            thresholds: reminderThresholdsRef.current,
             // Le fuseau du téléphone accompagne toujours les heures : le serveur
             // les applique à l'heure locale de cet appareil.
-            quietHours: { ...value, timeZone: getDeviceTimeZone() },
+            quietHours: { ...patch, timeZone: getDeviceTimeZone() },
           },
         });
         savedQuietHoursRef.current = value;
@@ -352,6 +371,8 @@ export default function NotificationsScreen() {
   /** Bascule : écriture immédiate. Heures : écriture différée (dernier choix). */
   const updateQuietHours = useCallback(
     (patch: Partial<QuietHours>, immediate = false) => {
+      touchedRef.current = true;
+      quietPatchRef.current = { ...quietPatchRef.current, ...patch };
       const next = { ...quietHoursRef.current, ...patch };
       quietHoursRef.current = next;
       setQuietHours(next);

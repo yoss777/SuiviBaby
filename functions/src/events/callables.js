@@ -12,6 +12,33 @@ const { isValidDocId } = require("../shared/validation");
 /**
  * validateAndCreateEvent — Création d'événement avec validation serveur
  */
+/**
+ * Session en cours (sommeil, promenade) : une seule à la fois par enfant.
+ * Retourne la requête des derniers événements du même type, ou null si
+ * l'événement créé n'est pas une session en cours.
+ */
+function runningSessionQuery(db, childId, data) {
+  const running = data.heureDebut && !data.heureFin;
+  if (!running) return null;
+  if (data.type === "sommeil" || (data.type === "activite" && data.typeActivite === "promenade")) {
+    return db
+      .collection("events")
+      .where("childId", "==", childId)
+      .where("type", "==", data.type)
+      .orderBy("date", "desc")
+      .limit(10);
+  }
+  return null;
+}
+
+function findRunningSession(snap, data) {
+  return snap.docs.find((d) => {
+    const e = d.data();
+    if (e.heureFin || !e.heureDebut) return false;
+    return data.type === "sommeil" || e.typeActivite === "promenade";
+  });
+}
+
 const validateAndCreateEvent = onCall(
   withAppCheck({ region: "europe-west1", concurrency: 50 }, "validateAndCreateEvent"),
   async (request) => {
@@ -67,6 +94,15 @@ const validateAndCreateEvent = onCall(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
+    // Règle métier : jamais deux sommeils ni deux promenades en cours pour un
+    // enfant (appuis répétés, widget, deux aidants). On renvoie la session déjà
+    // en cours au lieu d'en créer une seconde.
+    const runningQuery = runningSessionQuery(db, childId, cleanEventData);
+    if (runningQuery) {
+      const current = findRunningSession(await runningQuery.get(), cleanEventData);
+      if (current) return { id: current.id, alreadyRunning: true };
+    }
+
     // App 1.0.8 peut encore créer sans clé : création classique.
     if (!hasKey) {
       const ref = await db.collection("events").add(serverData);
@@ -102,6 +138,11 @@ const validateAndCreateEvent = onCall(
       // aléatoire) avec la même clé : on le reconnaît aussi.
       const legacy = await tx.get(legacyQuery);
       if (!legacy.empty) return { id: legacy.docs[0].id };
+      // Relu dans la transaction : deux démarrages simultanés ne passent pas tous les deux.
+      if (runningQuery) {
+        const current = findRunningSession(await tx.get(runningQuery), cleanEventData);
+        if (current) return { id: current.id, alreadyRunning: true };
+      }
       tx.create(eventRef, serverData);
       created = true;
       return { id: eventId };

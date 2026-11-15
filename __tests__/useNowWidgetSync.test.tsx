@@ -47,6 +47,7 @@ const params = (childId: string, over: Record<string, unknown> = {}) => ({
   sleepTotalMinutes: 0,
   lastAbsoluteMealMs: undefined,
   isPremium: false,
+  canWrite: true,
   reminders: { enabled: false, thresholds: { repas: 0, changes: 0 } },
   ...over,
 });

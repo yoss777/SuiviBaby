@@ -5,7 +5,7 @@
 // hors de la fonction (couleurs et libellés sont donc déclarés dedans).
 // Les données viennent de utils/widgetSnapshot.ts (updateSnapshot depuis l'app).
 // Le chrono défile seul (Text timerInterval) : aucun rechargement dépensé.
-import { HStack, Image, Spacer, Text, VStack } from "@expo/ui/swift-ui";
+import { HStack, Image, Link, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
   containerBackground,
@@ -43,9 +43,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   const now = environment.date ? new Date(environment.date).getTime() : Date.now();
   const family = environment.widgetFamily;
-  const live = props.live;
+  // Tétée oubliée (brouillon expiré : 3 h sans action, 1 h en pause) : retirée, comme dans l'app.
+  const alive = (l: WidgetLive | null | undefined) =>
+    !!l && !(l.expiresAtMs != null && (environment.date ? new Date(environment.date).getTime() : Date.now()) >= l.expiresAtMs);
+  const live = alive(props.live) ? props.live : (props.lives ?? []).find(alive) ?? null;
   // Toutes les sessions en cours (tétée, sommeil, promenade), comme sur Android.
-  const lives: WidgetLive[] = props.lives ?? (live ? [live] : []);
+  const lives: WidgetLive[] = (props.lives ?? (live ? [live] : [])).filter(alive);
   // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
   const labelOf = (l: WidgetLive) =>
     l.kind === "sleep" ? (l.nap === true ? "Sieste" : l.nap === false ? "Nuit" : "Sommeil") : KIND[l.kind].label;
@@ -54,8 +57,29 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
   // Appui : la tétée en cours ou le formulaire repas (hooks/useWidgetDeepLink.ts).
   const child = props.childId ? `&child=${encodeURIComponent(props.childId)}` : "";
-  const url = `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
+  // Proche (lecture seule) : l'appui ouvre l'Accueil, sans formulaire.
+  const url =
+    props.canWrite === false
+      ? "suivibaby:///baby/home"
+      : `suivibaby:///baby/home?widget=${live?.kind === "nursing" ? "nursing" : "meal"}${child}`;
   const bg = containerBackground(C.bg, "widget");
+  // Démarrer / arrêter sieste-nuit et promenade (Parent, moyen et grand) :
+  // le lien ouvre l'app, qui agit tout de suite. Nuit de 19:00 à 8:00.
+  const canWrite = props.canWrite !== false;
+  const napNow = (() => {
+    const hour = new Date(environment.date ? new Date(environment.date).getTime() : Date.now()).getHours();
+    return hour >= 8 && hour < 19;
+  })();
+  const actionUrl = (action: string) =>
+    `suivibaby:///baby/home?widget=${action}${child}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}`;
+  const chip = (label: string, action: string, color: string) => (
+    <Link
+      key={action}
+      destination={actionUrl(action)}
+      label={label}
+      modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(color), lineLimit(1)]}
+    />
+  );
   const far = new Date(now + 24 * 3600 * 1000);
   // Compteurs d'un jour passé (minuit franchi sans nouvel envoi) : masqués.
   const dayStart = props.dayStartMs ?? 0;
@@ -159,6 +183,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {live.otherSideLabel ? (
         <Text modifiers={[font({ size: 12 }), monospacedDigit(), foregroundStyle(C.soft)]}>{live.otherSideLabel}</Text>
       ) : null}
+      {canWrite && family !== "systemSmall"
+        ? chip(
+            "■ Arrêter",
+            live.kind === "sleep" ? "sleep-stop" : live.kind === "walk" ? "walk-stop" : "nursing-stop",
+            info?.color ?? C.strong,
+          )
+        : null}
     </VStack>
   ) : (
     <VStack alignment="leading" spacing={4}>
@@ -179,6 +210,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       )}
       {props.lastMealLabel ? (
         <Text modifiers={[font({ size: 13 }), foregroundStyle(C.soft), lineLimit(1)]}>{props.lastMealLabel}</Text>
+      ) : null}
+      {canWrite && family !== "systemSmall" ? (
+        <HStack spacing={12}>
+          {chip(napNow ? "▶ Sieste" : "▶ Nuit", "sleep-start", C.sleep)}
+          {chip("▶ Promenade", "walk-start", C.walk)}
+        </HStack>
       ) : null}
     </VStack>
   );

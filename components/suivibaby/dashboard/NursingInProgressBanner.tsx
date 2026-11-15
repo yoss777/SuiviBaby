@@ -139,8 +139,11 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
       <View style={[styles.dot, { backgroundColor: running ? cat.primary : nc.textMuted }]} />
       <FontAwesome name="person-breastfeeding" size={16} color={accentText} />
       <View style={styles.labelColumn}>
-        <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={2}>
+        <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={1}>
           {display.label}
+        </Text>
+        <Text style={[styles.detail, { color: nc.textNormal }]} numberOfLines={1}>
+          {display.detail}
         </Text>
         {display.expiryLabel && (
           <Text
@@ -167,6 +170,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     marginBottom: 12,
+    // Même marge latérale que les cartes du résumé (statsGroupContainer).
+    marginHorizontal: 20,
     // Borne le ripple Android aux coins arrondis (aucun badge ne déborde).
     overflow: "hidden",
   },
@@ -182,6 +187,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  detail: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   expiry: {
     fontSize: 13,

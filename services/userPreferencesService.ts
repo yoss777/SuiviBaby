@@ -1,5 +1,5 @@
 // services/userPreferencesService.ts
-import { arrayRemove, arrayUnion, doc, getDoc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { arrayRemove, arrayUnion, doc, getDoc, getDocFromCache, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import type { DocumentData, DocumentSnapshot, FirestoreError, Unsubscribe } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
@@ -108,6 +108,29 @@ const defaultNotificationPreferences: NotificationPreferences = {
 const defaultThemePreference: ThemePreference = 'auto';
 const defaultLanguagePreference: LanguagePreference = 'fr';
 
+/** Normalise le document user_preferences (valeurs par défaut comprises). */
+function toUserPreferences(data: UserPreferences): UserPreferences {
+  return {
+    hiddenChildrenIds: data.hiddenChildrenIds ?? [],
+    lastActiveChildId: data.lastActiveChildId ?? undefined,
+    notifications: {
+      ...defaultNotificationPreferences,
+      ...(data.notifications || {}),
+      reminders: {
+        ...defaultNotificationPreferences.reminders,
+        ...(data.notifications?.reminders || {}),
+        thresholds: {
+          ...defaultNotificationPreferences.reminders?.thresholds,
+          ...(data.notifications?.reminders?.thresholds || {}),
+        } as Record<ReminderKey, number>,
+        quietHours: resolveQuietHours(data.notifications?.reminders?.quietHours),
+      } as ReminderPreferences,
+    },
+    theme: data.theme ?? defaultThemePreference,
+    language: data.language ?? defaultLanguagePreference,
+  };
+}
+
 /**
  * Récupère les préférences de l'utilisateur
  */
@@ -127,26 +150,7 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      const data = docSnap.data() as UserPreferences;
-      return {
-        hiddenChildrenIds: data.hiddenChildrenIds ?? [],
-        lastActiveChildId: data.lastActiveChildId ?? undefined,
-        notifications: {
-          ...defaultNotificationPreferences,
-          ...(data.notifications || {}),
-          reminders: {
-            ...defaultNotificationPreferences.reminders,
-            ...(data.notifications?.reminders || {}),
-            thresholds: {
-              ...defaultNotificationPreferences.reminders?.thresholds,
-              ...(data.notifications?.reminders?.thresholds || {}),
-            } as Record<ReminderKey, number>,
-            quietHours: resolveQuietHours(data.notifications?.reminders?.quietHours),
-          } as ReminderPreferences,
-        },
-        theme: data.theme ?? defaultThemePreference,
-        language: data.language ?? defaultLanguagePreference,
-      };
+      return toUserPreferences(docSnap.data() as UserPreferences);
     } else {
       // Si le document n'existe pas, le créer avec des valeurs par défaut
       const defaultPrefs = {
@@ -166,6 +170,23 @@ export async function obtenirPreferences(): Promise<UserPreferences> {
 }
 
 /**
+ * Préférences de notifications déjà présentes sur l'appareil (cache Firestore),
+ * sans attendre le réseau ; null s'il n'y en a pas. L'écran s'affiche tout de
+ * suite avec elles, puis la lecture serveur les met à jour.
+ */
+export async function obtenirPreferencesNotificationsEnCache(): Promise<NotificationPreferences | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  try {
+    const snap = await getDocFromCache(doc(db, "user_preferences", user.uid));
+    if (!snap.exists()) return null;
+    return toUserPreferences(snap.data() as UserPreferences).notifications || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Obtenir les préférences de notifications
  */
 export async function obtenirPreferencesNotifications(): Promise<NotificationPreferences> {
@@ -176,8 +197,22 @@ export async function obtenirPreferencesNotifications(): Promise<NotificationPre
 /**
  * Mettre à jour les préférences de notifications
  */
+/**
+ * Mise à jour partielle : seules les clés fournies changent. Les rappels se
+ * fusionnent clé par clé (un seuil, une heure calme) avec la version serveur,
+ * pour ne pas réécrire avec des valeurs d'écran anciennes ce qu'un autre
+ * appareil a changé entre-temps.
+ */
+export type NotificationPreferencesUpdate = Omit<Partial<NotificationPreferences>, "reminders"> & {
+  reminders?: {
+    enabled?: boolean;
+    thresholds?: Partial<Record<ReminderKey, number>>;
+    quietHours?: Partial<QuietHours>;
+  };
+};
+
 export async function mettreAJourPreferencesNotifications(
-  updates: Partial<NotificationPreferences>
+  updates: NotificationPreferencesUpdate
 ) {
   try {
     const userId = getUserId();
