@@ -103,7 +103,9 @@ describe("réglage « Pas de rappels la nuit »", () => {
     await act(async () => {
       fireEvent(screen.getByRole("switch", { name: "Pas de rappels la nuit" }), "valueChange", false);
     });
-    expect(savedQuietHours()).toMatchObject({ enabled: false, start: "22:00", end: "07:00" });
+    // Seul le champ touché part (le serveur fusionne avec sa version).
+    expect(savedQuietHours()).toMatchObject({ enabled: false });
+    expect(savedQuietHours().start).toBeUndefined();
     expect(screen.queryByTestId("time-Début")).toBeNull();
     expect(screen.queryByTestId("time-Fin")).toBeNull();
     expect(mockShowToast).toHaveBeenCalled();
@@ -116,7 +118,7 @@ describe("réglage « Pas de rappels la nuit »", () => {
     expect(screen.getByText("Début 23:15")).toBeTruthy();
     expect(mockMettreAJour).not.toHaveBeenCalled(); // pas une écriture par cran du sélecteur
     await act(async () => { jest.advanceTimersByTime(1000); });
-    expect(savedQuietHours()).toMatchObject({ enabled: true, start: "23:15", end: "07:00" });
+    expect(savedQuietHours()).toEqual({ start: "23:15", timeZone: expect.any(String) });
     expect(typeof savedQuietHours().timeZone).toBe("string");
   });
 
@@ -131,14 +133,15 @@ describe("réglage « Pas de rappels la nuit »", () => {
     expect(savedQuietHours()).toMatchObject({ end: "06:30" });
   });
 
-  it("l'écriture conserve l'état des rappels et les seuils", async () => {
+  it("l'écriture n'envoie que les heures calmes : rappels et seuils restent ceux du serveur", async () => {
     await renderScreen();
     mockPicked["Fin"] = at(8, 0);
     fireEvent.press(screen.getByTestId("time-Fin"));
     await act(async () => { jest.advanceTimersByTime(1000); });
     const arg = mockMettreAJour.mock.calls[0][0];
-    expect(arg.reminders.enabled).toBe(true);
-    expect(arg.reminders.thresholds.repas).toBe(3);
+    expect(arg.reminders.enabled).toBeUndefined();
+    expect(arg.reminders.thresholds).toBeUndefined();
+    expect(arg.reminders.quietHours).toMatchObject({ end: "08:00" });
   });
 
   it("début == fin : explique que les rappels restent actifs", async () => {

@@ -197,8 +197,22 @@ export async function obtenirPreferencesNotifications(): Promise<NotificationPre
 /**
  * Mettre à jour les préférences de notifications
  */
+/**
+ * Mise à jour partielle : seules les clés fournies changent. Les rappels se
+ * fusionnent clé par clé (un seuil, une heure calme) avec la version serveur,
+ * pour ne pas réécrire avec des valeurs d'écran anciennes ce qu'un autre
+ * appareil a changé entre-temps.
+ */
+export type NotificationPreferencesUpdate = Omit<Partial<NotificationPreferences>, "reminders"> & {
+  reminders?: {
+    enabled?: boolean;
+    thresholds?: Partial<Record<ReminderKey, number>>;
+    quietHours?: Partial<QuietHours>;
+  };
+};
+
 export async function mettreAJourPreferencesNotifications(
-  updates: Partial<NotificationPreferences>
+  updates: NotificationPreferencesUpdate
 ) {
   try {
     const userId = getUserId();

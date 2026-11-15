@@ -314,11 +314,10 @@ export default function NotificationsScreen() {
     setReminderThresholds(nextThresholds);
 
     try {
+      // Seule la clé touchée part (interrupteur ou un seuil) : le serveur la
+      // fusionne avec sa version, sans réécrire les autres seuils affichés.
       await mettreAJourPreferencesNotifications({
-        reminders: {
-          enabled: nextEnabled,
-          thresholds: nextThresholds,
-        },
+        reminders: "enabled" in next ? { enabled: nextEnabled } : { thresholds: next },
       });
       // P6: Toast on save success
       showToast("Rappel mis à jour");
@@ -340,16 +339,19 @@ export default function NotificationsScreen() {
     reminderThresholdsRef.current = reminderThresholds;
   }, [remindersEnabled, reminderThresholds]);
 
+  // Champs des heures calmes touchés depuis le dernier enregistrement : seuls
+  // eux partent (sinon l'écran réécrivait aussi les autres, peut-être anciens).
+  const quietPatchRef = useRef<Partial<QuietHours>>({});
   const saveQuietHours = useCallback(
     async (value: QuietHours) => {
+      const patch = quietPatchRef.current;
+      quietPatchRef.current = {};
       try {
         await mettreAJourPreferencesNotifications({
           reminders: {
-            enabled: remindersEnabledRef.current,
-            thresholds: reminderThresholdsRef.current,
             // Le fuseau du téléphone accompagne toujours les heures : le serveur
             // les applique à l'heure locale de cet appareil.
-            quietHours: { ...value, timeZone: getDeviceTimeZone() },
+            quietHours: { ...patch, timeZone: getDeviceTimeZone() },
           },
         });
         savedQuietHoursRef.current = value;
@@ -370,6 +372,7 @@ export default function NotificationsScreen() {
   const updateQuietHours = useCallback(
     (patch: Partial<QuietHours>, immediate = false) => {
       touchedRef.current = true;
+      quietPatchRef.current = { ...quietPatchRef.current, ...patch };
       const next = { ...quietHoursRef.current, ...patch };
       quietHoursRef.current = next;
       setQuietHours(next);
