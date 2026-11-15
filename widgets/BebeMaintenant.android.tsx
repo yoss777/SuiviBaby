@@ -106,13 +106,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Appui sur une zone : ouvre le formulaire de la catégorie dans l'app
   // (hooks/useWidgetDeepLink.ts). Une version native sans « openUrl » l'ignore
   // et l'appui ouvre l'app, comme avant.
-  const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours" };
+  const LINK_LABEL = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours", sleep: "Noter un sommeil" };
   // Zone cliquable : son lien et son libellé TalkBack.
   // `say` : ce que TalkBack lit avant l'action (ex. « Dernier repas à 19:37 »).
   // Proche (lecture seule, canWrite=false) : l'appui ouvre l'Accueil, sans
   // formulaire, et TalkBack dit « Consulter dans SuiviBaby ».
   const canWrite = props.canWrite !== false;
-  const linkMods = (action: "meal" | "diaper" | "nursing", say?: string) => {
+  const linkMods = (action: "meal" | "diaper" | "nursing" | "sleep", say?: string) => {
     const label = canWrite ? LINK_LABEL[action] : "Consulter dans SuiviBaby";
     return [
       createModifier("openUrl", {
@@ -123,6 +123,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       semantics({ contentDescription: say ? `${say}. ${label}` : label }),
     ];
   };
+
+  // Lignes de la liste de droite sans formulaire (évènements, espaces) : une
+  // LazyColumn garde l'appui pour elle, il n'atteint pas le fond du widget et
+  // ne faisait rien. Lien vers l'Accueil, comme le fond (et comme l'iPhone).
+  const homeMods = (say: string) => [
+    createModifier("openUrl", { url: "suivibaby:///baby/home" }),
+    semantics({ contentDescription: `${say}. Ouvrir SuiviBaby` }),
+  ];
 
   // Démarrer / arrêter sieste-nuit et promenade (Parent seulement) : l'appui
   // ouvre l'app, qui agit tout de suite (hooks/useWidgetDeepLink.ts).
@@ -590,7 +598,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <Row
         key={key}
         verticalAlignment="center"
-        modifiers={[size(Rw, ITEM_H), ...(key === "meal" ? linkMods("meal") : key === "diaper" ? linkMods("diaper") : [])]}
+        modifiers={[
+          size(Rw, ITEM_H),
+          ...(key === "meal" || key === "diaper" || key === "sleep" ? linkMods(key) : homeMods(sub ?? key)),
+        ]}
       >
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(8)]} />
@@ -608,7 +619,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const lateSub = (ms: number) => {
       const k = daysAgo(ms);
       const t = clock(ms);
-      const tries = k <= 0 ? [`rappel · ${t}`] : k === 1 ? [`rappel · hier ${t}`, "rappel · hier"] : [`rappel · le ${ddmm(ms)}`, "rappel"];
+      // « rappel · dernier à 11:57 / dernier hier à 11:57 / dernier le 13/11 »
+      // (demande de Yoss, 2026-11-15), raccourci si la colonne est étroite.
+      const tries =
+        k <= 0
+          ? [`rappel · dernier à ${t}`, `rappel · à ${t}`, `rappel · ${t}`]
+          : k === 1
+            ? [`rappel · dernier hier à ${t}`, `rappel · hier à ${t}`, `rappel · hier ${t}`, "rappel · hier"]
+            : [`rappel · dernier le ${ddmm(ms)}`, `rappel · le ${ddmm(ms)}`, "rappel"];
       return tries.find((x) => textW12(x) * 1.05 <= room) ?? tries[tries.length - 1];
     };
     // Aucun jamais noté (prouvé par la fiche de l'enfant) : « aucun noté » (la
@@ -634,9 +652,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return (
       <LazyColumn modifiers={[size(Rw, zoneH)]}>
         {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate)}
-        <Spacer key="gap-meal-diaper" modifiers={[height(ITEM_GAP)]} />
+        <Spacer key="gap-meal-diaper" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} />
         {item("diaper", CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate)}
-        <Spacer key="gap-diaper-sleep" modifiers={[height(ITEM_GAP)]} />
+        <Spacer key="gap-diaper-sleep" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} />
         {item(
           "sleep",
           CAT.sleep.dot,
@@ -644,15 +662,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           "de sommeil",
           false,
         )}
-        {events.length ? <Spacer key="gap-sleep-title" modifiers={[height(ITEM_GAP)]} /> : null}
+        {events.length ? <Spacer key="gap-sleep-title" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} /> : null}
         {events.length ? (
-          <Column key="events-title" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
+          <Column key="events-title" modifiers={[size(Rw, TITLE_H), ...homeMods("Évènements récents")]} verticalAlignment="center">
             {txt("Évènements récents", C.soft, 12)}
           </Column>
         ) : null}
         {events.flatMap((e, i) => {
           const row = (
-            <Row key={`ev-${i}-${e.ms}`} verticalAlignment="center" modifiers={[size(Rw, ROW_H)]}>
+            <Row key={`ev-${i}-${e.ms}`} verticalAlignment="center" modifiers={[size(Rw, ROW_H), ...homeMods(`${clock(e.ms)} ${e.label}`)]}>
               {dot((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? CAT.meal.dot : e.kind === "diaper" ? CAT.diaper.dot : C.soft))}
               <Spacer modifiers={[width(6)]} />
               {txt(clock(e.ms), C.soft, 12)}
@@ -664,7 +682,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           const firstOfYesterday = e.ms < dayStart && (i === 0 || events[i - 1].ms >= dayStart);
           return firstOfYesterday
             ? [
-                <Column key="events-yesterday" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
+                <Column key="events-yesterday" modifiers={[size(Rw, TITLE_H), ...homeMods("Hier")]} verticalAlignment="center">
                   {txt("Hier", C.soft, 12)}
                 </Column>,
                 row,
