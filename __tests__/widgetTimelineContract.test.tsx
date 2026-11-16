@@ -40,7 +40,11 @@ it("timeline écrite par l'app : rendue par le widget (prénom, session, clé), 
   const late = entries.find((e) => e.date.getTime() > end && e.date.getTime() < NOW + 24 * H);
   expect(late).toBeDefined();
   const lateDump = dumpWidget(render(late!.props, { colorScheme: "light", widgetFamily: "systemMedium", date: late!.date }));
-  expect(lateDump.texts.some((t) => /^\d+h\d\d$|^\d+ min$/.test(t))).toBe(false);
+  // La sieste en cours passe au compteur natif (défile seul).
+  expect(lateDump.nativeTimers).toBeGreaterThanOrEqual(1);
+  // Et pendant la fenêtre de comptage, c'est le texte à la minute (« 1 h » dans 0 min…).
+  const firstDump = dumpWidget(render(entries[0].props, { colorScheme: "light", widgetFamily: "systemMedium", date: entries[0].date }));
+  expect(firstDump.nativeTimers).toBe(0);
 
   const last = entries[entries.length - 1];
   expect(last.date.getTime()).toBe(NOW + 24 * H + 60_000);

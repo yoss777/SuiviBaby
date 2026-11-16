@@ -59,14 +59,15 @@ object WidgetPushHandler {
     if (msg.optString("t") == "w0") {
       // Effacement : données vides à la place, enfant oublié (plus rien ne
       // s'applique pour lui avant la prochaine écriture de l'app).
-      val outcome = WidgetPushGuards.decideWipe(childId, prefs.getString(CHILD_KEY, null))
+      var outcome = WidgetPushGuards.decideWipe(childId, prefs.getString(CHILD_KEY, null))
       if (outcome == WidgetPushOutcome.WIPED) {
-        prefs.edit()
+        val written = prefs.edit()
           .putString(PROPS_KEY, (p ?: emptyProps(receivedAtMs)).toString())
           .remove(CHILD_KEY)
           .remove(SEQ_KEY)
           .commit()
-        requestRedraw(context)
+        // Disque plein ou erreur d'E/S : jamais annoncé comme effacé.
+        if (written) requestRedraw(context) else outcome = WidgetPushOutcome.ERROR
       }
       appendLog(prefs, receivedAtMs, seq, outcome)
       Log.i(TAG, "w0 -> ${outcome.code}")
@@ -81,17 +82,18 @@ object WidgetPushHandler {
       appWriteAtMs = prefs.getLong(APP_AT_KEY, 0L),
       foreground = isForeground(context),
     )
+    var finalOutcome = outcome
     if (outcome == WidgetPushOutcome.APPLIED && p != null) {
       if (!p.has("childId")) p.put("childId", childId)
-      prefs.edit()
+      val written = prefs.edit()
         .putString(PROPS_KEY, p.toString())
         .putLong(SEQ_KEY, seq)
         .putString(CHILD_KEY, childId)
         .commit()
-      requestRedraw(context)
+      if (written) requestRedraw(context) else finalOutcome = WidgetPushOutcome.ERROR
     }
-    appendLog(prefs, receivedAtMs, seq, outcome)
-    Log.i(TAG, "w1 s=$seq -> ${outcome.code}")
+    appendLog(prefs, receivedAtMs, seq, finalOutcome)
+    Log.i(TAG, "w1 s=$seq -> ${finalOutcome.code}")
     return true
   }
 

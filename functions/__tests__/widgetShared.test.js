@@ -34,7 +34,7 @@ describe("otherEventLabel / otherEventIcon", () => {
     [{ type: "vitamine", nomVitamine: "Vitamine K" }, "Vitamine K", "medicament"],
     [{ type: "medicament", nomMedicament: "antibiotique otite" }, "Médicament", "medicament"],
     [{ type: "medicament" }, "Médicament", "medicament"],
-    [{ type: "temperature", valeur: 37.84 }, "Temp. 37,8 °C", "temperature"],
+    [{ type: "temperature", valeur: 37.84 }, "Température", "temperature"],
     [{ type: "temperature" }, "Température", "temperature"],
     [{ type: "symptome" }, "Symptôme", "symptome"],
     [{ type: "vaccin", nomVaccin: "ROR" }, "Vaccin", "vaccin"],
@@ -223,4 +223,16 @@ describe("usableNursing : document partiel", () => {
     // Sans aucune durée : rien à afficher.
     expect(w.usableNursing({ leftSeconds: 0, rightSeconds: 0, runningSide: "left", updatedAt: now - 60_000 }, now)).toBeNull();
   });
+});
+
+describe("versionAtLeast (consentement du widget)", () => {
+  const { versionAtLeast } = require("../src/shared/consent");
+  test.each([
+    ["2.2", "2.2", true],
+    ["2.3", "2.2", true],
+    ["2.10", "2.9", true],
+    ["2.1", "2.2", false],
+    ["1.9", "2.2", false],
+    [undefined, "2.2", false],
+  ])("%s ≥ %s : %s", (v, min, ok) => expect(versionAtLeast(v, min)).toBe(ok));
 });

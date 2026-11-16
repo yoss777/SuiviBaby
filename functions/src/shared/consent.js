@@ -8,6 +8,34 @@ function hasValidHealthConsent(prefs) {
   return prefs?.healthDataConsent?.granted === true;
 }
 
+/**
+ * Widget (envoi des données de santé hors de l'app, via Expo/FCM/APNs) :
+ * consentement donné ET d'une version au moins égale à celle dont la
+ * politique décrit le widget. À relever (ex. « 2.3 ») avec la mise à jour de
+ * la politique de confidentialité : le widget ne part alors qu'aux comptes
+ * qui l'ont acceptée, sans toucher aux rappels (toute version, ci-dessus).
+ */
+const WIDGET_MIN_CONSENT_VERSION = "2.2";
+
+function versionAtLeast(version, min) {
+  if (typeof version !== "string") return false;
+  const a = version.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = Number.isFinite(a[i]) ? a[i] : 0;
+    const y = Number.isFinite(b[i]) ? b[i] : 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+function hasWidgetHealthConsent(prefs, min = WIDGET_MIN_CONSENT_VERSION) {
+  return hasValidHealthConsent(prefs) && versionAtLeast(prefs.healthDataConsent.version, min);
+}
+
 module.exports = {
   hasValidHealthConsent,
+  hasWidgetHealthConsent,
+  versionAtLeast,
+  WIDGET_MIN_CONSENT_VERSION,
 };

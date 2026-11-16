@@ -57,6 +57,11 @@ export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { d
   const exact = (ms: number | null | undefined) => {
     if (typeof ms === "number" && Number.isFinite(ms) && ms > now && ms <= horizon) dates.add(ms);
   };
+  // Au-delà du comptage : une entrée par heure jusqu'à 24 h, sinon « il y a
+  // 4h00 » (dernier repas, dernier change, « màj ») restait figé jusqu'à
+  // l'entrée exacte suivante (parfois 10 h). Les chronos de session, eux,
+  // passent au compteur natif.
+  for (let t = countingEndMs + 3600_000; t < horizon; t += 3600_000) exact(t);
   // Rappel qui passe au rouge.
   exact(props.alerts?.mealAtMs);
   exact(props.alerts?.diaperAtMs);

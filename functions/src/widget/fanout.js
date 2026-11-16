@@ -23,7 +23,7 @@ const admin = require("firebase-admin");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const widget = require("../../shared/widget");
 const reminderLib = require("../../lib/reminders");
-const { hasValidHealthConsent } = require("../shared/consent");
+const { hasWidgetHealthConsent } = require("../shared/consent");
 const { subscriptionStateFrom, isEntitledStatus } = require("../billing/subscription");
 const { usersWithPendingDeletion } = require("../notifications/eligibility");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
@@ -126,8 +126,8 @@ function splitEvents(eventDocs) {
           ms,
           type: e.type,
           nomVitamine: e.nomVitamine,
-          // Pas de nom de médicament ni de vaccin (saisie libre) : libellés génériques.
-          valeur: e.valeur,
+          // Ni nom de médicament ou de vaccin (saisie libre), ni valeur de
+          // température : libellés génériques.
           typeActivite: e.typeActivite,
           duree: e.duree,
           isNap: e.isNap,
@@ -250,7 +250,8 @@ async function fanOutWidget(db, childId, { urgent }) {
     try {
       const prefsSnap = await db.doc(`user_preferences/${uid}`).get();
       const prefs = prefsSnap.exists ? prefsSnap.data() : {};
-      if (!hasValidHealthConsent(prefs)) {
+      // Consentement santé d'une version qui couvre le widget (shared/consent).
+      if (!hasWidgetHealthConsent(prefs)) {
         stats.skipped++;
         continue;
       }

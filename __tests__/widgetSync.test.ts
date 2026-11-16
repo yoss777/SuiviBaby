@@ -224,9 +224,18 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(new Set(dates).size).toBe(dates.length);
     // Grille alignée sur la session seulement (plus de doublon sur « maintenant »).
     expect(dates).not.toContain(now + 30 * 60_000);
-    expect(dates.length).toBeLessThan(110);
+    expect(dates.length).toBeLessThan(130); // ~60 + 36 + ~20 horaires + exactes
     // Fin du comptage : 4 h, jamais l'entrée d'expiration (sinon chrono figé).
     expect(countingEndMs).toBe(now + 4 * 3600_000);
+  });
+
+  it("au-delà de 4 h : une entrée par heure jusqu'à 24 h (« il y a » jamais figé longtemps)", () => {
+    const now = 1_000_000_000_000;
+    const { dates, countingEndMs } = widgetTimelinePlan(props({ generatedAtMs: now }), now);
+    const after = dates.filter((d) => d > countingEndMs);
+    const gaps = after.map((d, i) => d - (i ? after[i - 1] : countingEndMs));
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(3600_000);
+    expect(dates.length).toBeLessThan(140);
   });
 
   it("entrées exactes : rappel qui passe au rouge, minuit, bascule Sieste/Nuit", () => {
