@@ -13,6 +13,7 @@ import {
   getDocs,
   query,
   setDoc,
+  deleteField,
   Timestamp,
   updateDoc,
   where,
@@ -158,8 +159,14 @@ export async function registerPushToken(userId: string): Promise<void> {
         // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
         ...(await linkKeyField()),
         widgetPush: true,
-        // Enfant affiché par le widget, s'il est déjà connu (sinon posé par setWidgetChild).
-        ...(desiredWidgetChildId ? { widgetChildId: desiredWidgetChildId } : {}),
+        // Enfant affiché par le widget, s'il est déjà connu (sinon posé par
+        // setWidgetChild). Jeton repris d'un autre compte : l'enfant de l'ancien
+        // compte est retiré (sinon le serveur continuait à lui écrire ce bébé).
+        ...(desiredWidgetChildId
+          ? { widgetChildId: desiredWidgetChildId }
+          : ownExisting
+            ? {}
+            : { widgetChildId: deleteField() }),
       },
       { merge: true },
     );

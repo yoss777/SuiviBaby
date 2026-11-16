@@ -51,7 +51,9 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
   // si le widget affiche cet enfant, données vides et enfant oublié. Jamais
   // refusé au premier plan ni pour une séquence : l'effacement prime.
   if (msg.t === "w0") {
-    if (!msg.c || state.shownChildId !== msg.c) return "child";
+    // Autre enfant affiché : on n'y touche pas. Enfant affiché inconnu (état
+    // perdu) : on efface quand même, l'app réécrira à la prochaine ouverture.
+    if (!msg.c || (state.shownChildId && state.shownChildId !== msg.c)) return "child";
     if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) return "write";
     await clearIosWidgetPush();
     return "wipe";

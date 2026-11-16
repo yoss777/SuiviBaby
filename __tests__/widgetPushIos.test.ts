@@ -121,6 +121,12 @@ describe("effacement à distance (« w0 »)", () => {
     expect(await handleWidgetPushIos(msg(10_000))).toBe("child");
   });
 
+  it("enfant affiché inconnu (état perdu) : effacé quand même", async () => {
+    await clearIosWidgetPush();
+    expect(await handleWidgetPushIos(w0("c1"))).toBe("wipe");
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+  });
+
   it("autre enfant affiché : rien n'est effacé", async () => {
     await noteIosAppSnapshot("c2", 1_000);
     expect(await handleWidgetPushIos(w0("c1"))).toBe("child");

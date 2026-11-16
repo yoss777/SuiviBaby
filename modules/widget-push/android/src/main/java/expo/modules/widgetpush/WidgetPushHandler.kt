@@ -62,7 +62,7 @@ object WidgetPushHandler {
       val outcome = WidgetPushGuards.decideWipe(childId, prefs.getString(CHILD_KEY, null))
       if (outcome == WidgetPushOutcome.WIPED) {
         prefs.edit()
-          .putString(PROPS_KEY, (p ?: JSONObject()).toString())
+          .putString(PROPS_KEY, (p ?: emptyProps(receivedAtMs)).toString())
           .remove(CHILD_KEY)
           .remove(SEQ_KEY)
           .commit()
@@ -122,6 +122,22 @@ object WidgetPushHandler {
   }
 
   /** Journal circulaire (mesure de latence, E6) : aucune donnée personnelle. */
+  /**
+   * Données vides mais valides (le widget lit `alerts`, `lives`, `recent` sans
+   * garde) : repli si un « w0 » arrivait sans données. Même forme que
+   * EMPTY_NOW_WIDGET (functions/shared/widget).
+   */
+  private fun emptyProps(nowMs: Long): JSONObject = JSONObject()
+    .put("v", 1)
+    .put("childName", "")
+    .put("lives", JSONArray())
+    .put("recent", JSONArray())
+    .put("alerts", JSONObject())
+    .put("canWrite", true)
+    .put("isPremium", false)
+    .put("dayStartMs", 0)
+    .put("generatedAtMs", nowMs)
+
   private fun appendLog(prefs: android.content.SharedPreferences, receivedAtMs: Long, seq: Long, outcome: WidgetPushOutcome) {
     val log = runCatching { JSONArray(prefs.getString(LOG_KEY, "[]")) }.getOrDefault(JSONArray())
     log.put(JSONObject().put("r", receivedAtMs).put("s", seq).put("o", outcome.code))

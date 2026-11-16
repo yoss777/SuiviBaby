@@ -48,6 +48,7 @@ jest.mock("firebase/firestore", () => ({
   orderBy: jest.fn(),
   limit: jest.fn(),
   serverTimestamp: jest.fn(() => "SERVER_TIMESTAMP"),
+  deleteField: jest.fn(() => "DELETE_FIELD"),
   Timestamp: {
     now: jest.fn(() => ({ toDate: () => new Date(), seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 })),
     fromDate: jest.fn((date: Date) => ({ toDate: () => date, seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 })),
