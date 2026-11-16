@@ -329,19 +329,51 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     pushNowWidget(props({ childName: "init", lives: [sleep] }));
     pushNowWidget(props({ childName: "init", lives: [] }));
     jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS * 2);
+    // Courte, courte, puis une seule complète.
     expect(calls).toHaveLength(3);
     expect(lastEntries()[0].props.lives ?? []).toHaveLength(0);
   });
 
-  it("app quittée avant 4 s : la complète est écrite au retour au premier plan", () => {
+  it("app quittée avant 4 s, retour : une seule complète, celle de l'envoi qui suit", () => {
     setup();
     pushNowWidget(props({ childName: "init", lives: [sleep] }));
     // Minuteries suspendues : le délai ne s'écoule pas. Retour dans l'app :
     invalidateWidgetKey();
+    expect(calls).toHaveLength(1);
+    pushNowWidget(props({ childName: "frais", lives: [sleep] }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS * 3);
     expect(calls).toHaveLength(2);
     expect(calls[1]).toBeGreaterThan(80);
-    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS);
+    expect(lastEntries()[0].props.childName).toBe("frais");
+  });
+
+  it("app quittée avant 4 s, retour sans envoi (écran pas prêt) : la complète due part quand même", () => {
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    invalidateWidgetKey();
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS + 1000);
     expect(calls).toHaveLength(2);
+    expect(calls[1]).toBeGreaterThan(80);
+  });
+
+  it("envoi en attente abandonné sans écrire : la complète repasse ensuite", () => {
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS - 1000);
+    pushNowWidget(props({ childName: "autre", lives: [sleep] }));
+    jest.advanceTimersByTime(1000);
+    cancelPendingWidgetPush();
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS + 500);
+    expect(calls).toHaveLength(2);
+    expect(lastEntries()[0].props.childName).toBe("init");
+  });
+
+  it("déconnexion (écritures suspendues) : la complète en attente ne part jamais", () => {
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    clearNowWidget({ suspend: true });
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS * 3);
+    expect(calls).toHaveLength(1);
   });
 
   it("contenu remplacé, widget vidé ou données serveur entre-temps : la complète en attente ne part pas", () => {
@@ -390,7 +422,12 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     expect(dates).toContain(mealAt);
     expect(dates).toContain(new Date(2026, 10, 17, 0, 0).getTime());
     expect(dates).toContain(now + 24 * 3600_000 + 60_000);
+    // « màj HH:MM » (données de plus de 2 h) à l'heure.
+    expect(dates).toContain(now + 2 * 3600_000 + 1000);
     expect(dates.length).toBeLessThanOrEqual(16);
+    // Sans heure de génération : ni « màj » ni expiration (le widget n'expire pas non plus).
+    const bare = widgetQuickTimelinePlan(props({ generatedAtMs: undefined as any }), now).dates;
+    expect(bare).not.toContain(now + 2 * 3600_000 + 1000);
   });
 });
 

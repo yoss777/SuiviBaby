@@ -71,6 +71,8 @@ function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number,
   for (const [plusDay, h] of [[1, 0], [0, 8], [0, 19], [1, 8]] as const) {
     exact(new Date(d.getFullYear(), d.getMonth(), d.getDate() + plusDay, h).getTime());
   }
+  // Données de plus de 2 h : « màj HH:MM » et grisé (BebeMaintenant.ios.tsx).
+  if (props.generatedAtMs) exact(props.generatedAtMs + 2 * 3600_000 + 1000);
   // Expiration à 24 h : widget masqué (BebeMaintenant.ios.tsx).
   if (props.generatedAtMs) exact(props.generatedAtMs + 24 * 3600_000 + 60_000);
 }
@@ -169,7 +171,23 @@ function cancelFullTimeline(): void {
   fullTimelineTimer = null;
   pendingFull = null;
 }
-/** Écrit tout de suite la timeline complète due (retour au premier plan). */
+/**
+ * Programme la complète due. Un envoi en attente (anti-rebond) l'écrira et
+ * l'annulera ; s'il est abandonné sans écrire, la complète repasse ensuite.
+ */
+function scheduleFullTimeline(delayMs: number): void {
+  if (fullTimelineTimer) clearTimeout(fullTimelineTimer);
+  fullTimelineTimer = setTimeout(() => {
+    fullTimelineTimer = null;
+    if (!pendingFull) return;
+    if (pending) {
+      scheduleFullTimeline(WIDGET_SYNC_DEBOUNCE_MS + 500);
+      return;
+    }
+    runPendingFull();
+  }, delayMs);
+}
+/** Écrit tout de suite la timeline complète due. */
 function runPendingFull(): void {
   const due = pendingFull;
   cancelFullTimeline();
@@ -229,15 +247,7 @@ function write(props: NowWidgetProps, key: string, opts: { quick?: boolean } = {
       if (opts.quick) {
         // Annulée par toute écriture suivante, l'effacement ou un envoi serveur.
         pendingFull = { props, widget };
-        fullTimelineTimer = setTimeout(() => {
-          fullTimelineTimer = null;
-          // Un envoi en attente (anti-rebond) écrira déjà la complète.
-          if (pending) {
-            pendingFull = null;
-            return;
-          }
-          runPendingFull();
-        }, WIDGET_IOS_FULL_TIMELINE_DELAY_MS);
+        scheduleFullTimeline(WIDGET_IOS_FULL_TIMELINE_DELAY_MS);
       }
     } else {
       widget.updateSnapshot(toNativeWidgetProps(props));
@@ -360,8 +370,10 @@ export function flushPendingWidgetPush(): void {
  * à contenu égal. Appelé au retour au premier plan.
  */
 export function invalidateWidgetKey(): void {
-  // Timeline complète restée due (app quittée avant 4 s) : écrite maintenant.
-  runPendingFull();
+  // Timeline complète restée due (app quittée avant 4 s) : l'envoi qui suit le
+  // retour l'écrit (et l'annule) ; sinon (écran pas prêt) elle part après
+  // l'anti-rebond. Jamais deux timelines lourdes coup sur coup.
+  if (pendingFull) scheduleFullTimeline(WIDGET_SYNC_DEBOUNCE_MS + 1000);
   // Seule la clé de contenu : la signature des sessions garde l'écriture
   // immédiate d'un démarrage ou d'un arrêt au retour au premier plan.
   lastKey = "";
