@@ -129,10 +129,10 @@ let pendingUnloaded = false;
 
 function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps): void {
   const { dates, countingEndMs } = widgetTimelinePlan(props);
-  // Fin du comptage à la minute (4 h), PAS la dernière entrée : après, le
-  // widget reprend le compteur natif. Avec l'entrée d'expiration (24 h) comme
-  // fin, le chrono restait figé à « 4h00 » de 4 h à 24 h.
-  const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: countingEndMs + 5 * 60_000 });
+  // Fin du comptage à la minute = la dernière entrée de comptage (4 h), PAS
+  // la dernière entrée : dès elle, le widget reprend le compteur natif. Avec
+  // l'expiration (24 h) ou une marge, le chrono restait figé (« 4h00 »).
+  const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: countingEndMs });
   widget.updateTimeline!(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
 }
 
@@ -295,19 +295,22 @@ export function cancelPendingWidgetPush(): void {
  * Déconnexion : le widget ne doit plus montrer le prénom ni les données de
  * santé de l'enfant sur un téléphone partagé. Immédiat (pas d'anti-rebond).
  */
-export function clearNowWidget(opts: { suspend?: boolean } = {}): void {
+/** @returns vrai si le widget a bien été vidé. */
+export function clearNowWidget(opts: { suspend?: boolean } = {}): boolean {
   if (opts.suspend) writesSuspended = true;
   cancelPendingWidgetPush();
   lastKey = "";
   lastChildId = undefined;
   clearWidgetPush();
   const widget = getWidget();
-  if (!widget) return;
+  if (!widget) return false;
   try {
     widget.updateSnapshot(EMPTY_NOW_WIDGET_NATIVE);
+    return true;
   } catch (error) {
     if (__DEV__) console.warn("[widget] effacement impossible", error);
     reportOnce(error, "clear");
+    return false;
   }
 }
 

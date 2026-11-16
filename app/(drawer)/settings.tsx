@@ -272,7 +272,7 @@ export default function SettingsScreen() {
       await withdrawHealthConsent();
       // Plus de données de santé hors de l'app : widget vidé tout de suite sur
       // ce téléphone (le serveur l'efface aussi sur les autres appareils).
-      clearNowWidget();
+      clearNowWidget({ suspend: true });
       setShowWithdrawConsentModal(false);
       router.replace("/boot");
     } catch {

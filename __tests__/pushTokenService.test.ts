@@ -205,13 +205,13 @@ describe("données du widget seulement si un widget est posé", () => {
     expect(updateDoc).not.toHaveBeenCalled();
   });
 
-  it("module natif absent (inconnu) : considéré sans widget", async () => {
+  it("module natif absent (inconnu) : widgetPush non écrit (absent = aucun envoi)", async () => {
     permission("granted");
     mocked(getDoc).mockResolvedValue({ exists: () => false });
     mocked(getDocs).mockResolvedValue({ docs: [] });
     await removePushTokens("u0");
     mockInstalled = null;
     await registerPushToken("u1");
-    expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ widgetPush: false });
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).not.toHaveProperty("widgetPush");
   });
 });

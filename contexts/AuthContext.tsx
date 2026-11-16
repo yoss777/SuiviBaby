@@ -376,6 +376,8 @@ export function AuthProvider({
       }
     } catch (error) {
       console.error("Erreur lors de la déconnexion:", error);
+      // Toujours connecté (la déconnexion a échoué) : le widget reprend.
+      if (auth.currentUser) resumeWidgetWrites();
       throw error;
     }
   }, []);

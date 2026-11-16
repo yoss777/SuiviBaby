@@ -72,15 +72,24 @@ async function wipeWidgetForUser(db, uid, childId, { nowMs = Date.now() } = {}) 
       stats.failed = failed;
     }
     // L'appareil ne reçoit plus rien pour cet enfant, même ancien (cap < 2).
+    // Enfant retiré des jetons : appareils effacés (envoi réussi) et anciennes
+    // versions (cap < 2, aucun « w0 » possible). Envoi en échec : on garde
+    // l'enfant, pour qu'un nouvel essai (purge finale) retrouve l'appareil.
+    const sendOk = stats.failed === 0;
+    const toUnlink = sendOk ? shown : shown.filter((d) => !canWipe(d.data()));
     const updateErrors = [];
     await Promise.all(
-      shown.map((d) =>
+      toUnlink.map((d) =>
         d.ref.update({ widgetChildId: admin.firestore.FieldValue.delete() }).catch((e) => {
           stats.errors += 1;
           updateErrors.push(e?.code ?? "unknown");
         }),
       ),
     );
+    if (stats.skippedOldCap > 0) {
+      // Visible : ces appareils gardent le widget jusqu'à son expiration (24 h).
+      console.warn("widgetWipe: old app versions cannot be wiped (24 h expiry only)", { count: stats.skippedOldCap });
+    }
     reminderLib.logJobSummary("widgetWipe", startedAt, {
       reason: stats.failed > 0 && stats.sent === 0 ? "failed" : "sent",
       ...stats,

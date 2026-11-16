@@ -556,7 +556,7 @@ service cloud.firestore {
         (!('platform' in d) || d.platform in ['ios', 'android']) &&
         (!('enabled' in d) || d.enabled is bool) &&
         (!('widgetPush' in d) || d.widgetPush is bool) &&
-        (!('widgetCap' in d) || (d.widgetCap is int && d.widgetCap >= 0 && d.widgetCap <= 2)) &&
+        (!('widgetCap' in d) || (d.widgetCap is int && d.widgetCap >= 0 && d.widgetCap <= 3)) &&
         (!('widgetChildId' in d) || (d.widgetChildId is string && d.widgetChildId.size() <= 128)) &&
         (!('widgetLinkKey' in d) || (d.widgetLinkKey is string && d.widgetLinkKey.size() >= 16 && d.widgetLinkKey.size() <= 64)) &&
         (!('tz' in d) || d.tz == null || (d.tz is string && d.tz.size() <= 64)) &&

@@ -27,7 +27,11 @@ const { deleteUserEventPhotos } = require("../shared/photos");
 async function purgeUserData(db, uid) {
   // Widget vidé sur ses appareils avant que ses jetons disparaissent (nouvel
   // essai si l'effacement avait échoué à la demande de suppression).
-  await widgetWipe.wipeWidgetForUser(db, uid, null);
+  const wipe = await widgetWipe.wipeWidgetForUser(db, uid, null);
+  if (!wipe.ok) {
+    // Au mieux : les jetons partent avec la purge ; le widget expire en 24 h.
+    console.warn("purgeUserData: widget wipe failed before purge (24 h expiry remains)", { failed: wipe.failed, errors: wipe.errors });
+  }
   let email = "";
   try {
     const userRecord = await admin.auth().getUser(uid);

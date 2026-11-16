@@ -50,9 +50,12 @@ let notificationsGranted = false;
  * serveur avant d'envoyer les données du widget (plan-temps-reel.md, E3) :
  * 1 = récepteur natif Android présent, ou tâche d'arrière-plan iPhone
  * enregistrée (E7, option 1 : notification silencieuse, livraison au mieux) ;
- * 2 = comprend aussi l'effacement à distance (« w0 »).
+ * 2 = comprend aussi l'effacement à distance (« w0 ») ;
+ * 3 = n'annonce widgetPush que si un widget est posé (le serveur n'envoie les
+ *     données qu'à partir de 3 : les anciennes versions gardaient widgetPush
+ *     vrai sans widget).
  */
-const widgetCap = (): Promise<number> => (Platform.OS === "android" ? Promise.resolve(2) : widgetPushIosCap());
+const widgetCap = (): Promise<number> => (Platform.OS === "android" ? Promise.resolve(3) : widgetPushIosCap());
 
 function deviceTimeZone(): string | null {
   try {
@@ -111,10 +114,10 @@ async function getExpoPushToken(): Promise<string | null> {
   return cachedToken;
 }
 
-/** Un widget SuiviBaby est-il posé ? Inconnu (module absent) : non. */
-async function widgetInstalled(): Promise<boolean> {
+/** Un widget SuiviBaby est-il posé ? null : inconnu (module absent, erreur). */
+async function widgetInstalled(): Promise<boolean | null> {
   const n = await installedWidgetCount();
-  return (n ?? 0) > 0;
+  return n == null ? null : n > 0;
 }
 
 let lastWidgetPush: boolean | null = null;
@@ -127,7 +130,8 @@ export async function refreshWidgetPresence(): Promise<void> {
   const docId = getTokenDocId();
   if (!docId || !registeredUserId) return;
   const installed = await widgetInstalled();
-  if (installed === lastWidgetPush) return;
+  // Inconnu : on n'écrase pas la valeur enregistrée.
+  if (installed == null || installed === lastWidgetPush) return;
   try {
     await updateDoc(doc(db, COLLECTION, docId), { widgetPush: installed });
     lastWidgetPush = installed;
@@ -184,7 +188,8 @@ export async function registerPushToken(userId: string): Promise<void> {
         widgetCap: await widgetCap(),
         // Données du widget envoyées seulement si un widget est posé
         // (minimisation des données de santé) ; revu au retour au premier plan.
-        widgetPush: installed,
+        // Inconnu (module absent) : champ inchangé ; absent = pas d'envoi.
+        ...(installed == null ? {} : { widgetPush: installed }),
         // Clé des liens de cet appareil : le serveur l'ajoute aux liens du
         // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
         ...(await linkKeyField()),

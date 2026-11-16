@@ -476,8 +476,16 @@ export async function processQueue(): Promise<number> {
             // Écriture mise en file par une ancienne version (1.0.8) sans clé :
             // l'identifiant de la ligne, stable d'un rejeu à l'autre, en tient lieu.
             if (!payload.idempotencyKey) payload.idempotencyKey = event.id;
-            const create = httpsCallable(functions, "validateAndCreateEvent");
-            await create(payload);
+            const create = httpsCallable<Record<string, unknown>, { id: string; alreadyRunning?: boolean }>(
+              functions,
+              "validateAndCreateEvent",
+            );
+            const created = await create(payload);
+            // Sieste/balade déjà en cours (lancée ailleurs pendant qu'on était
+            // hors ligne) : rien de créé, l'entrée affichée en attente est retirée.
+            if (created?.data?.alreadyRunning) {
+              purgeQueuedOptimistic({ action: "create", idempotencyKey: payload.idempotencyKey as string });
+            }
             break;
           }
           case "update": {

@@ -34,8 +34,8 @@ function seed(extra = {}) {
       notifications: { reminders: { enabled: true, thresholds: { repas: 3, changes: 2 } } },
     },
     "subscriptions/dad": { tier: "premium", status: "active" },
-    "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris" },
-    "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "America/New_York" },
+    "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris" },
+    "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "America/New_York" },
     "events/e1": { childId: "c1", userId: "dad", type: "biberon", date: ts(NOW - 2 * HOUR), quantite: 120, note: "secret" },
     "events/e2": { childId: "c1", userId: "mum", type: "miction", date: ts(NOW - 3 * HOUR) },
     "events/e3": { childId: "c1", userId: "dad", type: "sommeil", date: ts(NOW - HOUR), heureDebut: ts(NOW - HOUR), isNap: true },
@@ -132,7 +132,7 @@ describe("fanOutWidget", () => {
     memoryStore(seed({
       "user_preferences/mum": {},
       "users/dad": { pendingDeletion: { scheduledAt: "x" } },
-      "device_tokens/x1": { userId: "dad", token: "ExponentPushToken[x1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c2" },
+      "device_tokens/x1": { userId: "dad", token: "ExponentPushToken[x1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c2" },
     }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     expect(pushed()).toHaveLength(0);
@@ -140,16 +140,24 @@ describe("fanOutWidget", () => {
     jest.clearAllMocks();
     memoryStore(seed({
       "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 0, widgetChildId: "c1" },
-      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "ios", widgetPush: true, widgetCap: 1, widgetChildId: "c1" },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1" },
     }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     expect(pushed()).toHaveLength(0);
   });
 
+  it("ancienne version (widgetCap < 3, widgetPush resté vrai sans widget) : plus de données", async () => {
+    memoryStore(seed({
+      "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 2, widgetChildId: "c1", tz: "Europe/Paris" },
+    }));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[d1]"]);
+  });
+
   it("iPhone activé (app_config/widgetPush.ios) : notification silencieuse, priorité normale, sans titre", async () => {
     memoryStore(seed({
       "app_config/widgetPush": { enabled: true, ios: true },
-      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "ios", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris" },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris" },
     }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     const ios = pushed().find((m) => m.to === "ExponentPushToken[d1]");
@@ -164,8 +172,8 @@ describe("fanOutWidget", () => {
 
   it("clé des liens de l'appareil ajoutée aux données ; clé mal formée ignorée", async () => {
     memoryStore(seed({
-      "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "0123456789abcdef0123456789abcdef" },
-      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "<script>" },
+      "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "0123456789abcdef0123456789abcdef" },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "<script>" },
     }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     const byTo = Object.fromEntries(pushed().map((m) => [m.to, m]));
@@ -176,7 +184,7 @@ describe("fanOutWidget", () => {
   it("iPhone : plafond des notifications silencieuses (2 min pour une session, 20 min sinon)", async () => {
     const ios = (lastIosPushAt) => ({
       "app_config/widgetPush": { enabled: true, ios: true },
-      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 2, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt },
     });
     const toIos = () => pushed().filter((m) => m.to === "ExponentPushToken[i1]");
     // Envoi il y a 5 min : un évènement ordinaire attend, un début/fin de session passe.

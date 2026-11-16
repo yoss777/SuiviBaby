@@ -29,6 +29,8 @@ const { usersWithPendingDeletion } = require("../notifications/eligibility");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
 
 const HOUR = 3600 * 1000;
+/** Capacité minimale pour recevoir les données du widget (voir pushTokenService). */
+const DATA_CAP = 3;
 /**
  * iPhone : Apple tolère 2-3 notifications silencieuses par heure ; au-delà,
  * iOS les retarde ou les abandonne. Plafond par appareil : début/fin de
@@ -264,7 +266,9 @@ async function fanOutWidget(db, childId, { urgent }) {
           t.platform !== "ios" || nowMs - iosLast >= (urgent ? IOS_MIN_GAP_URGENT_MS : IOS_MIN_GAP_MS);
         if (t.platform === "ios" && config.ios === true && !iosAllowed) stats.iosThrottled = (stats.iosThrottled || 0) + 1;
         const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true && iosAllowed);
-        return t.widgetPush === true && Number(t.widgetCap) >= 1 && platformOk &&
+        // widgetCap >= 3 : version qui n'annonce widgetPush que si un widget est
+        // posé (les plus anciennes le gardaient vrai sans widget : plus rien).
+        return t.widgetPush === true && Number(t.widgetCap) >= DATA_CAP && platformOk &&
           getExpoModule().Expo.isExpoPushToken(t.token);
       });
       if (devices.length === 0) continue;
@@ -325,7 +329,15 @@ async function fanOutWidget(db, childId, { urgent }) {
   const { delivered, failed, dead, chunkErrors, errorsByCode } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
   // iPhone : heure du dernier envoi, pour le plafond (champ serveur seulement).
   const iosSent = tokenDocs.filter((d) => d.platform === "ios" && !dead.has(d.token));
-  await Promise.all(iosSent.map((d) => d.ref.update({ lastIosPushAt: nowMs }).catch(() => {})));
+  await Promise.all(
+    iosSent.map((d) =>
+      d.ref.update({ lastIosPushAt: nowMs }).catch(() => {
+        // Sans cette heure, le plafond iPhone ne s'applique plus : compté.
+        stats.iosStampFailed = (stats.iosStampFailed || 0) + 1;
+        stats.errors++;
+      }),
+    ),
+  );
   if (errorsByCode && Object.keys(errorsByCode).length > 0) stats.errorsByCode = errorsByCode;
   stats.sent = delivered;
   stats.failed = failed;

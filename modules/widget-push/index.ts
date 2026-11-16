@@ -71,6 +71,7 @@ export function readReceiveLog(): WidgetPushLogEntry[] {
  * WidgetCenter, écran verrouillé compris). null : inconnu (module natif
  * absent, client de développement non reconstruit, erreur).
  */
+let countErrorReported = false;
 export async function installedWidgetCount(): Promise<number | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -79,7 +80,12 @@ export async function installedWidgetCount(): Promise<number | null> {
     if (!mod?.installedWidgetCount) return null;
     const n = await mod.installedWidgetCount();
     return typeof n === "number" && Number.isFinite(n) ? n : null;
-  } catch {
+  } catch (error) {
+    if (!countErrorReported) {
+      countErrorReported = true;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("@/utils/errorReporting").captureServiceError(error, { service: "widgetPush", operation: "installedWidgetCount" });
+    }
     return null;
   }
 }
