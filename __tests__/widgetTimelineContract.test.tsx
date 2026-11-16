@@ -34,6 +34,14 @@ it("timeline écrite par l'app : rendue par le widget (prénom, session, clé), 
   // Les données natives n'ont aucun null (pont Android d'expo-widgets).
   expect(JSON.stringify(entries[0].props)).not.toContain("null");
 
+  // Au-delà de la fenêtre de comptage (4 h) : compteur natif, jamais une
+  // durée figée (régression : « 4h00 » affiché de 4 h à 24 h).
+  const end = entries[0].props.timelineEndMs as number;
+  const late = entries.find((e) => e.date.getTime() > end && e.date.getTime() < NOW + 24 * H);
+  expect(late).toBeDefined();
+  const lateDump = dumpWidget(render(late!.props, { colorScheme: "light", widgetFamily: "systemMedium", date: late!.date }));
+  expect(lateDump.texts.some((t) => /^\d+h\d\d$|^\d+ min$/.test(t))).toBe(false);
+
   const last = entries[entries.length - 1];
   expect(last.date.getTime()).toBe(NOW + 24 * H + 60_000);
   const expired = dumpWidget(render(last.props, { colorScheme: "light", widgetFamily: "systemMedium", date: last.date }));

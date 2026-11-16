@@ -119,6 +119,21 @@ describe("requestAccountDeletion / cancelAccountDeletion", () => {
     expect(sentEmails()[0][0].to).toBe("u1@t.com");
   });
 
+  it("effacement du widget en échec : jetons gardés (nouvel essai à la purge), aucun envoi ne leur part", async () => {
+    const docs = memoryStore({
+      "users/u1": { email: "u1@t.com" },
+      "device_tokens/t1": { userId: "u1", token: "ExponentPushToken[w]", platform: "android", widgetPush: true, widgetCap: 2, widgetChildId: "c1" },
+    });
+    const wipe = require("../src/widget/wipe");
+    const spy = jest.spyOn(wipe, "wipeWidgetForUser").mockResolvedValue({ devices: 1, sent: 0, failed: 1, errors: 0, skippedOldCap: 0, ok: false });
+    try {
+      await fns.requestAccountDeletion(call("u1"));
+      expect(docs.has("device_tokens/t1")).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("keeps the schedule when the e-mail cannot be sent", async () => {
     delete process.env.RESEND_API_KEY;
     const docs = memoryStore({ "users/u1": {} });

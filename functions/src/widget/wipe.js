@@ -37,21 +37,27 @@ function wipeMessageData(childId, nowMs) {
 /**
  * Efface le widget des appareils de `uid` qui affichent `childId` (ou tout
  * enfant si `childId` est null). Ne lève jamais : un échec est journalisé.
- * @returns nombre d'appareils visés
+ * @returns { devices, sent, failed, skippedOldCap, ok } — ok faux si l'envoi
+ *   a échoué (l'appelant peut garder les jetons pour réessayer).
  */
 async function wipeWidgetForUser(db, uid, childId, { nowMs = Date.now() } = {}) {
-  const stats = { devices: 0, sent: 0, failed: 0, errors: 0 };
+  const stats = { devices: 0, sent: 0, failed: 0, errors: 0, skippedOldCap: 0 };
+  const result = () => ({ ...stats, ok: stats.failed === 0 && stats.errors === 0 });
   const startedAt = Date.now();
   try {
     const config = (await db.doc("app_config/widgetPush").get()).data() || {};
     if (config.wipe === false) {
       reminderLib.logJobSummary("widgetWipe", startedAt, { reason: "disabled", ...stats });
-      return 0;
+      return result();
     }
     let q = db.collection("device_tokens").where("userId", "==", uid);
     if (childId) q = q.where("widgetChildId", "==", childId);
     const snap = await q.get();
-    const targets = snap.docs.filter((d) => d.data().widgetChildId && canWipe(d.data()));
+    const shown = snap.docs.filter((d) => d.data().widgetChildId);
+    const targets = shown.filter((d) => canWipe(d.data()));
+    // Anciennes versions (cap < 2) : pas de « w0 » possible, seule
+    // l'expiration à 24 h les protège. Compté, et journalisé en warn.
+    stats.skippedOldCap = shown.length - targets.length;
     const messages = targets.map((d) => {
       const t = d.data();
       const data = wipeMessageData(t.widgetChildId, nowMs);
@@ -66,16 +72,38 @@ async function wipeWidgetForUser(db, uid, childId, { nowMs = Date.now() } = {}) 
       stats.failed = failed;
     }
     // L'appareil ne reçoit plus rien pour cet enfant, même ancien (cap < 2).
-    const stale = snap.docs.filter((d) => d.data().widgetChildId);
+    // Enfant retiré des jetons : appareils effacés (envoi réussi) et anciennes
+    // versions (cap < 2, aucun « w0 » possible). Envoi en échec : on garde
+    // l'enfant, pour qu'un nouvel essai (purge finale) retrouve l'appareil.
+    const sendOk = stats.failed === 0;
+    const toUnlink = sendOk ? shown : shown.filter((d) => !canWipe(d.data()));
+    const updateErrors = [];
     await Promise.all(
-      stale.map((d) => d.ref.update({ widgetChildId: admin.firestore.FieldValue.delete() }).catch(() => (stats.errors += 1))),
+      toUnlink.map((d) =>
+        d.ref.update({ widgetChildId: admin.firestore.FieldValue.delete() }).catch((e) => {
+          stats.errors += 1;
+          updateErrors.push(e?.code ?? "unknown");
+        }),
+      ),
     );
-    reminderLib.logJobSummary("widgetWipe", startedAt, { reason: stats.failed > 0 && stats.sent === 0 ? "failed" : "sent", ...stats });
-    return messages.length;
+    if (stats.skippedOldCap > 0) {
+      // Visible : ces appareils gardent le widget jusqu'à son expiration (24 h).
+      console.warn("widgetWipe: old app versions cannot be wiped (24 h expiry only)", { count: stats.skippedOldCap });
+    }
+    reminderLib.logJobSummary("widgetWipe", startedAt, {
+      reason: stats.failed > 0 && stats.sent === 0 ? "failed" : "sent",
+      ...stats,
+      ...(updateErrors.length ? { updateErrors } : {}),
+    });
+    return result();
   } catch (error) {
     stats.errors += 1;
-    reminderLib.logJobSummary("widgetWipe", startedAt, { reason: "failed", error: error?.message ?? String(error), ...stats });
-    return 0;
+    reminderLib.logJobSummary("widgetWipe", startedAt, {
+      reason: "failed",
+      error: reminderLib.maskPushTokens(error?.message ?? String(error)),
+      ...stats,
+    });
+    return result();
   }
 }
 

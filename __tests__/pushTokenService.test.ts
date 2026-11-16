@@ -14,11 +14,16 @@ jest.mock("expo-notifications", () => ({
 }));
 
 jest.mock("@/config/firebase", () => ({ db: {} }));
+let mockInstalled: number | null = 1;
+jest.mock("@/modules/widget-push", () => ({
+  ...jest.requireActual("@/modules/widget-push"),
+  installedWidgetCount: () => Promise.resolve(mockInstalled),
+}));
 
 import * as Notifications from "expo-notifications";
 import { getDoc, setDoc, updateDoc } from "firebase/firestore";
 
-import { registerPushToken, removePushTokens, setWidgetChild } from "@/services/pushTokenService";
+import { refreshWidgetPresence, registerPushToken, removePushTokens, setWidgetChild } from "@/services/pushTokenService";
 import { getDocs } from "firebase/firestore";
 
 const mocked = <T>(fn: T) => fn as unknown as jest.Mock;
@@ -30,6 +35,7 @@ function permission(status: "granted" | "denied") {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockInstalled = 1;
   mocked(Notifications.getExpoPushTokenAsync).mockResolvedValue({ data: "ExponentPushToken[abc]" });
 });
 
@@ -177,5 +183,35 @@ describe("setWidgetChild", () => {
     for (let i = 0; i < 40; i++) await Promise.resolve();
     expect(mocked(setDoc).mock.calls.length).toBeGreaterThan(setCalls);
     expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ userId: "u1", widgetChildId: "c7" });
+  });
+});
+
+describe("données du widget seulement si un widget est posé", () => {
+  it("aucun widget posé : widgetPush faux ; widget ajouté puis app rouverte : passe à vrai", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0");
+    mockInstalled = 0;
+    await registerPushToken("u1");
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ widgetPush: false });
+    mockInstalled = 2;
+    mocked(updateDoc).mockResolvedValue(undefined);
+    await refreshWidgetPresence();
+    expect(updateDoc).toHaveBeenCalledWith(undefined, { widgetPush: true });
+    // Rien de changé ensuite : pas de nouvelle écriture.
+    mocked(updateDoc).mockClear();
+    await refreshWidgetPresence();
+    expect(updateDoc).not.toHaveBeenCalled();
+  });
+
+  it("module natif absent (inconnu) : widgetPush non écrit (absent = aucun envoi)", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0");
+    mockInstalled = null;
+    await registerPushToken("u1");
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).not.toHaveProperty("widgetPush");
   });
 });

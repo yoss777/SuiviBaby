@@ -19,6 +19,8 @@ import {
   WIDGET_UNLOADED_GRACE_MS,
   looksUnloaded,
   widgetTimelineDates,
+  widgetTimelinePlan,
+  resumeWidgetWrites,
 } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import { AppState } from "react-native";
@@ -207,22 +209,73 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(dates).toContain(now + 24 * 3600_000 + 60_000);
   });
 
-  it("une entrée par minute pendant 1 h, puis toutes les 5 min jusqu'à 4 h, alignées sur le début de la session", () => {
+  it("une entrée par minute pendant 1 h alignée sur la session, puis toutes les 5 min jusqu'à 4 h", () => {
     const now = 1_000_000_000_000;
     const start = now - 20_000; // sieste lancée il y a 20 s
-    const dates = widgetTimelineDates(
-      props({ lives: [{ kind: "sleep", timerStartMs: start, sinceMs: start, sinceLabel: "depuis 10:00" } as any] }),
+    const { dates, countingEndMs } = widgetTimelinePlan(
+      props({ generatedAtMs: now, lives: [{ kind: "sleep", timerStartMs: start, sinceMs: start, sinceLabel: "depuis 10:00" } as any] }),
       now,
     );
     expect(dates[0]).toBe(now);
-    expect(dates).toContain(now + 60 * 60_000);
+    expect(dates).toContain(start + 60_000);
+    expect(dates).toContain(start + 60 * 60_000);
     expect(dates).toContain(now + 65 * 60_000);
     expect(dates).toContain(now + 4 * 3600_000);
-    // Puis la seule entrée d'expiration (24 h après la génération des données).
-    expect(dates.filter((d) => d > now + 4 * 3600_000)).toHaveLength(1);
-    expect(dates).toContain(start + 60_000);
     expect(new Set(dates).size).toBe(dates.length);
-    expect(dates).toContain(start + 2 * 60_000);
-    expect(dates.length).toBeLessThan(170);
+    // Grille alignée sur la session seulement (plus de doublon sur « maintenant »).
+    expect(dates).not.toContain(now + 30 * 60_000);
+    expect(dates.length).toBeLessThan(110);
+    // Fin du comptage : 4 h, jamais l'entrée d'expiration (sinon chrono figé).
+    expect(countingEndMs).toBe(now + 4 * 3600_000);
   });
+
+  it("entrées exactes : rappel qui passe au rouge, minuit, bascule Sieste/Nuit", () => {
+    const now = new Date(2026, 10, 16, 15, 0).getTime();
+    const mealAt = now + 6 * 3600_000 + 7 * 60_000; // après la fenêtre de 4 h
+    const { dates } = widgetTimelinePlan(props({ generatedAtMs: now, alerts: { mealAtMs: mealAt } as any }), now);
+    expect(dates).toContain(mealAt);
+    expect(dates).toContain(new Date(2026, 10, 17, 0, 0).getTime());
+    expect(dates).toContain(new Date(2026, 10, 16, 19, 0).getTime());
+    expect(dates).toContain(new Date(2026, 10, 17, 8, 0).getTime());
+  });
+
+  it("écriture iPhone : fin de comptage à 4 h 05 dans les données, même avec l'entrée d'expiration", () => {
+    const entries: { date: Date; props: NowWidgetProps }[] = [];
+    __resetWidgetSyncForTests({ updateSnapshot: jest.fn(), updateTimeline: (e: typeof entries) => entries.push(...e) } as any);
+    const now = Date.now();
+    pushNowWidget(props({ generatedAtMs: now }));
+    expect(entries.length).toBeGreaterThan(50);
+    const end = entries[0].props.timelineEndMs as number;
+    expect(end).toBeLessThanOrEqual(now + 4 * 3600_000 + 5 * 60_000 + 1000);
+    expect(entries[entries.length - 1].date.getTime()).toBeGreaterThan(end);
+  });
+});
+
+describe("déconnexion", () => {
+  it("widget vidé puis écritures suspendues : un rendu tardif de l'Accueil ne réaffiche rien", () => {
+    pushNowWidget(props({ childName: "avant" }));
+    clearNowWidget({ suspend: true });
+    widget.updateSnapshot.mockClear();
+    mockCalls.length = 0;
+    setAppState("background");
+    pushNowWidget(props({ childName: "Léa après déconnexion" }));
+    jest.advanceTimersByTime(10_000);
+    expect(mockCalls.filter((c) => c.startsWith("write:"))).toEqual([]);
+    resumeWidgetWrites();
+    pushNowWidget(props({ childName: "nouveau compte" }));
+    expect(mockCalls).toContain("write:nouveau compte");
+  });
+});
+
+it("A écrit, B en attente, retour à A : B n'est jamais écrit (pas d'état périmé)", () => {
+  primed();
+  pushNowWidget(props({ childName: "A" }));
+  widget.updateSnapshot.mockClear();
+  mockCalls.length = 0;
+  jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+  mockCalls.length = 0;
+  pushNowWidget(props({ childName: "B" }));
+  pushNowWidget(props({ childName: "A" }));
+  jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS * 2);
+  expect(mockCalls.filter((c) => c.startsWith("write:"))).toEqual([]);
 });

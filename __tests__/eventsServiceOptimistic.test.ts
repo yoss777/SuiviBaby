@@ -356,3 +356,21 @@ describe("supprimerEvenement (6.5)", () => {
     await expect(supprimerEvenement("c1", "e1")).rejects.toThrow("Quantité invalide");
   });
 });
+
+describe("sieste/balade déjà en cours (lancée sur un autre appareil)", () => {
+  it("rien de créé : optimiste retiré, onAlreadyRunning appelé, jamais confirmé avec l'id de l'autre", async () => {
+    callable.mockResolvedValue({ data: { id: "existing", alreadyRunning: true } });
+    const onConfirmed = jest.fn();
+    const onAlreadyRunning = jest.fn();
+    const tempId = ajouterEvenementOptimistic(
+      "c1",
+      { type: "sommeil", heureDebut: new Date(), date: new Date(), isNap: true } as any,
+      { onConfirmed, onAlreadyRunning },
+    );
+    expect(getOptimisticEntries("c1").some((e) => e.event?.id === tempId)).toBe(true);
+    await settle();
+    expect(onAlreadyRunning).toHaveBeenCalledWith("existing");
+    expect(onConfirmed).not.toHaveBeenCalled();
+    expect(getOptimisticEntries("c1")).toHaveLength(0);
+  });
+});

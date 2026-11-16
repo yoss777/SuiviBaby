@@ -54,6 +54,7 @@ import {
   isBiometricEnabled,
 } from "@/services/biometricAuthService";
 import { withdrawHealthConsent } from "@/services/healthConsentService";
+import { clearNowWidget } from "@/services/widgetSync";
 import { useAccountDeletionFlow } from "@/hooks/useAccountDeletionFlow";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
 
@@ -269,6 +270,9 @@ export default function SettingsScreen() {
     try {
       // Server records the withdrawal and resets the local consent cache.
       await withdrawHealthConsent();
+      // Plus de données de santé hors de l'app : widget vidé tout de suite sur
+      // ce téléphone (le serveur l'efface aussi sur les autres appareils).
+      clearNowWidget({ suspend: true });
       setShowWithdrawConsentModal(false);
       router.replace("/boot");
     } catch {

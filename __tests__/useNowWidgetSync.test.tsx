@@ -17,7 +17,7 @@ jest.mock("@/services/widgetSync", () => ({
   cancelPendingWidgetPush: () => mockCancel(),
   invalidateWidgetKey: jest.fn(),
 }));
-jest.mock("@/services/pushTokenService", () => ({ setWidgetChild: jest.fn() }));
+jest.mock("@/services/pushTokenService", () => ({ setWidgetChild: jest.fn(), refreshWidgetPresence: jest.fn(() => Promise.resolve()) }));
 jest.mock("@/services/widgetLinkKey", () => ({
   getWidgetLinkKey: () => Promise.resolve("0123456789abcdef0123456789abcdef"),
 }));

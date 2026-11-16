@@ -52,3 +52,15 @@ it("déconnexion : la clé est renouvelée, l'ancienne n'ouvre plus rien", async
   expect(next).not.toBe(old);
   expect(await isWidgetLinkKeyValid(old)).toBe(false);
 });
+
+it("renouvellement pendant une lecture : l'ancienne lecture n'écrit pas de clé", async () => {
+  let release: () => void = () => {};
+  (SecureStore.getItemAsync as jest.Mock).mockImplementationOnce(
+    () => new Promise((r) => (release = () => r(null))),
+  );
+  const inFlight = getWidgetLinkKey();
+  await rotateWidgetLinkKey();
+  release();
+  expect(await inFlight).toBeNull();
+  expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+});

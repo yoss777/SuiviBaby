@@ -60,6 +60,10 @@ export async function recordHealthConsent(uid: string): Promise<void> {
     platform: Platform.OS,
   });
   verifiedUid = uid;
+  // Consentement redonné : le widget peut de nouveau être écrit (suspendu au
+  // retrait du consentement).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  (require("@/services/widgetSync") as typeof import("@/services/widgetSync")).resumeWidgetWrites();
 }
 
 /**

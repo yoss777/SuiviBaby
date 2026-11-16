@@ -148,21 +148,24 @@ const minutesLabel = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${pad(m % 60)}` : 
  */
 function otherEventLabel(e) {
   switch (e.type) {
+    // Vitamines connues seulement (D, K) : « Autre vitamine » est une saisie
+    // libre, jamais affichée hors de l'app ni envoyée.
     case "vitamine": {
       const name = text(e.nomVitamine);
-      if (!name) return "Vitamines";
-      return /^vit/i.test(name) ? name : `Vitamine ${name}`;
+      const m = name && /^(?:vit(?:amine)?\.?\s*)?([dk])(?:\d)?$/i.exec(name.trim());
+      return m ? `Vitamine ${m[1].toUpperCase()}` : "Vitamines";
     }
+    // Libellés génériques : un nom saisi librement (« antibiotique otite »)
+    // ne s'affiche pas hors de l'app ni ne transite par les services de push.
+    // Le détail reste dans l'app.
     case "medicament":
-      return text(e.nomMedicament) || "Médicament";
+      return "Médicament";
     case "temperature":
       return typeof e.valeur === "number" ? `Temp. ${e.valeur.toFixed(1).replace(".", ",")} °C` : "Température";
     case "symptome":
       return "Symptôme";
-    case "vaccin": {
-      const name = text(e.nomVaccin);
-      return name ? `Vaccin ${name}` : "Vaccin";
-    }
+    case "vaccin":
+      return "Vaccin";
     case "bain":
       return "Bain";
     case "nettoyage_nez":

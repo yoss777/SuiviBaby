@@ -1,3 +1,4 @@
+const widgetWipe = require("../widget/wipe");
 const admin = require("firebase-admin");
 const { DELETED_USER_ID, USER_DATA_BY_FIELD, USER_DOCS_BY_ID } = require("../../lib/userPurge");
 const { revokeAppleToken } = require("../shared/apple");
@@ -24,6 +25,13 @@ const { deleteUserEventPhotos } = require("../shared/photos");
  * this resolves.
  */
 async function purgeUserData(db, uid) {
+  // Widget vidé sur ses appareils avant que ses jetons disparaissent (nouvel
+  // essai si l'effacement avait échoué à la demande de suppression).
+  const wipe = await widgetWipe.wipeWidgetForUser(db, uid, null);
+  if (!wipe.ok) {
+    // Au mieux : les jetons partent avec la purge ; le widget expire en 24 h.
+    console.warn("purgeUserData: widget wipe failed before purge (24 h expiry remains)", { failed: wipe.failed, errors: wipe.errors });
+  }
   let email = "";
   try {
     const userRecord = await admin.auth().getUser(uid);

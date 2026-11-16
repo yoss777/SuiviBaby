@@ -10,7 +10,7 @@ import {
   type NursingTimerState,
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
-import { setWidgetChild } from "@/services/pushTokenService";
+import { refreshWidgetPresence, setWidgetChild } from "@/services/pushTokenService";
 import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import {
   cancelPendingWidgetPush,
@@ -100,12 +100,19 @@ export function useNowWidgetSync(p: Params): void {
     };
   }, [p.childId]);
 
+  // Un widget est-il posé ? (le serveur n'envoie qu'aux appareils qui en ont un)
+  useEffect(() => {
+    void refreshWidgetPresence();
+  }, []);
+
   // Retour au premier plan : nouvel envoi (minuit passé, brouillon expiré…).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") {
         invalidateWidgetKey();
         setTick((t) => t + 1);
+        // Widget ajouté ou retiré pendant que l'app était fermée.
+        void refreshWidgetPresence();
       } else {
         // Retour rapide à l'écran d'accueil : rien ne reste en attente, et on
         // recalcule (la tétée du nouvel enfant n'est plus attendue, voir plus bas).

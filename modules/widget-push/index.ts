@@ -67,6 +67,30 @@ export function readReceiveLog(): WidgetPushLogEntry[] {
 }
 
 /**
+ * Nombre de widgets SuiviBaby posés (Android : AppWidgetManager ; iPhone :
+ * WidgetCenter, écran verrouillé compris). null : inconnu (module natif
+ * absent, client de développement non reconstruit, erreur).
+ */
+let countErrorReported = false;
+export async function installedWidgetCount(): Promise<number | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { requireOptionalNativeModule } = require("expo-modules-core") as typeof import("expo-modules-core");
+    const mod = requireOptionalNativeModule<{ installedWidgetCount?: () => number | Promise<number> }>("WidgetPush");
+    if (!mod?.installedWidgetCount) return null;
+    const n = await mod.installedWidgetCount();
+    return typeof n === "number" && Number.isFinite(n) ? n : null;
+  } catch (error) {
+    if (!countErrorReported) {
+      countErrorReported = true;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("@/utils/errorReporting").captureServiceError(error, { service: "widgetPush", operation: "installedWidgetCount" });
+    }
+    return null;
+  }
+}
+
+/**
  * Android : renvoie l'app en arrière-plan (retour à l'écran d'accueil) après
  * une action lancée depuis le widget. Sans effet ailleurs ou si le module natif
  * est trop ancien (client de développement non reconstruit).

@@ -176,9 +176,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // ----- Écran verrouillé -----
   if (family === "accessoryInline") {
     return live ? (
-      <Text modifiers={[widgetURL(url)]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
+      <Text modifiers={[widgetURL(url), privacySensitive()]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
     ) : (
-      <Text modifiers={[widgetURL(url)]}>
+      <Text modifiers={[widgetURL(url), privacySensitive()]}>
         {props.lastMealMs ? `Repas à ${new Date(props.lastMealMs).toTimeString().slice(0, 5)}` : "SuiviBaby"}
       </Text>
     );
@@ -529,7 +529,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       : lives.length === 0 && !props.loading && props.lastMealMs
         ? zoneUrl("meal")
         : homeUrl;
-  const container = [bg, widgetURL(small ? smallUrl : homeUrl), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" })];
+  // privacySensitive : iPhone verrouillé (StandBy, écran verrouillé), iOS
+  // masque le prénom et les données de santé du bébé.
+  const container = [
+    bg,
+    widgetURL(small ? smallUrl : homeUrl),
+    frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" }),
+    privacySensitive(),
+  ];
 
   if (small) {
     return (

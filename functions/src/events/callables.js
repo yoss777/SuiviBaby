@@ -107,7 +107,10 @@ const validateAndCreateEvent = onCall(
     const runningQuery = runningSessionQuery(db, childId, cleanEventData);
     if (runningQuery) {
       const current = findRunningSession(await runningQuery.get(), cleanEventData);
-      if (current) return { id: current.id, alreadyRunning: true };
+      // Sa propre création rejouée (réponse perdue, même clé) : ce n'est pas
+      // « déjà en cours » — l'idempotence plus bas renvoie le même document.
+      const ownReplay = hasKey && current?.id === idempotentEventId(uid, childId, idempotencyKey);
+      if (current && !ownReplay) return { id: current.id, alreadyRunning: true };
     }
 
     // App 1.0.8 peut encore créer sans clé : création classique.

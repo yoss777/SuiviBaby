@@ -7,7 +7,7 @@
 // Déclaré au chargement du module (portée globale), exigence de TaskManager.
 import { AppState, Platform } from "react-native";
 
-import { writeServerWidgetProps } from "@/services/widgetSync";
+import { clearNowWidget, writeServerWidgetProps } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
   clearIosWidgetPush,
@@ -54,7 +54,15 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
     // Autre enfant affiché : on n'y touche pas. Enfant affiché inconnu (état
     // perdu) : on efface quand même, l'app réécrira à la prochaine ouverture.
     if (!msg.c || (state.shownChildId && state.shownChildId !== msg.c)) return "child";
-    if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) return "write";
+    if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) {
+      // Timeline impossible : repli sur l'effacement simple (données vides).
+      // Signalé seulement si lui aussi échoue : l'effacement n'échoue jamais
+      // en silence.
+      if (!clearNowWidget()) {
+        captureServiceError(new Error("w0: widget wipe failed"), { service: "widgetPushIos", operation: "wipeFallback" });
+        return "write";
+      }
+    }
     await clearIosWidgetPush();
     return "wipe";
   }
@@ -81,8 +89,9 @@ let readyPromise: Promise<boolean> = Promise.resolve(false);
 
 /** Capacité « widget temps réel » de l'iPhone : 1 si la tâche est enregistrée. */
 export async function widgetPushIosCap(): Promise<number> {
-  // 2 : données (« w1 ») et effacement à distance (« w0 »).
-  return (await readyPromise) ? 2 : 0;
+  // 3 : données (« w1 »), effacement à distance (« w0 »), widgetPush seulement
+  // si un widget est posé.
+  return (await readyPromise) ? 3 : 0;
 }
 
 if (Platform.OS === "ios") {

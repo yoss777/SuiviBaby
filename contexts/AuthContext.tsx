@@ -3,7 +3,7 @@ import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
-import { clearNowWidget } from "@/services/widgetSync";
+import { clearNowWidget, resumeWidgetWrites } from "@/services/widgetSync";
 import { rotateWidgetLinkKey } from "@/services/widgetLinkKey";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
@@ -146,6 +146,11 @@ const AUTH_LOADING_TIMEOUT_MS = 8000;
 // (appareil partagé, changement de compte). Les écouteurs de permissions sont
 // fermés et les consommateurs montés notifiés.
 function clearSessionCaches() {
+  // Widget d'écran d'accueil vidé EN PREMIER (avant tout appel réseau qui
+  // pourrait échouer), écritures suspendues jusqu'à la prochaine connexion, et
+  // clé des liens renouvelée. Aussi à la déconnexion forcée (session révoquée).
+  clearNowWidget({ suspend: true });
+  void rotateWidgetLinkKey();
   clearTodayEventsCache();
   clearWeeklyEventsCache();
   clearPreferencesCache();
@@ -307,6 +312,8 @@ export function AuthProvider({
           stateRef.current.firebaseUser?.uid === fbUser.uid &&
           stateRef.current.user != null;
         dispatch({ type: "SET_FIREBASE_USER", payload: fbUser });
+        // Connecté : le widget peut de nouveau être écrit.
+        resumeWidgetWrites();
         if (!isSameUser) {
           await loadUserData(fbUser);
           startAutoSync();
@@ -332,10 +339,7 @@ export function AuthProvider({
       // Exports (health data) must not outlive the session on a shared device.
       // Best effort: cleanupStaleExports never throws, the catch is defensive.
       await cleanupStaleExports(0).catch(() => {});
-      // Le widget d'écran d'accueil ne doit pas garder le prénom ni les
-      // données de santé de l'enfant après la déconnexion.
-      clearNowWidget();
-      void rotateWidgetLinkKey();
+      // Widget vidé et clé renouvelée au début, dans clearSessionCaches.
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});
@@ -372,6 +376,8 @@ export function AuthProvider({
       }
     } catch (error) {
       console.error("Erreur lors de la déconnexion:", error);
+      // Toujours connecté (la déconnexion a échoué) : le widget reprend.
+      if (auth.currentUser) resumeWidgetWrites();
       throw error;
     }
   }, []);
