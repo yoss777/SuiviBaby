@@ -26,6 +26,8 @@ problème) · ⏳ en cours · — pas encore testé.
 | 11 | Chrono : accueil et widgets (iPhone et Android) passent de « 0 min » à « 1 min » au même moment, puis « 59 min » → « 1h00 » ensemble | — | Règle commune : secondes du début ignorées |
 | 12 | Appui sur ▶ / ■ du widget : le widget change tout de suite après l'ouverture de l'app (plus d'attente de 2 s) | — | |
 | 13 | Température notée : le widget affiche « Temp. 37,8 °C » | — | Visible sur l'écran d'accueil Android sans déverrouillage (choix produit) |
+| 14 | iPhone : démarrer / arrêter une balade dans l'app, retour immédiat à l'écran d'accueil → widget à jour en 1-2 s | ✅ 16/11 (version dev) | Timeline courte (~15 entrées) puis complète 4 s après ; > 5 s avec ~120 entrées, lent avec 29 |
+| 15 | iPhone : sieste lancée, app quittée tout de suite ; 20 min plus tard, rouvrir l'app → chrono en minutes (pas de secondes), « il y a » à jour | — | Timeline complète écrite au retour dans l'app |
 
 ## Après les tests
 
