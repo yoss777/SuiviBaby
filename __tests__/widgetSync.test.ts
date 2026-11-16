@@ -67,6 +67,31 @@ it("anti-rebond : un seul envoi, le dernier ; noté avant l'écriture", () => {
   expect(mockCalls).toEqual(["note:c1", "write:B"]);
 });
 
+it("session démarrée, mise en pause ou arrêtée : écrite tout de suite (appui sur le widget visible aussitôt)", () => {
+  primed();
+  const sleep = { kind: "sleep", timerStartMs: 1000, sinceMs: 1000, sinceLabel: "depuis 10:00" } as any;
+  pushNowWidget(props({ lives: [sleep] }));
+  expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
+  // Autre changement, sessions identiques : anti-rebond habituel.
+  pushNowWidget(props({ lives: [sleep], childName: "Léa B" }));
+  expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
+  jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+  expect(widget.updateSnapshot).toHaveBeenCalledTimes(2);
+  // Pause d'une tétée, puis arrêt : immédiats.
+  const nursing = { kind: "nursing", timerStartMs: 1000, sinceMs: 1000, sinceLabel: "" } as any;
+  pushNowWidget(props({ lives: [sleep, nursing], childName: "Léa B" }));
+  pushNowWidget(props({ lives: [sleep, { ...nursing, pausedAtMs: 5000 }], childName: "Léa B" }));
+  pushNowWidget(props({ lives: [], childName: "Léa B" }));
+  expect(widget.updateSnapshot).toHaveBeenCalledTimes(5);
+});
+
+it("après invalidation (retour au premier plan) : un démarrage reste écrit tout de suite", () => {
+  primed();
+  invalidateWidgetKey();
+  pushNowWidget(props({ lives: [{ kind: "walk", timerStartMs: 1000, sinceMs: 1000, sinceLabel: "" } as any] }));
+  expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
+});
+
 it("contenu inchangé (hors heure de calcul) : pas de réécriture, sauf après invalidation", () => {
   primed();
   pushNowWidget(props({ generatedAtMs: 1 }));
@@ -209,24 +234,36 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(dates).toContain(now + 24 * 3600_000 + 60_000);
   });
 
-  it("une entrée par minute pendant 1 h alignée sur la session, puis toutes les 5 min jusqu'à 4 h", () => {
-    const now = 1_000_000_000_000;
+  it("une entrée par minute de la pendule pendant 1 h, puis toutes les 5 min jusqu'à 4 h", () => {
+    const now = 1_000_000_000_000; // 46:40 passées de 40 s
     const start = now - 20_000; // sieste lancée il y a 20 s
     const { dates, countingEndMs } = widgetTimelinePlan(
       props({ generatedAtMs: now, lives: [{ kind: "sleep", timerStartMs: start, sinceMs: start, sinceLabel: "depuis 10:00" } as any] }),
       now,
     );
+    const nextMinute = Math.floor(now / 60_000) * 60_000 + 60_000;
     expect(dates[0]).toBe(now);
-    expect(dates).toContain(start + 60_000);
-    expect(dates).toContain(start + 60 * 60_000);
+    // « 0 min » → « 1 min » à hh:mm:00, comme Android et l'Accueil (secondes ignorées).
+    expect(dates).toContain(nextMinute);
+    expect(dates).toContain(nextMinute + 59 * 60_000);
+    expect(dates).not.toContain(start + 60_000);
     expect(dates).toContain(now + 65 * 60_000);
     expect(dates).toContain(now + 4 * 3600_000);
     expect(new Set(dates).size).toBe(dates.length);
-    // Grille alignée sur la session seulement (plus de doublon sur « maintenant »).
-    expect(dates).not.toContain(now + 30 * 60_000);
     expect(dates.length).toBeLessThan(130); // ~60 + 36 + ~20 horaires + exactes
     // Fin du comptage : 4 h, jamais l'entrée d'expiration (sinon chrono figé).
     expect(countingEndMs).toBe(now + 4 * 3600_000);
+  });
+
+  it("une seule grille, même avec deux sessions en cours", () => {
+    const now = 1_000_000_000_000;
+    const lives = [
+      { kind: "sleep", timerStartMs: now - 20_000, sinceMs: now - 20_000, sinceLabel: "" },
+      { kind: "walk", timerStartMs: now - 50_000, sinceMs: now - 50_000, sinceLabel: "" },
+    ] as any;
+    const one = widgetTimelineDates(props({ generatedAtMs: now, lives: [lives[0]] }), now);
+    const two = widgetTimelineDates(props({ generatedAtMs: now, lives }), now);
+    expect(two).toEqual(one);
   });
 
   it("au-delà de 4 h : une entrée par heure jusqu'à 24 h (« il y a » jamais figé longtemps)", () => {

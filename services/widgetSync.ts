@@ -27,8 +27,7 @@ type WidgetHandle = {
 /**
  * iPhone : entrées de timeline. Le compteur natif d'iOS affiche toujours les
  * secondes ; pour « 45 min » / « 1h08 » (comme Android), l'app prépare une
- * entrée par minute pendant 1 h (alignée sur le début de la session en
- * cours, sinon sur maintenant), puis toutes les 5 min jusqu'à 4 h : c'est la
+ * entrée par minute pendant 1 h (à la minute de la pendule), puis toutes les 5 min jusqu'à 4 h : c'est la
  * fenêtre de comptage (`countingEndMs`). Au-delà, le widget reprend le
  * compteur natif (il ne reste jamais figé).
  * S'y ajoutent des entrées exactes, hors comptage : heure d'un rappel, minuit,
@@ -37,18 +36,11 @@ type WidgetHandle = {
  */
 export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { dates: number[]; countingEndMs: number } {
   const dates = new Set<number>([now]);
-  const timed = (props.lives ?? []).filter((l) => l.kind !== "nursing");
-  // Grille à la minute : alignée sur chaque session en cours (« 0 min » →
-  // « 1 min » à l'instant exact), sinon sur maintenant. Pas les deux : la
-  // timeline doublait de taille sans rien apporter.
-  if (timed.length === 0) {
-    for (let k = 1; k <= 60; k++) dates.add(now + k * 60_000);
-  } else {
-    for (const l of timed) {
-      const next = l.timerStartMs + Math.ceil((now - l.timerStartMs + 1) / 60_000) * 60_000;
-      for (let k = 0; k < 60; k++) dates.add(next + k * 60_000);
-    }
-  }
+  // Grille à la minute de la pendule (hh:mm:00) : les durées sont comptées « à
+  // la pendule » (secondes du début ignorées), comme Android et l'Accueil ; une
+  // seule grille, quel que soit le nombre de sessions en cours.
+  const firstMinute = Math.floor(now / 60_000) * 60_000 + 60_000;
+  for (let k = 0; k < 60; k++) dates.add(firstMinute + k * 60_000);
   for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
   const countingEndMs = Math.max(...dates);
 
@@ -82,6 +74,12 @@ export function widgetTimelineDates(props: NowWidgetProps, now = Date.now()): nu
 
 let handle: WidgetHandle | null | undefined;
 let lastKey = "";
+// Sessions affichées au dernier envoi (démarrage, arrêt, pause) : écrites sans
+// attendre, l'appui sur le widget doit se voir tout de suite.
+let lastLivesSig: string | null = null;
+export function livesSignature(props: NowWidgetProps): string {
+  return JSON.stringify((props.lives ?? []).map((l) => [l.kind, l.timerStartMs, l.pausedAtMs ?? null]));
+}
 let pending: ReturnType<typeof setTimeout> | null = null;
 // Une seule remontée par session et par opération (pas de bruit à chaque envoi).
 const reported = new Set<string>();
@@ -153,6 +151,9 @@ export function writeServerWidgetProps(props: NowWidgetProps): boolean {
   try {
     writeIosTimeline(widget, props);
     lastKey = "";
+    // Sessions affichées par l'envoi serveur : un démarrage ou un arrêt qui suit
+    // reste écrit tout de suite.
+    lastLivesSig = livesSignature(props);
     return true;
   } catch (error) {
     reportOnce(error, "serverTimeline");
@@ -174,6 +175,7 @@ function write(props: NowWidgetProps, key: string): void {
       widget.updateSnapshot(toNativeWidgetProps(props));
     }
     lastKey = key;
+    lastLivesSig = props.loading ? null : livesSignature(props);
     lastWrittenDay = dayOf(Date.now());
     if (props.childId !== lastChildId) childSwitchedAt = Date.now();
     lastChildId = props.childId;
@@ -188,6 +190,7 @@ function write(props: NowWidgetProps, key: string): void {
 /**
  * Envoi au widget. Anti-rebond de 2 s, sauf :
  * - enfant affiché changé, ou données qui arrivent juste après (15 s) ;
+ * - session démarrée, arrêtée ou mise en pause (retour visible tout de suite) ;
  * - app hors premier plan : Android y suspend les minuteries JS, un envoi
  *   différé ne partirait qu'au retour dans l'app.
  */
@@ -243,7 +246,8 @@ export function pushNowWidget(props: NowWidgetProps): void {
     props.childId !== lastChildId ||
     lastKey.includes('"loading":true') ||
     Date.now() - childSwitchedAt < WIDGET_CHILD_SWITCH_WINDOW_MS ||
-    AppState.currentState !== "active";
+    AppState.currentState !== "active" ||
+    (lastLivesSig != null && livesSignature(props) !== lastLivesSig);
   if (immediate) {
     write(props, key);
     return;
@@ -285,6 +289,8 @@ export function flushPendingWidgetPush(): void {
  * à contenu égal. Appelé au retour au premier plan.
  */
 export function invalidateWidgetKey(): void {
+  // Seule la clé de contenu : la signature des sessions garde l'écriture
+  // immédiate d'un démarrage ou d'un arrêt au retour au premier plan.
   lastKey = "";
 }
 
@@ -305,6 +311,7 @@ export function clearNowWidget(opts: { suspend?: boolean } = {}): boolean {
   if (opts.suspend) writesSuspended = true;
   cancelPendingWidgetPush();
   lastKey = "";
+  lastLivesSig = null;
   lastChildId = undefined;
   clearWidgetPush();
   const widget = getWidget();
@@ -323,6 +330,7 @@ export function clearNowWidget(opts: { suspend?: boolean } = {}): boolean {
 export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   handle = widget === undefined ? undefined : widget;
   lastKey = "";
+  lastLivesSig = null;
   lastChildId = undefined;
   lastWrittenDay = "";
   writesSuspended = false;

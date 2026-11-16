@@ -111,7 +111,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Sommeil en cours compté dans le total du jour (jusqu'à l'instant du rendu).
   const sleepFrom =
     props.day?.sleepRunningFromMs != null && lives.some((l) => l.kind === "sleep") ? Math.min(props.day.sleepRunningFromMs, now) : null;
-  const sleepNowMin = (props.day?.sleepMinutes ?? 0) + (sleepFrom != null ? Math.max(0, Math.round((now - sleepFrom) / 60000)) : 0);
+  const sleepNowMin = (props.day?.sleepMinutes ?? 0) + (sleepFrom != null ? Math.max(0, Math.floor(now / 60000) - Math.floor(sleepFrom / 60000)) : 0);
   // Info de plus de 2 h : on dit de quand elle date.
   const generatedAt = props.generatedAtMs ?? 0;
   const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
@@ -121,7 +121,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // (ancienne app, timeline épuisée) : compteurs natifs d'iOS, avec secondes.
   const inTimeline = props.timelineEndMs != null && now < props.timelineEndMs;
   const minutesText = (startMs: number) => {
-    const m = Math.max(0, Math.floor((now - startMs) / 60000));
+    // Minutes « à la pendule » (secondes du début ignorées), comme Android et l'Accueil.
+    const m = Math.max(0, Math.floor(now / 60000) - Math.floor(startMs / 60000));
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
   };
   // Sommeil, promenade : « 0 min » dès le départ, comme Android (pas de

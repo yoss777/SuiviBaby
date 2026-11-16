@@ -160,10 +160,12 @@ function otherEventLabel(e) {
     // Le détail reste dans l'app.
     case "medicament":
       return "Médicament";
-    // Valeur chiffrée seulement dans l'app : l'écran d'accueil Android n'a pas
-    // d'équivalent de privacySensitive.
+    // Valeur affichée (choix produit, 2026-11-16) : un nombre mesuré, pas une
+    // saisie libre. Valeur absurde ou absente : libellé seul.
     case "temperature":
-      return "Température";
+      return typeof e.valeur === "number" && Number.isFinite(e.valeur) && e.valeur >= 30 && e.valeur <= 45
+        ? `Temp. ${e.valeur.toFixed(1).replace(".", ",")} °C`
+        : "Température";
     case "symptome":
       return "Symptôme";
     case "vaccin":
