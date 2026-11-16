@@ -1,6 +1,7 @@
 // components/suivibaby/dashboard/PromenadeWidget.tsx
 // Unified layout — same container size whether active or inactive
 
+import { clockMinutesBetween } from "@/utils/clockMinutes";
 import { radius, space } from "@/constants/tokens";
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { flatInDark } from "@/constants/theme";
@@ -64,7 +65,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
-      ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
+      ? clockMinutesBetween(startTimestamp, currentTime.getTime())
       : elapsedMinutesProp;
   useAnnounceActiveChange(isActive, "Balade démarrée", "Balade terminée");
   const nc = getNeutralColors(colorScheme);

@@ -1,4 +1,5 @@
 import { ActivitiesEditData, ActiviteType } from "@/components/forms/ActivitiesForm";
+import { clockMinutesBetween } from "@/utils/clockMinutes";
 import { flatInDark } from "@/constants/theme";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
@@ -354,7 +355,7 @@ export default function ActivitiesScreen() {
     if (!promenadeEnCours?.heureDebut) return 0;
     const start = toDate(promenadeEnCours.heureDebut);
     if (!isValidDate(start)) return 0;
-    return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
+    return clockMinutesBetween(start.getTime(), now.getTime());
   }, [promenadeEnCours, now]);
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<{ visible: boolean; ids: string[] }>({ visible: false, ids: [] });
@@ -1025,7 +1026,7 @@ export default function ActivitiesScreen() {
       const d = Math.max(0, Math.round((toDate(e.heureFin).getTime() - toDate(e.heureDebut).getTime()) / 60000));
       duration = formatDuration(d);
     } else if (isPromenade && e.heureDebut && !e.heureFin) {
-      const d = Math.max(0, Math.round((now.getTime() - toDate(e.heureDebut).getTime()) / 60000));
+      const d = clockMinutesBetween(toDate(e.heureDebut).getTime(), now.getTime());
       duration = formatDuration(d);
     } else {
       duration = event.duree ? formatDuration(event.duree) : undefined;

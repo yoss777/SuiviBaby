@@ -1,4 +1,5 @@
 import { flatInDark } from "@/constants/theme";
+import { clockMinutesBetween } from "@/utils/clockMinutes";
 import { toDecimalInputFr } from "@/utils/frenchNumber";
 import { daysWindowToCover } from "@/hooks/eventList/useEventWindow";
 import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
@@ -828,7 +829,7 @@ export default function RoutinesScreen() {
     if (!sommeilEnCours?.heureDebut) return 0;
     const start = toDate(sommeilEnCours.heureDebut);
     if (!isValidDate(start)) return 0;
-    return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
+    return clockMinutesBetween(start.getTime(), now.getTime());
   }, [sommeilEnCours, now]);
 
   const handleDateSelect = useCallback((day: DateData) => {

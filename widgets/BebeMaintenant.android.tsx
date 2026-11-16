@@ -254,7 +254,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const sleepRunning =
     day?.sleepRunningFromMs != null && lives.some((l) => l.kind === "sleep") ? Math.min(day.sleepRunningFromMs, now) : null;
   const sleepBaseMs = day && sleepRunning != null ? sleepRunning - day.sleepMinutes * 60000 : null;
-  const sleepNowMin = day ? day.sleepMinutes + (sleepRunning != null ? Math.max(0, Math.round((now - sleepRunning) / 60000)) : 0) : 0;
+  const sleepNowMin = day ? day.sleepMinutes + (sleepRunning != null ? Math.max(0, Math.floor(now / 60000) - Math.floor(sleepRunning / 60000)) : 0) : 0;
 
   // ----- Grille -----
   const env = environment as WidgetEnvironment & { widthDp?: number; heightDp?: number };
@@ -728,11 +728,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   // Prochain redessin utile : passage à 1 h d'une durée, rappel qui passe au rouge.
   const refreshCandidates = [
-    ...lives.filter((l) => l.kind !== "nursing").map((l) => l.timerStartMs + HOUR),
+    // Début arrondi à la minute, comme le compteur natif (« 60 min » évité).
+    ...lives.filter((l) => l.kind !== "nursing").map((l) => Math.floor(l.timerStartMs / 60000) * 60000 + HOUR),
     // Expiration d'une tétée oubliée : redessin pour la retirer.
     ...lives.filter((l) => l.expiresAtMs != null).map((l) => l.expiresAtMs as number),
     // Total de sommeil qui passe 1 h : le format change (« 59 min » → « 1h00 »).
-    ...(sleepBaseMs != null ? [sleepBaseMs + HOUR] : []),
+    ...(sleepBaseMs != null ? [Math.floor(sleepBaseMs / 60000) * 60000 + HOUR] : []),
     ...(n === 0 && props.lastMealMs ? [props.lastMealMs + HOUR] : []),
     nextMidnight,
     midnightFromNow,

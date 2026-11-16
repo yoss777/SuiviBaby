@@ -150,8 +150,9 @@ describe("otherEventLabel (fil du jour)", () => {
     expect(otherEventLabel({ type: "vitamine" })).toBe("Vitamines");
     // Libellé générique : le nom saisi librement reste dans l'app.
     expect(otherEventLabel({ type: "medicament", nomMedicament: "antibiotique otite" })).toBe("Médicament");
-    // Valeur chiffrée seulement dans l'app.
-    expect(otherEventLabel({ type: "temperature", valeur: 37.8 })).toBe("Température");
+    // Température : la valeur mesurée (choix produit), libellé seul si absurde.
+    expect(otherEventLabel({ type: "temperature", valeur: 37.8 })).toBe("Temp. 37,8 °C");
+    expect(otherEventLabel({ type: "temperature", valeur: 3780 })).toBe("Température");
     expect(otherEventLabel({ type: "bain" })).toBe("Bain");
     expect(otherEventLabel({ type: "nettoyage_nez" })).toBe("Soin du nez");
   });

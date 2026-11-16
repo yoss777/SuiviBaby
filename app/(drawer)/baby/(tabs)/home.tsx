@@ -8,6 +8,7 @@ import {
   TipsCarousel,
   type StatItem,
 } from "@/components/suivibaby/dashboard";
+import { clockMinutesBetween } from "@/utils/clockMinutes";
 import { NursingInProgressBanner } from "@/components/suivibaby/dashboard/NursingInProgressBanner";
 import { ReminderWarningWatcher } from "@/components/suivibaby/dashboard/ReminderWarningWatcher";
 import { flatInDark } from "@/constants/theme";
@@ -1839,7 +1840,10 @@ export default function HomeDashboard() {
       // Ne compter que la portion qui tombe aujourd'hui
       const effectiveStart = Math.max(start.getTime(), startOfToday.getTime());
       const effectiveEnd = Math.min(end.getTime(), endOfToday.getTime());
-      const todayMinutes = Math.round((effectiveEnd - effectiveStart) / 60000);
+      // Sommeil en cours : minutes « à la pendule », comme le widget.
+      const todayMinutes = item.heureFin
+        ? Math.round((effectiveEnd - effectiveStart) / 60000)
+        : clockMinutesBetween(effectiveStart, effectiveEnd);
 
       return sum + Math.max(0, todayMinutes);
     }, 0);

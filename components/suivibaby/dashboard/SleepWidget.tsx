@@ -1,4 +1,5 @@
 import { radius, space } from "@/constants/tokens";
+import { clockMinutesBetween } from "@/utils/clockMinutes";
 import {
   getCategoryColors,
   getCategoryTextColors,
@@ -66,7 +67,7 @@ export const SleepWidget = memo(function SleepWidget({
   const { currentTime } = useMinuteTick(isActive && startTimestamp !== undefined);
   const elapsedMinutes =
     startTimestamp !== undefined
-      ? Math.max(0, Math.round((currentTime.getTime() - startTimestamp) / 60000))
+      ? clockMinutesBetween(startTimestamp, currentTime.getTime())
       : elapsedMinutesProp;
   useAnnounceActiveChange(
     isActive,
