@@ -14,6 +14,8 @@ const STORE_KEY = "widgetLinkKey.v1";
 
 let cached: string | null = null;
 let loading: Promise<string | null> | null = null;
+/** Génération : une lecture lancée avant un renouvellement n'écrit plus rien. */
+let generation = 0;
 
 function newKey(): string {
   return Array.from(Crypto.getRandomBytes(16), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -23,13 +25,18 @@ function newKey(): string {
 export function getWidgetLinkKey(): Promise<string | null> {
   if (cached) return Promise.resolve(cached);
   if (!loading) {
-    loading = (async () => {
+    const gen = generation;
+    // eslint-disable-next-line prefer-const
+    let p!: Promise<string | null>;
+    p = (async () => {
       try {
         let key = await SecureStore.getItemAsync(STORE_KEY);
+        if (gen !== generation) return null;
         if (!key) {
           key = newKey();
           await SecureStore.setItemAsync(STORE_KEY, key);
         }
+        if (gen !== generation) return null;
         cached = key;
         return key;
       } catch (error) {
@@ -37,9 +44,10 @@ export function getWidgetLinkKey(): Promise<string | null> {
         captureServiceError(error, { service: "widgetLinkKey", operation: "load" });
         return null;
       } finally {
-        loading = null;
+        if (loading === p) loading = null;
       }
     })();
+    loading = p;
   }
   return loading;
 }
@@ -56,6 +64,7 @@ export async function isWidgetLinkKeyValid(k: string | null | undefined): Promis
  * compte (sur iPhone, le trousseau survit même à la désinstallation).
  */
 export async function rotateWidgetLinkKey(): Promise<void> {
+  generation += 1;
   cached = null;
   loading = null;
   try {

@@ -63,6 +63,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
+import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { useWidgetActionGate } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
@@ -1163,14 +1164,29 @@ export default function HomeDashboard() {
       if (!activeChild?.id || sommeilEnCours) return false;
       if (startLocked(activeChild.id, "sleep")) return false;
       lockStart(activeChild.id, "sleep");
-      ajouterEvenementOptimistic(activeChild.id, {
-        type: "sommeil" as const,
-        heureDebut: new Date(),
-        date: new Date(),
-        isNap,
-        // Mesure de l'usage des boutons du widget (décision du 2026-11-15).
-        ...(fromWidget ? { source: "widget" } : {}),
-      });
+      const childId = activeChild.id;
+      ajouterEvenementOptimistic(
+        childId,
+        {
+          type: "sommeil" as const,
+          heureDebut: new Date(),
+          date: new Date(),
+          isNap,
+          // Mesure de l'usage des boutons du widget (décision du 2026-11-15).
+          ...(fromWidget ? { source: "widget" } : {}),
+        },
+        {
+          // Lancée entre-temps sur un autre appareil : rien de créé, on le dit.
+          onAlreadyRunning: () => {
+            startingRef.current[`${childId}:sleep`] = 0;
+            showToast(isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
+          },
+          // Échec : un nouvel appui doit pouvoir réessayer tout de suite.
+          onFailed: () => {
+            startingRef.current[`${childId}:sleep`] = 0;
+          },
+        },
+      );
       if (!fromWidget) showToast(isNap ? "Sieste démarrée" : "Nuit démarrée");
       return true;
     },
@@ -1237,13 +1253,26 @@ export default function HomeDashboard() {
     if (!activeChild?.id || promenadeEnCours) return false;
     if (startLocked(activeChild.id, "walk")) return false;
     lockStart(activeChild.id, "walk");
-    ajouterEvenementOptimistic(activeChild.id, {
-      type: "activite" as const,
-      typeActivite: "promenade",
-      heureDebut: new Date(),
-      date: new Date(),
-      ...(fromWidget ? { source: "widget" } : {}),
-    });
+    const childId = activeChild.id;
+    ajouterEvenementOptimistic(
+      childId,
+      {
+        type: "activite" as const,
+        typeActivite: "promenade",
+        heureDebut: new Date(),
+        date: new Date(),
+        ...(fromWidget ? { source: "widget" } : {}),
+      },
+      {
+        onAlreadyRunning: () => {
+          startingRef.current[`${childId}:walk`] = 0;
+          showToast("Balade déjà en cours");
+        },
+        onFailed: () => {
+          startingRef.current[`${childId}:walk`] = 0;
+        },
+      },
+    );
     if (!fromWidget) showToast("Balade démarrée");
     return true;
   }, [activeChild?.id, promenadeEnCours, showToast]);
@@ -1268,7 +1297,9 @@ export default function HomeDashboard() {
       const event = kind === "sleep" ? running.sommeilEnCours : running.promenadeEnCours;
       const sameStart =
         !!event?.heureDebut && Math.abs(toDate(event.heureDebut).getTime() - startedAtMs) < 60_000;
-      if (running.childId !== childId || !event?.id || event.source !== "widget" || !sameStart) {
+      // Créée par cet utilisateur : jamais la session lancée par l'autre parent.
+      const mine = !!event?.userId && event.userId === auth.currentUser?.uid;
+      if (running.childId !== childId || !event?.id || event.source !== "widget" || !sameStart || !mine) {
         showToast("Rien à annuler pour ce bébé");
         return;
       }

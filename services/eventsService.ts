@@ -30,6 +30,7 @@ import {
   generateTempId,
   markOptimisticQueued,
   notifyOptimisticFailure,
+  removeOptimistic,
   setOptimisticInFlight,
   updateOptimisticCreate,
   type OptimisticFailure,
@@ -172,16 +173,21 @@ function buildUpdatePayload(
   return payload;
 }
 
-async function callCreateEventCF(
+/** Création serveur. `alreadyRunning` : une session du même type tournait déjà (rien de créé). */
+async function callCreateEventCFDetailed(
   payload: Record<string, unknown>,
-): Promise<string> {
+): Promise<{ id: string; alreadyRunning: boolean }> {
   const createEvent = httpsCallable<
     Record<string, unknown>,
-    { id: string }
+    { id: string; alreadyRunning?: boolean }
   >(functions, "validateAndCreateEvent");
 
   const result = await createEvent(payload);
-  return result.data.id;
+  return { id: result.data.id, alreadyRunning: result.data.alreadyRunning === true };
+}
+
+async function callCreateEventCF(payload: Record<string, unknown>): Promise<string> {
+  return (await callCreateEventCFDetailed(payload)).id;
 }
 
 async function callUpdateEventCF(
@@ -905,6 +911,12 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
  */
 export interface OptimisticWriteOptions {
   onConfirmed?: () => void;
+  /**
+   * Création d'une sieste/balade refusée parce qu'une autre tournait déjà
+   * (lancée sur un autre appareil) : l'entrée optimiste est retirée, rien
+   * n'a été créé. `existingId` : la session déjà en cours.
+   */
+  onAlreadyRunning?: (existingId: string) => void;
   onFailed?: (error: unknown) => void;
   /** false : « Réessayer » n'a pas de sens (ex. photo supprimée après l'échec). */
   retryable?: boolean;
@@ -998,7 +1010,18 @@ export function ajouterEvenementOptimistic(
         return;
       }
 
-      const realId = await withRetry(() => callCreateEventCF(payload));
+      const { id: realId, alreadyRunning } = await withRetry(() => callCreateEventCFDetailed(payload));
+      if (alreadyRunning) {
+        // Rien de créé : l'optimiste n'est jamais confirmé avec l'id de la
+        // session de quelqu'un d'autre (qu'un « Annuler » supprimerait).
+        pendingOptimisticCreateUpdates.delete(tempId);
+        removeOptimistic(tempId);
+        if (options?.onAlreadyRunning) {
+          const existingId = realId;
+          runCallback(() => options.onAlreadyRunning?.(existingId), "onAlreadyRunning");
+        }
+        return;
+      }
       confirmOptimistic(tempId, realId);
       runCallback(options?.onConfirmed, "onConfirmed");
       const pendingUpdate = pendingOptimisticCreateUpdates.get(tempId);

@@ -25,27 +25,54 @@ type WidgetHandle = {
 };
 
 /**
- * iPhone : dates des entrées de timeline. Le compteur natif d'iOS affiche
- * toujours les secondes ; pour « 45 min » / « 1h08 » (comme Android), l'app
- * prépare une entrée par minute pendant 1 h (alignée sur le début de chaque
- * session en cours), puis toutes les 5 min jusqu'à 4 h.
+ * iPhone : entrées de timeline. Le compteur natif d'iOS affiche toujours les
+ * secondes ; pour « 45 min » / « 1h08 » (comme Android), l'app prépare une
+ * entrée par minute pendant 1 h (alignée sur le début de la session en
+ * cours, sinon sur maintenant), puis toutes les 5 min jusqu'à 4 h : c'est la
+ * fenêtre de comptage (`countingEndMs`). Au-delà, le widget reprend le
+ * compteur natif (il ne reste jamais figé).
+ * S'y ajoutent des entrées exactes, hors comptage : heure d'un rappel, minuit,
+ * bascule Sieste/Nuit (8:00, 19:00) et expiration à 24 h (widget masqué).
  * Les entrées préparées ne consomment pas le budget de rechargement d'iOS.
  */
-export function widgetTimelineDates(props: NowWidgetProps, now = Date.now()): number[] {
+export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { dates: number[]; countingEndMs: number } {
   const dates = new Set<number>([now]);
-  for (let k = 1; k <= 60; k++) dates.add(now + k * 60_000);
-  for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
-  // Expiration à 24 h (widget masqué, BebeMaintenant.ios.tsx) : une entrée
-  // juste après, sans quoi le widget resterait sur la dernière entrée.
-  const expiry = (props.generatedAtMs ?? 0) + 24 * 3600_000 + 60_000;
-  if (props.generatedAtMs && expiry > now) dates.add(expiry);
-  // Passage exact à chaque minute d'une session en cours (« 0 min » → « 1 min »).
-  for (const l of props.lives ?? []) {
-    if (l.kind === "nursing") continue;
-    const next = l.timerStartMs + Math.ceil((now - l.timerStartMs + 1) / 60_000) * 60_000;
-    for (let k = 0; k < 60; k++) dates.add(next + k * 60_000);
+  const timed = (props.lives ?? []).filter((l) => l.kind !== "nursing");
+  // Grille à la minute : alignée sur chaque session en cours (« 0 min » →
+  // « 1 min » à l'instant exact), sinon sur maintenant. Pas les deux : la
+  // timeline doublait de taille sans rien apporter.
+  if (timed.length === 0) {
+    for (let k = 1; k <= 60; k++) dates.add(now + k * 60_000);
+  } else {
+    for (const l of timed) {
+      const next = l.timerStartMs + Math.ceil((now - l.timerStartMs + 1) / 60_000) * 60_000;
+      for (let k = 0; k < 60; k++) dates.add(next + k * 60_000);
+    }
   }
-  return [...dates].sort((a, b) => a - b);
+  for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
+  const countingEndMs = Math.max(...dates);
+
+  // Entrées exactes (hors comptage), dans les 24 h.
+  const horizon = now + 24 * 3600_000 + 2 * 60_000;
+  const exact = (ms: number | null | undefined) => {
+    if (typeof ms === "number" && Number.isFinite(ms) && ms > now && ms <= horizon) dates.add(ms);
+  };
+  // Rappel qui passe au rouge.
+  exact(props.alerts?.mealAtMs);
+  exact(props.alerts?.diaperAtMs);
+  // Minuit local (compteurs du jour masqués) et bascule Sieste/Nuit.
+  const d = new Date(now);
+  for (const [plusDay, h] of [[1, 0], [0, 8], [0, 19], [1, 8]] as const) {
+    exact(new Date(d.getFullYear(), d.getMonth(), d.getDate() + plusDay, h).getTime());
+  }
+  // Expiration à 24 h : widget masqué (BebeMaintenant.ios.tsx).
+  if (props.generatedAtMs) exact(props.generatedAtMs + 24 * 3600_000 + 60_000);
+  return { dates: [...dates].sort((a, b) => a - b), countingEndMs };
+}
+
+/** Dates seules (tests, compatibilité). */
+export function widgetTimelineDates(props: NowWidgetProps, now = Date.now()): number[] {
+  return widgetTimelinePlan(props, now).dates;
 }
 
 let handle: WidgetHandle | null | undefined;
@@ -83,6 +110,15 @@ export function widgetContentKey(props: NowWidgetProps): string {
 }
 
 let lastChildId: string | undefined;
+/**
+ * Écritures suspendues (déconnexion) : un rendu de l'Accueil pendant la
+ * déconnexion ne réaffiche pas le prénom ni les données. Reprise à la
+ * prochaine connexion (resumeWidgetWrites).
+ */
+let writesSuspended = false;
+export function resumeWidgetWrites(): void {
+  writesSuspended = false;
+}
 /** Jour calendaire (local) du dernier contenu écrit dans le widget. */
 let lastWrittenDay = "";
 const dayOf = (ms: number) => new Date(ms).toDateString();
@@ -92,8 +128,11 @@ let pendingRun: (() => void) | null = null;
 let pendingUnloaded = false;
 
 function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps): void {
-  const dates = widgetTimelineDates(props);
-  const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: dates[dates.length - 1] + 5 * 60_000 });
+  const { dates, countingEndMs } = widgetTimelinePlan(props);
+  // Fin du comptage à la minute (4 h), PAS la dernière entrée : après, le
+  // widget reprend le compteur natif. Avec l'entrée d'expiration (24 h) comme
+  // fin, le chrono restait figé à « 4h00 » de 4 h à 24 h.
+  const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: countingEndMs + 5 * 60_000 });
   widget.updateTimeline!(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
 }
 
@@ -103,6 +142,7 @@ function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps): void {
  * de l'app repart d'une clé vide (contenu jamais ignoré comme « identique »).
  */
 export function writeServerWidgetProps(props: NowWidgetProps): boolean {
+  if (writesSuspended) return false;
   const widget = getWidget();
   if (!widget?.updateTimeline || props.loading) return false;
   try {
@@ -116,6 +156,7 @@ export function writeServerWidgetProps(props: NowWidgetProps): boolean {
 }
 
 function write(props: NowWidgetProps, key: string): void {
+  if (writesSuspended) return;
   const widget = getWidget();
   if (!widget) return;
   try {
@@ -164,7 +205,12 @@ export const WIDGET_UNLOADED_GRACE_MS = 5000;
 
 export function pushNowWidget(props: NowWidgetProps): void {
   const key = widgetContentKey(props);
-  if (key === lastKey) return;
+  if (key === lastKey) {
+    // Retour au contenu déjà affiché : l'envoi en attente (intermédiaire)
+    // n'a plus lieu d'être, sinon il écrirait un état périmé dans 2 s.
+    cancelPendingWidgetPush();
+    return;
+  }
   cancelPendingWidgetPush();
   if (looksUnloaded(props)) {
     // Hors premier plan, la réponse du serveur ne peut plus arriver (réseau
@@ -249,7 +295,8 @@ export function cancelPendingWidgetPush(): void {
  * Déconnexion : le widget ne doit plus montrer le prénom ni les données de
  * santé de l'enfant sur un téléphone partagé. Immédiat (pas d'anti-rebond).
  */
-export function clearNowWidget(): void {
+export function clearNowWidget(opts: { suspend?: boolean } = {}): void {
+  if (opts.suspend) writesSuspended = true;
   cancelPendingWidgetPush();
   lastKey = "";
   lastChildId = undefined;
@@ -270,6 +317,7 @@ export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   lastKey = "";
   lastChildId = undefined;
   lastWrittenDay = "";
+  writesSuspended = false;
   childSwitchedAt = 0;
   reported.clear();
   cancelPendingWidgetPush();

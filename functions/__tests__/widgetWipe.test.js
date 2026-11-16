@@ -39,7 +39,7 @@ beforeEach(() => {
 describe("wipeWidgetForUser", () => {
   it("membre retiré de c1 : « w0 » à ses appareils qui affichent c1 (cap ≥ 2), rien aux autres", async () => {
     const docs = memoryStore(seed());
-    expect(await wipe.wipeWidgetForUser(db(), "dad", "c1", { nowMs: 1000 })).toBe(2);
+    expect(await wipe.wipeWidgetForUser(db(), "dad", "c1", { nowMs: 1000 })).toMatchObject({ devices: 2, ok: true, skippedOldCap: 1 });
     const msgs = pushed();
     expect(msgs.map((m) => m.to).sort()).toEqual(["ExponentPushToken[a1]", "ExponentPushToken[i1]"]);
     for (const m of msgs) {
@@ -69,14 +69,14 @@ describe("wipeWidgetForUser", () => {
 
   it("interrupteur d'urgence : rien n'est envoyé", async () => {
     memoryStore(seed({ "app_config/widgetPush": { enabled: true, wipe: false } }));
-    expect(await wipe.wipeWidgetForUser(db(), "dad", "c1")).toBe(0);
+    expect(await wipe.wipeWidgetForUser(db(), "dad", "c1")).toMatchObject({ devices: 0 });
     expect(pushed()).toHaveLength(0);
   });
 
   it("ne lève jamais (Expo en panne) : la suppression de compte continue", async () => {
     memoryStore(seed());
     expoClient.sendPushNotificationsAsync.mockRejectedValue(new Error("expo down"));
-    await expect(wipe.wipeWidgetForUser(db(), "dad", "c1")).resolves.toBe(0);
+    await expect(wipe.wipeWidgetForUser(db(), "dad", "c1")).resolves.toMatchObject({ ok: false });
   });
 });
 

@@ -173,6 +173,40 @@ describe("fanOutWidget", () => {
     expect(byTo["ExponentPushToken[d1]"].data.p.linkKey).toBeUndefined();
   });
 
+  it("iPhone : plafond des notifications silencieuses (2 min pour une session, 20 min sinon)", async () => {
+    const ios = (lastIosPushAt) => ({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 2, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt },
+    });
+    const toIos = () => pushed().filter((m) => m.to === "ExponentPushToken[i1]");
+    // Envoi il y a 5 min : un évènement ordinaire attend, un début/fin de session passe.
+    let docs = memoryStore(seed(ios(NOW - 5 * 60_000)));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: false });
+    expect(toIos()).toHaveLength(0);
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(toIos()).toHaveLength(1);
+    expect(docs.get("device_tokens/i1").lastIosPushAt).toBe(NOW);
+    // Envoi il y a 1 min : même un début de session attend.
+    jest.clearAllMocks();
+    docs = memoryStore(seed(ios(NOW - 60_000)));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(toIos()).toHaveLength(0);
+    // Android jamais plafonné.
+    expect(pushed().some((m) => m.to === "ExponentPushToken[m1]")).toBe(true);
+  });
+
+  it("médicament et vaccin : ni le nom saisi ni aucun texte libre dans le message", async () => {
+    memoryStore(seed({
+      "events/m1": { childId: "c1", userId: "dad", type: "medicament", date: ts(NOW - HOUR), nomMedicament: "antibiotique otite" },
+      "events/v1": { childId: "c1", userId: "dad", type: "vaccin", date: ts(NOW - HOUR), nomVaccin: "Hépatite B rappel" },
+    }));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    const raw = JSON.stringify(pushed().map((m) => m.data));
+    expect(raw).not.toContain("antibiotique");
+    expect(raw).not.toContain("Hépatite");
+    expect(raw).toContain("Médicament");
+  });
+
   it("tétée partagée en cours (non expirée) et enfant supprimé", async () => {
     memoryStore(seed({
       "children/c1/live/nursing": { leftSeconds: 300, rightSeconds: 0, runningSide: "right", runningSince: NOW - 60000, startedAt: NOW - 400000, updatedAt: NOW - 60000, v: 1, updatedBy: "mum" },

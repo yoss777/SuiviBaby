@@ -29,6 +29,13 @@ const { usersWithPendingDeletion } = require("../notifications/eligibility");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
 
 const HOUR = 3600 * 1000;
+/**
+ * iPhone : Apple tolère 2-3 notifications silencieuses par heure ; au-delà,
+ * iOS les retarde ou les abandonne. Plafond par appareil : début/fin de
+ * session au plus toutes les 2 min, le reste toutes les 20 min.
+ */
+const IOS_MIN_GAP_URGENT_MS = 2 * 60 * 1000;
+const IOS_MIN_GAP_MS = 20 * 60 * 1000;
 /** Événements lus : de quoi couvrir « aujourd'hui » dans tout fuseau, et hier pour le dernier repas. */
 const LOOKBACK_MS = 48 * HOUR;
 /** Un événement plus ancien ne change pas le widget. */
@@ -117,9 +124,8 @@ function splitEvents(eventDocs) {
           ms,
           type: e.type,
           nomVitamine: e.nomVitamine,
-          nomMedicament: e.nomMedicament,
+          // Pas de nom de médicament ni de vaccin (saisie libre) : libellés génériques.
           valeur: e.valeur,
-          nomVaccin: e.nomVaccin,
           typeActivite: e.typeActivite,
           duree: e.duree,
           isNap: e.isNap,
@@ -253,7 +259,11 @@ async function fanOutWidget(db, childId, { urgent }) {
         .get();
       const devices = devicesSnap.docs.filter((d) => {
         const t = d.data();
-        const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true);
+        const iosLast = typeof t.lastIosPushAt === "number" ? t.lastIosPushAt : 0;
+        const iosAllowed =
+          t.platform !== "ios" || nowMs - iosLast >= (urgent ? IOS_MIN_GAP_URGENT_MS : IOS_MIN_GAP_MS);
+        if (t.platform === "ios" && config.ios === true && !iosAllowed) stats.iosThrottled = (stats.iosThrottled || 0) + 1;
+        const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true && iosAllowed);
         return t.widgetPush === true && Number(t.widgetCap) >= 1 && platformOk &&
           getExpoModule().Expo.isExpoPushToken(t.token);
       });
@@ -295,7 +305,7 @@ async function fanOutWidget(db, childId, { urgent }) {
           continue;
         }
         stats.devices++;
-        tokenDocs.push({ ref: device.ref, token: t.token });
+        tokenDocs.push({ ref: device.ref, token: t.token, platform: t.platform });
         // iPhone : notification silencieuse, sans titre ni son. Apple exige la
         // priorité normale (5) pour une notification d'arrière-plan.
         messages.push(
@@ -313,6 +323,9 @@ async function fanOutWidget(db, childId, { urgent }) {
   if (messages.length === 0) return log(stats.errors > 0 ? "failed" : "no-device");
 
   const { delivered, failed, dead, chunkErrors, errorsByCode } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+  // iPhone : heure du dernier envoi, pour le plafond (champ serveur seulement).
+  const iosSent = tokenDocs.filter((d) => d.platform === "ios" && !dead.has(d.token));
+  await Promise.all(iosSent.map((d) => d.ref.update({ lastIosPushAt: nowMs }).catch(() => {})));
   if (errorsByCode && Object.keys(errorsByCode).length > 0) stats.errorsByCode = errorsByCode;
   stats.sent = delivered;
   stats.failed = failed;

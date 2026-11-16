@@ -5,7 +5,8 @@ const { writeAdminAudit } = require("../admin/audit");
 const { purgeUserData } = require("./purgeUser");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
 const { deleteDocsByFieldBatched } = require("../shared/batch");
-const { wipeWidgetForUser } = require("../widget/wipe");
+// Appelé via le module (pas déstructuré) : remplaçable dans les tests.
+const widgetWipe = require("../widget/wipe");
 const { checkRateLimit } = require("../shared/rateLimit");
 const { newResend } = require("../shared/runtime");
 const { APPLE_SECRETS } = require("../shared/secrets");
@@ -103,8 +104,8 @@ const deleteUserAccount = onCall(
     await checkRateLimit(db, uid, "delete", 1);
 
     try {
-      // Widget vidé sur ses appareils AVANT que les jetons disparaissent.
-      await wipeWidgetForUser(db, targetUid, null);
+      // Widget vidé sur ses appareils AVANT que les jetons disparaissent
+      // (fait au début de purgeUserData).
       await purgeUserData(db, targetUid);
     } catch (e) {
       console.error(`deleteUserAccount: purge failed for uid=${targetUid}`, e?.message ?? e);
@@ -228,9 +229,11 @@ const requestAccountDeletion = onCall(
     await db.doc(`users/${uid}`).set({ pendingDeletion }, { mergeFields: ["pendingDeletion"] });
 
     // No push for an account that is leaving — sauf l'effacement du widget,
-    // envoyé avant de supprimer les jetons (prénom et données du bébé).
-    await wipeWidgetForUser(db, uid, null);
-    await deleteDocsByFieldBatched(db, "device_tokens", "userId", uid);
+    // envoyé avant de supprimer les jetons (prénom et données du bébé). Si
+    // l'effacement échoue, les jetons restent (aucun envoi ne part vers un
+    // compte en cours de suppression) : la purge finale le réessaie.
+    const wipe = await widgetWipe.wipeWidgetForUser(db, uid, null);
+    if (wipe.ok) await deleteDocsByFieldBatched(db, "device_tokens", "userId", uid);
 
     // Une erreur d'e-mail n'annule pas la demande, mais elle est signalée au
     // client (emailSent) pour qu'il ne promette pas un e-mail qui ne vient pas.

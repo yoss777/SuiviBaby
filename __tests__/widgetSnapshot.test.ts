@@ -148,7 +148,8 @@ describe("otherEventLabel (fil du jour)", () => {
     expect(otherEventLabel({ type: "vitamine", nomVitamine: "D" })).toBe("Vitamine D");
     expect(otherEventLabel({ type: "vitamine", nomVitamine: "Vitamine K" })).toBe("Vitamine K");
     expect(otherEventLabel({ type: "vitamine" })).toBe("Vitamines");
-    expect(otherEventLabel({ type: "medicament", nomMedicament: "Doliprane" })).toBe("Doliprane");
+    // Libellé générique : le nom saisi librement reste dans l'app.
+    expect(otherEventLabel({ type: "medicament", nomMedicament: "antibiotique otite" })).toBe("Médicament");
     expect(otherEventLabel({ type: "temperature", valeur: 37.8 })).toBe("Temp. 37,8 °C");
     expect(otherEventLabel({ type: "bain" })).toBe("Bain");
     expect(otherEventLabel({ type: "nettoyage_nez" })).toBe("Soin du nez");

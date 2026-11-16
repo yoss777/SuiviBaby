@@ -153,16 +153,17 @@ function otherEventLabel(e) {
       if (!name) return "Vitamines";
       return /^vit/i.test(name) ? name : `Vitamine ${name}`;
     }
+    // Libellés génériques : un nom saisi librement (« antibiotique otite »)
+    // ne s'affiche pas hors de l'app ni ne transite par les services de push.
+    // Le détail reste dans l'app.
     case "medicament":
-      return text(e.nomMedicament) || "Médicament";
+      return "Médicament";
     case "temperature":
       return typeof e.valeur === "number" ? `Temp. ${e.valeur.toFixed(1).replace(".", ",")} °C` : "Température";
     case "symptome":
       return "Symptôme";
-    case "vaccin": {
-      const name = text(e.nomVaccin);
-      return name ? `Vaccin ${name}` : "Vaccin";
-    }
+    case "vaccin":
+      return "Vaccin";
     case "bain":
       return "Bain";
     case "nettoyage_nez":

@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { widgetPushIosCap } from "@/services/widgetPushIos";
+import { installedWidgetCount } from "@/modules/widget-push";
 import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import { captureServiceError } from "@/utils/errorReporting";
 import { isConnectivityError } from "@/utils/networkError";
@@ -110,6 +111,31 @@ async function getExpoPushToken(): Promise<string | null> {
   return cachedToken;
 }
 
+/** Un widget SuiviBaby est-il posé ? Inconnu (module absent) : non. */
+async function widgetInstalled(): Promise<boolean> {
+  const n = await installedWidgetCount();
+  return (n ?? 0) > 0;
+}
+
+let lastWidgetPush: boolean | null = null;
+
+/**
+ * Retour au premier plan : widget ajouté ou retiré depuis ? Met à jour le
+ * jeton de l'appareil (le serveur n'envoie qu'aux appareils qui en ont un).
+ */
+export async function refreshWidgetPresence(): Promise<void> {
+  const docId = getTokenDocId();
+  if (!docId || !registeredUserId) return;
+  const installed = await widgetInstalled();
+  if (installed === lastWidgetPush) return;
+  try {
+    await updateDoc(doc(db, COLLECTION, docId), { widgetPush: installed });
+    lastWidgetPush = installed;
+  } catch (error) {
+    if (!isConnectivityError(error)) captureServiceError(error, { service: "pushToken", operation: "widgetPresence" });
+  }
+}
+
 async function linkKeyField(): Promise<{ widgetLinkKey?: string }> {
   const key = await getWidgetLinkKey();
   return key ? { widgetLinkKey: key } : {};
@@ -143,6 +169,7 @@ export async function registerPushToken(userId: string): Promise<void> {
       if (ownExisting) captureServiceError(error, { service: "pushToken", operation: "readTokenDoc" });
     }
 
+    const installed = await widgetInstalled();
     await setDoc(
       docRef,
       {
@@ -155,10 +182,12 @@ export async function registerPushToken(userId: string): Promise<void> {
         tz: deviceTimeZone(),
         appVersion: Constants.expoConfig?.version ?? null,
         widgetCap: await widgetCap(),
+        // Données du widget envoyées seulement si un widget est posé
+        // (minimisation des données de santé) ; revu au retour au premier plan.
+        widgetPush: installed,
         // Clé des liens de cet appareil : le serveur l'ajoute aux liens du
         // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
         ...(await linkKeyField()),
-        widgetPush: true,
         // Enfant affiché par le widget, s'il est déjà connu (sinon posé par
         // setWidgetChild). Jeton repris d'un autre compte : l'enfant de l'ancien
         // compte est retiré (sinon le serveur continuait à lui écrire ce bébé).
@@ -172,6 +201,7 @@ export async function registerPushToken(userId: string): Promise<void> {
     );
     lastWidgetChildId = desiredWidgetChildId;
     registeredUserId = userId;
+    lastWidgetPush = installed;
   } catch (error) {
     console.error("Erreur registerPushToken:", error);
     captureServiceError(error, { service: "pushToken", operation: "registerPushToken" });
@@ -191,6 +221,7 @@ export async function removePushTokens(userId: string): Promise<void> {
   lastWidgetChildId = null;
   desiredWidgetChildId = null;
   registeredUserId = null;
+  lastWidgetPush = null;
   try {
     const q = query(
       collection(db, COLLECTION),

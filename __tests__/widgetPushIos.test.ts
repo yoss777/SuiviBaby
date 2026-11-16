@@ -4,8 +4,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, Platform } from "react-native";
 
 const mockWrite = jest.fn((_p: unknown) => true);
+const mockClearWidget = jest.fn();
 jest.mock("@/services/widgetSync", () => ({
   writeServerWidgetProps: (p: unknown) => mockWrite(p),
+  clearNowWidget: () => mockClearWidget(),
 }));
 
 import { handleWidgetPushIos, readW1 } from "@/services/widgetPushIos";
@@ -138,4 +140,12 @@ describe("effacement à distance (« w0 »)", () => {
     setAppState("active");
     expect(await handleWidgetPushIos(w0("c1"))).toBe("wipe");
   });
+});
+
+it("« w0 » : timeline impossible → repli sur l'effacement simple, l'enfant est oublié", async () => {
+  await noteIosAppSnapshot("c1", 1_000);
+  mockWrite.mockReturnValueOnce(false);
+  expect(await handleWidgetPushIos({ t: "w0", c: "c1", s: 9_000, p: { v: 1 } })).toBe("wipe");
+  expect(mockClearWidget).toHaveBeenCalled();
+  expect((await readWidgetPushIosState()).shownChildId).toBeNull();
 });

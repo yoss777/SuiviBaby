@@ -7,7 +7,7 @@
 // Déclaré au chargement du module (portée globale), exigence de TaskManager.
 import { AppState, Platform } from "react-native";
 
-import { writeServerWidgetProps } from "@/services/widgetSync";
+import { clearNowWidget, writeServerWidgetProps } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
   clearIosWidgetPush,
@@ -54,7 +54,16 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
     // Autre enfant affiché : on n'y touche pas. Enfant affiché inconnu (état
     // perdu) : on efface quand même, l'app réécrira à la prochaine ouverture.
     if (!msg.c || (state.shownChildId && state.shownChildId !== msg.c)) return "child";
-    if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) return "write";
+    if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) {
+      // Timeline impossible : repli sur l'effacement simple (données vides),
+      // signalé. L'effacement ne doit pas échouer en silence.
+      captureServiceError(new Error("w0: timeline write failed"), { service: "widgetPushIos", operation: "wipeFallback" });
+      try {
+        clearNowWidget();
+      } catch {
+        return "write";
+      }
+    }
     await clearIosWidgetPush();
     return "wipe";
   }

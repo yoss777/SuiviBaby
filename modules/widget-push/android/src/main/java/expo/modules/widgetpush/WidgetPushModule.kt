@@ -1,5 +1,7 @@
 package expo.modules.widgetpush
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
@@ -36,6 +38,14 @@ class WidgetPushModule : Module() {
     AsyncFunction("moveTaskToBack") {
       appContext.currentActivity?.moveTaskToBack(true) ?: false
     }.runOnQueue(Queues.MAIN)
+
+    // Nombre de widgets SuiviBaby posés : le serveur n'envoie les données du
+    // widget qu'aux appareils qui en ont un (minimisation des données de santé).
+    Function("installedWidgetCount") {
+      val ctx = appContext.reactContext ?: return@Function 0
+      val component = ComponentName(ctx.packageName, "${ctx.packageName}.${WidgetPushHandler.WIDGET_NAME}Provider")
+      AppWidgetManager.getInstance(ctx).getAppWidgetIds(component).size
+    }
 
     // Journal de réception (mesure E6) : [{ r, s, o }], sans donnée personnelle.
     Function("readReceiveLog") {
