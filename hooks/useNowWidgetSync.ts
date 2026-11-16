@@ -11,6 +11,7 @@ import {
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
 import { setWidgetChild } from "@/services/pushTokenService";
+import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import {
   cancelPendingWidgetPush,
   flushPendingWidgetPush,
@@ -64,6 +65,21 @@ export function useNowWidgetSync(p: Params): void {
   // n'est jamais envoyée dans le widget du nouveau.
   const [nursingOf, setNursingOf] = useState<{ childId: string; state: NursingTimerState | null } | null>(null);
   const [tick, setTick] = useState(0);
+  // Clé des liens du widget (actions sans confirmation) : chargée une fois,
+  // AVANT le premier envoi (sinon le widget était écrit sans clé puis réécrit,
+  // et ses liens demandaient une confirmation entre-temps). null = trousseau
+  // indisponible (envoi sans clé), undefined = pas encore lue.
+  const [linkKey, setLinkKey] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    void getWidgetLinkKey().then(
+      (k) => active && setLinkKey(k),
+      () => active && setLinkKey(null),
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
   // Enfant précédent dans cette session : un vrai changement d'enfant (pas le
   // démarrage) fait passer le widget tout de suite sur le nouveau prénom.
   const prevChildRef = useRef<string | undefined>(undefined);
@@ -110,7 +126,7 @@ export function useNowWidgetSync(p: Params): void {
       cancelPendingWidgetPush();
       if (switchedRef.current && p.childId) pushNowWidgetLoading(p.childId, p.childName);
     };
-    if (!p.childId || !p.ready) {
+    if (!p.childId || !p.ready || linkKey === undefined) {
       waitForData();
       return;
     }
@@ -161,8 +177,12 @@ export function useNowWidgetSync(p: Params): void {
       },
       localEnv,
     );
-    pushNowWidget({ ...buildNowWidgetProps(input, localEnv), childId: p.childId });
+    pushNowWidget({
+      ...buildNowWidgetProps(input, localEnv),
+      childId: p.childId,
+      ...(linkKey ? { linkKey } : {}),
+    });
     setWidgetChild(p.childId);
     // tick : nouvel envoi au retour au premier plan.
-  }, [p, nursingOf, tick]);
+  }, [p, nursingOf, tick, linkKey]);
 }

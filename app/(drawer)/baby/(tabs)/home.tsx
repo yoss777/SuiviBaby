@@ -63,6 +63,8 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
+import { useModal } from "@/contexts/ModalContext";
+import { isWidgetLinkKeyValid } from "@/services/widgetLinkKey";
 import { isNapHour } from "@/utils/sleepPeriod";
 import { moveAppToBack } from "@/modules/widget-push";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
@@ -208,6 +210,7 @@ export default function HomeDashboard() {
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showActionToast } = useToast();
+  const { showConfirm } = useModal();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -1305,7 +1308,7 @@ export default function HomeDashboard() {
   }, [cancelWidgetBack]);
   useEffect(() => cancelWidgetBack, [cancelWidgetBack]);
 
-  const openFromWidget = useCallback(
+  const runWidgetAction = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => {
       // Proche (lecture seule) : pas de formulaire, l'Accueil suffit.
       if (!canManageContent) {
@@ -1429,6 +1432,49 @@ export default function HomeDashboard() {
       data.biberons,
       data.solides,
     ],
+  );
+  // Démarrer / arrêter une session : fait seulement si le lien porte la clé
+  // de cet appareil (il vient du widget). Sinon (autre app, page web, widget
+  // pas encore à jour) : confirmation. Ouvrir un formulaire n'en demande pas.
+  const runWidgetActionRef = useRef(runWidgetAction);
+  runWidgetActionRef.current = runWidgetAction;
+  // Bébé actif et montage, relus après la vérification (asynchrone) de la clé
+  // et après la confirmation : jamais d'action sur un autre bébé.
+  const activeChildIdRef = useRef(activeChild?.id);
+  activeChildIdRef.current = activeChild?.id;
+  const homeMountedRef = useRef(true);
+  useEffect(() => {
+    homeMountedRef.current = true;
+    return () => {
+      homeMountedRef.current = false;
+    };
+  }, []);
+  const openFromWidget = useCallback(
+    (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string }) => {
+      const CONFIRM: Partial<Record<WidgetDeepLinkAction, string>> = {
+        "sleep-start": opts?.nap === false ? "Démarrer la nuit ?" : "Démarrer une sieste ?",
+        "sleep-stop": "Arrêter le sommeil en cours ?",
+        "walk-start": "Démarrer une balade ?",
+        "walk-stop": "Arrêter la balade en cours ?",
+        "nursing-stop": "Arrêter la tétée en cours ?",
+      };
+      const title = CONFIRM[action];
+      const childId = activeChildIdRef.current;
+      const run = () => {
+        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
+        runWidgetActionRef.current(action, opts?.nap === undefined ? undefined : { nap: opts.nap });
+      };
+      if (!title || !canManageContent) {
+        run();
+        return;
+      }
+      void isWidgetLinkKeyValid(opts?.linkKey).then((ok) => {
+        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
+        if (ok) run();
+        else showConfirm(title, "Ce lien ne vient pas de votre widget SuiviBaby.", run);
+      });
+    },
+    [canManageContent, showConfirm],
   );
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,

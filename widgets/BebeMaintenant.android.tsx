@@ -154,7 +154,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   const timedMods = (action: keyof typeof ACTION_SAY) => [
     createModifier("openUrl", {
-      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}`,
+      // &k= : clé des liens de l'appareil (sinon l'app demande confirmation).
+      url: `suivibaby:///baby/home?widget=${action}${props.childId ? `&child=${encodeURIComponent(props.childId)}` : ""}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}${props.linkKey ? `&k=${props.linkKey}` : ""}`,
     }),
     semantics({ contentDescription: ACTION_SAY[action] }),
   ];

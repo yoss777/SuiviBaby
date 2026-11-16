@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { widgetPushIosCap } from "@/services/widgetPushIos";
+import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import { captureServiceError } from "@/utils/errorReporting";
 import { isConnectivityError } from "@/utils/networkError";
 
@@ -107,6 +108,11 @@ async function getExpoPushToken(): Promise<string | null> {
   return cachedToken;
 }
 
+async function linkKeyField(): Promise<{ widgetLinkKey?: string }> {
+  const key = await getWidgetLinkKey();
+  return key ? { widgetLinkKey: key } : {};
+}
+
 /**
  * Enregistre le push token dans Firestore.
  * Utilise token comme ID de document pour idempotence.
@@ -147,6 +153,9 @@ export async function registerPushToken(userId: string): Promise<void> {
         tz: deviceTimeZone(),
         appVersion: Constants.expoConfig?.version ?? null,
         widgetCap: await widgetCap(),
+        // Clé des liens de cet appareil : le serveur l'ajoute aux liens du
+        // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
+        ...(await linkKeyField()),
         widgetPush: true,
         // Enfant affiché par le widget, s'il est déjà connu (sinon posé par setWidgetChild).
         ...(desiredWidgetChildId ? { widgetChildId: desiredWidgetChildId } : {}),

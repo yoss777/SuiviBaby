@@ -94,3 +94,13 @@ describe("isTransientNetworkNoise", () => {
     expect(isTransientNetworkNoise({ exception: { values: [{ value: "Missing or insufficient permissions." }] } })).toBe(false);
   });
 });
+
+it("masque la clé des liens du widget dans les traces (…&k=…)", () => {
+  const out = filterBreadcrumb({
+    category: "navigation",
+    message: "suivibaby:///baby/home?widget=sleep-stop&k=0123456789abcdef0123456789abcdef",
+    data: { to: "/baby/home?widget=sleep-stop&k=0123456789abcdef0123456789abcdef&child=c1" },
+  }) as { message: string; data: { to: string } };
+  expect(out.message).not.toContain("0123456789abcdef");
+  expect(out.data.to).toBe("/baby/home?widget=sleep-stop&k=[clé]&child=c1");
+});

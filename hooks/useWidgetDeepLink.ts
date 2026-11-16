@@ -39,9 +39,10 @@ export function useWidgetDeepLink(opts: {
   /** Données de l'Accueil chargées : la feuille s'ouvre sur un état juste. */
   ready: boolean;
   /** `nap` : sieste (true) ou nuit (false) pour « sleep-start », tel qu'affiché par le widget. */
-  open: (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => void;
+  /** `linkKey` : clé portée par le lien (&k=), vérifiée par l'appelant pour les actions. */
+  open: (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string }) => void;
 }): void {
-  const { widget, child, nap } = useLocalSearchParams<{ widget?: string; child?: string; nap?: string }>();
+  const { widget, child, nap, k } = useLocalSearchParams<{ widget?: string; child?: string; nap?: string; k?: string }>();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { ready, open } = opts;
   // Un lien n'est traité qu'une fois. router.setParams() n'efface les
@@ -57,7 +58,7 @@ export function useWidgetDeepLink(opts: {
     }
     const key = `${widget}|${child ?? ""}|${nap ?? ""}`;
     if (handledRef.current === key) return;
-    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined });
+    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined });
     if (!ACTIONS.has(widget)) {
       clear();
       return;
@@ -72,7 +73,11 @@ export function useWidgetDeepLink(opts: {
     }
     if (!ready) return;
     handledRef.current = key;
-    open(widget as WidgetDeepLinkAction, nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : undefined);
+    const linkOpts = {
+      ...(nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : {}),
+      ...(k ? { linkKey: k } : {}),
+    };
+    open(widget as WidgetDeepLinkAction, Object.keys(linkOpts).length ? linkOpts : undefined);
     clear();
-  }, [widget, child, nap, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
+  }, [widget, child, nap, k, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
 }
