@@ -558,12 +558,13 @@ service cloud.firestore {
         (!('widgetPush' in d) || d.widgetPush is bool) &&
         (!('widgetCap' in d) || (d.widgetCap is int && d.widgetCap >= 0 && d.widgetCap <= 2)) &&
         (!('widgetChildId' in d) || (d.widgetChildId is string && d.widgetChildId.size() <= 128)) &&
+        (!('widgetLinkKey' in d) || (d.widgetLinkKey is string && d.widgetLinkKey.size() >= 16 && d.widgetLinkKey.size() <= 64)) &&
         (!('tz' in d) || d.tz == null || (d.tz is string && d.tz.size() <= 64)) &&
         (!('appVersion' in d) || d.appVersion == null || (d.appVersion is string && d.appVersion.size() <= 32));
     }
     function deviceTokenKeys() {
       return ['userId', 'token', 'platform', 'enabled', 'registeredAt', 'lastUsedAt',
-        'tz', 'appVersion', 'widgetCap', 'widgetPush', 'widgetChildId'];
+        'tz', 'appVersion', 'widgetCap', 'widgetPush', 'widgetChildId', 'widgetLinkKey'];
     }
 
     match /device_tokens/{tokenId} {

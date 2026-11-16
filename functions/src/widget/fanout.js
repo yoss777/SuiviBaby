@@ -282,6 +282,11 @@ async function fanOutWidget(db, childId, { urgent }) {
           reminders,
           nowMs,
         });
+        // Clé des liens de cet appareil (posée par l'app) : les liens du widget
+        // réécrit par le serveur restent utilisables sans confirmation.
+        if (typeof t.widgetLinkKey === "string" && /^[0-9a-f]{16,64}$/.test(t.widgetLinkKey)) {
+          props.linkKey = t.widgetLinkKey;
+        }
         const data = widgetMessageData(childId, seq, props);
         if (!data) {
           stats.errors++;

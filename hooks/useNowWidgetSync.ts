@@ -11,6 +11,7 @@ import {
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
 import { setWidgetChild } from "@/services/pushTokenService";
+import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import {
   cancelPendingWidgetPush,
   flushPendingWidgetPush,
@@ -64,6 +65,15 @@ export function useNowWidgetSync(p: Params): void {
   // n'est jamais envoyée dans le widget du nouveau.
   const [nursingOf, setNursingOf] = useState<{ childId: string; state: NursingTimerState | null } | null>(null);
   const [tick, setTick] = useState(0);
+  // Clé des liens du widget (actions sans confirmation) : chargée une fois.
+  const [linkKey, setLinkKey] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void getWidgetLinkKey().then((k) => active && setLinkKey(k));
+    return () => {
+      active = false;
+    };
+  }, []);
   // Enfant précédent dans cette session : un vrai changement d'enfant (pas le
   // démarrage) fait passer le widget tout de suite sur le nouveau prénom.
   const prevChildRef = useRef<string | undefined>(undefined);
@@ -161,8 +171,12 @@ export function useNowWidgetSync(p: Params): void {
       },
       localEnv,
     );
-    pushNowWidget({ ...buildNowWidgetProps(input, localEnv), childId: p.childId });
+    pushNowWidget({
+      ...buildNowWidgetProps(input, localEnv),
+      childId: p.childId,
+      ...(linkKey ? { linkKey } : {}),
+    });
     setWidgetChild(p.childId);
     // tick : nouvel envoi au retour au premier plan.
-  }, [p, nursingOf, tick]);
+  }, [p, nursingOf, tick, linkKey]);
 }

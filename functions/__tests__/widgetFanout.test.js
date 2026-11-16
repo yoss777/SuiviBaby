@@ -162,6 +162,17 @@ describe("fanOutWidget", () => {
     expect(pushed().find((m) => m.to === "ExponentPushToken[m1]")._contentAvailable).toBeUndefined();
   });
 
+  it("clé des liens de l'appareil ajoutée aux données ; clé mal formée ignorée", async () => {
+    memoryStore(seed({
+      "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "0123456789abcdef0123456789abcdef" },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: true, widgetCap: 1, widgetChildId: "c1", tz: "Europe/Paris", widgetLinkKey: "<script>" },
+    }));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    const byTo = Object.fromEntries(pushed().map((m) => [m.to, m]));
+    expect(byTo["ExponentPushToken[m1]"].data.p.linkKey).toBe("0123456789abcdef0123456789abcdef");
+    expect(byTo["ExponentPushToken[d1]"].data.p.linkKey).toBeUndefined();
+  });
+
   it("tétée partagée en cours (non expirée) et enfant supprimé", async () => {
     memoryStore(seed({
       "children/c1/live/nursing": { leftSeconds: 300, rightSeconds: 0, runningSide: "right", runningSince: NOW - 60000, startedAt: NOW - 400000, updatedAt: NOW - 60000, v: 1, updatedBy: "mum" },

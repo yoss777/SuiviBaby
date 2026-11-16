@@ -2155,6 +2155,8 @@ describe("device_tokens collection", () => {
     await assertFails(setDoc(doc(db, "device_tokens", "w3"), { ...full, token: "w3", platform: "web" }));
     await assertFails(setDoc(doc(db, "device_tokens", "w4"), { ...full, token: "w4", extra: "x" }));
     await assertFails(updateDoc(doc(db, "device_tokens", "w1"), { widgetChildId: "x".repeat(200) }));
+    await assertSucceeds(updateDoc(doc(db, "device_tokens", "w1"), { widgetLinkKey: "0123456789abcdef0123456789abcdef" }));
+    await assertFails(updateDoc(doc(db, "device_tokens", "w1"), { widgetLinkKey: "court" }));
   });
 
   test("ancien jeton avec un champ historique : toujours modifiable", async () => {

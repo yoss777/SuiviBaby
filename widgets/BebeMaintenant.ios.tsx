@@ -76,8 +76,10 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const hour = new Date(environment.date ? new Date(environment.date).getTime() : Date.now()).getHours();
     return hour >= 8 && hour < 19;
   })();
+  // Démarrer / arrêter : &k= porte la clé des liens de l'appareil (sinon l'app
+  // demande confirmation, services/widgetLinkKey.ts).
   const actionUrl = (action: string) =>
-    `suivibaby:///baby/home?widget=${action}${child}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}`;
+    `suivibaby:///baby/home?widget=${action}${child}${action === "sleep-start" ? `&nap=${napNow ? 1 : 0}` : ""}${props.linkKey ? `&k=${props.linkKey}` : ""}`;
   // Écran d'accueil, comme Android : le fond ouvre l'Accueil ; seules certaines
   // zones ouvrent un formulaire (repas, change, tétée en cours).
   const homeUrl = "suivibaby:///baby/home";

@@ -79,6 +79,12 @@ export interface NowWidgetProps {
   lastMealKind: MealKind | null;
   /** Droit de saisie (Parent, propriétaire) ; faux pour un Proche (lecture seule). */
   canWrite: boolean;
+  /**
+   * Clé des liens de cet appareil (services/widgetLinkKey.ts), ajoutée aux
+   * liens qui démarrent ou arrêtent une session. Posée par l'app ou par le
+   * serveur (device_tokens.widgetLinkKey) ; absente : confirmation demandée.
+   */
+  linkKey?: string;
   isPremium: boolean;
   /** État de la journée : affiché pour tous. */
   day: WidgetDay | null;
