@@ -18,6 +18,9 @@ jest.mock("@/services/widgetSync", () => ({
   invalidateWidgetKey: jest.fn(),
 }));
 jest.mock("@/services/pushTokenService", () => ({ setWidgetChild: jest.fn() }));
+jest.mock("@/services/widgetLinkKey", () => ({
+  getWidgetLinkKey: () => Promise.resolve("0123456789abcdef0123456789abcdef"),
+}));
 
 const mockLoads: Record<string, (s: unknown) => void> = {};
 jest.mock("@/components/forms/nursingTimer", () => ({
@@ -89,7 +92,18 @@ it("données d'un autre enfant encore affichées : bloqué ; au démarrage, pas 
 it("hors premier plan : n'attend pas la lecture de la tétée (réseau suspendu)", async () => {
   setAppState("background");
   renderHook(() => useNowWidgetSync(params("a")));
+  // Clé des liens lue d'abord (asynchrone), puis envoi sans attendre la tétée.
+  await act(async () => {});
   expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ childId: "a", live: null }));
   await act(async () => mockLoads.a(nursingA));
   expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ live: expect.objectContaining({ kind: "nursing" }) }));
+});
+
+it("clé des liens lue avant le premier envoi : une seule écriture, avec la clé", async () => {
+  setAppState("background");
+  renderHook(() => useNowWidgetSync(params("a")));
+  expect(mockPush).not.toHaveBeenCalled();
+  await act(async () => {});
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ linkKey: "0123456789abcdef0123456789abcdef" }));
 });

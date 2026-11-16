@@ -15,7 +15,8 @@ const SENSITIVE_KEY =
   /(email|e-mail|name|nom|prenom|prénom|transcript|text|note|description|message|phone|address|token|password|valeur|value|quantite|quantity|amount|temperature|symptom|medicament|photo|poids|weight|taille|height|birth|naissance|dob|mood|humeur|title|titre)/i;
 
 export function maskEmails(value: string): string {
-  return value.replace(EMAIL, "[email]");
+  // Et la clé des liens du widget (…&k=<clé>) : jamais envoyée à Sentry.
+  return value.replace(EMAIL, "[email]").replace(/([?&]k=)[^&#\s]+/g, "$1[clé]");
 }
 
 /** Copy of `data` without sensitive keys, strings masked, nested up to depth 3. */

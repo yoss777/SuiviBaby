@@ -4,6 +4,7 @@ import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
 import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
 import { clearNowWidget } from "@/services/widgetSync";
+import { rotateWidgetLinkKey } from "@/services/widgetLinkKey";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
 import { clearTodayEventsCache } from "@/services/todayEventsCache";
 import { clearWeeklyEventsCache } from "@/services/weeklyEventsCache";
@@ -334,6 +335,7 @@ export function AuthProvider({
       // Le widget d'écran d'accueil ne doit pas garder le prénom ni les
       // données de santé de l'enfant après la déconnexion.
       clearNowWidget();
+      void rotateWidgetLinkKey();
       // Supprimer les push tokens avant signOut (nécessite auth active)
       const uid = auth.currentUser?.uid;
       if (uid) await removePushTokens(uid).catch(() => {});

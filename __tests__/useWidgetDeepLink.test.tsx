@@ -2,7 +2,7 @@
 import { renderHook } from "@testing-library/react-native";
 
 const mockSetParams = jest.fn();
-let mockParams: { widget?: string; child?: string; nap?: string } = {};
+let mockParams: { widget?: string; child?: string; nap?: string; k?: string } = {};
 jest.mock("expo-router", () => ({
   router: { setParams: (p: unknown) => mockSetParams(p) },
   useLocalSearchParams: () => mockParams,
@@ -114,4 +114,11 @@ it("ligne sommeil du widget : action reconnue", () => {
   const open = jest.fn();
   renderHook(() => useWidgetDeepLink({ ready: true, open }));
   expect(open).toHaveBeenCalledWith("sleep", undefined);
+});
+
+it("clé des liens (&k=) transmise avec l'action, puis effacée de l'adresse", () => {
+  mockParams = { widget: "sleep-start", child: "c1", nap: "1", k: "0123456789abcdef0123456789abcdef" };
+  const open = jest.fn();
+  renderHook(() => useWidgetDeepLink({ ready: true, open }));
+  expect(open).toHaveBeenCalledWith("sleep-start", { nap: true, linkKey: "0123456789abcdef0123456789abcdef" });
 });

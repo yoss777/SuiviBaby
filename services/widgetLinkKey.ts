@@ -51,6 +51,20 @@ export async function isWidgetLinkKeyValid(k: string | null | undefined): Promis
   return !!key && key === k;
 }
 
+/**
+ * Déconnexion : la clé est oubliée, une nouvelle sera tirée au prochain
+ * compte (sur iPhone, le trousseau survit même à la désinstallation).
+ */
+export async function rotateWidgetLinkKey(): Promise<void> {
+  cached = null;
+  loading = null;
+  try {
+    await SecureStore.deleteItemAsync(STORE_KEY);
+  } catch (error) {
+    captureServiceError(error, { service: "widgetLinkKey", operation: "rotate" });
+  }
+}
+
 /** Tests uniquement. */
 export function __resetWidgetLinkKeyForTests(): void {
   cached = null;

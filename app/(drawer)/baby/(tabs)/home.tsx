@@ -1438,6 +1438,17 @@ export default function HomeDashboard() {
   // pas encore à jour) : confirmation. Ouvrir un formulaire n'en demande pas.
   const runWidgetActionRef = useRef(runWidgetAction);
   runWidgetActionRef.current = runWidgetAction;
+  // Bébé actif et montage, relus après la vérification (asynchrone) de la clé
+  // et après la confirmation : jamais d'action sur un autre bébé.
+  const activeChildIdRef = useRef(activeChild?.id);
+  activeChildIdRef.current = activeChild?.id;
+  const homeMountedRef = useRef(true);
+  useEffect(() => {
+    homeMountedRef.current = true;
+    return () => {
+      homeMountedRef.current = false;
+    };
+  }, []);
   const openFromWidget = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string }) => {
       const CONFIRM: Partial<Record<WidgetDeepLinkAction, string>> = {
@@ -1448,12 +1459,17 @@ export default function HomeDashboard() {
         "nursing-stop": "Arrêter la tétée en cours ?",
       };
       const title = CONFIRM[action];
-      const run = () => runWidgetActionRef.current(action, opts?.nap === undefined ? undefined : { nap: opts.nap });
+      const childId = activeChildIdRef.current;
+      const run = () => {
+        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
+        runWidgetActionRef.current(action, opts?.nap === undefined ? undefined : { nap: opts.nap });
+      };
       if (!title || !canManageContent) {
         run();
         return;
       }
       void isWidgetLinkKeyValid(opts?.linkKey).then((ok) => {
+        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
         if (ok) run();
         else showConfirm(title, "Ce lien ne vient pas de votre widget SuiviBaby.", run);
       });

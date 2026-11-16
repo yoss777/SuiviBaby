@@ -73,11 +73,11 @@ export function useWidgetDeepLink(opts: {
     }
     if (!ready) return;
     handledRef.current = key;
-    const opts = {
+    const linkOpts = {
       ...(nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : {}),
       ...(k ? { linkKey: k } : {}),
     };
-    open(widget as WidgetDeepLinkAction, Object.keys(opts).length ? opts : undefined);
+    open(widget as WidgetDeepLinkAction, Object.keys(linkOpts).length ? linkOpts : undefined);
     clear();
   }, [widget, child, nap, k, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
 }

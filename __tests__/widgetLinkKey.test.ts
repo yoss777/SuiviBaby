@@ -4,6 +4,7 @@ const mockStore = new Map<string, string>();
 jest.mock("expo-secure-store", () => ({
   getItemAsync: jest.fn(async (k: string) => mockStore.get(k) ?? null),
   setItemAsync: jest.fn(async (k: string, v: string) => void mockStore.set(k, v)),
+  deleteItemAsync: jest.fn(async (k: string) => void mockStore.delete(k)),
 }));
 let mockSeed = 1;
 jest.mock("expo-crypto", () => ({
@@ -12,7 +13,7 @@ jest.mock("expo-crypto", () => ({
 
 import * as SecureStore from "expo-secure-store";
 
-import { __resetWidgetLinkKeyForTests, getWidgetLinkKey, isWidgetLinkKeyValid } from "@/services/widgetLinkKey";
+import { __resetWidgetLinkKeyForTests, getWidgetLinkKey, isWidgetLinkKeyValid, rotateWidgetLinkKey } from "@/services/widgetLinkKey";
 
 beforeEach(() => {
   mockStore.clear();
@@ -40,4 +41,14 @@ it("trousseau indisponible : pas de clé, tout lien demande confirmation", async
   (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error("keychain locked"));
   expect(await getWidgetLinkKey()).toBeNull();
   expect(await isWidgetLinkKeyValid("abc")).toBe(false);
+});
+
+it("déconnexion : la clé est renouvelée, l'ancienne n'ouvre plus rien", async () => {
+  mockSeed = 3;
+  const old = await getWidgetLinkKey();
+  await rotateWidgetLinkKey();
+  mockSeed = 4;
+  const next = await getWidgetLinkKey();
+  expect(next).not.toBe(old);
+  expect(await isWidgetLinkKeyValid(old)).toBe(false);
 });
