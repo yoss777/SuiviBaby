@@ -76,7 +76,7 @@ jobs:
       - name: Download the latest EAS Android build
         run: |
           set -euo pipefail
-          npx --yes eas-cli@latest build:list \
+          npx --yes eas-cli@27.10.0 build:list \
             --platform android --build-profile "$BUILD_PROFILE" \
             --status finished --limit 1 --non-interactive --json > builds.json
           URL=$(jq -r '.[0].artifacts.buildUrl // empty' builds.json)

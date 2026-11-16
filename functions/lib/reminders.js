@@ -96,7 +96,12 @@ async function safeRefreshLastEventAt(db, childId, types) {
  * is none. Reads the child's lastEventAt; queries events only when the key is
  * missing. `stats.fallbackReads` counts those queries.
  */
-async function getLastEventMillis(db, childId, childData, category, stats) {
+/**
+ * @param opts.unknownOnInvalid dernier évènement à date illisible : rend
+ *   `undefined` (« inconnu ») au lieu de `null` (aucun rappel). Le widget s'en
+ *   sert pour ne pas annoncer « aucun repas noté » à tort.
+ */
+async function getLastEventMillis(db, childId, childData, category, stats, opts = {}) {
   const stored = childData?.lastEventAt?.[category];
   if (stored === null) return null;
   const storedMs = toMillis(stored);
@@ -106,7 +111,9 @@ async function getLastEventMillis(db, childId, childData, category, stats) {
   if (snap.empty) return null;
   // Date absente ou invalide : on ne sait pas quand a eu lieu l'événement, donc
   // aucun rappel (un 0 ferait partir un rappel immédiat à chaque passage).
-  return toMillis(snap.docs[0].data().date);
+  const ms = toMillis(snap.docs[0].data().date);
+  if (ms === null) return opts.unknownOnInvalid ? undefined : null;
+  return ms;
 }
 
 /** True when the child has at least one event in [weekStart, weekEnd] (no figure is read). */
@@ -194,7 +201,12 @@ async function sendPushWithTickets(client, messages) {
   // code est une panne (configuration, quota, taille) à voir tout de suite.
   const unexpected = Object.keys(errorsByCode).filter((c) => c !== "DeviceNotRegistered");
   if (unexpected.length > 0) {
-    logger.error("sendPushWithTickets: tickets in error", { errorsByCode, firstTicketMessage, delivered, failed });
+    logger.error("sendPushWithTickets: tickets in error", {
+      errorsByCode,
+      firstTicketMessage: maskPushTokens(firstTicketMessage),
+      delivered,
+      failed,
+    });
   }
   // Rien n'est parti : l'erreur remonte (nouvel essai au passage suivant).
   if (firstError && delivered === 0) throw firstError;
@@ -215,9 +227,20 @@ async function removeDeadTokens(tokenDocs, dead) {
   return results.filter((r) => r.status === "fulfilled").length;
 }
 
-/** One structured log line at the end of a run. */
+/** Jetons Expo masqués (un message d'Expo peut citer le jeton entier). */
+function maskPushTokens(text) {
+  return typeof text === "string" ? text.replace(/Expo(nent)?PushToken\[[^\]]*\]/g, "ExponentPushToken[…]") : text;
+}
+
+/**
+ * One structured log line at the end of a run. Niveau selon l'issue : un
+ * envoi en échec ou avec des erreurs doit pouvoir déclencher une alerte.
+ */
 function logJobSummary(job, startedAtMs, fields) {
-  logger.info(`${job}: done`, { job, durationMs: Date.now() - startedAtMs, ...fields });
+  const payload = { job, durationMs: Date.now() - startedAtMs, ...fields };
+  if (fields?.reason === "failed") logger.error(`${job}: done`, payload);
+  else if ((fields?.errors ?? 0) > 0 || (fields?.failed ?? 0) > 0) logger.warn(`${job}: done`, payload);
+  else logger.info(`${job}: done`, payload);
 }
 
 module.exports = {
@@ -229,6 +252,7 @@ module.exports = {
   refreshLastEventAt,
   safeRefreshLastEventAt,
   getLastEventMillis,
+  maskPushTokens,
   hadActivityInWeek,
   mapInChunks,
   sendPushWithTickets,

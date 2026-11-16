@@ -168,10 +168,8 @@ function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs
       lastAbsoluteMealMs,
       // getLastEventMillis : null = aucun évènement de la catégorie (prouvé) ;
       // absent (anciens appels) = inconnu.
-      lastEventAt:
-        lastAbsoluteDiaperMs === undefined
-          ? undefined
-          : { repas: lastAbsoluteMealMs ?? null, changes: lastAbsoluteDiaperMs ?? null },
+      // undefined (date illisible) = inconnu pour cette catégorie seulement.
+      lastEventAt: { repas: lastAbsoluteMealMs, changes: lastAbsoluteDiaperMs },
       isPremium: premium,
       canWrite: canWrite !== false,
       reminders,
@@ -231,74 +229,86 @@ async function fanOutWidget(db, childId, { urgent }) {
   const seq = eventsSnap.readTime && typeof eventsSnap.readTime.toMillis === "function" ? eventsSnap.readTime.toMillis() : nowMs;
   const split = splitEvents(eventsSnap.docs);
   const nursing = widget.usableNursing(liveSnap.exists ? liveSnap.data() : null, nowMs);
-  const lastAbsoluteMealMs = await reminderLib.getLastEventMillis(db, childId, child, "repas", null);
-  const lastAbsoluteDiaperMs = await reminderLib.getLastEventMillis(db, childId, child, "changes", null);
+  // Date illisible : « inconnu » (undefined), jamais « aucun repas noté ».
+  const unknown = { unknownOnInvalid: true };
+  const lastAbsoluteMealMs = await reminderLib.getLastEventMillis(db, childId, child, "repas", null, unknown);
+  const lastAbsoluteDiaperMs = await reminderLib.getLastEventMillis(db, childId, child, "changes", null, unknown);
 
   const messages = [];
   const tokenDocs = [];
   for (const uid of members) {
-    const prefsSnap = await db.doc(`user_preferences/${uid}`).get();
-    const prefs = prefsSnap.exists ? prefsSnap.data() : {};
-    if (!hasValidHealthConsent(prefs)) {
-      stats.skipped++;
-      continue;
-    }
-    const devicesSnap = await db
-      .collection("device_tokens")
-      .where("userId", "==", uid)
-      .where("widgetChildId", "==", childId)
-      .get();
-    const devices = devicesSnap.docs.filter((d) => {
-      const t = d.data();
-      const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true);
-      return t.widgetPush === true && Number(t.widgetCap) >= 1 && platformOk &&
-        getExpoModule().Expo.isExpoPushToken(t.token);
-    });
-    if (devices.length === 0) continue;
-    stats.recipients++;
-
-    const premium = isPremium(await db.doc(`subscriptions/${uid}`).get(), nowMs);
-    const r = prefs.notifications?.reminders || {};
-    const reminders = {
-      enabled: r.enabled === true,
-      repasHours: Number(r.thresholds?.repas) || 0,
-      changesHours: Number(r.thresholds?.changes) || 0,
-    };
-    for (const device of devices) {
-      const t = device.data();
-      const props = propsForDevice({
-        childId,
-        childName: child.name || "",
-        split,
-        nursing,
-        lastAbsoluteMealMs,
-        lastAbsoluteDiaperMs,
-        tz: t.tz,
-        premium,
-        canWrite: writers.has(uid),
-        reminders,
-        nowMs,
-      });
-      const data = widgetMessageData(childId, seq, props);
-      if (!data) {
-        stats.errors++;
-        console.warn("widgetFanout: message too big even without the day feed", { childId });
+    // Un membre en erreur (lecture refusée, réseau) n'arrête pas l'envoi aux
+    // autres : compté, journalisé sans identifiant.
+    try {
+      const prefsSnap = await db.doc(`user_preferences/${uid}`).get();
+      const prefs = prefsSnap.exists ? prefsSnap.data() : {};
+      if (!hasValidHealthConsent(prefs)) {
+        stats.skipped++;
         continue;
       }
-      stats.devices++;
-      tokenDocs.push({ ref: device.ref, token: t.token });
-      // iPhone : notification silencieuse, sans titre ni son. Apple exige la
-      // priorité normale (5) pour une notification d'arrière-plan.
-      messages.push(
-        t.platform === "ios"
-          ? { to: t.token, data, _contentAvailable: true, priority: "normal", ttl: MESSAGE_TTL_S }
-          : { to: t.token, data, priority: urgent ? "high" : "normal", ttl: MESSAGE_TTL_S },
-      );
+      const devicesSnap = await db
+        .collection("device_tokens")
+        .where("userId", "==", uid)
+        .where("widgetChildId", "==", childId)
+        .get();
+      const devices = devicesSnap.docs.filter((d) => {
+        const t = d.data();
+        const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true);
+        return t.widgetPush === true && Number(t.widgetCap) >= 1 && platformOk &&
+          getExpoModule().Expo.isExpoPushToken(t.token);
+      });
+      if (devices.length === 0) continue;
+      stats.recipients++;
+
+      const premium = isPremium(await db.doc(`subscriptions/${uid}`).get(), nowMs);
+      const r = prefs.notifications?.reminders || {};
+      const reminders = {
+        enabled: r.enabled === true,
+        repasHours: Number(r.thresholds?.repas) || 0,
+        changesHours: Number(r.thresholds?.changes) || 0,
+      };
+      for (const device of devices) {
+        const t = device.data();
+        const props = propsForDevice({
+          childId,
+          childName: child.name || "",
+          split,
+          nursing,
+          lastAbsoluteMealMs,
+          lastAbsoluteDiaperMs,
+          tz: t.tz,
+          premium,
+          canWrite: writers.has(uid),
+          reminders,
+          nowMs,
+        });
+        const data = widgetMessageData(childId, seq, props);
+        if (!data) {
+          stats.errors++;
+          stats.tooBig = (stats.tooBig || 0) + 1;
+          console.warn("widgetFanout: message too big even without the day feed", { childId });
+          continue;
+        }
+        stats.devices++;
+        tokenDocs.push({ ref: device.ref, token: t.token });
+        // iPhone : notification silencieuse, sans titre ni son. Apple exige la
+        // priorité normale (5) pour une notification d'arrière-plan.
+        messages.push(
+          t.platform === "ios"
+            ? { to: t.token, data, _contentAvailable: true, priority: "normal", ttl: MESSAGE_TTL_S }
+            : { to: t.token, data, priority: urgent ? "high" : "normal", ttl: MESSAGE_TTL_S },
+        );
+      }
+    } catch (error) {
+      stats.errors++;
+      console.error("widgetFanout: member failed", { childId, error: error?.message ?? String(error) });
     }
   }
-  if (messages.length === 0) return log("no-device");
+  // Aucun message parce que des membres ont échoué : une vraie panne.
+  if (messages.length === 0) return log(stats.errors > 0 ? "failed" : "no-device");
 
-  const { delivered, failed, dead, chunkErrors } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+  const { delivered, failed, dead, chunkErrors, errorsByCode } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+  if (errorsByCode && Object.keys(errorsByCode).length > 0) stats.errorsByCode = errorsByCode;
   stats.sent = delivered;
   stats.failed = failed;
   stats.errors += chunkErrors;

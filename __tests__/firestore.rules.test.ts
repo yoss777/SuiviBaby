@@ -2143,6 +2143,27 @@ describe("device_tokens collection", () => {
     const db = authedFirestore(BOB_UID);
     await assertFails(deleteDoc(doc(db, "device_tokens", "token1")));
   });
+
+  test("champs du widget bornés : jeton complet accepté, valeurs inventées refusées", async () => {
+    const db = authedFirestore(BOB_UID);
+    const full = {
+      userId: BOB_UID, token: "w1", platform: "android", enabled: true, tz: "Europe/Paris",
+      appVersion: "1.0.20", widgetCap: 1, widgetPush: true, widgetChildId: "child-1",
+    };
+    await assertSucceeds(setDoc(doc(db, "device_tokens", "w1"), full));
+    await assertFails(setDoc(doc(db, "device_tokens", "w2"), { ...full, token: "w2", widgetCap: 99 }));
+    await assertFails(setDoc(doc(db, "device_tokens", "w3"), { ...full, token: "w3", platform: "web" }));
+    await assertFails(setDoc(doc(db, "device_tokens", "w4"), { ...full, token: "w4", extra: "x" }));
+    await assertFails(updateDoc(doc(db, "device_tokens", "w1"), { widgetChildId: "x".repeat(200) }));
+  });
+
+  test("ancien jeton avec un champ historique : toujours modifiable", async () => {
+    await seedData(async (db: any) => {
+      await setDoc(doc(db, "device_tokens", "legacy"), { userId: ALICE_UID, token: "old", platform: "ios", deviceName: "iPhone" });
+    });
+    const db = authedFirestore(ALICE_UID);
+    await assertSucceeds(updateDoc(doc(db, "device_tokens", "legacy"), { enabled: false, widgetCap: 1 }));
+  });
 });
 
 // ===========================================================================

@@ -549,13 +549,32 @@ service cloud.firestore {
     // NOTIFICATIONS
     // ============================================
 
+    // Champs du jeton bornés (reprise d'un jeton connu : pas de champ arbitraire,
+    // pas de capacité widget inventée). Chacun est facultatif.
+    function validDeviceToken(d) {
+      return d.token is string && d.token.size() <= 200 &&
+        (!('platform' in d) || d.platform in ['ios', 'android']) &&
+        (!('enabled' in d) || d.enabled is bool) &&
+        (!('widgetPush' in d) || d.widgetPush is bool) &&
+        (!('widgetCap' in d) || (d.widgetCap is int && d.widgetCap >= 0 && d.widgetCap <= 2)) &&
+        (!('widgetChildId' in d) || (d.widgetChildId is string && d.widgetChildId.size() <= 128)) &&
+        (!('tz' in d) || d.tz == null || (d.tz is string && d.tz.size() <= 64)) &&
+        (!('appVersion' in d) || d.appVersion == null || (d.appVersion is string && d.appVersion.size() <= 32));
+    }
+    function deviceTokenKeys() {
+      return ['userId', 'token', 'platform', 'enabled', 'registeredAt', 'lastUsedAt',
+        'tz', 'appVersion', 'widgetCap', 'widgetPush', 'widgetChildId'];
+    }
+
     match /device_tokens/{tokenId} {
       // Lecture : l'utilisateur ne peut lire que ses propres tokens
       allow read: if isSignedIn() &&
         resource.data.userId == request.auth.uid;
       // Création : l'utilisateur ne peut créer que des tokens à son nom
       allow create: if isSignedIn() &&
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        validDeviceToken(request.resource.data) &&
+        request.resource.data.keys().hasOnly(deviceTokenKeys());
       // Mise à jour : son propre token, ou reprise d'un token posé par un
       // autre compte sur le même appareil. L'id du doc dérive du token Expo,
       // identique pour tous les comptes d'un téléphone : sans reprise, le
@@ -565,6 +584,10 @@ service cloud.firestore {
       // connaître, ce que seul l'appareil (ou son propriétaire) peut faire.
       allow update: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid &&
+        validDeviceToken(request.resource.data) &&
+        // Champs modifiés seulement : un ancien jeton portant un champ
+        // historique reste modifiable.
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(deviceTokenKeys()) &&
         (resource.data.userId == request.auth.uid ||
           request.resource.data.token == resource.data.token);
       // Suppression : uniquement ses propres tokens

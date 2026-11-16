@@ -20,6 +20,7 @@ import {
 import { db } from "@/config/firebase";
 import { widgetPushIosCap } from "@/services/widgetPushIos";
 import { captureServiceError } from "@/utils/errorReporting";
+import { isConnectivityError } from "@/utils/networkError";
 
 const COLLECTION = "device_tokens";
 // Projet EAS courant (@yoss7/suivibaby), lu dans app.json : l'ancien identifiant
@@ -34,6 +35,10 @@ let cachedToken: string | null = null;
 let widgetChildTimer: ReturnType<typeof setTimeout> | null = null;
 let desiredWidgetChildId: string | null = null;
 let lastWidgetChildId: string | null = null;
+/** Compte du dernier enregistrement réussi (réenregistrement si le jeton a disparu). */
+let registeredUserId: string | null = null;
+/** Délais des nouvelles tentatives d'écriture de l'enfant du widget. */
+const WIDGET_CHILD_RETRY_MS = [10_000, 30_000, 120_000];
 /** Permission de notification accordée lors du dernier getExpoPushToken. */
 let notificationsGranted = false;
 
@@ -149,6 +154,7 @@ export async function registerPushToken(userId: string): Promise<void> {
       { merge: true },
     );
     lastWidgetChildId = desiredWidgetChildId;
+    registeredUserId = userId;
   } catch (error) {
     console.error("Erreur registerPushToken:", error);
     captureServiceError(error, { service: "pushToken", operation: "registerPushToken" });
@@ -160,6 +166,14 @@ export async function registerPushToken(userId: string): Promise<void> {
  * À appeler au signOut.
  */
 export async function removePushTokens(userId: string): Promise<void> {
+  // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
+  // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
+  // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
+  if (widgetChildTimer) clearTimeout(widgetChildTimer);
+  widgetChildTimer = null;
+  lastWidgetChildId = null;
+  desiredWidgetChildId = null;
+  registeredUserId = null;
   try {
     const q = query(
       collection(db, COLLECTION),
@@ -168,11 +182,6 @@ export async function removePushTokens(userId: string): Promise<void> {
     const snapshot = await getDocs(q);
 
     await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
-    // Docs supprimés : le prochain enregistrement doit réécrire l'enfant du widget.
-    if (widgetChildTimer) clearTimeout(widgetChildTimer);
-    widgetChildTimer = null;
-    lastWidgetChildId = null;
-    desiredWidgetChildId = null;
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
@@ -238,17 +247,43 @@ export async function isDevicePushEnabled(): Promise<boolean> {
 export function setWidgetChild(childId: string): void {
   desiredWidgetChildId = childId;
   if (childId === lastWidgetChildId) return;
+  scheduleWidgetChildWrite(childId, 3000, 0);
+}
+
+/**
+ * Écrit l'enfant du widget. Échec : nouvel essai (10 s, 30 s, 2 min) tant que
+ * cet enfant est toujours celui voulu ; sans quoi le serveur ne trouvait plus
+ * l'appareil et le widget restait figé sans signal. Jeton supprimé entre-temps
+ * (not-found, jeton mort nettoyé) : réenregistrement, qui écrit l'enfant voulu.
+ */
+function scheduleWidgetChildWrite(childId: string, delayMs: number, attempt: number): void {
   if (widgetChildTimer) clearTimeout(widgetChildTimer);
   widgetChildTimer = setTimeout(() => {
     widgetChildTimer = null;
     const docId = getTokenDocId();
     // Jeton pas encore enregistré : registerPushToken écrira l'enfant souhaité.
-    // Déjà écrit entre-temps (par registerPushToken) : rien à faire.
-    if (!docId || childId === lastWidgetChildId) return;
+    // Déjà écrit entre-temps (par registerPushToken), ou autre enfant voulu : rien à faire.
+    if (!docId || childId === lastWidgetChildId || childId !== desiredWidgetChildId) return;
     lastWidgetChildId = childId;
     updateDoc(doc(db, COLLECTION, docId), { widgetChildId: childId }).catch((error) => {
+      // Un autre enfant est voulu entre-temps (ou déconnexion) : son écriture
+      // est déjà planifiée ; ne pas annuler son minuteur pour réessayer celui-ci.
+      if (childId !== desiredWidgetChildId) return;
       lastWidgetChildId = null;
-      captureServiceError(error, { service: "pushToken", operation: "setWidgetChild" });
+      const code = (error as { code?: string } | null)?.code;
+      if (code === "not-found" && registeredUserId) {
+        void registerPushToken(registeredUserId);
+        return;
+      }
+      if (!isConnectivityError(error)) {
+        captureServiceError(error, { service: "pushToken", operation: "setWidgetChild" });
+      }
+      const next = WIDGET_CHILD_RETRY_MS[attempt];
+      if (next != null) scheduleWidgetChildWrite(childId, next, attempt + 1);
+      // Derniers essais épuisés (réseau) : un signal, le widget reste figé.
+      else if (isConnectivityError(error)) {
+        captureServiceError(error, { service: "pushToken", operation: "setWidgetChildGaveUp" });
+      }
     });
-  }, 3000);
+  }, delayMs);
 }
