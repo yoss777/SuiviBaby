@@ -364,7 +364,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       return props.lastMealMs ? (
         restBlock("Dernier repas", CAT.meal, props.lastMealMs, mealLate, props.alerts.mealAtMs, 26)
       ) : (
-        <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>Pas encore de repas aujourd'hui</Text>
+        <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>Aucun repas noté</Text>
       );
     }
     return (
@@ -423,7 +423,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // hors session du même type ; pas en petit format).
   const firstName = props.childName ? props.childName.trim().split(/\s+/)[0] : "SuiviBaby";
   const headChip = (label: string, action: string, cat: { tile: string; text: string }) => (
-    <Link key={action} destination={actionUrl(action)}>
+    <Link
+      key={action}
+      destination={actionUrl(action)}
+      modifiers={[
+        accessibilityLabel(
+          action === "walk-start" ? "Démarrer une balade" : label.includes("Nuit") ? "Démarrer la nuit" : "Démarrer une sieste",
+        ),
+      ]}
+    >
       <Text
         modifiers={[
           font({ size: 11, weight: "semibold" }),

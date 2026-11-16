@@ -10,7 +10,7 @@ index 222bdfd..4e802df 100644
 +# (classe interne à Glance). Ne pas renommer ni supprimer.
 +-keep class androidx.glance.appwidget.EmittableAndroidRemoteViews { *; }
 diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
-index 3df9e4a..20b805e 100644
+index 3df9e4a..82679ae 100644
 --- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 +++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetEmittableTree.kt
 @@ -4,6 +4,8 @@ package expo.modules.widgets
@@ -22,7 +22,7 @@ index 3df9e4a..20b805e 100644
  import android.graphics.Color as AndroidColor
  import androidx.compose.ui.unit.DpSize
  import androidx.compose.ui.unit.TextUnit
-@@ -123,10 +125,150 @@ private class WidgetConverterContext(
+@@ -123,10 +125,153 @@ private class WidgetConverterContext(
  internal fun ReadableMap.toPeekRoot(context: Context, source: InteractionSource, size: DpSize): Emittable {
    val converterContext = WidgetConverterContext(context, size)
    return EmittableColumn().also { root ->
@@ -106,9 +106,12 @@ index 3df9e4a..20b805e 100644
 +  val color = stringProp("color")
 +  val fontSize = doubleProp("fontSize")?.toFloat() ?: 28f
 +
-+  // Début arrondi à la minute ; décalage ramené dans [-12 h, +12 h[.
++  // Début tronqué à la minute (l'horloge tronque aussi l'heure courante) :
++  // arrondi, un début à hh:mm:40 affichait « 23h59 » jusqu'à la minute
++  // suivante. Tronqué, l'écart est au plus +1 min, jamais négatif.
++  // Décalage ramené dans [-12 h, +12 h[.
 +  val dayMin = 24 * 60
-+  val startMin = Math.floorMod(Math.round(startMs / 60000.0), dayMin.toLong()).toInt()
++  val startMin = Math.floorMod(Math.floorDiv(startMs, 60000L), dayMin.toLong()).toInt()
 +  var offsetMin = -startMin
 +  if (offsetMin < -12 * 60) offsetMin += dayMin
 +  val sign = if (offsetMin < 0) "-" else "+"
@@ -173,7 +176,7 @@ index 3df9e4a..20b805e 100644
  internal fun createErrorRoot(message: String): Emittable = createErrorText(message)
  
  private fun createErrorText(message: String): EmittableText {
-@@ -152,6 +294,9 @@ private fun ReadableMap.toPeekNodes(converterContext: WidgetConverterContext, so
+@@ -152,6 +297,9 @@ private fun ReadableMap.toPeekNodes(converterContext: WidgetConverterContext, so
      "SpacerView" -> listOf(toPeekSpacer(converterContext))
      "SwitchView" -> listOf(toPeekSwitch(converterContext))
      "TextView" -> listOf(toPeekText(converterContext))
@@ -183,7 +186,7 @@ index 3df9e4a..20b805e 100644
      "Button", "FilledTonalButton", "OutlinedButton", "ElevatedButton", "TextButton" -> listOf(
        toPeekButton(converterContext, source)
      )
-@@ -419,6 +564,19 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
+@@ -419,6 +567,19 @@ private fun ModifierType.toPeekModifier(converterContext: ConverterContext): Gla
      "background" -> asRecord<BackgroundParams>(converterContext)?.color?.toGlanceColorProvider()
        ?.let { GlanceModifier.background(it) }
      "cornerRadius" -> asRecord<CornerRadiusParams>(converterContext)?.let { GlanceModifier.cornerRadius(it.radius.dp) }

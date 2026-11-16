@@ -263,6 +263,13 @@ export default function HomeDashboard() {
   const [data, setData] = useState<DashboardData>(
     initialCache ? { ...emptyData, ...initialCache } : emptyData,
   );
+  // Bébé à qui appartiennent `data` (cache ou réponse du serveur). Juste après
+  // un changement de bébé, `activeChild` a déjà changé mais pas encore les
+  // données : un lien du widget attend, sinon il agissait sur l'ancien bébé.
+  const [dataChildId, setDataChildId] = useState<string | null>(initialCache ? activeChild?.id ?? null : null);
+  // Bébé de la dernière réponse du serveur : ses données ne sont dans `data`
+  // qu'après la fusion (anti-rebond de 50 ms), d'où le relais par l'effet de fusion.
+  const serverChildRef = useRef<string | null>(null);
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
     meals: {
@@ -1139,14 +1146,20 @@ export default function HomeDashboard() {
   // Démarrage en vol : l'événement optimiste n'apparaît dans sommeilEnCours /
   // promenadeEnCours qu'après le prochain rendu. Sans ce verrou, deux appuis
   // rapprochés (ou un lien du widget traité deux fois) créaient deux sessions.
-  const startingRef = useRef<{ sleep: number; walk: number }>({ sleep: 0, walk: 0 });
+  // Rangé par bébé : un démarrage chez un bébé ne bloque pas l'autre.
+  const startingRef = useRef<Record<string, number>>({});
   const START_LOCK_MS = 10_000;
+  const startLocked = (childId: string, kind: "sleep" | "walk") =>
+    Date.now() - (startingRef.current[`${childId}:${kind}`] ?? 0) < START_LOCK_MS;
+  const lockStart = (childId: string, kind: "sleep" | "walk") => {
+    startingRef.current[`${childId}:${kind}`] = Date.now();
+  };
 
   const handleStartSleep = useCallback(
     (isNap: boolean, fromWidget = false) => {
       if (!activeChild?.id || sommeilEnCours) return false;
-      if (Date.now() - startingRef.current.sleep < START_LOCK_MS) return false;
-      startingRef.current.sleep = Date.now();
+      if (startLocked(activeChild.id, "sleep")) return false;
+      lockStart(activeChild.id, "sleep");
       ajouterEvenementOptimistic(activeChild.id, {
         type: "sommeil" as const,
         heureDebut: new Date(),
@@ -1219,8 +1232,8 @@ export default function HomeDashboard() {
   // Promenade start/stop handlers
   const handleStartPromenade = useCallback((fromWidget = false) => {
     if (!activeChild?.id || promenadeEnCours) return false;
-    if (Date.now() - startingRef.current.walk < START_LOCK_MS) return false;
-    startingRef.current.walk = Date.now();
+    if (startLocked(activeChild.id, "walk")) return false;
+    lockStart(activeChild.id, "walk");
     ajouterEvenementOptimistic(activeChild.id, {
       type: "activite" as const,
       typeActivite: "promenade",
@@ -1237,15 +1250,25 @@ export default function HomeDashboard() {
   }, [promenadeEnCours, stopTimedEventWithUndo]);
 
   // Session démarrée depuis le widget : « Annuler » la supprime. Lue au
-  // moment de l'appui sur Annuler (l'événement optimiste a pu recevoir son id).
-  const runningRef = useRef({ sommeilEnCours, promenadeEnCours });
-  runningRef.current = { sommeilEnCours, promenadeEnCours };
+  // moment de l'appui sur Annuler (l'événement optimiste a pu recevoir son id),
+  // mais seulement si c'est bien celle de cet appui : même bébé, marquée
+  // « widget », démarrée à cet instant. Sinon (bébé changé entre-temps) on ne
+  // supprime rien : la session d'un autre bébé ne doit jamais partir.
+  const runningRef = useRef({ childId: activeChild?.id, sommeilEnCours, promenadeEnCours });
+  runningRef.current = { childId: activeChild?.id, sommeilEnCours, promenadeEnCours };
   const undoWidgetStart = useCallback(
-    (kind: "sleep" | "walk") => {
+    (kind: "sleep" | "walk", childId: string, startedAtMs: number) => {
       cancelWidgetBack();
-      const childId = activeChild?.id;
-      const event = kind === "sleep" ? runningRef.current.sommeilEnCours : runningRef.current.promenadeEnCours;
-      if (!childId || !event?.id) return;
+      // Annulé : un nouvel appui sur le widget doit pouvoir redémarrer.
+      startingRef.current[`${childId}:${kind}`] = 0;
+      const running = runningRef.current;
+      const event = kind === "sleep" ? running.sommeilEnCours : running.promenadeEnCours;
+      const sameStart =
+        !!event?.heureDebut && Math.abs(toDate(event.heureDebut).getTime() - startedAtMs) < 60_000;
+      if (running.childId !== childId || !event?.id || event.source !== "widget" || !sameStart) {
+        showToast("Rien à annuler pour ce bébé");
+        return;
+      }
       if (String(event.id).startsWith("__optimistic_")) {
         showToast("Enregistrement en cours, réessayez dans un instant");
         return;
@@ -1259,8 +1282,10 @@ export default function HomeDashboard() {
         scheduleDelete,
       });
     },
+    // cancelWidgetBack (useCallback sans dépendance) et setSoftDeletedIds
+    // (setter d'état) sont stables ; cancelWidgetBack est déclaré plus bas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeChild?.id, scheduleDelete, showToast],
+    [scheduleDelete, showToast],
   );
 
   // Android : après une action lancée depuis le widget, retour à l'écran
@@ -1296,11 +1321,18 @@ export default function HomeDashboard() {
         if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
         else {
           const nap = opts?.nap ?? isNapHour(new Date());
-          if (handleStartSleep(nap, true)) {
+          const childId = activeChild?.id;
+          const startedAt = Date.now();
+          if (childId && handleStartSleep(nap, true)) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            showActionToast(nap ? "Sieste démarrée" : "Nuit démarrée", "Annuler", () => undoWidgetStart("sleep"), 5000);
+            showActionToast(
+              nap ? "Sieste démarrée" : "Nuit démarrée",
+              "Annuler",
+              () => undoWidgetStart("sleep", childId, startedAt),
+              5000,
+            );
             scheduleWidgetBack();
-          }
+          } else if (childId) showToast("Démarrage déjà en cours");
         }
         return;
       }
@@ -1314,10 +1346,14 @@ export default function HomeDashboard() {
       }
       if (action === "walk-start") {
         if (promenadeEnCours) showToast("Balade déjà en cours");
-        else if (handleStartPromenade(true)) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk"), 5000);
-          scheduleWidgetBack();
+        else {
+          const childId = activeChild?.id;
+          const startedAt = Date.now();
+          if (childId && handleStartPromenade(true)) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk", childId, startedAt), 5000);
+            scheduleWidgetBack();
+          } else if (childId) showToast("Démarrage déjà en cours");
         }
         return;
       }
@@ -1394,7 +1430,10 @@ export default function HomeDashboard() {
       data.solides,
     ],
   );
-  useWidgetDeepLink({ ready: isDataLoaded && canManageKnown, open: openFromWidget });
+  useWidgetDeepLink({
+    ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,
+    open: openFromWidget,
+  });
 
   const handleEditPromenadeInSheet = useCallback(() => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
@@ -1484,6 +1523,11 @@ export default function HomeDashboard() {
     };
 
     const cached = getTodayEventsCache(activeChild.id);
+    serverChildRef.current = null;
+    // Même bébé (relance au changement de jour) : ses données restent les
+    // siennes, le lien n'attend pas. Autre bébé sans cache : on attend.
+    const childId = activeChild.id;
+    setDataChildId((prev) => (cached || prev === childId ? childId : null));
 
     // Si on a le cache, l'utiliser immédiatement sans afficher de loading
     if (cached) {
@@ -1540,6 +1584,9 @@ export default function HomeDashboard() {
       activeChild.id,
       (events) => {
         setFirestoreEvents(events);
+        serverChildRef.current = activeChild.id;
+        // Journée vide : rien à fusionner, les données (vides) sont déjà justes.
+        if (events.length === 0) setDataChildId(activeChild.id);
         // Cache du jour tenu à jour (il amorce la fusion au prochain retour
         // sur cet enfant) : seulement les évènements d'aujourd'hui, l'écouteur
         // couvrant aussi hier.
@@ -1587,6 +1634,7 @@ export default function HomeDashboard() {
   useEffect(() => {
     const todayData = buildTodayEventsData(mergedTodayEvents as any[]);
     setData((prev) => ({ ...prev, ...todayData }));
+    if (serverChildRef.current) setDataChildId(serverChildRef.current);
     setSoftDeletedIds((prev) => {
       if (prev.size === 0) return prev;
       const dataIds = new Set((mergedTodayEvents as any[]).map((e: any) => e.id));

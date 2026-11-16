@@ -17,7 +17,13 @@ const { isValidDocId } = require("../shared/validation");
  * Retourne la requête des derniers événements du même type, ou null si
  * l'événement créé n'est pas une session en cours.
  */
-function runningSessionQuery(db, childId, data) {
+// Une session ouverte depuis plus de 48 h est oubliée : elle ne bloque plus
+// un nouveau démarrage. Toutes les sessions de la fenêtre sont lues (index
+// existant childId + type + date) : avec .limit(10), une promenade ouverte
+// derrière dix autres activités n'était pas vue.
+const RUNNING_SESSION_WINDOW_MS = 48 * 3600 * 1000;
+
+function runningSessionQuery(db, childId, data, nowMs = Date.now()) {
   const running = data.heureDebut && !data.heureFin;
   if (!running) return null;
   if (data.type === "sommeil" || (data.type === "activite" && data.typeActivite === "promenade")) {
@@ -25,8 +31,9 @@ function runningSessionQuery(db, childId, data) {
       .collection("events")
       .where("childId", "==", childId)
       .where("type", "==", data.type)
+      .where("date", ">=", admin.firestore.Timestamp.fromMillis(nowMs - RUNNING_SESSION_WINDOW_MS))
       .orderBy("date", "desc")
-      .limit(10);
+      .limit(500);
   }
   return null;
 }

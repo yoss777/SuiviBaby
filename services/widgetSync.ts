@@ -98,14 +98,16 @@ function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps): void {
  * arrière-plan). Pas notées comme écriture de l'app ; la prochaine écriture
  * de l'app repart d'une clé vide (contenu jamais ignoré comme « identique »).
  */
-export function writeServerWidgetProps(props: NowWidgetProps): void {
+export function writeServerWidgetProps(props: NowWidgetProps): boolean {
   const widget = getWidget();
-  if (!widget?.updateTimeline || props.loading) return;
+  if (!widget?.updateTimeline || props.loading) return false;
   try {
     writeIosTimeline(widget, props);
     lastKey = "";
+    return true;
   } catch (error) {
     reportOnce(error, "serverTimeline");
+    return false;
   }
 }
 

@@ -139,6 +139,12 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const h = new Date(Date.now()).getHours();
     return h >= 8 && h < 19;
   })();
+  // Prochaine bascule Sieste/Nuit (8:00 ou 19:00 locale).
+  const nextNapSwitch = (fromMs: number) => {
+    const d = new Date(fromMs);
+    const at = (h: number, plusDay = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + plusDay, h).getTime();
+    return [at(8), at(19), at(8, 1)].find((t) => t > fromMs) ?? at(8, 1);
+  };
   const ACTION_SAY = {
     "sleep-start": napNow ? "Démarrer une sieste" : "Démarrer la nuit",
     "sleep-stop": "Arrêter le sommeil",
@@ -417,14 +423,16 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // ----- Zone « Maintenant » -----
   const restZone = () => {
     const h = zoneH - bandH;
+    // Deux blocs dès qu'un repas OU un change est connu (comme l'iPhone) : sans
+    // repas noté, le dernier change restait masqué.
+    if (restDual) return restDualZone(h);
     if (!props.lastMealMs) {
       return (
         <Column verticalAlignment="center" modifiers={[size(zoneW, h)]}>
-          {txt("Pas encore de repas aujourd'hui", C.soft, small ? 12 : 14, false, 2)}
+          {txt("Aucun repas noté", C.soft, small ? 12 : 14, false, 2)}
         </Column>
       );
     }
-    if (restDual) return restDualZone(h);
     const big = small || zoneH < 108 ? 28 : 34;
     const sp = small ? 12 : 13;
     const at = `${mealWord && !small ? `${mealWord} ` : "à "}${clock(props.lastMealMs)}`;
@@ -740,6 +748,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ...(restDual && day?.lastDiaperMs ? [day.lastDiaperMs + HOUR] : []),
     props.alerts.mealAtMs ?? 0,
     props.alerts.diaperAtMs ?? 0,
+    // Bascule « ▶ Sieste » / « ▶ Nuit » à 8:00 et 19:00 (même règle que l'app).
+    nextNapSwitch(now),
   ].filter((t) => t > now);
   const nextRefresh = refreshCandidates.length ? Math.min(...refreshCandidates) : null;
   const refresh = nextRefresh && nativeLevel >= 3 ? <RefreshAt atMs={nextRefresh} /> : null;
