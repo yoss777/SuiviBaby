@@ -99,12 +99,43 @@ describe("capacité annoncée au serveur", () => {
     return mod!;
   };
 
-  it("iPhone, tâche enregistrée : 1", async () => {
+  it("iPhone, tâche enregistrée : 2 (données et effacement à distance)", async () => {
     expect(Platform.OS).toBe("ios");
-    expect(await load(() => Promise.resolve()).widgetPushIosCap()).toBe(1);
+    expect(await load(() => Promise.resolve()).widgetPushIosCap()).toBe(2);
   });
 
   it("enregistrement refusé (binaire sans mode d'arrière-plan) : 0", async () => {
     expect(await load(() => Promise.reject(new Error("E_BACKGROUND_REMOTE_NOTIFICATIONS_DISABLED"))).widgetPushIosCap()).toBe(0);
+  });
+});
+
+describe("effacement à distance (« w0 »)", () => {
+  const w0 = (c: string) => ({ t: "w0", c, s: 9_000, p: { v: 1, childName: "" } });
+
+  it("widget qui affiche cet enfant : données vides écrites, enfant oublié", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    expect(await handleWidgetPushIos({ dataString: JSON.stringify(w0("c1")) })).toBe("wipe");
+    expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ childName: "" }));
+    expect((await readWidgetPushIosState()).shownChildId).toBeNull();
+    // Plus rien ne s'applique pour cet enfant ensuite.
+    expect(await handleWidgetPushIos(msg(10_000))).toBe("child");
+  });
+
+  it("enfant affiché inconnu (état perdu) : effacé quand même", async () => {
+    await clearIosWidgetPush();
+    expect(await handleWidgetPushIos(w0("c1"))).toBe("wipe");
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it("autre enfant affiché : rien n'est effacé", async () => {
+    await noteIosAppSnapshot("c2", 1_000);
+    expect(await handleWidgetPushIos(w0("c1"))).toBe("child");
+    expect(mockWrite).not.toHaveBeenCalled();
+  });
+
+  it("appliqué même app ouverte (l'effacement prime)", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    setAppState("active");
+    expect(await handleWidgetPushIos(w0("c1"))).toBe("wipe");
   });
 });

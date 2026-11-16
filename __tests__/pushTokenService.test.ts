@@ -66,6 +66,15 @@ describe("registerPushToken", () => {
     expect(data).not.toHaveProperty("registeredAt");
   });
 
+  it("jeton repris d'un autre compte : l'enfant du widget de l'ancien compte est retiré", async () => {
+    permission("granted");
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0"); // aucun enfant voulu
+    mocked(getDoc).mockRejectedValue(Object.assign(new Error("denied"), { code: "permission-denied" }));
+    await registerPushToken("u2");
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ userId: "u2", widgetChildId: "DELETE_FIELD" });
+  });
+
   it("jeton repris d'un autre compte (doc illisible) : réglage reposé", async () => {
     permission("granted");
     mocked(getDoc).mockRejectedValue(Object.assign(new Error("denied"), { code: "permission-denied" }));

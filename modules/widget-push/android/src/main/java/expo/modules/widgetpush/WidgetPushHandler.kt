@@ -25,12 +25,15 @@ object WidgetPushHandler {
   const val LOG_KEY = "__sb_widget_push_log"
   private const val LOG_MAX = 20
 
+  /** Types de messages du widget : « w1 » (données), « w0 » (effacement). */
+  private val TYPES = setOf("w1", "w0")
+
   /** Le message est-il destiné au widget ? (sans dépendre d'un JSON valide) */
   fun isWidgetMessage(data: Map<String, String>): Boolean {
-    if (data["t"] == "w1") return true
+    if (data["t"] in TYPES) return true
     val body = data["body"] ?: return false
-    return runCatching { JSONObject(body).optString("t") == "w1" }
-      .getOrElse { Regex("\"t\"\\s*:\\s*\"w1\"").containsMatchIn(body) }
+    return runCatching { JSONObject(body).optString("t") in TYPES }
+      .getOrElse { Regex("\"t\"\\s*:\\s*\"w[01]\"").containsMatchIn(body) }
   }
 
   /** Message du widget, ou null : `body` JSON (Expo Push), sinon données à plat. */
@@ -39,7 +42,7 @@ object WidgetPushHandler {
     val msg = body ?: if (data["t"] != null) JSONObject().apply {
       data.forEach { (k, v) -> put(k, v) }
     } else null
-    return msg?.takeIf { it.optString("t") == "w1" }
+    return msg?.takeIf { it.optString("t") in TYPES }
   }
 
   /** Données du widget dans le message (objet, ou chaîne JSON à plat). */
@@ -53,6 +56,22 @@ object WidgetPushHandler {
     val childId = msg.optString("c").ifEmpty { null }
     val seq = msg.optLong("s", 0L)
     val p = props(msg)
+    if (msg.optString("t") == "w0") {
+      // Effacement : données vides à la place, enfant oublié (plus rien ne
+      // s'applique pour lui avant la prochaine écriture de l'app).
+      val outcome = WidgetPushGuards.decideWipe(childId, prefs.getString(CHILD_KEY, null))
+      if (outcome == WidgetPushOutcome.WIPED) {
+        prefs.edit()
+          .putString(PROPS_KEY, (p ?: emptyProps(receivedAtMs)).toString())
+          .remove(CHILD_KEY)
+          .remove(SEQ_KEY)
+          .commit()
+        requestRedraw(context)
+      }
+      appendLog(prefs, receivedAtMs, seq, outcome)
+      Log.i(TAG, "w0 -> ${outcome.code}")
+      return true
+    }
     val outcome = WidgetPushGuards.decide(
       childId = childId,
       seq = seq,
@@ -103,6 +122,22 @@ object WidgetPushHandler {
   }
 
   /** Journal circulaire (mesure de latence, E6) : aucune donnée personnelle. */
+  /**
+   * Données vides mais valides (le widget lit `alerts`, `lives`, `recent` sans
+   * garde) : repli si un « w0 » arrivait sans données. Même forme que
+   * EMPTY_NOW_WIDGET (functions/shared/widget).
+   */
+  private fun emptyProps(nowMs: Long): JSONObject = JSONObject()
+    .put("v", 1)
+    .put("childName", "")
+    .put("lives", JSONArray())
+    .put("recent", JSONArray())
+    .put("alerts", JSONObject())
+    .put("canWrite", true)
+    .put("isPremium", false)
+    .put("dayStartMs", 0)
+    .put("generatedAtMs", nowMs)
+
   private fun appendLog(prefs: android.content.SharedPreferences, receivedAtMs: Long, seq: Long, outcome: WidgetPushOutcome) {
     val log = runCatching { JSONArray(prefs.getString(LOG_KEY, "[]")) }.getOrDefault(JSONArray())
     log.put(JSONObject().put("r", receivedAtMs).put("s", seq).put("o", outcome.code))

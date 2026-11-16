@@ -27,6 +27,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PortalProvider } from "@gorhom/portal";
 import { GlobalSheetManager } from "@/components/ui/GlobalSheetManager";
 import { InvitationListener } from "@/components/ui/InvitationListener";
+import { WidgetOrphanGuard } from "@/components/widget/WidgetOrphanGuard";
 import { AppUpdateManager } from "@/components/ui/AppUpdateManager";
 
 import { setupNotificationHandler } from "@/services/localNotificationService";
@@ -132,6 +133,7 @@ function RootLayout() {
       <AppNavigation />
       <GlobalSheetManager />
       <InvitationListener />
+      <WidgetOrphanGuard />
       <AppUpdateManager />
     </AppProviders>
   );

@@ -243,6 +243,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // être finie ailleurs sans qu'on le sache ; on dit de quand date l'info.
   const STALE_LIVE_MS = 2 * HOUR;
   const generatedAt = props.generatedAtMs ?? 0;
+  const EXPIRE_MS = 24 * HOUR;
   // Données vieilles de plus de 2 h : « màj HH:MM » ; avec une session en cours,
   // le chrono passe en gris (« à vérifier ») : elle a pu finir ailleurs.
   const dataStale = generatedAt > 0 && now - generatedAt > STALE_LIVE_MS;
@@ -749,6 +750,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ...(restDual && day?.lastDiaperMs ? [day.lastDiaperMs + HOUR] : []),
     props.alerts.mealAtMs ?? 0,
     props.alerts.diaperAtMs ?? 0,
+    // Expiration à 24 h : widget masqué (voir plus bas).
+    ...(generatedAt > 0 ? [generatedAt + EXPIRE_MS + 60_000] : []),
     // Bascule « ▶ Sieste » / « ▶ Nuit » à 8:00 et 19:00 (même règle que l'app).
     nextNapSwitch(now),
   ].filter((t) => t > now);
@@ -838,6 +841,22 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   })();
 
   const container = [fillMaxSize(), background(C.bg), cornerRadius(20), paddingAll(PAD), a11y];
+
+  // Données de plus de 24 h (membre retiré du foyer, consentement retiré, app
+  // plus ouverte) : ni prénom ni données, seulement une invitation à ouvrir
+  // l'app. Redessin programmé à l'heure dite (RefreshAt), comme l'iPhone.
+  if (generatedAt > 0 && now - generatedAt > EXPIRE_MS) {
+    const msg = "Ouvrez SuiviBaby pour mettre à jour";
+    return (
+      <Column
+        modifiers={[fillMaxSize(), background(C.bg), cornerRadius(20), paddingAll(PAD), semantics({ contentDescription: `SuiviBaby. ${msg}` })]}
+      >
+        {txt("SuiviBaby", C.strong, 14, true)}
+        {gap(8)}
+        {txt(msg, C.soft, small ? 12 : 14, false, 2)}
+      </Column>
+    );
+  }
 
   if (small) {
     return (

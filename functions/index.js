@@ -106,3 +106,7 @@ exports.photoRefToPath = sharedPhotos.photoRefToPath;
 const widgetFanout = require("./src/widget/fanout");
 exports.onWidgetEventWrite = widgetFanout.onWidgetEventWrite;
 exports.onWidgetLiveWrite = widgetFanout.onWidgetLiveWrite;
+// Effacement à distance du widget (membre retiré, consentement retiré).
+const widgetWipe = require("./src/widget/wipe");
+exports.onWidgetAccessRemoved = widgetWipe.onWidgetAccessRemoved;
+exports.onWidgetConsentChanged = widgetWipe.onWidgetConsentChanged;

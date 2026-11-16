@@ -13,6 +13,7 @@ import {
   getDocs,
   query,
   setDoc,
+  deleteField,
   Timestamp,
   updateDoc,
   where,
@@ -47,9 +48,10 @@ let notificationsGranted = false;
  * Capacité « widget temps réel » de cette version de l'app, lue par le
  * serveur avant d'envoyer les données du widget (plan-temps-reel.md, E3) :
  * 1 = récepteur natif Android présent, ou tâche d'arrière-plan iPhone
- * enregistrée (E7, option 1 : notification silencieuse, livraison au mieux).
+ * enregistrée (E7, option 1 : notification silencieuse, livraison au mieux) ;
+ * 2 = comprend aussi l'effacement à distance (« w0 »).
  */
-const widgetCap = (): Promise<number> => (Platform.OS === "android" ? Promise.resolve(1) : widgetPushIosCap());
+const widgetCap = (): Promise<number> => (Platform.OS === "android" ? Promise.resolve(2) : widgetPushIosCap());
 
 function deviceTimeZone(): string | null {
   try {
@@ -157,8 +159,14 @@ export async function registerPushToken(userId: string): Promise<void> {
         // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
         ...(await linkKeyField()),
         widgetPush: true,
-        // Enfant affiché par le widget, s'il est déjà connu (sinon posé par setWidgetChild).
-        ...(desiredWidgetChildId ? { widgetChildId: desiredWidgetChildId } : {}),
+        // Enfant affiché par le widget, s'il est déjà connu (sinon posé par
+        // setWidgetChild). Jeton repris d'un autre compte : l'enfant de l'ancien
+        // compte est retiré (sinon le serveur continuait à lui écrire ce bébé).
+        ...(desiredWidgetChildId
+          ? { widgetChildId: desiredWidgetChildId }
+          : ownExisting
+            ? {}
+            : { widgetChildId: deleteField() }),
       },
       { merge: true },
     );

@@ -11,10 +11,22 @@ enum class WidgetPushOutcome(val code: String) {
   STALE_SEQ("seq"),
   OLDER_THAN_APP("app"),
   INVALID("invalid"),
+  WIPED("wipe"),
   ERROR("err"),
 }
 
 object WidgetPushGuards {
+  /**
+   * Message « w0 » (effacement à distance : membre retiré, consentement ou
+   * compte supprimé) : appliqué seulement si le widget affiche cet enfant.
+   * Jamais refusé au premier plan ni pour une séquence : l'effacement prime.
+   */
+  fun decideWipe(childId: String?, shownChildId: String?): WidgetPushOutcome {
+    if (childId.isNullOrEmpty()) return WidgetPushOutcome.INVALID
+    if (shownChildId.isNullOrEmpty() || shownChildId != childId) return WidgetPushOutcome.OTHER_CHILD
+    return WidgetPushOutcome.WIPED
+  }
+
   /**
    * @param childId enfant du message (`c`)
    * @param seq horodatage serveur de la lecture (`s`, ms)
