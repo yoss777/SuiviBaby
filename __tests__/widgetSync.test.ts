@@ -201,6 +201,12 @@ describe("données pas encore chargées au lancement", () => {
 
 
 describe("timeline iPhone (durées à la minute)", () => {
+  it("une entrée juste après 24 h : le widget se masque de lui-même (données expirées)", () => {
+    const now = 1_000_000_000_000;
+    const dates = widgetTimelineDates(props({ generatedAtMs: now }), now);
+    expect(dates).toContain(now + 24 * 3600_000 + 60_000);
+  });
+
   it("une entrée par minute pendant 1 h, puis toutes les 5 min jusqu'à 4 h, alignées sur le début de la session", () => {
     const now = 1_000_000_000_000;
     const start = now - 20_000; // sieste lancée il y a 20 s
@@ -211,7 +217,9 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(dates[0]).toBe(now);
     expect(dates).toContain(now + 60 * 60_000);
     expect(dates).toContain(now + 65 * 60_000);
-    expect(dates[dates.length - 1]).toBe(now + 4 * 3600_000);
+    expect(dates).toContain(now + 4 * 3600_000);
+    // Puis la seule entrée d'expiration (24 h après la génération des données).
+    expect(dates.filter((d) => d > now + 4 * 3600_000)).toHaveLength(1);
     expect(dates).toContain(start + 60_000);
     expect(new Set(dates).size).toBe(dates.length);
     expect(dates).toContain(start + 2 * 60_000);

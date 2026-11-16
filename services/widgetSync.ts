@@ -35,6 +35,10 @@ export function widgetTimelineDates(props: NowWidgetProps, now = Date.now()): nu
   const dates = new Set<number>([now]);
   for (let k = 1; k <= 60; k++) dates.add(now + k * 60_000);
   for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
+  // Expiration à 24 h (widget masqué, BebeMaintenant.ios.tsx) : une entrée
+  // juste après, sans quoi le widget resterait sur la dernière entrée.
+  const expiry = (props.generatedAtMs ?? 0) + 24 * 3600_000 + 60_000;
+  if (props.generatedAtMs && expiry > now) dates.add(expiry);
   // Passage exact à chaque minute d'une session en cours (« 0 min » → « 1 min »).
   for (const l of props.lives ?? []) {
     if (l.kind === "nursing") continue;

@@ -145,6 +145,34 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     `${labelOf(l)} en cours${l.side ? `, sein ${l.side === "G" ? "gauche" : "droit"}` : ""}, ${l.sinceLabel}${l.pausedAtMs != null ? ", en pause" : ""}`;
   const liveA11y = lives.map(a11yOf).join(". ");
 
+  // Données de plus de 24 h (membre retiré du foyer, consentement retiré,
+  // app plus ouverte) : ni prénom ni données, seulement une invitation à
+  // ouvrir l'app. Décidé par le widget à l'heure dite (entrée de timeline
+  // préparée, services/widgetSync.ts) : garanti sans réseau ni notification.
+  if (generatedAt > 0 && now - generatedAt > 24 * 3600 * 1000) {
+    const msg = "Ouvrez SuiviBaby pour mettre à jour";
+    if (family === "accessoryInline") return <Text modifiers={[widgetURL(homeUrl)]}>SuiviBaby</Text>;
+    if (family === "accessoryRectangular" || family === "accessoryCircular") {
+      return (
+        <VStack alignment="leading" spacing={2} modifiers={[widgetURL(homeUrl)]}>
+          <Text modifiers={[font({ size: 13, weight: "semibold" })]}>SuiviBaby</Text>
+          {family === "accessoryRectangular" ? <Text modifiers={[font({ size: 12 })]}>{msg}</Text> : null}
+        </VStack>
+      );
+    }
+    return (
+      <VStack
+        alignment="leading"
+        spacing={6}
+        modifiers={[bg, widgetURL(homeUrl), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" }), accessibilityLabel(`SuiviBaby. ${msg}`)]}
+      >
+        <Text modifiers={[font({ size: 13, weight: "bold" }), foregroundStyle(C.strong)]}>SuiviBaby</Text>
+        <Spacer />
+        <Text modifiers={[font({ size: 14 }), foregroundStyle(C.soft)]}>{msg}</Text>
+      </VStack>
+    );
+  }
+
   // ----- Écran verrouillé -----
   if (family === "accessoryInline") {
     return live ? (

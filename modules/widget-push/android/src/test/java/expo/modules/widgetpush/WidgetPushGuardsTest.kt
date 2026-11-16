@@ -56,4 +56,11 @@ class WidgetPushGuardsTest {
     assertEquals(false, WidgetPushHandler.isWidgetMessage(mapOf("body" to """{"type":"reminder"}""")))
     assertEquals(false, WidgetPushHandler.isWidgetMessage(mapOf("title" to "Rappel")))
   }
+
+  @Test fun wipesOnlyTheShownChild() {
+    assertEquals(WidgetPushOutcome.WIPED, WidgetPushGuards.decideWipe("c1", "c1"))
+    assertEquals(WidgetPushOutcome.OTHER_CHILD, WidgetPushGuards.decideWipe("c1", "c2"))
+    assertEquals(WidgetPushOutcome.OTHER_CHILD, WidgetPushGuards.decideWipe("c1", null))
+    assertEquals(WidgetPushOutcome.INVALID, WidgetPushGuards.decideWipe(null, "c1"))
+  }
 }

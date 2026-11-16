@@ -5,6 +5,7 @@ const { writeAdminAudit } = require("../admin/audit");
 const { purgeUserData } = require("./purgeUser");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
 const { deleteDocsByFieldBatched } = require("../shared/batch");
+const { wipeWidgetForUser } = require("../widget/wipe");
 const { checkRateLimit } = require("../shared/rateLimit");
 const { newResend } = require("../shared/runtime");
 const { APPLE_SECRETS } = require("../shared/secrets");
@@ -102,6 +103,8 @@ const deleteUserAccount = onCall(
     await checkRateLimit(db, uid, "delete", 1);
 
     try {
+      // Widget vidé sur ses appareils AVANT que les jetons disparaissent.
+      await wipeWidgetForUser(db, targetUid, null);
       await purgeUserData(db, targetUid);
     } catch (e) {
       console.error(`deleteUserAccount: purge failed for uid=${targetUid}`, e?.message ?? e);
@@ -224,7 +227,9 @@ const requestAccountDeletion = onCall(
     // mergeFields: replaces the whole map and works when users/{uid} is missing.
     await db.doc(`users/${uid}`).set({ pendingDeletion }, { mergeFields: ["pendingDeletion"] });
 
-    // No push for an account that is leaving.
+    // No push for an account that is leaving — sauf l'effacement du widget,
+    // envoyé avant de supprimer les jetons (prénom et données du bébé).
+    await wipeWidgetForUser(db, uid, null);
     await deleteDocsByFieldBatched(db, "device_tokens", "userId", uid);
 
     // Une erreur d'e-mail n'annule pas la demande, mais elle est signalée au

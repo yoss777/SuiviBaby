@@ -9,12 +9,18 @@ import { AppState, Platform } from "react-native";
 
 import { writeServerWidgetProps } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
-import { decideWidgetPush, noteIosAppliedSeq, readWidgetPushIosState, type WidgetPushDecision } from "@/services/widgetPushIosState";
-import type { NowWidgetProps } from "@/utils/widgetSnapshot";
+import {
+  clearIosWidgetPush,
+  decideWidgetPush,
+  noteIosAppliedSeq,
+  readWidgetPushIosState,
+  type WidgetPushDecision,
+} from "@/services/widgetPushIosState";
+import { EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps } from "@/utils/widgetSnapshot";
 
 export const WIDGET_PUSH_IOS_TASK = "suivibaby-widget-push";
 
-type W1 = { t: "w1"; c?: string; s?: number; p?: NowWidgetProps & { v?: number } };
+type W1 = { t: "w1" | "w0"; c?: string; s?: number; p?: NowWidgetProps & { v?: number } };
 
 /** Le message « w1 », quelle que soit sa place dans les données reçues. */
 export function readW1(data: unknown): W1 | null {
@@ -31,16 +37,25 @@ export function readW1(data: unknown): W1 | null {
   if (d && typeof d === "object") seen.push(d, tryParse(d.dataString), tryParse(d.body), tryParse(d.data));
   for (const c of seen) {
     const o = tryParse(c) as W1 | null;
-    if (o && typeof o === "object" && o.t === "w1") return o;
+    if (o && typeof o === "object" && (o.t === "w1" || o.t === "w0")) return o;
   }
   return null;
 }
 
 /** Applique un message serveur au widget si les gardes le permettent. */
-export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDecision | "write"> {
+export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDecision | "write" | "wipe"> {
   const msg = readW1(data);
   if (!msg) return "invalid";
   const state = await readWidgetPushIosState();
+  // Effacement à distance (membre retiré, consentement ou compte supprimé) :
+  // si le widget affiche cet enfant, données vides et enfant oublié. Jamais
+  // refusé au premier plan ni pour une séquence : l'effacement prime.
+  if (msg.t === "w0") {
+    if (!msg.c || state.shownChildId !== msg.c) return "child";
+    if (!writeServerWidgetProps({ ...EMPTY_NOW_WIDGET_NATIVE, ...(msg.p ?? {}) } as NowWidgetProps)) return "write";
+    await clearIosWidgetPush();
+    return "wipe";
+  }
   const decision = decideWidgetPush({
     childId: msg.c,
     seq: Number(msg.s),
@@ -64,7 +79,8 @@ let readyPromise: Promise<boolean> = Promise.resolve(false);
 
 /** Capacité « widget temps réel » de l'iPhone : 1 si la tâche est enregistrée. */
 export async function widgetPushIosCap(): Promise<number> {
-  return (await readyPromise) ? 1 : 0;
+  // 2 : données (« w1 ») et effacement à distance (« w0 »).
+  return (await readyPromise) ? 2 : 0;
 }
 
 if (Platform.OS === "ios") {
@@ -82,7 +98,7 @@ if (Platform.OS === "ios") {
       }
       try {
         const decision = await handleWidgetPushIos(data);
-        if (decision === "ok") return BackgroundNotificationResult.NewData;
+        if (decision === "ok" || decision === "wipe") return BackgroundNotificationResult.NewData;
         return decision === "write" ? BackgroundNotificationResult.Failed : BackgroundNotificationResult.NoData;
       } catch (e) {
         captureServiceError(e, { service: "widgetPushIos", operation: "handle" });
