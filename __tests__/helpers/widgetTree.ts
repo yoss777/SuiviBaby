@@ -29,7 +29,7 @@ export function compileWidget(src: string, platform: "ios" | "android"): (props:
   return new Function(...names, `return (${src});`)(...names.map((n) => scope[n])) as (props: unknown, env: unknown) => El;
 }
 
-export type WidgetDump = { texts: string[]; links: string[]; a11y: string[]; types: string[] };
+export type WidgetDump = { texts: string[]; links: string[]; a11y: string[]; types: string[]; nativeTimers: number };
 
 function fromModifiers(mods: unknown, acc: WidgetDump) {
   if (!Array.isArray(mods)) return;
@@ -38,7 +38,7 @@ function fromModifiers(mods: unknown, acc: WidgetDump) {
   for (const m of s.matchAll(/"(?:url)":"((?:[^"\\]|\\.)*)"/g)) acc.links.push(JSON.parse(`"${m[1]}"`));
 }
 
-export function dumpWidget(node: unknown, acc: WidgetDump = { texts: [], links: [], a11y: [], types: [] }): WidgetDump {
+export function dumpWidget(node: unknown, acc: WidgetDump = { texts: [], links: [], a11y: [], types: [], nativeTimers: 0 }): WidgetDump {
   if (node == null || typeof node === "boolean") return acc;
   if (typeof node === "string" || typeof node === "number") {
     acc.texts.push(String(node));
@@ -54,6 +54,8 @@ export function dumpWidget(node: unknown, acc: WidgetDump = { texts: [], links: 
   if (typeof p.destination === "string") acc.links.push(p.destination);
   if (typeof p.label === "string") acc.texts.push(p.label);
   if (typeof p.text === "string") acc.texts.push(p.text);
+  // Compteur natif d'iOS (Text timerInterval) : défile seul, jamais figé.
+  if (p.timerInterval) acc.nativeTimers += 1;
   fromModifiers(p.modifiers, acc);
   dumpWidget(p.children, acc);
   return acc;

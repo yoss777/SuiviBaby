@@ -20,7 +20,9 @@ class WidgetPushModule : Module() {
       prefs.edit()
         .putString(WidgetPushHandler.CHILD_KEY, childId)
         .putLong(WidgetPushHandler.APP_AT_KEY, System.currentTimeMillis())
-        .apply()
+        // commit (synchrone, comme le récepteur) : un message serveur arrivé
+        // juste après ne voit jamais un état à moitié écrit.
+        .commit()
     }
 
     // Déconnexion : le récepteur oublie l'enfant, la séquence et l'heure de
@@ -30,7 +32,7 @@ class WidgetPushModule : Module() {
         .remove(WidgetPushHandler.CHILD_KEY)
         .remove(WidgetPushHandler.SEQ_KEY)
         .remove(WidgetPushHandler.APP_AT_KEY)
-        .apply()
+        .commit()
     }
 
     // Après une action lancée depuis un bouton du widget : l'app repasse en
