@@ -101,6 +101,16 @@ describe("processScheduledDeletions → purgeUserData (audit A3)", () => {
     expect(docs.has("children/c2/live/nursing")).toBe(false);
   });
 
+  it("enfant partagé : une tétée en cours sans auteur (écriture actuelle) reste avec l'enfant", async () => {
+    // L'app n'écrit plus d'auteur sur live/nursing (seule la mère allaite) :
+    // la tétée en cours appartient au foyer, comme les autres données du bébé.
+    const data = seed();
+    data["children/c2/live/nursing"] = { leftSeconds: 30, rightSeconds: 0, v: 1 };
+    const docs = memoryStore(data);
+    await fns.processScheduledDeletions();
+    expect(docs.has("children/c2/live/nursing")).toBe(true);
+  });
+
   it("keeps the account for a retry, without e-mail, when Auth deletion fails", async () => {
     authApi.deleteUser.mockRejectedValue({ code: "auth/internal-error", message: "boom" });
     const docs = memoryStore(seed());
