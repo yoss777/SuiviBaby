@@ -62,10 +62,10 @@ it("Proche (lecture seule) : ni bouton démarrer/arrêter, tous les liens vers l
 it("données de plus de 24 h : ni prénom ni données, invitation à ouvrir l'app (toutes les familles)", () => {
   for (const family of ["systemSmall", "systemMedium", "systemLarge", "accessoryRectangular", "accessoryInline"]) {
     const d = show({ generatedAtMs: NOW - 25 * H }, family);
-    const text = allText(d);
-    expect(text).not.toContain("Léa");
-    expect(text).not.toContain("repas");
-    expect(d.a11y.join(" ")).not.toContain("Léa");
+    const visible = `${allText(d)} ${d.a11y.join(" ")}`;
+    for (const leak of ["Léa", "Martin", "repas", "rep.", "change", "ch.", "Dernier", "sommeil", "dodo"]) {
+      expect(visible).not.toContain(leak);
+    }
     expect(d.links.every((l) => l === "suivibaby:///baby/home")).toBe(true);
   }
   expect(allText(show({ generatedAtMs: NOW - 25 * H }))).toContain("Ouvrez SuiviBaby pour mettre à jour");
@@ -76,4 +76,10 @@ it("petit format : un seul lien (repas au repos), bande du jour", () => {
   expect(d.links.filter((l) => l.startsWith("suivibaby")).some((l) => l.includes("widget=meal"))).toBe(true);
   expect(allText(d)).toContain("3 rep.");
   expect(allText(d)).toContain("2 ch.");
+});
+
+it("canari : le plugin expo-widgets fournit bien le code source du widget, et il rend un arbre", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  expect(typeof require("@/widgets/BebeMaintenant.ios").default).toBe("string");
+  expect(show().texts.length).toBeGreaterThan(3);
 });

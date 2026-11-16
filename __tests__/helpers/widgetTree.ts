@@ -14,8 +14,16 @@ export function compileWidget(src: string, platform: "ios" | "android"): (props:
   const scope: Record<string, unknown> = {};
   for (const k of Object.keys(ui)) scope[k] = k;
   for (const k of Object.keys(mods)) scope[k] = mods[k];
-  const jsx = (type: unknown, props: Record<string, unknown>) => ({ type: typeof type === "string" ? type : String(type), props: props ?? {} });
+  // Un composant inconnu (non exporté par @expo/ui, renommé) fait échouer le
+  // test clairement au lieu d'un nœud « undefined » silencieux.
+  const jsx = (type: unknown, props: Record<string, unknown>) => {
+    if (type == null) throw new Error("Widget : composant inconnu (non exporté par @expo/ui ?)");
+    return { type: typeof type === "string" ? type : String(type), props: props ?? {} };
+  };
   Object.assign(scope, { _jsx: jsx, _jsxs: jsx, _Fragment: "Fragment" });
+  if (typeof src !== "string") {
+    throw new Error("Widget : le plugin expo-widgets ne fournit plus le code source (transformation changée ?)");
+  }
   const names = Object.keys(scope).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k));
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   return new Function(...names, `return (${src});`)(...names.map((n) => scope[n])) as (props: unknown, env: unknown) => El;

@@ -31,7 +31,8 @@ it("rappel dépassé : « rappel / dépassé » et « rappel · dernier hier à 
     day: { mealsCount: 0, bottleMl: 0, lastMealMs: at(-1, 23, 10), diapersCount: 2, lastDiaperMs: NOW - 3 * H, sleepMinutes: 0 },
   });
   expect(d.texts).toContain("dépassé");
-  expect(allText(d)).toMatch(/rappel · (dernier )?hier à 23:10/);
+  // À 420 dp, le libellé est raccourci pour tenir (lateSub) : texte exact.
+  expect(d.texts).toContain("rappel · hier à 23:10");
 });
 
 it("sieste en cours : liens démarrer/arrêter avec la clé de l'appareil", () => {
@@ -50,10 +51,12 @@ it("Proche (lecture seule) : ni démarrer ni arrêter, liens vers l'Accueil seul
 it("données de plus de 24 h : ni prénom ni données, invitation à ouvrir l'app (grand et petit)", () => {
   for (const size of [{ widthDp: 420, heightDp: 222 }, { widthDp: 200, heightDp: 200 }]) {
     const d = show({ generatedAtMs: NOW - 25 * H }, size);
-    expect(allText(d)).not.toContain("Léa");
-    expect(allText(d)).not.toContain("repas");
+    const visible = `${allText(d)} ${d.a11y.join(" ")}`;
+    for (const leak of ["Léa", "Martin", "repas", "rep.", "change", "ch.", "Dernier", "sommeil", "dodo"]) {
+      expect(visible).not.toContain(leak);
+    }
     expect(allText(d)).toContain("Ouvrez SuiviBaby pour mettre à jour");
-    expect(d.a11y.join(" ")).not.toContain("Léa");
+    expect(d.links.every((l) => l === "suivibaby:///baby/home")).toBe(true);
   }
 });
 

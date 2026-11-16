@@ -64,7 +64,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { useModal } from "@/contexts/ModalContext";
-import { isWidgetLinkKeyValid } from "@/services/widgetLinkKey";
+import { useWidgetActionGate } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
 import { moveAppToBack } from "@/modules/widget-push";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
@@ -1433,49 +1433,14 @@ export default function HomeDashboard() {
       data.solides,
     ],
   );
-  // Démarrer / arrêter une session : fait seulement si le lien porte la clé
-  // de cet appareil (il vient du widget). Sinon (autre app, page web, widget
-  // pas encore à jour) : confirmation. Ouvrir un formulaire n'en demande pas.
-  const runWidgetActionRef = useRef(runWidgetAction);
-  runWidgetActionRef.current = runWidgetAction;
-  // Bébé actif et montage, relus après la vérification (asynchrone) de la clé
-  // et après la confirmation : jamais d'action sur un autre bébé.
-  const activeChildIdRef = useRef(activeChild?.id);
-  activeChildIdRef.current = activeChild?.id;
-  const homeMountedRef = useRef(true);
-  useEffect(() => {
-    homeMountedRef.current = true;
-    return () => {
-      homeMountedRef.current = false;
-    };
-  }, []);
-  const openFromWidget = useCallback(
-    (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string }) => {
-      const CONFIRM: Partial<Record<WidgetDeepLinkAction, string>> = {
-        "sleep-start": opts?.nap === false ? "Démarrer la nuit ?" : "Démarrer une sieste ?",
-        "sleep-stop": "Arrêter le sommeil en cours ?",
-        "walk-start": "Démarrer une balade ?",
-        "walk-stop": "Arrêter la balade en cours ?",
-        "nursing-stop": "Arrêter la tétée en cours ?",
-      };
-      const title = CONFIRM[action];
-      const childId = activeChildIdRef.current;
-      const run = () => {
-        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
-        runWidgetActionRef.current(action, opts?.nap === undefined ? undefined : { nap: opts.nap });
-      };
-      if (!title || !canManageContent) {
-        run();
-        return;
-      }
-      void isWidgetLinkKeyValid(opts?.linkKey).then((ok) => {
-        if (!homeMountedRef.current || activeChildIdRef.current !== childId) return;
-        if (ok) run();
-        else showConfirm(title, "Ce lien ne vient pas de votre widget SuiviBaby.", run);
-      });
-    },
-    [canManageContent, showConfirm],
-  );
+  // Démarrer / arrêter depuis un lien : clé de l'appareil, sinon confirmation
+  // (hooks/useWidgetActionGate.ts, testé à part).
+  const openFromWidget = useWidgetActionGate({
+    run: runWidgetAction,
+    canManageContent,
+    activeChildId: activeChild?.id,
+    confirm: showConfirm,
+  });
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,
     open: openFromWidget,
