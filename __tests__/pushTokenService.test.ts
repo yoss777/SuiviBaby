@@ -137,6 +137,24 @@ describe("setWidgetChild", () => {
     expect(mocked(updateDoc).mock.calls[1][1]).toEqual({ widgetChildId: "c5" });
   });
 
+  it("enfant changé pendant une écriture en échec : le nouvel enfant est bien écrit", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0");
+    await registerPushToken("u1");
+    let rejectA: (e: unknown) => void = () => {};
+    mocked(updateDoc).mockImplementationOnce(() => new Promise((_r, rej) => (rejectA = rej)));
+    setWidgetChild("A");
+    jest.advanceTimersByTime(3000);
+    setWidgetChild("B");
+    rejectA(Object.assign(new Error("offline"), { code: "unavailable" }));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    mocked(updateDoc).mockResolvedValue(undefined);
+    jest.advanceTimersByTime(3000);
+    expect(mocked(updateDoc).mock.calls.at(-1)[1]).toEqual({ widgetChildId: "B" });
+  });
+
   it("jeton supprimé côté serveur (not-found) : réenregistré avec l'enfant voulu", async () => {
     permission("granted");
     mocked(getDoc).mockResolvedValue({ exists: () => false });

@@ -304,7 +304,8 @@ async function fanOutWidget(db, childId, { urgent }) {
       console.error("widgetFanout: member failed", { childId, error: error?.message ?? String(error) });
     }
   }
-  if (messages.length === 0) return log("no-device");
+  // Aucun message parce que des membres ont échoué : une vraie panne.
+  if (messages.length === 0) return log(stats.errors > 0 ? "failed" : "no-device");
 
   const { delivered, failed, dead, chunkErrors, errorsByCode } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
   if (errorsByCode && Object.keys(errorsByCode).length > 0) stats.errorsByCode = errorsByCode;

@@ -166,6 +166,14 @@ export async function registerPushToken(userId: string): Promise<void> {
  * À appeler au signOut.
  */
 export async function removePushTokens(userId: string): Promise<void> {
+  // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
+  // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
+  // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
+  if (widgetChildTimer) clearTimeout(widgetChildTimer);
+  widgetChildTimer = null;
+  lastWidgetChildId = null;
+  desiredWidgetChildId = null;
+  registeredUserId = null;
   try {
     const q = query(
       collection(db, COLLECTION),
@@ -174,14 +182,6 @@ export async function removePushTokens(userId: string): Promise<void> {
     const snapshot = await getDocs(q);
 
     await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
-    // Docs supprimés : le prochain enregistrement doit réécrire l'enfant du widget.
-    if (widgetChildTimer) clearTimeout(widgetChildTimer);
-    widgetChildTimer = null;
-    lastWidgetChildId = null;
-    desiredWidgetChildId = null;
-    registeredUserId = null;
-    if (widgetChildTimer) clearTimeout(widgetChildTimer);
-    widgetChildTimer = null;
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
@@ -266,6 +266,9 @@ function scheduleWidgetChildWrite(childId: string, delayMs: number, attempt: num
     if (!docId || childId === lastWidgetChildId || childId !== desiredWidgetChildId) return;
     lastWidgetChildId = childId;
     updateDoc(doc(db, COLLECTION, docId), { widgetChildId: childId }).catch((error) => {
+      // Un autre enfant est voulu entre-temps (ou déconnexion) : son écriture
+      // est déjà planifiée ; ne pas annuler son minuteur pour réessayer celui-ci.
+      if (childId !== desiredWidgetChildId) return;
       lastWidgetChildId = null;
       const code = (error as { code?: string } | null)?.code;
       if (code === "not-found" && registeredUserId) {
@@ -277,6 +280,10 @@ function scheduleWidgetChildWrite(childId: string, delayMs: number, attempt: num
       }
       const next = WIDGET_CHILD_RETRY_MS[attempt];
       if (next != null) scheduleWidgetChildWrite(childId, next, attempt + 1);
+      // Derniers essais épuisés (réseau) : un signal, le widget reste figé.
+      else if (isConnectivityError(error)) {
+        captureServiceError(error, { service: "pushToken", operation: "setWidgetChildGaveUp" });
+      }
     });
   }, delayMs);
 }
