@@ -1524,7 +1524,10 @@ export default function HomeDashboard() {
 
     const cached = getTodayEventsCache(activeChild.id);
     serverChildRef.current = null;
-    setDataChildId(cached ? activeChild.id : null);
+    // Même bébé (relance au changement de jour) : ses données restent les
+    // siennes, le lien n'attend pas. Autre bébé sans cache : on attend.
+    const childId = activeChild.id;
+    setDataChildId((prev) => (cached || prev === childId ? childId : null));
 
     // Si on a le cache, l'utiliser immédiatement sans afficher de loading
     if (cached) {
