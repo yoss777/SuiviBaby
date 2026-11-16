@@ -214,7 +214,11 @@ function usableNursing(state, now) {
   if (!state || typeof state !== "object") return null;
   const left = Number(state.leftSeconds) || 0;
   const right = Number(state.rightSeconds) || 0;
-  const side = state.runningSide === "left" || state.runningSide === "right" ? state.runningSide : null;
+  const runningSince = typeof state.runningSince === "number" ? state.runningSince : null;
+  // Côté « en cours » sans heure de reprise (document partiel) : traité comme
+  // en pause. Sinon le chrono partait de 1970 (« 56 ans »).
+  const side =
+    (state.runningSide === "left" || state.runningSide === "right") && runningSince != null ? state.runningSide : null;
   if (left <= 0 && right <= 0 && !side) return null;
   const ttl = side ? NURSING_RUNNING_TTL_MS : NURSING_PAUSED_TTL_MS;
   if (typeof state.updatedAt !== "number" || now - state.updatedAt > ttl) return null;
@@ -222,7 +226,7 @@ function usableNursing(state, now) {
     leftSeconds: left,
     rightSeconds: right,
     runningSide: side,
-    runningSince: typeof state.runningSince === "number" ? state.runningSince : null,
+    runningSince,
     startedAt: typeof state.startedAt === "number" ? state.startedAt : null,
     updatedAt: state.updatedAt,
   };

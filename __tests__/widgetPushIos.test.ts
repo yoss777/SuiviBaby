@@ -3,9 +3,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, Platform } from "react-native";
 
-const mockWrite = jest.fn();
+const mockWrite = jest.fn((_p: unknown) => true);
 jest.mock("@/services/widgetSync", () => ({
-  writeServerWidgetProps: (...a: unknown[]) => mockWrite(...a),
+  writeServerWidgetProps: (p: unknown) => mockWrite(p),
 }));
 
 import { handleWidgetPushIos, readW1 } from "@/services/widgetPushIos";
@@ -63,6 +63,14 @@ it("arrière-plan, bon enfant, plus récent que l'app : écrit puis retient la s
   // Même message rejoué : refusé.
   expect(await handleWidgetPushIos({ dataString: JSON.stringify(msg(5_000)) })).toBe("seq");
   expect(mockWrite).toHaveBeenCalledTimes(1);
+});
+
+it("écriture ratée : la séquence n'avance pas, le message suivant pourra s'appliquer", async () => {
+  await noteIosAppSnapshot("c1", 1_000);
+  mockWrite.mockReturnValueOnce(false);
+  expect(await handleWidgetPushIos(msg(5_000))).toBe("write");
+  expect((await readWidgetPushIosState()).lastSeq).toBe(0);
+  expect(await handleWidgetPushIos(msg(5_000))).toBe("ok");
 });
 
 it("app au premier plan, autre enfant, ou déconnexion : rien n'est écrit", async () => {

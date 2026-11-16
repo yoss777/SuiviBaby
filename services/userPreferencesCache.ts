@@ -30,6 +30,8 @@ export function clearPreferencesCache(): void {
 // ============================================
 
 interface CachedPermissions {
+  /** Enfant concerné : les droits d'un bébé ne valent pas pour un autre. */
+  childId: string;
   role: string | null;
   canManageContent: boolean;
 }

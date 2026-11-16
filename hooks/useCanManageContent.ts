@@ -20,7 +20,10 @@ export function useCanManageContentState(): { canManage: boolean; known: boolean
   const { firebaseUser } = useAuth();
   const { activeChild } = useBaby();
   const permissions = useChildPermissions(activeChild?.id, firebaseUser?.uid);
-  const cached = getPermissionsCache();
+  // Cache seulement pour le bébé qu'il concerne (sinon, après un changement de
+  // bébé, un Proche pouvait être traité en parent le temps du chargement).
+  const cache = getPermissionsCache();
+  const cached = cache && cache.childId === activeChild?.id ? cache : null;
   if (permissions.loading && cached) return { canManage: cached.canManageContent, known: true };
   return { canManage: canManageEvents(permissions.role), known: !permissions.loading };
 }

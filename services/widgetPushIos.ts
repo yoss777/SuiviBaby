@@ -8,6 +8,7 @@
 import { AppState, Platform } from "react-native";
 
 import { writeServerWidgetProps } from "@/services/widgetSync";
+import { captureServiceError } from "@/utils/errorReporting";
 import { decideWidgetPush, noteIosAppliedSeq, readWidgetPushIosState, type WidgetPushDecision } from "@/services/widgetPushIosState";
 import type { NowWidgetProps } from "@/utils/widgetSnapshot";
 
@@ -36,7 +37,7 @@ export function readW1(data: unknown): W1 | null {
 }
 
 /** Applique un message serveur au widget si les gardes le permettent. */
-export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDecision> {
+export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDecision | "write"> {
   const msg = readW1(data);
   if (!msg) return "invalid";
   const state = await readWidgetPushIosState();
@@ -48,7 +49,9 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
     foreground: AppState.currentState === "active",
   });
   if (decision !== "ok" || !msg.p) return decision;
-  writeServerWidgetProps(msg.p);
+  // Écriture ratée : la séquence n'avance pas (le message suivant pourra
+  // s'appliquer) et iOS reçoit « échec », pas « nouvelles données ».
+  if (!writeServerWidgetProps(msg.p)) return "write";
   await noteIosAppliedSeq(Number(msg.s));
   return "ok";
 }
@@ -73,20 +76,29 @@ if (Platform.OS === "ios") {
     const BackgroundNotificationResult = Notifications.BackgroundNotificationTaskResult;
     TaskManager.defineTask(WIDGET_PUSH_IOS_TASK, async ({ error, data }) => {
       // Le résultat règle le budget de réveils qu'iOS accorde à l'app.
-      if (error) return BackgroundNotificationResult.Failed;
+      if (error) {
+        captureServiceError(error, { service: "widgetPushIos", operation: "taskError" });
+        return BackgroundNotificationResult.Failed;
+      }
       try {
         const decision = await handleWidgetPushIos(data);
-        return decision === "ok" ? BackgroundNotificationResult.NewData : BackgroundNotificationResult.NoData;
+        if (decision === "ok") return BackgroundNotificationResult.NewData;
+        return decision === "write" ? BackgroundNotificationResult.Failed : BackgroundNotificationResult.NoData;
       } catch (e) {
-        if (__DEV__) console.warn("[widget] message serveur iPhone", e);
+        captureServiceError(e, { service: "widgetPushIos", operation: "handle" });
         return BackgroundNotificationResult.Failed;
       }
     });
     readyPromise = Notifications.registerTaskAsync(WIDGET_PUSH_IOS_TASK).then(
       () => true,
-      () => false,
+      (e) => {
+        // Visible : sinon widgetCap 0 et plus aucune mise à jour, sans savoir pourquoi.
+        captureServiceError(e, { service: "widgetPushIos", operation: "registerTask" });
+        return false;
+      },
     );
-  } catch {
+  } catch (e) {
     // Client sans expo-task-manager (ancien client de développement) : pas de temps réel.
+    captureServiceError(e, { service: "widgetPushIos", operation: "defineTask" });
   }
 }

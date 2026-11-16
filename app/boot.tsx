@@ -171,6 +171,7 @@ function BootScreenContent() {
               .then((accessDoc) => {
                 const role = accessDoc?.role ?? null;
                 setPermissionsCache({
+                  childId,
                   role,
                   canManageContent: canManageEvents(role),
                 });

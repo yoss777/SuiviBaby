@@ -213,3 +213,14 @@ describe("dernier repas / change sur tout l'historique (lastEventAt)", () => {
     expect(input.day.lastDiaperMs).toBe(recent);
   });
 });
+
+describe("usableNursing : document partiel", () => {
+  test("côté en cours sans heure de reprise : traité comme en pause, jamais un chrono depuis 1970", () => {
+    const now = at(10, 0);
+    const state = w.usableNursing({ leftSeconds: 300, rightSeconds: 0, runningSide: "left", runningSince: null, updatedAt: now - 60_000 }, now);
+    expect(state.runningSide).toBeNull();
+    expect(state.leftSeconds).toBe(300);
+    // Sans aucune durée : rien à afficher.
+    expect(w.usableNursing({ leftSeconds: 0, rightSeconds: 0, runningSide: "left", updatedAt: now - 60_000 }, now)).toBeNull();
+  });
+});
