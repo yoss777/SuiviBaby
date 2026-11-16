@@ -186,7 +186,9 @@ describe("fanOutWidget", () => {
       chunk.map(() => ({ status: "error", message: "Unable to retrieve the FCM server key", details: { error: "InvalidCredentials" } })));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     expect(errSpy).toHaveBeenCalledWith("sendPushWithTickets: tickets in error", expect.objectContaining({ errorsByCode: { InvalidCredentials: 2 }, delivered: 0, failed: 2 }));
-    expect(infoSpy).toHaveBeenCalledWith("widgetFanout: done", expect.objectContaining({ reason: "failed", sent: 0, failed: 2 }));
+    // Envoi en échec : résumé au niveau « error » (alertable), plus « info ».
+    expect(errSpy).toHaveBeenCalledWith("widgetFanout: done", expect.objectContaining({ reason: "failed", sent: 0, failed: 2 }));
+    expect(infoSpy).not.toHaveBeenCalledWith("widgetFanout: done", expect.anything());
     errSpy.mockRestore();
     infoSpy.mockRestore();
   });

@@ -297,9 +297,12 @@ describe("checkAndSendReminders reads lastEventAt (no event query when present)"
     data["device_tokens/t2"] = { userId: "u2", enabled: true, token: "ExponentPushToken[b]" };
     memoryStore(data);
     expoClient.sendPushNotificationsAsync.mockRejectedValueOnce(new Error("expo down"));
+    const loggerWarn = jest.spyOn(require("firebase-functions/logger"), "warn").mockImplementation(() => {});
     await fns.checkAndSendReminders();
     expect(pushed().map((m) => m.to).sort()).toEqual(["ExponentPushToken[a]", "ExponentPushToken[b]"]);
-    expect(infoSpy).toHaveBeenCalledWith("checkAndSendReminders: done", expect.objectContaining({ sent: 1, errors: 1 }));
+    // Erreurs dans le passage : résumé au niveau « warn ».
+    expect(loggerWarn).toHaveBeenCalledWith("checkAndSendReminders: done", expect.objectContaining({ sent: 1, errors: 1 }));
+    loggerWarn.mockRestore();
   });
 });
 
@@ -458,5 +461,23 @@ describe("sendWeeklyRecap uses lastEventAt.any", () => {
       "sendWeeklyRecap: done",
       expect.objectContaining({ job: "sendWeeklyRecap", users: 1, sent: 1, skipped: 0, errors: 0, durationMs: expect.any(Number) })
     );
+  });
+});
+
+describe("journaux et dates illisibles (revue ECC, lot 2)", () => {
+  const lib = require("../lib/reminders");
+
+  it("masque les jetons Expo cités par un message d'erreur", () => {
+    expect(lib.maskPushTokens('"ExponentPushToken[abc-123]" is not a registered push notification recipient'))
+      .toBe('"ExponentPushToken[…]" is not a registered push notification recipient');
+    expect(lib.maskPushTokens("ExpoPushToken[zz] et ExponentPushToken[yy]")).toBe("ExponentPushToken[…] et ExponentPushToken[…]");
+    expect(lib.maskPushTokens(null)).toBeNull();
+  });
+
+  it("date illisible du dernier repas : « inconnu » pour le widget, null (aucun rappel) par défaut", async () => {
+    memoryStore({ "events/e1": { childId: "c", type: "biberon", date: "pas une date" } });
+    const db = adminMod.firestore();
+    expect(await lib.getLastEventMillis(db, "c", {}, "repas", null)).toBeNull();
+    expect(await lib.getLastEventMillis(db, "c", {}, "repas", null, { unknownOnInvalid: true })).toBeUndefined();
   });
 });

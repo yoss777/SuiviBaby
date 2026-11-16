@@ -118,7 +118,9 @@ jobs:
         env:
           EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
         run: |
-          npx --yes eas-cli@latest build --local --platform ios --profile "${{ inputs.profile }}" \
+          # eas-cli épinglé (pas @latest) : il tourne avec EXPO_TOKEN et SENTRY_AUTH_TOKEN ;
+          # une version compromise ou cassée ne doit pas entrer sans revue.
+          npx --yes eas-cli@27.10.0 build --local --platform ios --profile "${{ inputs.profile }}" \
             --non-interactive --output "$RUNNER_TEMP/app.ipa"
           ls -l "$RUNNER_TEMP/app.ipa"
 
@@ -126,7 +128,7 @@ jobs:
         # A development client is never sent to App Store Connect.
         if: ${{ inputs.submit && inputs.profile == 'production' }}
         run: |
-          npx --yes eas-cli@latest submit --platform ios --profile production \
+          npx --yes eas-cli@27.10.0 submit --platform ios --profile production \
             --path "$RUNNER_TEMP/app.ipa" --non-interactive
 
       - name: Keep the .ipa (7 days)

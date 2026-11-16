@@ -118,4 +118,37 @@ describe("setWidgetChild", () => {
     jest.advanceTimersByTime(3000);
     expect(updateDoc).toHaveBeenCalledWith(undefined, { widgetChildId: "c9" });
   });
+
+  it("écriture en échec (réseau) : nouvel essai après 10 s, puis abandon de l'enfant remplacé", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0");
+    await registerPushToken("u1");
+    mocked(updateDoc).mockRejectedValueOnce(Object.assign(new Error("offline"), { code: "unavailable" }));
+    setWidgetChild("c5");
+    jest.advanceTimersByTime(3000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(updateDoc).toHaveBeenCalledTimes(1);
+    mocked(updateDoc).mockResolvedValue(undefined);
+    jest.advanceTimersByTime(10_000);
+    expect(updateDoc).toHaveBeenCalledTimes(2);
+    expect(mocked(updateDoc).mock.calls[1][1]).toEqual({ widgetChildId: "c5" });
+  });
+
+  it("jeton supprimé côté serveur (not-found) : réenregistré avec l'enfant voulu", async () => {
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    await removePushTokens("u0");
+    await registerPushToken("u1");
+    const setCalls = mocked(setDoc).mock.calls.length;
+    mocked(updateDoc).mockRejectedValueOnce(Object.assign(new Error("gone"), { code: "not-found" }));
+    setWidgetChild("c7");
+    jest.advanceTimersByTime(3000);
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+    expect(mocked(setDoc).mock.calls.length).toBeGreaterThan(setCalls);
+    expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ userId: "u1", widgetChildId: "c7" });
+  });
 });

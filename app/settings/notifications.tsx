@@ -82,16 +82,21 @@ export default function NotificationsScreen() {
   });
 
   // Préférences reçues (cache de l'appareil, puis serveur) appliquées à l'écran.
-  // Une fois que l'utilisateur a touché un réglage, la réponse serveur tardive
-  // ne l'écrase plus.
-  const touchedRef = useRef(false);
+  // Réglages touchés par l'utilisateur : une réponse tardive ne les écrase pas,
+  // mais met à jour tous les autres (avant, un seul toucher faisait ignorer
+  // toute la réponse du serveur).
+  const touchedRef = useRef(new Set<string>());
+  const touch = (key: string) => touchedRef.current.add(key);
+  // Réponse du serveur appliquée : le cache, plus ancien, ne passe plus.
+  const serverAppliedRef = useRef(false);
   const applyPreferences = useCallback((preferences: Awaited<ReturnType<typeof obtenirPreferencesNotifications>>) => {
-      setEmailEnabled(preferences.email);
-      setMarketing(preferences.marketing);
-      setUpdates(preferences.updates);
-      setTips(preferences.tips);
-      setInsightsEnabled(preferences.insights ?? true);
-      setCorrelationsEnabled(preferences.correlations ?? true);
+      const free = (key: string) => !touchedRef.current.has(key);
+      if (free("email")) setEmailEnabled(preferences.email);
+      if (free("marketing")) setMarketing(preferences.marketing);
+      if (free("updates")) setUpdates(preferences.updates);
+      if (free("tips")) setTips(preferences.tips);
+      if (free("insights")) setInsightsEnabled(preferences.insights ?? true);
+      if (free("correlations")) setCorrelationsEnabled(preferences.correlations ?? true);
       const loadedThresholds = {
         repas: preferences.reminders?.thresholds?.repas ?? 0,
         pompages: preferences.reminders?.thresholds?.pompages ?? 0,
@@ -101,14 +106,18 @@ export default function NotificationsScreen() {
       const allDisabled = Object.values(loadedThresholds).every(
         (value) => value === 0,
       );
-      setRemindersEnabled(
-        allDisabled ? false : (preferences.reminders?.enabled ?? true),
-      );
-      setReminderThresholds(loadedThresholds);
+      if (free("reminders")) {
+        setRemindersEnabled(
+          allDisabled ? false : (preferences.reminders?.enabled ?? true),
+        );
+        setReminderThresholds(loadedThresholds);
+      }
       const loadedQuietHours = normalizeQuietHours(preferences.reminders?.quietHours);
       savedQuietHoursRef.current = loadedQuietHours;
-      quietHoursRef.current = loadedQuietHours;
-      setQuietHours(loadedQuietHours);
+      if (free("quietHours")) {
+        quietHoursRef.current = loadedQuietHours;
+        setQuietHours(loadedQuietHours);
+      }
   }, []);
 
   useEffect(() => {
@@ -116,17 +125,22 @@ export default function NotificationsScreen() {
     // Affichage immédiat avec les préférences déjà sur l'appareil : avant,
     // l'écran restait sur le squelette jusqu'à la réponse du serveur.
     void obtenirPreferencesNotificationsEnCache().then((cached) => {
-      if (!isMounted || !cached || touchedRef.current) return;
+      if (!isMounted || !cached || serverAppliedRef.current) return;
       applyPreferences(cached);
       setIsLoading(false);
     });
-    void isDevicePushEnabled().then((on) => {
-      if (isMounted && !touchedRef.current) setPushEnabled(on);
-    });
+    isDevicePushEnabled()
+      .then((on) => {
+        if (isMounted && !touchedRef.current.has("push")) setPushEnabled(on);
+      })
+      .catch(() => {
+        // Lecture impossible : l'interrupteur garde sa valeur affichée.
+      });
     const loadPreferences = async () => {
       try {
         const preferences = await obtenirPreferencesNotifications();
-        if (!isMounted || touchedRef.current) return;
+        if (!isMounted) return;
+        serverAppliedRef.current = true;
         applyPreferences(preferences);
       } catch (error) {
         if (!isMounted) return;
@@ -206,7 +220,7 @@ export default function NotificationsScreen() {
     value: boolean,
   ) => {
     if (isLoading) return;
-    touchedRef.current = true;
+    touch(key);
     const previousValue = {
       push: pushEnabled,
       email: emailEnabled,
@@ -298,7 +312,7 @@ export default function NotificationsScreen() {
   const updateReminders = async (
     next: Partial<typeof reminderThresholds> | { enabled: boolean },
   ) => {
-    touchedRef.current = true;
+    touch("reminders");
     const previousEnabled = remindersEnabled;
     const previousThresholds = reminderThresholds;
 
@@ -371,7 +385,7 @@ export default function NotificationsScreen() {
   /** Bascule : écriture immédiate. Heures : écriture différée (dernier choix). */
   const updateQuietHours = useCallback(
     (patch: Partial<QuietHours>, immediate = false) => {
-      touchedRef.current = true;
+      touchedRef.current.add("quietHours");
       quietPatchRef.current = { ...quietPatchRef.current, ...patch };
       const next = { ...quietHoursRef.current, ...patch };
       quietHoursRef.current = next;
