@@ -7,6 +7,9 @@ import {
   formatDuration,
   type NowWidgetInput,
   otherEventLabel,
+  STALE_NAP_MS,
+  STALE_NIGHT_MS,
+  STALE_WALK_MS,
   toNativeWidgetProps,
 } from "@/utils/widgetSnapshot";
 
@@ -88,6 +91,16 @@ describe("buildNowWidgetProps", () => {
     expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: true })).live?.nap).toBe(true);
     expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: false })).live?.nap).toBe(false);
     expect(buildNowWidgetProps(base({ walkStartMs: T0 - min(5) })).live?.nap).toBeNull();
+  });
+
+  it("session oubliée ? : staleAtMs = début + seuil (sieste 6 h, nuit 15 h, balade 9 h), jamais pour la tétée", () => {
+    const h = (n: number) => n * 3600 * 1000;
+    expect([STALE_NAP_MS, STALE_NIGHT_MS, STALE_WALK_MS]).toEqual([h(6), h(15), h(9)]);
+    expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: true })).live?.staleAtMs).toBe(T0 - min(5) + h(6));
+    expect(buildNowWidgetProps(base({ sleepStartMs: T0 - min(5), sleepIsNap: false })).live?.staleAtMs).toBe(T0 - min(5) + h(15));
+    expect(buildNowWidgetProps(base({ walkStartMs: T0 - min(5) })).live?.staleAtMs).toBe(T0 - min(5) + h(9));
+    const st = { ...EMPTY_NURSING_TIMER, runningSide: "left" as const, runningSince: T0 - min(1), updatedAt: T0 - min(1) };
+    expect(buildNowWidgetProps(base({ nursing: st })).live?.staleAtMs).toBeUndefined();
   });
 
   it("chrono et état de la journée visibles des comptes gratuits ; rappel des couches Premium seulement", () => {

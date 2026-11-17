@@ -10,6 +10,8 @@ export interface WidgetLive {
   pausedAtMs: number | null;
   /** Tétée : heure où le brouillon expire (3 h sans action, 1 h en pause) ; le widget la retire alors. */
   expiresAtMs?: number | null;
+  /** Sieste/nuit/balade : instant à partir duquel la session est jugée « oubliée ? ». */
+  staleAtMs?: number | null;
   /** Côté actif ou dernier côté (tétée). */
   side: "G" | "D" | null;
   /** Temps de l'autre côté, figé : « D 4:10 » (tétée). */
@@ -189,6 +191,9 @@ export function buildNowWidgetProps(input: NowWidgetInput, env?: WidgetEnv): Now
 export function countGroups(timestamps: number[], gapMs: number): number;
 export function assembleNowWidgetInput(src: WidgetSource, env?: WidgetEnv): NowWidgetInput;
 
+export const STALE_NAP_MS: number;
+export const STALE_NIGHT_MS: number;
+export const STALE_WALK_MS: number;
 export const NURSING_PAUSED_TTL_MS: number;
 export const NURSING_RUNNING_TTL_MS: number;
 /** Tétée partagée encore valable (temps compté ou côté en cours, non expirée), sinon null. */

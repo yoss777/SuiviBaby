@@ -56,6 +56,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     softOnTile: dark ? "#d1d5db" : "#4b5563",
     rule: dark ? "#374151" : "#e5e7eb",
     alert: dark ? "#f87171" : "#b91c1c",
+    // « Oubliée ? » : ambre. #8A4B00 ≥ 5,5:1 sur les tuiles claires, #FBBF24 ≥ 6,6:1 sur les sombres.
+    warn: dark ? "#FBBF24" : "#8A4B00",
     // Pastille du prénom : teinte de marque, contraste AA.
     pillBg: dark ? "#1e3a5f" : "#e0f0f5",
     pillText: dark ? "#bfdbfe" : "#075f80",
@@ -361,6 +363,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   );
   const chrono = (l: WidgetLive, sp: number) =>
     fixedLine(sp, chronoRaw(l, sp));
+  // Sieste/nuit/balade qui dure trop (staleAtMs) : « oubliée ? », jamais arrêtée seule.
+  const isStale = (l: WidgetLive) => l.kind !== "nursing" && l.staleAtMs != null && now >= l.staleAtMs;
   const chronoRaw = (l: WidgetLive, sp: number) =>
     l.kind === "nursing" ? (
       <Chrono
@@ -374,7 +378,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       // qui avance seule. Les secondes de la 1re minute ont été essayées : le
       // redessin à 1 min dépend d'une alarme Android non exacte, qui n'arrivait
       // pas (secondes restées affichées après 4 min sur le S21).
-      elapsed(l.timerStartMs, liveStale ? C.softOnTile : C.strong, sp)
+      elapsed(l.timerStartMs, liveStale ? C.softOnTile : isStale(l) ? C.warn : C.strong, sp)
     );
   // Sommeil : « Sieste » ou « Nuit », comme sur l'Accueil.
   const labelOf = (l: WidgetLive) =>
@@ -401,7 +405,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const liveSay = (l: WidgetLive) =>
     l.kind === "nursing"
       ? a11yLive(l)
-      : `${labelOf(l)} en cours depuis ${sinceTime(l)}, ${spokenDur(Math.max(0, Math.floor(now / 60000) - Math.floor(l.timerStartMs / 60000)))}`;
+      : `${labelOf(l)} en cours depuis ${sinceTime(l)}, ${spokenDur(Math.max(0, Math.floor(now / 60000) - Math.floor(l.timerStartMs / 60000)))}${isStale(l) ? ", oubliée ? à vérifier" : ""}`;
   // Zone d'une session : tétée = lien + libellé ; sommeil, balade = libellé seul
   // (l'appui sur la tuile ouvre l'app).
   const tileMods = (l: WidgetLive) =>
@@ -529,6 +533,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       return `Tétée${l.pausedAtMs != null ? " en pause" : ""}${l.side ? ` · ${sideWord(l.side)}` : ""}${other ? ` · ${other}` : ""}`;
     }
     const label = labelOf(l);
+    if (isStale(l)) return `${label} · oubliée ?`;
     return small ? label : zoneW < 200 ? `${label} · ${sinceTime(l)}` : `${label} · depuis ${sinceTime(l)}`;
   };
 
@@ -917,6 +922,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const refreshCandidates = [
     // Début arrondi à la minute, comme le compteur natif (« 60 min » évité).
     ...lives.filter((l) => l.kind !== "nursing").map((l) => Math.floor(l.timerStartMs / 60000) * 60000 + HOUR),
+    // Session « oubliée ? » : la tuile passe à l'ambre à l'instant dit.
+    ...lives.filter((l) => l.kind !== "nursing" && l.staleAtMs != null).map((l) => l.staleAtMs as number),
     // Expiration d'une tétée oubliée : redessin pour la retirer.
     ...lives.filter((l) => l.expiresAtMs != null).map((l) => l.expiresAtMs as number),
     // Total de sommeil qui passe 1 h : le format change (« 59 min » → « 1h00 »).

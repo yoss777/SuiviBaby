@@ -64,3 +64,31 @@ it("sans repas noté : le dernier change reste visible", () => {
   const d = show({ lastMealMs: null, day: { mealsCount: 0, bottleMl: 0, lastMealMs: null, diapersCount: 1, lastDiaperMs: NOW - H, sleepMinutes: 0 } });
   expect(allText(d)).toContain("Dernier change");
 });
+
+describe("session oubliée ? (staleAtMs)", () => {
+  const raw = (live: Record<string, unknown>, scheme = "light") =>
+    JSON.stringify(render(widgetProps({ lives: [live] }), { colorScheme: scheme, nativeLevel: 3, widthDp: 420, heightDp: 222 }));
+  const stale = (startMs: number, staleAtMs: number) => ({ ...napLive(startMs), staleAtMs });
+
+  it("avant le seuil : titre normal, chrono non ambre", () => {
+    const l = stale(NOW - 5 * H, NOW + H);
+    const d = show({ lives: [l] });
+    expect(allText(d)).not.toContain("oubliée");
+    expect(d.a11y.join(" ")).not.toContain("oubliée");
+    expect(raw(l)).not.toContain("#8A4B00");
+  });
+
+  it("au seuil : « Sieste · oubliée ? », chrono ambre (clair et sombre), phrase parlée complétée", () => {
+    const l = stale(NOW - 6 * H, NOW);
+    const d = show({ lives: [l] });
+    expect(allText(d)).toContain("Sieste · oubliée ?");
+    expect(d.a11y.join(" ")).toContain(", oubliée ? à vérifier");
+    expect(raw(l)).toContain("#8A4B00");
+    expect(raw(l, "dark")).toContain("#FBBF24");
+  });
+
+  it("redessin programmé à l'instant staleAtMs", () => {
+    const l = stale(NOW - 5 * H, NOW + 20 * 60_000);
+    expect(raw(l)).toContain(`"atMs":${NOW + 20 * 60_000}`);
+  });
+});

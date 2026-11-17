@@ -85,3 +85,31 @@ it("canari : le plugin expo-widgets fournit bien le code source du widget, et il
   expect(typeof require("@/widgets/BebeMaintenant.ios").default).toBe("string");
   expect(show().texts.length).toBeGreaterThan(3);
 });
+
+describe("session oubliée ? (staleAtMs)", () => {
+  const raw = (live: Record<string, unknown>, nowMs: number, scheme = "light") =>
+    JSON.stringify(render(widgetProps({ lives: [live] }), { colorScheme: scheme, widgetFamily: "systemMedium", date: new Date(nowMs) }));
+  const stale = (startMs: number, staleAtMs: number) => ({ ...napLive(startMs), staleAtMs });
+
+  it("avant le seuil : titre normal, chrono non ambre, rien de plus dans la phrase parlée", () => {
+    const l = stale(NOW - 5 * H, NOW + H);
+    const d = show({ lives: [l] });
+    expect(allText(d)).not.toContain("oubliée");
+    expect(d.a11y.join(" ")).not.toContain("oubliée");
+    expect(raw(l, NOW)).not.toContain("#8A4B00");
+  });
+
+  it("au seuil : « Sieste · oubliée ? », chrono ambre (clair et sombre), phrase parlée complétée", () => {
+    const l = stale(NOW - 6 * H, NOW);
+    const d = show({ lives: [l] });
+    expect(d.texts).toContain("Sieste · oubliée ?");
+    expect(d.a11y.join(" ")).toContain(", oubliée ? à vérifier");
+    expect(raw(l, NOW)).toContain("#8A4B00");
+    expect(raw(l, NOW, "dark")).toContain("#FBBF24");
+  });
+
+  it("la tétée n'est jamais concernée", () => {
+    const nursing = { ...napLive(NOW - 20 * H), kind: "nursing", nap: null, side: "G", staleAtMs: NOW - H };
+    expect(allText(show({ lives: [nursing] }))).not.toContain("oubliée");
+  });
+});

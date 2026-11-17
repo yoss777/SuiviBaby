@@ -54,7 +54,7 @@ export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { d
 
 /**
  * Entrées exactes (hors comptage), dans les 24 h : une toutes les `stepMs`
- * après `fromMs`, rappel qui passe au rouge, minuit, bascule Sieste/Nuit,
+ * après `fromMs`, rappel qui passe au rouge, session « oubliée ? », minuit, bascule Sieste/Nuit,
  * expiration à 24 h.
  */
 function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number, fromMs: number, stepMs: number | null): void {
@@ -66,6 +66,8 @@ function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number,
   // Rappel qui passe au rouge.
   exact(props.alerts?.mealAtMs);
   exact(props.alerts?.diaperAtMs);
+  // Session oubliée ? : la tuile passe à l'ambre à l'instant dit.
+  for (const l of props.lives ?? (props.live ? [props.live] : [])) exact(l.staleAtMs);
   // Minuit local (compteurs du jour masqués) et bascule Sieste/Nuit.
   const d = new Date(now);
   for (const [plusDay, h] of [[1, 0], [0, 8], [0, 19], [1, 8]] as const) {

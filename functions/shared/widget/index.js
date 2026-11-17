@@ -213,6 +213,12 @@ function otherEventIcon(e) {
  * (components/forms/nursingTimer.ts). Décidé par Yoss le 2026-11-15 (avant :
  * 1 h et 3 h, jugés trop longs : une tétée oubliée restait affichée en cours).
  */
+// « Session oubliée ? » : durée au-delà de laquelle une session en cours est
+// signalée (jamais arrêtée seule : l'heure de fin réelle est inconnue).
+const STALE_NAP_MS = 6 * HOUR;
+const STALE_NIGHT_MS = 15 * HOUR;
+const STALE_WALK_MS = 9 * HOUR;
+
 const NURSING_PAUSED_TTL_MS = 40 * 60 * 1000;
 const NURSING_RUNNING_TTL_MS = 100 * 60 * 1000;
 
@@ -325,10 +331,12 @@ function nursingLive(state, now, env) {
 }
 
 function simpleLive(kind, startMs, nap, env) {
+  const threshold = kind === "walk" ? STALE_WALK_MS : nap === false ? STALE_NIGHT_MS : STALE_NAP_MS;
   return {
     kind,
     timerStartMs: startMs,
     pausedAtMs: null,
+    staleAtMs: startMs + threshold,
     side: null,
     otherSideLabel: null,
     sinceMs: startMs,
@@ -503,6 +511,9 @@ function assembleNowWidgetInput(src, env = localEnv) {
 module.exports = {
   NURSING_PAUSED_TTL_MS,
   NURSING_RUNNING_TTL_MS,
+  STALE_NAP_MS,
+  STALE_NIGHT_MS,
+  STALE_WALK_MS,
   usableNursing,
   sleepMinutesInDay,
   WIDGET_RECENT_MAX,

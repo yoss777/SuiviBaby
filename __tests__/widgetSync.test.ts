@@ -288,6 +288,15 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(dates).toContain(new Date(2026, 10, 17, 8, 0).getTime());
   });
 
+  it("session oubliée ? : une entrée exacte à staleAtMs, aussi dans la timeline courte", () => {
+    const now = new Date(2026, 10, 16, 15, 0).getTime();
+    const staleAt = now + 5 * 3600_000 + 13_000; // hors de la grille minute / 5 min
+    const live = { kind: "sleep", timerStartMs: now - 3600_000, pausedAtMs: null, staleAtMs: staleAt } as any;
+    const p = props({ generatedAtMs: now, live, lives: [live] });
+    expect(widgetTimelinePlan(p, now).dates).toContain(staleAt);
+    expect(widgetQuickTimelinePlan(p, now).dates).toContain(staleAt);
+  });
+
   it("écriture iPhone : fin de comptage à 4 h 05 dans les données, même avec l'entrée d'expiration", () => {
     const entries: { date: Date; props: NowWidgetProps }[] = [];
     __resetWidgetSyncForTests({ updateSnapshot: jest.fn(), updateTimeline: (e: typeof entries) => entries.push(...e) } as any);

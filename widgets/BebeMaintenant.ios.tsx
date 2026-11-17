@@ -43,6 +43,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     strong: dark ? "#f9fafb" : "#1f2937",
     soft: dark ? "#9ca3af" : "#6b7280",
     alert: dark ? "#f87171" : "#b91c1c",
+    // « Oubliée ? » : ambre. #8A4B00 ≥ 5,5:1 sur les tuiles claires, #FBBF24 ≥ 6,6:1 sur les sombres.
+    warn: dark ? "#FBBF24" : "#8A4B00",
     rule: dark ? "#374151" : "#e5e7eb",
     nursing: "#D66B8F",
     sleep: "#7C6BA4",
@@ -90,6 +92,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const labelOf = (l: WidgetLive) =>
     l.kind === "sleep" ? (l.nap === true ? "Sieste" : l.nap === false ? "Nuit" : "Sommeil") : KIND[l.kind].label;
   const info = live ? { ...KIND[live.kind], label: labelOf(live) } : null;
+  // Sieste/nuit/balade qui dure trop (staleAtMs, shared/widget) : « oubliée ? », jamais arrêtée seule.
+  const isStale = (l: WidgetLive | null | undefined) =>
+    !!l && l.kind !== "nursing" && l.staleAtMs != null && (environment.date ? new Date(environment.date).getTime() : Date.now()) >= l.staleAtMs;
   const mealLate = props.alerts.mealAtMs != null && now >= props.alerts.mealAtMs;
   const diaperLate = props.alerts.diaperAtMs != null && now >= props.alerts.diaperAtMs;
   // Appui : la tétée en cours ou le formulaire repas (hooks/useWidgetDeepLink.ts).
@@ -187,7 +192,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       if (dur) parts.push(dur);
       return parts.join(", ");
     }
-    return `${labelOf(l)} en cours ${l.sinceLabel}${dur ? `, ${dur}` : ""}${l.pausedAtMs != null ? ", en pause" : ""}`;
+    return `${labelOf(l)} en cours ${l.sinceLabel}${dur ? `, ${dur}` : ""}${l.pausedAtMs != null ? ", en pause" : ""}${isStale(l) ? ", oubliée ? à vérifier" : ""}`;
   };
   const liveA11y = lives.map(a11yOf).join(". ");
 
@@ -196,7 +201,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     // la durée n'est dite nulle part ailleurs : le chrono natif reste lisible.
     const hid = hide && inTimeline ? [accessibilityHidden()] : [];
     return l && l.kind !== "nursing" && inTimeline ? (
-      <Text modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}>
+      <Text modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : isStale(l) ? C.warn : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}>
         {minutesText(l.timerStartMs)}
       </Text>
     ) : l ? (
@@ -204,7 +209,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         timerInterval={{ lower: new Date(l.timerStartMs), upper: far }}
         countsDown={false}
         pauseTime={l.pausedAtMs != null ? new Date(l.pausedAtMs) : undefined}
-        modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}
+        modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : isStale(l) ? C.warn : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}
       />
     ) : null;
   };
@@ -276,7 +281,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // ----- Écran verrouillé -----
   if (family === "accessoryInline") {
     return live ? (
-      <Text modifiers={[widgetURL(url), privacySensitive(), accessibilityLabel(a11yOf(live)), typeCap]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
+      <Text modifiers={[widgetURL(url), privacySensitive(), accessibilityLabel(a11yOf(live)), typeCap]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${isStale(live) ? "oubliée ?" : live.sinceLabel}`}</Text>
     ) : (
       <Text
         modifiers={[
@@ -311,7 +316,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {live ? (
           <>
             <Text modifiers={[F(13, "semibold")]}>
-              {`${info?.label}${live.side ? ` · ${live.side}` : ""}${live.pausedAtMs != null ? " · en pause" : ""}`}
+              {`${info?.label}${live.side ? ` · ${live.side}` : ""}${live.pausedAtMs != null ? " · en pause" : ""}${isStale(live) ? " · oubliée ?" : ""}`}
             </Text>
             {timer(22)}
             {live.otherSideLabel ? <Text modifiers={[F(12)]}>{live.otherSideLabel}</Text> : null}
@@ -414,6 +419,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       const other = withOther ? otherSide(l) : null;
       return `Tétée${l.pausedAtMs != null ? " en pause" : ""}${l.side ? ` · ${sideWord(l.side)}` : ""}${other ? ` · ${other}` : ""}`;
     }
+    if (isStale(l)) return `${labelOf(l)} · oubliée ?`;
     return small ? labelOf(l) : `${labelOf(l)} · ${sinceTime(l)}`;
   };
   const tileMods = (l: WidgetLive, radius: number, pad: number) => [
@@ -500,7 +506,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <HStack spacing={5} modifiers={[accessibilityElement("ignore"), ...liveLabel(l)]}>
           {dotText(CAT[l.kind].dot, 8)}
           <Text modifiers={[F(12, "semibold"), foregroundStyle(CAT[l.kind].text), ...fit1]}>
-            {l.kind === "nursing" && l.side ? `${CAT.nursing.short} ${l.side}` : labelOf(l)}
+            {l.kind === "nursing" && l.side ? `${CAT.nursing.short} ${l.side}` : isStale(l) ? `${labelOf(l)} · oubliée ?` : labelOf(l)}
           </Text>
           <Spacer />
           {timerOf(l, 15)}
