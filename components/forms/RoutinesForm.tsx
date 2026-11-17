@@ -27,7 +27,7 @@ import {
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -263,8 +263,13 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
   // Fin d'une sieste : 23:59 du jour du début au plus tard.
-  const napEndOfDay = new Date(heureDebut);
-  napEndOfDay.setHours(23, 59, 0, 0);
+  // Même objet tant que le début ne change pas (un nouvel objet à chaque rendu
+  // relançait le sélecteur natif).
+  const napEndOfDay = useMemo(() => {
+    const d = new Date(heureDebut);
+    d.setHours(23, 59, 0, 0);
+    return d;
+  }, [heureDebut]);
   const [chronoDirty, setChronoDirty] = useState(() =>
     shouldForceChronoDirty(editData, sommeilEnCours),
   );
@@ -300,17 +305,51 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     setChronoDirty(true);
   }, []);
 
+  // Sélecteur iOS à roulettes : un appel par cran pendant le défilement. On
+  // attend qu'il s'arrête (sinon une alerte par cran : l'app gelait en
+  // allant vers 23:59) et une seule alerte à la fois.
+  const pastMidnightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pastMidnightAlertOpen = useRef(false);
+  useEffect(() => () => {
+    if (pastMidnightTimer.current) clearTimeout(pastMidnightTimer.current);
+  }, []);
+  const onNapEndBeforeStart = (pickedEnd: Date) => {
+    if (pastMidnightTimer.current) clearTimeout(pastMidnightTimer.current);
+    pastMidnightTimer.current = setTimeout(() => {
+      pastMidnightTimer.current = null;
+      askNapPastMidnight(pickedEnd);
+    }, 700);
+  };
+  const cancelNapEndBeforeStart = () => {
+    if (pastMidnightTimer.current) clearTimeout(pastMidnightTimer.current);
+    pastMidnightTimer.current = null;
+  };
+
   // Sieste dont la fin passe minuit : elle ne peut pas finir le lendemain.
   // On propose de l'enregistrer comme une nuit, avec les mêmes heures.
   const askNapPastMidnight = (pickedEnd: Date) => {
+    if (pastMidnightAlertOpen.current) return;
+    pastMidnightAlertOpen.current = true;
+    // Boîte fermée sans bouton (appui hors de la boîte) : on ne bloque pas
+    // les alertes suivantes indéfiniment.
+    setTimeout(() => {
+      pastMidnightAlertOpen.current = false;
+    }, 10_000);
     const endNextDay = new Date(heureDebut);
     endNextDay.setDate(endNextDay.getDate() + 1);
     endNextDay.setHours(pickedEnd.getHours(), pickedEnd.getMinutes(), 0, 0);
     showAlert("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", [
-      { text: "Corriger l'heure de fin", style: "cancel" },
+      {
+        text: "Corriger l'heure de fin",
+        style: "cancel",
+        onPress: () => {
+          pastMidnightAlertOpen.current = false;
+        },
+      },
       {
         text: "Enregistrer comme nuit",
         onPress: () => {
+          pastMidnightAlertOpen.current = false;
           handleSelectType("night");
           setHeureFin(endNextDay);
           setChronoDirty(true);
@@ -320,6 +359,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   };
 
   const handleHeureFinChange = useCallback((nextDate: Date | null) => {
+    // Revenu sur une heure valide pendant le défilement : plus d'alerte en attente.
+    cancelNapEndBeforeStart();
     setHeureFin(nextDate);
     setChronoDirty(true);
   }, []);
@@ -793,7 +834,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         showEndDate={sheetType !== "nap"}
         endDateLabel="Date fin"
         heureFinMaximumDate={sheetType === "nap" ? napEndOfDay : undefined}
-        onEndBeforeStart={sheetType === "nap" ? askNapPastMidnight : undefined}
+        onEndBeforeStart={sheetType === "nap" ? onNapEndBeforeStart : undefined}
         showOngoingToggle
         isOngoing={isOngoing}
         onOngoingChange={handleOngoingChange}
