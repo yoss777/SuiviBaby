@@ -518,13 +518,19 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         // If sommeilEnCours prop is provided, use it; otherwise query Firestore
         let hasOngoingSleep = !!sommeilEnCours;
         if (!sommeilEnCours && activeChild?.id) {
-          const recentSleeps = await obtenirEvenements(activeChild.id, {
-            type: "sommeil" as EventType,
-            limite: 5,
-          });
-          hasOngoingSleep = recentSleeps.some(
-            (e: any) => e.heureDebut && !e.heureFin,
-          );
+          // Lecture impossible (hors ligne…) : on continue, le serveur refuse
+          // un second sommeil en cours et le signale (plus de bouton gelé).
+          try {
+            const recentSleeps = await obtenirEvenements(activeChild.id, {
+              type: "sommeil" as EventType,
+              limite: 5,
+            });
+            hasOngoingSleep = recentSleeps.some(
+              (e: any) => e.heureDebut && !e.heureFin,
+            );
+          } catch {
+            hasOngoingSleep = false;
+          }
         }
         if (hasOngoingSleep) {
           showAlert(

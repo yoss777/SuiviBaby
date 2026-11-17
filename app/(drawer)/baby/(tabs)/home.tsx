@@ -50,6 +50,7 @@ import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { suggestForgottenEnd } from "@/utils/forgottenSession";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, RUNNING_SESSION_WINDOW_MS, supprimerEvenement } from "@/services/eventsService";
+import { captureServiceError } from "@/utils/errorReporting";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
@@ -236,8 +237,13 @@ export default function HomeDashboard() {
   useEffect(() => {
     if (!activeChild?.id) return;
     setOpenSessionEvents([]);
-    return ecouterSessionsOuvertes(activeChild.id, setOpenSessionEvents);
-  }, [activeChild?.id, setOpenSessionEvents]);
+    return ecouterSessionsOuvertes(activeChild.id, setOpenSessionEvents, (error) => {
+      // Jamais silencieux : sans cette écoute, une session ouverte peut rester
+      // invisible et bloquer un démarrage (« déjà en cours »).
+      captureServiceError(error, { service: "home", operation: "ecouterSessionsOuvertes" });
+      showToast("Sessions en cours indisponibles : vérifiez la connexion.", 5000);
+    });
+  }, [activeChild?.id, setOpenSessionEvents, showToast]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [loadError, setLoadError] = useState(false);

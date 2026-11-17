@@ -50,6 +50,8 @@ export interface OptimisticFailure {
   previousEvent?: any;
   /** False when a retry cannot work (e.g. the uploaded photo was deleted). */
   retryable: boolean;
+  /** Why the server refused, in French, shown after the failure message. */
+  reason?: string;
 }
 
 export type OptimisticFailureCallback = (message: string, failure?: OptimisticFailure) => void;
@@ -70,6 +72,39 @@ const STALE_THRESHOLD_MS = 60_000; // 60 seconds — handles CF cold starts with
  */
 export function setOnFailure(cb: OptimisticFailureCallback | null): void {
   onFailureCallback = cb;
+  // Échecs survenus sans écouteur (démarrage, remontage) : montrés maintenant.
+  if (cb && pendingFailures.length > 0) {
+    const queued = pendingFailures.splice(0);
+    for (const { message, failure } of queued) cb(message, failure);
+  }
+}
+
+// Échecs notifiés pendant qu'aucun écouteur n'était enregistré.
+const MAX_PENDING_FAILURES = 5;
+const pendingFailures: { message: string; failure?: OptimisticFailure }[] = [];
+
+function deliverFailure(message: string, failure?: OptimisticFailure): void {
+  if (onFailureCallback) {
+    onFailureCallback(message, failure);
+    return;
+  }
+  pendingFailures.push({ message, failure });
+  if (pendingFailures.length > MAX_PENDING_FAILURES) pendingFailures.shift();
+}
+
+/**
+ * Message d'information sans échec d'écriture à réessayer (ex. une sieste
+ * était déjà en cours : la saisie n'a pas été ajoutée). Même canal que les
+ * échecs, jamais silencieux.
+ */
+export function notifyOptimisticNotice(message: string): void {
+  deliverFailure(message);
+}
+
+/** Création refusée par le serveur : une session du même type tournait déjà. */
+export function alreadyRunningNotice(eventType: unknown): string {
+  const label = getEventTypeLabel(eventType);
+  return `${label ?? "Une session"} déjà en cours : la nouvelle saisie n'a pas été ajoutée.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +284,7 @@ export function markOptimisticQueued(tempIdOrEventId: string): void {
  */
 export function failOptimistic(
   tempIdOrEventId: string,
-  options: { retryable?: boolean } = {},
+  options: { retryable?: boolean; reason?: string } = {},
 ): (OptimisticFailure & { event: any; operation: OptimisticOperation }) | null {
   markWidgetUserAction();
   let entry = entries.get(tempIdOrEventId);
@@ -276,6 +311,7 @@ export function failOptimistic(
     retryData: entry.event,
     previousEvent: entry.previousEvent,
     retryable: options.retryable !== false,
+    reason: options.reason,
   };
 
   const previousHadHeureFin = hasHeureFin(entry.previousEvent);
@@ -326,8 +362,8 @@ export function notifyOptimisticFailure(failure: OptimisticFailure): void {
   const what = failure.operation === 'create' ? "l'ajout" : 'la modification';
   const message =
     `Échec de ${what}${label ? ` : ${label}` : ''}.` +
-    (failure.retryable ? '' : ' Veuillez recommencer.');
-  onFailureCallback?.(message, failure);
+    (failure.reason ? ` ${failure.reason}` : failure.retryable ? '' : ' Veuillez recommencer.');
+  deliverFailure(message, failure);
 }
 
 /**
@@ -658,4 +694,5 @@ export function cleanup(): void {
 export function resetOptimisticStoreForTests(): void {
   entries.clear();
   onFailureCallback = null;
+  pendingFailures.length = 0;
 }

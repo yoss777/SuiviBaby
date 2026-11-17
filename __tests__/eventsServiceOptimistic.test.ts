@@ -40,6 +40,8 @@ const captured = captureServiceError as jest.Mock;
 const KEY_FORMAT = /^[A-Za-z0-9_-]{1,100}$/;
 const netError = () => Object.assign(new Error("network request failed"), { code: "functions/unavailable" });
 const permanentError = () => Object.assign(new Error("Quantité invalide"), { code: "functions/invalid-argument" });
+// Erreur serveur ni réseau ni définitive : « Réessayer » reste proposé.
+const retryableError = () => Object.assign(new Error("boom"), { code: "functions/unknown" });
 const conflictError = () => Object.assign(new Error("Event modified"), { code: "functions/aborted" });
 
 /** Lets the fire-and-forget IIFE and the retry delays (1 s, 3 s) finish. */
@@ -125,7 +127,7 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     expect(getOptimisticEntries("c1")[0].status).toBe("queued_offline");
   });
 
-  it("a permanent refusal is reported with the event type, to Sentry, and rolled back", async () => {
+  it("a permanent refusal is reported with the event type and the reason, to Sentry, rolled back, never retried", async () => {
     const onFailure = jest.fn();
     setOnFailure(onFailure);
     callable.mockRejectedValue(permanentError());
@@ -133,12 +135,13 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     ajouterEvenementOptimistic("c1", data());
     await settle();
 
-    expect(callable).toHaveBeenCalledTimes(3);
+    // Refus définitif : une seule tentative, pas de « Réessayer ».
+    expect(callable).toHaveBeenCalledTimes(1);
     expect(enqueue).not.toHaveBeenCalled();
     expect(getOptimisticEntries("c1")).toHaveLength(0);
     expect(onFailure).toHaveBeenCalledWith(
-      "Échec de l'ajout : biberon.",
-      expect.objectContaining({ operation: "create", eventType: "biberon", retryable: true }),
+      "Échec de l'ajout : biberon. Quantité invalide.",
+      expect.objectContaining({ operation: "create", eventType: "biberon", retryable: false, reason: "Quantité invalide." }),
     );
     expect(captured).toHaveBeenCalledWith(
       expect.anything(),
@@ -191,7 +194,7 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     expect(onFailed).toHaveBeenCalledTimes(1);
     expect(onConfirmed).toHaveBeenCalledTimes(1);
     expect(onFailure).toHaveBeenLastCalledWith(
-      "Échec de l'ajout : biberon. Veuillez recommencer.",
+      "Échec de l'ajout : biberon. Quantité invalide.",
       expect.objectContaining({ retryable: false }),
     );
   });
@@ -254,7 +257,7 @@ describe("modifierEvenementOptimistic (6.9)", () => {
     expect(enqueue).not.toHaveBeenCalled();
     expect(getOptimisticEntries("c1")).toHaveLength(0);
     expect(onFailure).toHaveBeenCalledWith(
-      "Échec de la modification : biberon. Veuillez recommencer.",
+      "Échec de la modification : biberon. Il a été modifié entre-temps sur un autre appareil.",
       expect.objectContaining({ operation: "update", retryable: false, eventType: "biberon" }),
     );
   });
@@ -302,7 +305,7 @@ describe("retryFailedOptimistic (6.4)", () => {
   it("re-sends a failed create with the data kept and the same key", async () => {
     let failure: any;
     setOnFailure((_m, f) => { failure = f; });
-    callable.mockRejectedValue(permanentError());
+    callable.mockRejectedValue(retryableError());
     ajouterEvenementOptimistic("c1", { type: "biberon", quantite: 120, date: new Date() });
     await settle();
     const firstKey = callable.mock.calls[0][0].idempotencyKey;
@@ -320,7 +323,7 @@ describe("retryFailedOptimistic (6.4)", () => {
   it("re-sends a failed update with the new values", async () => {
     let failure: any;
     setOnFailure((_m, f) => { failure = f; });
-    callable.mockRejectedValue(permanentError());
+    callable.mockRejectedValue(retryableError());
     modifierEvenementOptimistic("c1", "e1", { quantite: 150 } as any, { id: "e1", type: "biberon", quantite: 100 });
     await settle();
 

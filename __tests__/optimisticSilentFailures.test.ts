@@ -91,7 +91,7 @@ describe("M2 : purge des entrées périmées", () => {
     reject(err("Quantité invalide", "functions/invalid-argument"));
     await jest.advanceTimersByTimeAsync(10_000);
 
-    expect(onFailure).toHaveBeenCalledWith("Échec de l'ajout : biberon.", expect.objectContaining({ operation: "create", childId: "c1" }));
+    expect(onFailure).toHaveBeenCalledWith("Échec de l'ajout : biberon. Quantité invalide.", expect.objectContaining({ operation: "create", childId: "c1" }));
   });
 
   it("failWrite prévient même quand l'entrée a disparu (création) : type et données reconstruits", async () => {
@@ -107,12 +107,12 @@ describe("M2 : purge des entrées périmées", () => {
 
     expect(onFailure).toHaveBeenCalledTimes(1);
     const [message, failure] = onFailure.mock.calls[0];
-    expect(message).toBe("Échec de l'ajout : biberon.");
+    expect(message).toBe("Échec de l'ajout : biberon. Quantité invalide.");
     expect(failure).toMatchObject({
       operation: "create",
       childId: "c1",
       eventType: "biberon",
-      retryable: true,
+      retryable: false, // refus définitif : pas de « Réessayer »
       retryData: expect.objectContaining({ type: "biberon", quantite: 90, idempotencyKey: expect.any(String) }),
     });
   });
@@ -128,7 +128,7 @@ describe("M2 : purge des entrées périmées", () => {
 
     expect(onFailure).toHaveBeenCalledTimes(1);
     const [message, failure] = onFailure.mock.calls[0];
-    expect(message).toBe("Échec de la modification : biberon.");
+    expect(message).toBe("Échec de la modification : biberon. Quantité invalide.");
     expect(failure).toMatchObject({
       operation: "update",
       eventId: "e1",
