@@ -68,7 +68,7 @@ import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetD
 import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
-import { useWidgetActionGate } from "@/hooks/useWidgetActionGate";
+import { useWidgetActionGate, WIDGET_SMALL_CONFIRM_MESSAGE } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1491,9 +1491,32 @@ export default function HomeDashboard() {
   });
   // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
   // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).
+  // Dernière version de runWidgetAction : un choix fait dans une boîte restée
+  // ouverte agit sur l'état actuel, pas sur celui de son ouverture.
+  const runWidgetActionRef = useRef(runWidgetAction);
+  runWidgetActionRef.current = runWidgetAction;
+  // Choix confirmé dans une boîte native : seulement si le bébé n'a pas changé.
+  const runPicked = useCallback((childId: string, action: WidgetDeepLinkAction) => {
+    if (activeChildIdRef.current !== childId) return;
+    runWidgetActionRef.current(action);
+  }, []);
+  // Boîte native à plusieurs choix (la fenêtre de l'app n'a qu'un bouton
+  // d'action). Android n'affiche que 3 boutons : « Annuler » y devient un
+  // appui hors de la boîte (cancelable).
+  const askNative = useCallback((title: string, buttons: { text: string; onPress: () => void }[]) => {
+    const withCancel = Platform.OS === "android" && buttons.length >= 3 ? buttons : [...buttons, { text: "Annuler", style: "cancel" as const, onPress: () => {} }];
+    Alert.alert(title, WIDGET_SMALL_CONFIRM_MESSAGE, withCancel, { cancelable: true });
+  }, []);
+
+  // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
+  // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).
   const pickStopFromWidget = useCallback(async () => {
     const childId = activeChild?.id;
-    if (!childId || !canManageContent) return;
+    if (!childId) return;
+    if (!canManageContent) {
+      showToast("Seuls les parents peuvent faire une saisie");
+      return;
+    }
     const nursing = await loadNursingTimer(childId, Date.now()).catch(() => null);
     if (activeChildIdRef.current !== childId) return;
     const choices: { text: string; action: WidgetDeepLinkAction }[] = [];
@@ -1504,31 +1527,37 @@ export default function HomeDashboard() {
       showToast("Aucune session en cours");
       return;
     }
-    // Boîte native : plusieurs choix (la fenêtre de l'app n'a qu'un bouton
-    // d'action, « Arrêter la balade » disparaissait). Lien du petit widget iPhone.
-    Alert.alert(
+    askNative(
       choices.length === 1 ? `${choices[0].text} ?` : "Arrêter quelle session ?",
-      "Depuis le petit widget, l'arrêt est confirmé ici.",
-      [
-        ...choices.map((c) => ({ text: c.text, onPress: () => runWidgetAction(c.action) })),
-        { text: "Annuler", style: "cancel" as const },
-      ],
+      choices.map((c) => ({ text: c.text, onPress: () => runPicked(childId, c.action) })),
     );
-  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showToast, runWidgetAction]);
+  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showToast, askNative, runPicked]);
+
+  // Petit widget iPhone, tétée : un appui sert aussi à changer de côté, d'où
+  // « Voir la tétée » (feuille Repas, sans rien arrêter).
+  const askNursingStopFromWidget = useCallback(async () => {
+    const childId = activeChild?.id;
+    if (!childId) return;
+    const nursing = await loadNursingTimer(childId, Date.now()).catch(() => null);
+    if (activeChildIdRef.current !== childId) return;
+    if (!nursing?.runningSide) {
+      // Widget pas encore à jour : rien à arrêter, on ouvre la tétée.
+      runPicked(childId, "nursing");
+      return;
+    }
+    askNative("Arrêter la tétée ?", [
+      { text: "Arrêter et enregistrer", onPress: () => runPicked(childId, "nursing-stop") },
+      { text: "Voir la tétée", onPress: () => runPicked(childId, "nursing") },
+    ]);
+  }, [activeChild?.id, askNative, runPicked]);
+
   const openWidgetLink = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => {
       if (action === "stop-pick") void pickStopFromWidget();
-      else if (action === "nursing-stop" && opts?.fromSmall && canManageContent) {
-        // Petit widget iPhone, tétée : un appui sert aussi à changer de côté,
-        // d'où « Voir la tétée » (feuille Repas, sans rien arrêter).
-        Alert.alert("Arrêter la tétée ?", "Le côté en cours sera mis en pause, puis la tétée s'ouvre pour l'enregistrer.", [
-          { text: "Arrêter et enregistrer", onPress: () => runWidgetAction("nursing-stop") },
-          { text: "Voir la tétée", onPress: () => runWidgetAction("nursing") },
-          { text: "Annuler", style: "cancel" },
-        ]);
-      } else openFromWidget(action, opts);
+      else if (action === "nursing-stop" && opts?.fromSmall && canManageContent) void askNursingStopFromWidget();
+      else openFromWidget(action, opts);
     },
-    [pickStopFromWidget, openFromWidget, canManageContent, runWidgetAction],
+    [pickStopFromWidget, askNursingStopFromWidget, openFromWidget, canManageContent],
   );
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,

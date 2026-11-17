@@ -60,7 +60,7 @@ export function useWidgetDeepLink(opts: {
       handledRef.current = null;
       return;
     }
-    const key = `${widget}|${child ?? ""}|${nap ?? ""}`;
+    const key = `${widget}|${child ?? ""}|${nap ?? ""}|${ask ?? ""}`;
     if (handledRef.current === key) return;
     const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined, ask: undefined });
     if (!ACTIONS.has(widget)) {

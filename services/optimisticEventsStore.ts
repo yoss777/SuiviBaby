@@ -350,7 +350,6 @@ export function purgeQueuedOptimistic(match: {
   idempotencyKey?: string;
   eventId?: string;
 }): number {
-  markWidgetUserAction();
   let removed = 0;
   for (const [key, e] of entries) {
     const isCreateMatch =
@@ -368,7 +367,10 @@ export function purgeQueuedOptimistic(match: {
       removed++;
     }
   }
-  if (removed > 0) notify();
+  if (removed > 0) {
+    markWidgetUserAction();
+    notify();
+  }
   return removed;
 }
 
@@ -377,8 +379,8 @@ export function purgeQueuedOptimistic(match: {
  * Unlike failOptimistic, this does NOT show an error toast.
  */
 export function removeOptimistic(tempIdOrEventId: string): void {
-  markWidgetUserAction();
   if (entries.delete(tempIdOrEventId)) {
+    markWidgetUserAction();
     notify();
     return;
   }
