@@ -29,16 +29,48 @@ export function compileWidget(src: string, platform: "ios" | "android"): (props:
   return new Function(...names, `return (${src});`)(...names.map((n) => scope[n])) as (props: unknown, env: unknown) => El;
 }
 
-export type WidgetDump = { texts: string[]; links: string[]; a11y: string[]; types: string[]; nativeTimers: number };
+export type WidgetDump = {
+  texts: string[];
+  links: string[];
+  a11y: string[];
+  types: string[];
+  nativeTimers: number;
+  /** accessibilityHint */
+  hints: string[];
+  /** Traits ajoutés (ex. isHeader) */
+  traits: string[];
+  /** Nombre d'éléments masqués au lecteur d'écran */
+  hidden: number;
+  /** Nombre d'accessibilityElement("ignore") */
+  ignored: number;
+  /** Polices à taille fixe (font({ size }) sans textStyle) : tailles */
+  fixedFonts: number[];
+  /** Plafonds Dynamic Type (dynamicTypeSize({ max })) */
+  typeCaps: string[];
+  /** frame({ minHeight }) posés */
+  minHeights: number[];
+};
 
 function fromModifiers(mods: unknown, acc: WidgetDump) {
   if (!Array.isArray(mods)) return;
+  for (const m of mods as Record<string, unknown>[]) {
+    if (m.$type === "accessibilityHint") acc.hints.push(String(m.hint));
+    if (m.$type === "accessibilityAddTraits") acc.traits.push(...(m.traits as string[]));
+    if (m.$type === "accessibilityHidden" && m.hidden) acc.hidden += 1;
+    if (m.$type === "accessibilityElement" && m.children === "ignore") acc.ignored += 1;
+    if (m.$type === "font" && m.textStyle == null && typeof m.size === "number") acc.fixedFonts.push(m.size);
+    if (m.$type === "dynamicTypeSize" && typeof m.max === "string") acc.typeCaps.push(m.max);
+    if (m.$type === "frame" && typeof m.minHeight === "number") acc.minHeights.push(m.minHeight);
+  }
   const s = JSON.stringify(mods);
   for (const m of s.matchAll(/"(?:label|contentDescription)":"((?:[^"\\]|\\.)*)"/g)) acc.a11y.push(JSON.parse(`"${m[1]}"`));
   for (const m of s.matchAll(/"(?:url)":"((?:[^"\\]|\\.)*)"/g)) acc.links.push(JSON.parse(`"${m[1]}"`));
 }
 
-export function dumpWidget(node: unknown, acc: WidgetDump = { texts: [], links: [], a11y: [], types: [], nativeTimers: 0 }): WidgetDump {
+export function dumpWidget(node: unknown, acc: WidgetDump = {
+    texts: [], links: [], a11y: [], types: [], nativeTimers: 0,
+    hints: [], traits: [], hidden: 0, ignored: 0, fixedFonts: [], typeCaps: [], minHeights: [],
+  }): WidgetDump {
   if (node == null || typeof node === "boolean") return acc;
   if (typeof node === "string" || typeof node === "number") {
     acc.texts.push(String(node));

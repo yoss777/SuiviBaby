@@ -66,9 +66,9 @@ import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
+import { useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
 import { useWidgetActionGate } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
-import { moveAppToBack } from "@/modules/widget-push";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1323,22 +1323,8 @@ export default function HomeDashboard() {
     [scheduleDelete, showToast],
   );
 
-  // Android : après une action lancée depuis le widget, retour à l'écran
-  // d'accueil au bout de 5 s si l'écran n'est pas touché entre-temps.
-  const widgetBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelWidgetBack = useCallback(() => {
-    if (widgetBackTimerRef.current) clearTimeout(widgetBackTimerRef.current);
-    widgetBackTimerRef.current = null;
-  }, []);
-  const scheduleWidgetBack = useCallback(() => {
-    if (Platform.OS !== "android") return;
-    cancelWidgetBack();
-    widgetBackTimerRef.current = setTimeout(() => {
-      widgetBackTimerRef.current = null;
-      void moveAppToBack();
-    }, 5500);
-  }, [cancelWidgetBack]);
-  useEffect(() => cancelWidgetBack, [cancelWidgetBack]);
+  // Android : retour auto à l'Accueil après une action du widget (hooks/useWidgetBackTimer.ts).
+  const { schedule: scheduleWidgetBack, cancel: cancelWidgetBack } = useWidgetBackTimer();
 
   const runWidgetAction = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => {
@@ -1374,7 +1360,7 @@ export default function HomeDashboard() {
       if (action === "sleep-stop") {
         if (sommeilEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" });
+          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
           scheduleWidgetBack();
         } else showToast("Aucun sommeil en cours");
         return;
@@ -1395,7 +1381,7 @@ export default function HomeDashboard() {
       if (action === "walk-stop") {
         if (promenadeEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" });
+          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
           scheduleWidgetBack();
         } else showToast("Aucune balade en cours");
         return;
@@ -1457,6 +1443,7 @@ export default function HomeDashboard() {
       showActionToast,
       undoWidgetStart,
       scheduleWidgetBack,
+      cancelWidgetBack,
       openSheetRaw,
       handleResumeNursing,
       handleEditSleepInSheet,

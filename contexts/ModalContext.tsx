@@ -63,7 +63,13 @@ type ModalContextType = {
     buttons?: AlertButton[],
     options?: AlertOptions,
   ) => void;
-  showConfirm: (title: string, message: React.ReactNode, onConfirm: () => void) => void;
+  showConfirm: (
+    title: string,
+    message: React.ReactNode,
+    onConfirm: () => void,
+    /** Par défaut : bouton rouge « Supprimer ». `destructive: false` = couleur normale. */
+    opts?: { confirmText?: string; destructive?: boolean },
+  ) => void;
   hide: () => void;
   /** Vrai si une modale du contexte est affichée (lecture ponctuelle, non réactive). */
   hasOpenModal: () => boolean;
@@ -192,21 +198,30 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     setModalState(null);
   }, []);
 
-  const showConfirm = useCallback((title: string, message: React.ReactNode, onConfirm: () => void) => {
-    present(
-      {
-        type: "confirm",
-        title,
-        message,
-        confirmText: "Supprimer",
-        cancelText: "Annuler",
-        confirmButtonColor: DESTRUCTIVE_COLOR,
-        confirmTextColor: "#fff",
-        onConfirm,
-      },
-      false,
-    );
-  }, [present]);
+  const showConfirm = useCallback(
+    (
+      title: string,
+      message: React.ReactNode,
+      onConfirm: () => void,
+      opts?: { confirmText?: string; destructive?: boolean },
+    ) => {
+      const destructive = opts?.destructive !== false;
+      present(
+        {
+          type: "confirm",
+          title,
+          message,
+          confirmText: opts?.confirmText ?? "Supprimer",
+          cancelText: "Annuler",
+          confirmButtonColor: destructive ? DESTRUCTIVE_COLOR : colorsRef.current.tint,
+          confirmTextColor: destructive ? "#fff" : colorsRef.current.onTint,
+          onConfirm,
+        },
+        false,
+      );
+    },
+    [present],
+  );
 
   useEffect(() => {
     if (!modalState || modalState.type !== "info") return;
