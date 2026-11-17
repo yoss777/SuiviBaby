@@ -10,7 +10,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  setDoc,
   Timestamp,
   where,
 } from "firebase/firestore";
@@ -226,37 +225,6 @@ export async function ajouterEvenement(
   }
 
   return callCreateEventCF(payload);
-}
-
-/**
- * ✨ Ajoute un événement avec un ID spécifique (pour double écriture)
- * Utilise setDoc au lieu de addDoc pour spécifier l'ID
- */
-export async function ajouterEvenementAvecId(
-  childId: string,
-  id: string,
-  data: Omit<Event, "id" | "childId" | "userId" | "createdAt">,
-): Promise<void> {
-  try {
-    const userId = getUserId();
-
-    const eventData = {
-      ...data,
-      childId,
-      userId,
-      createdAt: Timestamp.now(),
-      date:
-        data.date instanceof Date ? Timestamp.fromDate(data.date) : data.date,
-    };
-
-    // setDoc avec merge: true crée ou fusionne si le document existe déjà
-    const docRef = doc(db, COLLECTION_NAME, id);
-    await setDoc(docRef, eventData, { merge: true });
-  } catch (e) {
-    console.error("❌ Erreur lors de l'ajout avec ID :", e);
-    captureServiceError(e, { service: "events", operation: "ajouterEvenementAvecId" });
-    throw e;
-  }
 }
 
 /**

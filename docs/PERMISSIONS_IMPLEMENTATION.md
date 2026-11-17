@@ -104,18 +104,18 @@ function EventsScreen({ childId }) {
 }
 ```
 
-#### 3.3. Ajouter `createdBy` aux events
+#### 3.3. Créer les events par le serveur (obsolète : `createdBy`)
 
 Lors de la création d'un event :
 
+> Obsolète (lot 5, jalon 2) : le client n'écrit plus jamais dans `events`.
+> Les règles refusent création et modification ; passer par
+> `ajouterEvenement` / `modifierEvenement` (`services/eventsService.ts`), qui
+> appellent les callables `validateAndCreateEvent` / `validateAndUpdateEvent`.
+> Le serveur pose lui-même `userId` (compte connecté) et `createdAt`.
+
 ```typescript
-await addDoc(collection(db, 'events'), {
-  childId,
-  type: 'feeding',
-  createdBy: currentUser.uid, // IMPORTANT
-  timestamp: Timestamp.now(),
-  // ... autres données
-});
+await ajouterEvenement(childId, { type: "biberon", date: new Date(), quantite: 120 });
 ```
 
 #### 3.4. Ajouter `userId` aux likes/comments
@@ -207,7 +207,7 @@ firebase emulators:start
 - [ ] Vérifier que tous les accès sont créés
 - [ ] Tester manuellement les 4 rôles
 - [ ] Mettre à jour le code de création d'enfants
-- [ ] Ajouter `createdBy` aux events existants (optionnel)
+- [x] ~~Ajouter `createdBy` aux events existants~~ (obsolète : le serveur pose `userId`)
 - [ ] Ajouter `userId` aux likes/comments existants (optionnel)
 - [ ] Déployer les règles en production
 - [ ] Exécuter la migration en production

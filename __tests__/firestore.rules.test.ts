@@ -756,79 +756,15 @@ describe("events collection", () => {
     await assertFails(getDoc(doc(db, "events", "event1")));
   });
 
-  test("owner can create event with userId == auth.uid", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(
-      setDoc(doc(db, "events", "event2"), {
-        childId: CHILD_ID,
-        userId: ALICE_UID,
-        type: "couche",
-        createdAt: now,
-        data: {},
-      })
-    );
-  });
-
-  test("cannot create event with userId != auth.uid", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertFails(
-      setDoc(doc(db, "events", "event2"), {
-        childId: CHILD_ID,
-        userId: BOB_UID, // spoofing
-        type: "couche",
-        createdAt: now,
-        data: {},
-      })
-    );
-  });
-
-  test("viewer cannot create event", async () => {
-    const db = authedFirestore(BOB_UID);
-    await assertFails(
-      setDoc(doc(db, "events", "event2"), {
-        childId: CHILD_ID,
-        userId: BOB_UID,
-        type: "couche",
-        createdAt: now,
-        data: {},
-      })
-    );
-  });
-
-  test("owner can update event preserving immutable fields", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertSucceeds(
-      updateDoc(doc(db, "events", "event1"), {
-        // Preserve immutable fields
-        userId: ALICE_UID,
-        childId: CHILD_ID,
-        createdAt: now,
-        // Mutable field
-        type: "tetee",
-      })
-    );
-  });
-
-  test("update cannot change userId", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertFails(
-      updateDoc(doc(db, "events", "event1"), {
-        userId: BOB_UID, // changed!
-        childId: CHILD_ID,
-        createdAt: now,
-      })
-    );
-  });
-
-  test("update cannot change childId", async () => {
-    const db = authedFirestore(ALICE_UID);
-    await assertFails(
-      updateDoc(doc(db, "events", "event1"), {
-        userId: ALICE_UID,
-        childId: CHILD2_ID, // changed!
-        createdAt: now,
-      })
-    );
+  // Création et modification : serveur seul (allow create, update: if false).
+  // Les champs immuables et le compte posé par le serveur sont testés côté
+  // callables (functions/__tests__/sprint4.test.js, validateAndUpdateEvent).
+  test.each([ALICE_UID, BOB_UID, CHARLIE_UID])("%s cannot create, merge or update an event from the client", async (uid) => {
+    const db = authedFirestore(uid);
+    const valid = { childId: CHILD_ID, userId: uid, type: "couche", createdAt: now, data: {} };
+    await assertFails(setDoc(doc(db, "events", "event2"), valid));
+    await assertFails(setDoc(doc(db, "events", "event1"), { type: "tetee" }, { merge: true }));
+    await assertFails(updateDoc(doc(db, "events", "event1"), { type: "tetee" }));
   });
 
   test("delete event is always denied (CF only)", async () => {
@@ -2227,32 +2163,15 @@ describe("sprint 4.8 role matrix", () => {
   });
 
   describe("writing events", () => {
-    test.each([ALICE_UID, ADMIN_UID])("%s can create an event", async (uid) => {
-      await assertSucceeds(setDoc(doc(authedFirestore(uid), "events", "new1"), newEvent(uid)));
-    });
-    test.each([CONTRIB_UID, VIEWER_UID, FLAGGED_UID])("%s cannot create an event", async (uid) => {
-      await assertFails(setDoc(doc(authedFirestore(uid), "events", "new1"), newEvent(uid)));
-    });
-    test.each([CONTRIB_UID, VIEWER_UID, FLAGGED_UID])("%s cannot update an event", async (uid) => {
-      await assertFails(updateDoc(doc(authedFirestore(uid), "events", "plainEvent"), { note: "x" }));
+    // Serveur seul : aucun rôle n'écrit en direct, même avec des champs valides.
+    test.each([ALICE_UID, ADMIN_UID, CONTRIB_UID, VIEWER_UID, FLAGGED_UID])("%s cannot create, merge or update an event from the client", async (uid) => {
+      const db = authedFirestore(uid);
+      await assertFails(setDoc(doc(db, "events", "new1"), newEvent(uid)));
+      await assertFails(setDoc(doc(db, "events", "plainEvent"), { note: "x" }, { merge: true }));
+      await assertFails(updateDoc(doc(db, "events", "plainEvent"), { note: "x" }));
     });
     test.each([ALICE_UID, ADMIN_UID, CONTRIB_UID, VIEWER_UID])("%s cannot delete an event from the client", async (uid) => {
       await assertFails(deleteDoc(doc(authedFirestore(uid), "events", "plainEvent")));
-    });
-    test("cannot create an event already flagged as reported", async () => {
-      await assertFails(setDoc(doc(authedFirestore(ALICE_UID), "events", "new1"), { ...newEvent(ALICE_UID), reported: true }));
-    });
-    test.each([
-      ["reported", { reported: false }],
-      ["createdAt", { createdAt: Timestamp.fromMillis(1) }],
-      ["childId", { childId: CHILD2_ID }],
-      ["userId", { userId: BOB_UID }],
-      ["idempotencyKey", { idempotencyKey: "k" }],
-    ])("owner cannot change %s on update", async (_name, patch) => {
-      await assertFails(updateDoc(doc(authedFirestore(ALICE_UID), "events", "plainEvent"), patch as any));
-    });
-    test("owner can still edit ordinary fields", async () => {
-      await assertSucceeds(updateDoc(doc(authedFirestore(ALICE_UID), "events", "plainEvent"), { note: "ok" }));
     });
   });
 

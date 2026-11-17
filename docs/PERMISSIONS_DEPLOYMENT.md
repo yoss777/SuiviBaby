@@ -129,18 +129,18 @@ import { createOwnerAccess } from '@/utils/permissions';
 await createOwnerAccess(childId, currentUser.uid);
 ```
 
-### 2. Ajouter `createdBy` aux events
+### 2. Créer les events par le serveur (obsolète : `createdBy`)
 
 Lors de la création d'événements :
 
+> Obsolète (lot 5, jalon 2) : le client n'écrit plus jamais dans `events`.
+> Les règles refusent création et modification ; passer par
+> `ajouterEvenement` / `modifierEvenement` (`services/eventsService.ts`), qui
+> appellent les callables `validateAndCreateEvent` / `validateAndUpdateEvent`.
+> Le serveur pose lui-même `userId` (compte connecté) et `createdAt`.
+
 ```typescript
-await addDoc(collection(db, 'events'), {
-  childId,
-  type: 'feeding',
-  createdBy: currentUser.uid, // IMPORTANT
-  timestamp: Timestamp.now(),
-  // ... autres données
-});
+await ajouterEvenement(childId, { type: "biberon", date: new Date(), quantite: 120 });
 ```
 
 ### 3. Utiliser les permissions dans les composants

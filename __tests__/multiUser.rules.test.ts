@@ -170,8 +170,9 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     }));
   });
 
-  test("A can still write events", async () => {
-    await assertSucceeds(setDoc(doc(asUser(A), "events", "newA"), { childId: CHILD, userId: A, type: "biberon", createdAt: Timestamp.now() }));
+  test("A (owner) cannot write events from the client either (server callables only), but keeps owner rights", async () => {
+    await assertFails(setDoc(doc(asUser(A), "events", "newA"), { childId: CHILD, userId: A, type: "biberon", createdAt: Timestamp.now() }));
+    await assertSucceeds(setDoc(doc(asUser(A), "eventLikes", "likeA"), { childId: CHILD, eventId: "plain", userId: A }));
   });
 
   const callRole = (uid: string, role: string) =>
@@ -192,14 +193,15 @@ describe("A shares with B, B reads and interacts, A revokes", () => {
     await assertFails(updateDoc(doc(asUser(A), "children", CHILD, "access", B), { role: "owner", canWriteEvents: true }));
 
     await callRole(A, "admin");
-    await assertSucceeds(setDoc(doc(asUser(B), "events", "byParentB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
+    // Rôle admin (« Parent » dans l'app) : aimer un événement sans photo, réservé à owner/admin.
+    await assertSucceeds(setDoc(doc(asUser(B), "eventLikes", "byParentB"), { childId: CHILD, eventId: "plain", userId: B }));
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const access = (await getDoc(doc(ctx.firestore() as any, "children", CHILD, "access", B))).data();
       expect(access).toMatchObject({ role: "admin", canWriteEvents: true, grantedBy: A });
     });
 
     await callRole(A, "contributor");
-    await assertFails(setDoc(doc(asUser(B), "events", "byProcheB"), { childId: CHILD, userId: B, type: "biberon", createdAt: Timestamp.now() }));
+    await assertFails(setDoc(doc(asUser(B), "eventLikes", "byProcheB"), { childId: CHILD, eventId: "plain", userId: B }));
     await assertSucceeds(getDoc(doc(asUser(B), "events", "plain")));
   });
 

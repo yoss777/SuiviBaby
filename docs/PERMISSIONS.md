@@ -191,7 +191,7 @@ Le script :
 Les règles Firestore sont configurées dans [`firestore.rules`](/firestore.rules) pour :
 - Vérifier les permissions côté serveur
 - Empêcher les modifications non autorisées
-- Valider les champs `createdBy`, `userId` pour éviter l'usurpation d'identité
+- Réserver au serveur l'écriture des événements (le serveur pose `userId` d'après le compte connecté) et valider `userId` sur les likes et commentaires pour éviter l'usurpation d'identité
 
 ## Bonnes pratiques
 
