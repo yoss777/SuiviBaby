@@ -1179,9 +1179,9 @@ export function ecouterEvenementsDuJour(
  * ou une balade ouverte avant hier n'était pas chargée par l'Accueil
  * (événements depuis hier 0 h) mais bloquait tout nouveau démarrage.
  */
-export const RUNNING_SESSION_WINDOW_MS = 48 * 3600 * 1000;
+export const RUNNING_SESSION_WINDOW_MS = 24 * 3600 * 1000;
 
-/** Sessions ouvertes (sommeil, balade) des 48 dernières heures, en temps réel. */
+/** Sessions ouvertes (sommeil, balade) des 24 dernières heures, en temps réel. */
 export function ecouterSessionsOuvertes(
   childId: string,
   callback: (events: any[]) => void,

@@ -1,4 +1,5 @@
 // components/forms/ActivitiesForm.tsx
+import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL } from "@/utils/sessionLimits";
 import { otherWalkBlocksResume } from "@/utils/walkResume";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
@@ -257,7 +258,12 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const handleOngoingChange = useCallback((nextOngoing: boolean) => {
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
-  }, []);
+    // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
+    // tombait forcément aujourd'hui, même pour une session d'un autre jour).
+    if (!nextOngoing) {
+      setHeureFin((prev) => prev ?? defaultEndFor(heureDebut));
+    }
+  }, [heureDebut]);
 
   // ============================================
   // HANDLERS
@@ -268,6 +274,11 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
+    // Une balade ne dure jamais 24 h (le serveur refuserait la durée, sans message).
+    if (isChronoMode && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
+      showAlert("Durée impossible", `Une balade ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
     // Ensure heureFin is on the same day and strictly after heureDebut
     if (isChronoMode && !isOngoing && heureFin) {
       const aligned = alignDateToDebut(heureFin, heureDebut);

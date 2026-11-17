@@ -1,4 +1,5 @@
 // components/forms/RoutinesForm.tsx
+import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL } from "@/utils/sessionLimits";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
@@ -304,7 +305,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleOngoingChange = useCallback((nextOngoing: boolean) => {
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
-  }, []);
+    // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
+    // tombait forcément aujourd'hui, même pour une session d'un autre jour).
+    if (!nextOngoing) {
+      setHeureFin((prev) => prev ?? defaultEndFor(heureDebut));
+    }
+  }, [heureDebut]);
 
   // ============================================
   // TYPE SELECTION
@@ -369,6 +375,11 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
 
   const handleSubmit = async () => {
     if (!activeChild?.id || isSubmitting) return;
+    // Un sommeil ne dure jamais 24 h (le serveur refuserait la durée, sans message).
+    if (sheetType !== "nez" && sheetType !== "bain" && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
+      showAlert("Durée impossible", `Un sommeil ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
 
     setIsSubmitting(true);
 

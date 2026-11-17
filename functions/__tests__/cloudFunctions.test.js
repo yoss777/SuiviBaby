@@ -43,7 +43,7 @@ describe("validateAndCreateEvent", () => {
     await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", heureDebut: start, heureFin: start, date: start, idempotencyKey: "s3" }));
     expect([...docs.keys()].filter((k) => k.startsWith("events/"))).toHaveLength(3);
   });
-  it("promenade ouverte derrière plus de 10 activités : vue ; session de plus de 48 h : oubliée", async () => {
+  it("promenade ouverte derrière plus de 10 activités : vue ; session de plus de 24 h : oubliée", async () => {
     const { memoryStore } = require("./memoryFirestore");
     const docs = memoryStore({ "children/c1/access/u1": { role: "owner" } });
     const ago = (h) => new Date(Date.now() - h * 3600_000).toISOString();
@@ -53,8 +53,8 @@ describe("validateAndCreateEvent", () => {
       await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "activite", typeActivite: "jeux", date: ago(2 - i / 10), idempotencyKey: `a${i}` }));
     }
     expect(await fns.validateAndCreateEvent(auth("u1", { ...walk, heureDebut: ago(0), date: ago(0), idempotencyKey: "w2" }))).toEqual({ id: w1.id, alreadyRunning: true });
-    // Sommeil oublié il y a 3 jours : un nouveau démarrage est accepté.
-    await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", heureDebut: ago(72), date: ago(72), idempotencyKey: "old" }));
+    // Sommeil oublié il y a 30 h (plus de 24 h) : un nouveau démarrage est accepté.
+    await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", heureDebut: ago(30), date: ago(30), idempotencyKey: "old" }));
     const fresh = await fns.validateAndCreateEvent(auth("u1", { childId: "c1", type: "sommeil", heureDebut: ago(0), date: ago(0), idempotencyKey: "new" }));
     expect(fresh.alreadyRunning).toBeUndefined();
     expect([...docs.keys()].filter((k) => k.startsWith("events/")).length).toBe(1 + 12 + 2);

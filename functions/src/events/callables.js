@@ -17,11 +17,12 @@ const { isValidDocId } = require("../shared/validation");
  * Retourne la requête des derniers événements du même type, ou null si
  * l'événement créé n'est pas une session en cours.
  */
-// Une session ouverte depuis plus de 48 h est oubliée : elle ne bloque plus
-// un nouveau démarrage. Toutes les sessions de la fenêtre sont lues (index
+// Une session ouverte depuis plus de 24 h est oubliée : elle ne bloque plus
+// un nouveau démarrage (un sommeil ou une balade ne dure jamais 24 h ;
+// au-delà, le serveur refuse d'ailleurs la durée, validation.js). Toutes les sessions de la fenêtre sont lues (index
 // existant childId + type + date) : avec .limit(10), une promenade ouverte
 // derrière dix autres activités n'était pas vue.
-const RUNNING_SESSION_WINDOW_MS = 48 * 3600 * 1000;
+const RUNNING_SESSION_WINDOW_MS = 24 * 3600 * 1000;
 
 function runningSessionQuery(db, childId, data, nowMs = Date.now()) {
   const running = data.heureDebut && !data.heureFin;
