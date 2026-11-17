@@ -48,6 +48,7 @@ import { getAgeInWeeks } from "@/utils/ageUtils";
 import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
+import { suggestForgottenEnd } from "@/utils/forgottenSession";
 import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache } from "@/services/userPreferencesCache";
@@ -1238,6 +1239,10 @@ export default function HomeDashboard() {
       return;
     }
     const start = toDate(sommeilEnCours.heureDebut);
+    // Session oubliée (sieste > 6 h, nuit > 15 h) : le formulaire s'ouvre en
+    // mode terminé, heure de fin plausible pré-remplie (à ajuster), sinon
+    // l'heure saisie partait dans le début et la session restait ouverte.
+    const forgottenEnd = suggestForgottenEnd(start, sommeilEnCours.isNap === false ? "night" : "nap");
 
     openSheet({
       ownerId: headerOwnerId.current,
@@ -1249,6 +1254,7 @@ export default function HomeDashboard() {
         type: "sommeil",
         date: start,
         heureDebut: start,
+        ...(forgottenEnd ? { heureFin: forgottenEnd } : {}),
         isNap: sommeilEnCours.isNap,
         location: sommeilEnCours.location,
         quality: sommeilEnCours.quality,
@@ -1536,6 +1542,7 @@ export default function HomeDashboard() {
       return;
     }
     const start = toDate(promenadeEnCours.heureDebut);
+    const forgottenEnd = suggestForgottenEnd(start, "walk");
 
     openSheet({
       ownerId: headerOwnerId.current,
@@ -1546,6 +1553,7 @@ export default function HomeDashboard() {
         typeActivite: "promenade",
         date: start,
         heureDebut: start,
+        ...(forgottenEnd ? { heureFin: forgottenEnd } : {}),
         description: promenadeEnCours.description ?? promenadeEnCours.note,
       },
       promenadeEnCours,
