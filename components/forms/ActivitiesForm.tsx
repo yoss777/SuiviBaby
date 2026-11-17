@@ -1,4 +1,5 @@
 // components/forms/ActivitiesForm.tsx
+import { otherWalkBlocksResume } from "@/utils/walkResume";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
@@ -308,9 +309,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           return;
         }
       }
-      const isEditingSamePromenade =
-        editData && promenadeEnCours && editData.id === promenadeEnCours.id;
-      if (isChronoMode && isOngoing && isEditing && !isEditingSamePromenade) {
+      if (
+        otherWalkBlocksResume({
+          isChronoMode,
+          isOngoing,
+          isEditing: !!isEditing,
+          editId: editData?.id,
+          runningId: promenadeEnCours?.id,
+        })
+      ) {
         showAlert(
           "Attention",
           "Une autre balade est déjà en cours. Terminez-la d'abord.",
