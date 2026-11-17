@@ -358,6 +358,18 @@ Bascule, dans cet ordre :
 Prochain relèvement de version (2.4…) : déployer d'abord le serveur qui l'accepte,
 puis publier l'app (l'app accepte toute version ≥ la sienne, le serveur une liste fermée).
 
+**Événements en écriture serveur seule (2026-11-17, lot 5 jalon 2)** : `firestore.rules`
+refuse create/update sur `events` côté client ; tout passe par les callables
+(`validateAndCreateEvent`, `validateAndUpdateEvent`, `deleteEventCascade`). Preuve : aucune
+version autorisée (minVersion 1.0.6) n'écrit en direct, vérifié sur chaque commit
+« chore(release) » de la 1.0.6 à la 1.0.21 (seule `ajouterEvenementAvecId`, jamais appelée).
+Les règles s'appliquent aussitôt à toutes les versions installées. Après le déploiement,
+surveiller 48 h :
+- Sentry : recherche `permission-denied` (aucune app ne devrait en produire sur `events`) ;
+- Console Firebase → Firestore → Utilisation → « Requêtes refusées » (doit rester au niveau
+  habituel, les refus d'événements n'existant plus côté app).
+Retour arrière : redéployer la version précédente de `firestore.rules` (aucune app à publier).
+
 ---
 
 ## 9. Dates à surveiller

@@ -241,17 +241,15 @@ service cloud.firestore {
       // Lecture : tous ceux qui ont accès à l'enfant
       allow read: if hasAccess(resource.data.childId);
 
-      // Création : owner/admin + userId == auth.uid. `reported` est posé par le
-      // serveur (modération) : un event ne naît pas déjà masqué.
-      allow create: if canWriteEvents(request.resource.data.childId) &&
-        request.resource.data.userId == request.auth.uid &&
-        !('reported' in request.resource.data);
-
-      // Modification : owner/admin uniquement. userId, childId, createdAt,
-      // idempotencyKey et reported (modération) ne changent jamais côté client.
-      allow update: if canWriteEvents(resource.data.childId) &&
-        !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['userId', 'childId', 'createdAt', 'idempotencyKey', 'reported']);
+      // Création et modification : serveur uniquement (callables
+      // validateAndCreateEvent / validateAndUpdateEvent, functions/src/events).
+      // Ils tiennent ce que les règles ne savent pas exprimer : une seule
+      // session en cours, débit, validation par type, idempotence, verrou
+      // optimiste, lastEventAt. Aucune app autorisée (minVersion 1.0.6) n'écrit
+      // en direct : vérifié le 2026-11-17 sur chaque commit « chore(release) »
+      // de la 1.0.6 à la 1.0.21 (`git grep -nE "(setDoc|addDoc|updateDoc)\("`
+      // filtré sur events) ; seule ajouterEvenementAvecId, jamais appelée.
+      allow create, update: if false;
 
       // Suppression : désactivée côté client — utiliser deleteEventCascade CF
       // pour garantir la suppression atomique des likes/comments associés.

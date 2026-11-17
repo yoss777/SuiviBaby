@@ -368,6 +368,15 @@ describe("4.8 events: roles and update sanitising", () => {
     expect(after.id).toBeUndefined();
   });
 
+  it("create: the server sets userId from the caller and drops reported and id", async () => {
+    await fns.validateAndCreateEvent(call("own", { childId: "c1", type: "couche", userId: "evil", reported: true, id: "zzz" }));
+    const created = [...docs.entries()].filter(([k]) => k.startsWith("events/") && k !== "events/e1").map(([, v]) => v);
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ childId: "c1", type: "couche", userId: "own" });
+    expect(created[0].reported).toBeUndefined();
+    expect(created[0].id).toBeUndefined();
+  });
+
   it("does not let null delete the protected fields", async () => {
     docs.set("events/e1", { ...docs.get("events/e1"), reported: true });
     await fns.validateAndUpdateEvent(call("own", { childId: "c1", eventId: "e1", reported: null, createdAt: null }));
