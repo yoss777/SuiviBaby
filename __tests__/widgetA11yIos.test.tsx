@@ -120,6 +120,13 @@ describe("phrases parlées", () => {
     expect(ro.links.some((l) => l.includes("-stop"))).toBe(false);
   });
 
+  it("petit format, une tétée : « ■ » et le widget ouvre l'arrêt de la tétée avec confirmation (ask=1)", () => {
+    const nursing = { kind: "nursing", timerStartMs: NOW - 10 * 60_000, sinceMs: NOW - 10 * 60_000, sinceLabel: "depuis 14:20", side: "G" } as any;
+    const d = show({ lives: [nursing] }, "systemSmall");
+    expect(d.texts).toContain("■");
+    expect(d.links.some((l) => l.includes("widget=nursing-stop") && l.includes("&ask=1") && !l.includes("&k="))).toBe(true);
+  });
+
   it("données de plus de 2 h : « mis à jour à », « données à vérifier »", () => {
     const d = show({ generatedAtMs: NOW - 3 * H, lives: [napLive(NOW - H)] });
     expect(d.a11y).toContain("Données à vérifier, mis à jour à 12:00");

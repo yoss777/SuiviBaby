@@ -1502,9 +1502,17 @@ export default function HomeDashboard() {
   const openWidgetLink = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => {
       if (action === "stop-pick") void pickStopFromWidget();
-      else openFromWidget(action, opts);
+      else if (action === "nursing-stop" && opts?.fromSmall && canManageContent) {
+        // Petit widget iPhone, tétée : un appui sert aussi à changer de côté,
+        // d'où « Voir la tétée » (feuille Repas, sans rien arrêter).
+        Alert.alert("Arrêter la tétée ?", "Le côté en cours sera mis en pause, puis la tétée s'ouvre pour l'enregistrer.", [
+          { text: "Arrêter et enregistrer", onPress: () => runWidgetAction("nursing-stop") },
+          { text: "Voir la tétée", onPress: () => runWidgetAction("nursing") },
+          { text: "Annuler", style: "cancel" },
+        ]);
+      } else openFromWidget(action, opts);
     },
-    [pickStopFromWidget, openFromWidget],
+    [pickStopFromWidget, openFromWidget, canManageContent, runWidgetAction],
   );
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,

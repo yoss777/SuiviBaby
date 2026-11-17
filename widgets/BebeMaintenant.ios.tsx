@@ -373,7 +373,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // tout le widget (limite d'Apple). Il arrête la session, SANS la clé de
   // l'appareil : l'app demande « Arrêter la sieste ? » (Arrêter / Annuler),
   // jamais d'arrêt sur un simple appui pour ouvrir l'app.
-  const smallStop = small && canWrite && lives.length === 1 && lives[0].kind !== "nursing" ? lives[0] : null;
+  // Tétée comprise : l'app propose « Arrêter et enregistrer » ou « Voir la tétée ».
+  const smallStop = small && canWrite && lives.length === 1 ? lives[0] : null;
   // Plusieurs sessions : l'app demande laquelle arrêter (« stop-pick »).
   const smallPick = small && canWrite && lives.length >= 2;
   // « ■ » visuel du petit format (le lien est celui du widget).
