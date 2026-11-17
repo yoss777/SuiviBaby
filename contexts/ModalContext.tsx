@@ -101,6 +101,13 @@ const isErrorTitle = (value: string) =>
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
+type ModalHostState = {
+  modalState: ModalState;
+  modalProtected: boolean;
+  closeCurrent: (expected?: ModalContent) => void;
+};
+const ModalStateContext = createContext<ModalHostState | null>(null);
+
 // Point d'entrée pour le code hors composant (menus de ligne, liens profonds) :
 // même fenêtre que useModal().showAlert, enregistrée par le provider monté.
 let globalShowAlert: ModalContextType["showAlert"] | null = null;
@@ -109,9 +116,14 @@ export const showAppAlert: ModalContextType["showAlert"] = (...args) => {
   else if (__DEV__) console.warn("showAppAlert appelé sans ModalProvider monté");
 };
 
-export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
-  const colorScheme = useColorScheme() ?? "light";
-  const colors = Colors[colorScheme];
+export const ModalProvider = ({
+  children,
+  renderHost = true,
+}: {
+  children: React.ReactNode;
+  /** false : les fenêtres sont affichées par un <ModalHost /> monté ailleurs. */
+  renderHost?: boolean;
+}) => {
   const [modalState, setModalState] = useState<ModalState>(null);
   // Alerte protégée affichée : le bouton retour Android ne la ferme pas.
   const [modalProtected, setModalProtected] = useState(false);
@@ -129,8 +141,6 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Couleurs lues par ref : les fonctions du contexte restent stables même si
   // le thème change (les consommateurs « actions » ne se re-rendent pas).
-  const colorsRef = useRef(colors);
-  colorsRef.current = colors;
 
   const present = useCallback((content: ModalContent, protectedModal: boolean, key?: string) => {
     if (
@@ -178,9 +188,6 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     if (next?.protectedModal) protectedListenersRef.current.forEach((listener) => listener());
   }, []);
 
-  // Texte posé sur l'aplat tint : token du thème (blanc en clair, foncé en
-  // sombre, où le blanc ne fait que 2.54:1 sur #60a5fa).
-  const tintTextColor = colors.onTint;
 
   const showAlert = useCallback((
     title: string,
@@ -188,8 +195,6 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     buttons: AlertButton[] = [],
     options: AlertOptions = {},
   ) => {
-    const colors = colorsRef.current;
-    const tintTextColor = colors.onTint;
     const isProtected = options.dismissible === false || options.callEmergency === true;
     const cancelOf = buttons.find((btn) => btn.style === "cancel");
     if (buttons.length >= 3) {
@@ -219,8 +224,8 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           title,
           message,
           confirmText: onlyButton?.text ?? "OK",
-          confirmButtonColor: isError ? DESTRUCTIVE_COLOR : colors.tint,
-          confirmTextColor: isError ? "#fff" : tintTextColor,
+          confirmButtonColor: isError ? DESTRUCTIVE_COLOR : undefined,
+          confirmTextColor: isError ? "#fff" : undefined,
           onConfirm: onlyButton?.onPress,
         },
         isProtected,
@@ -242,8 +247,8 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
         message,
         confirmText: confirmButton?.text || "Confirmer",
         cancelText: cancelButton?.text || "Annuler",
-        confirmButtonColor: confirmIsDestructive ? DESTRUCTIVE_COLOR : colors.tint,
-        confirmTextColor: confirmIsDestructive ? "#fff" : tintTextColor,
+        confirmButtonColor: confirmIsDestructive ? DESTRUCTIVE_COLOR : undefined,
+        confirmTextColor: confirmIsDestructive ? "#fff" : undefined,
         onConfirm: confirmButton?.onPress,
         // Comme l'alerte native : « Annuler », le retour Android et le fond
         // exécutent l'action du bouton d'annulation.
@@ -275,8 +280,8 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           message,
           confirmText: opts?.confirmText ?? "Supprimer",
           cancelText: "Annuler",
-          confirmButtonColor: destructive ? DESTRUCTIVE_COLOR : colorsRef.current.tint,
-          confirmTextColor: destructive ? "#fff" : colorsRef.current.onTint,
+          confirmButtonColor: destructive ? DESTRUCTIVE_COLOR : undefined,
+          confirmTextColor: destructive ? "#fff" : undefined,
           onConfirm,
         },
         false,
@@ -324,9 +329,38 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
     [showAlert, showConfirm, hide, hasOpenModal, subscribeProtectedModal],
   );
 
+  const hostState = useMemo(
+    () => ({ modalState, modalProtected, closeCurrent }),
+    [modalState, modalProtected, closeCurrent],
+  );
+
   return (
     <ModalContext.Provider value={value}>
-      {children}
+      <ModalStateContext.Provider value={hostState}>
+        {children}
+        {renderHost && <ModalHost />}
+      </ModalStateContext.Provider>
+    </ModalContext.Provider>
+  );
+};
+
+/**
+ * Affichage des fenêtres. Monté par le provider (tests, usage simple) ou,
+ * dans l'app, sous le thème de l'app (`renderHost={false}` + `<ModalHost />`
+ * dans RootLayout) : les fenêtres suivent alors le thème choisi dans l'app,
+ * pas celui du téléphone. Les couleurs sont résolues ici, à l'affichage.
+ */
+export function ModalHost() {
+  const host = useContext(ModalStateContext);
+  const colorScheme = useColorScheme() ?? "light";
+  const colors = Colors[colorScheme];
+  // Texte posé sur l'aplat tint : token du thème (blanc en clair, foncé en
+  // sombre, où le blanc ne fait que 2.54:1 sur #60a5fa).
+  const tintTextColor = colors.onTint;
+  if (!host) return null;
+  const { modalState, modalProtected, closeCurrent } = host;
+  return (
+    <>
       {modalState?.type === "info" && (
         <InfoModal
           visible={true}
@@ -352,7 +386,7 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           message={modalState.message}
           confirmText={modalState.confirmText}
           cancelText={modalState.cancelText}
-          confirmButtonColor={modalState.confirmButtonColor}
+          confirmButtonColor={modalState.confirmButtonColor ?? colors.tint}
           confirmTextColor={modalState.confirmTextColor ?? tintTextColor}
           dismissOnBack={!modalProtected}
           onCancel={() => {
@@ -386,9 +420,10 @@ export const ModalProvider = ({ children }: { children: React.ReactNode }) => {
           }}
         />
       )}
-    </ModalContext.Provider>
+    </>
   );
-};
+}
+
 
 // Même valeur que useModal : toutes les fonctions sont stables (le contexte ne
 // porte aucun état), un consommateur qui n'appelle que des actions ne se

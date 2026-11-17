@@ -6,7 +6,7 @@ import { Colors } from "@/constants/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
-import { ModalProvider, showAppAlert } from "@/contexts/ModalContext";
+import { ModalHost, ModalProvider, showAppAlert } from "@/contexts/ModalContext";
 import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { PremiumProvider } from "@/contexts/PremiumContext";
@@ -109,13 +109,19 @@ function GestureWrapper({ children }: { children: ReactNode }) {
  *   MomentsNotification dépend de Auth + Baby
  *   Migration dépend de Auth + Modal
  */
+// Fenêtres affichées par <ModalHost /> dans RootLayout, sous le thème de l'app
+// (le provider reste au-dessus : l'authentification en a besoin).
+const ModalProviderThemedHost = ({ children }: { children: React.ReactNode }) => (
+  <ModalProvider renderHost={false}>{children}</ModalProvider>
+);
+
 const AppProviders = composeProviders([
   ErrorBoundary,
   GestureWrapper,
   SafeAreaProvider,
   PortalProvider,
   ToastProvider,
-  ModalProvider,
+  ModalProviderThemedHost,
   AuthProvider,
   AppThemeProvider,
   PremiumProvider,
@@ -134,6 +140,7 @@ function RootLayout() {
       <InvitationListener />
       <WidgetOrphanGuard />
       <AppUpdateManager />
+      <ModalHost />
     </AppProviders>
   );
 }

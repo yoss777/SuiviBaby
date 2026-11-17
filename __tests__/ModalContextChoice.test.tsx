@@ -135,3 +135,19 @@ describe("buttonsFitSideBySide (petits écrans, texte agrandi)", () => {
     expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1.5)).toBe(false);
   });
 });
+
+describe("ModalHost sous le thème de l'app", () => {
+  it("fenêtre affichée par l'hôte séparé (provider sans rendu propre)", () => {
+    const { ModalHost } = require("@/contexts/ModalContext");
+    render(
+      <ModalProvider renderHost={false}>
+        <Grab />
+        <ModalHost />
+      </ModalProvider>,
+    );
+    act(() => modal.showAlert("Titre", "affiché par l'hôte"));
+    expect(screen.getByText("affiché par l'hôte")).toBeTruthy();
+    // Une seule fenêtre : le provider n'en rend pas une seconde.
+    expect(screen.getAllByText("affiché par l'hôte")).toHaveLength(1);
+  });
+});
