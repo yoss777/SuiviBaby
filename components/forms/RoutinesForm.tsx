@@ -1,5 +1,5 @@
 // components/forms/RoutinesForm.tsx
-import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL, unusualSessionMessage } from "@/utils/sessionLimits";
+import { defaultEndFor, exceedsMaxSession, lateNapMessage, MAX_SESSION_LABEL, napCrossesMidnight, unusualSessionMessage } from "@/utils/sessionLimits";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
@@ -308,9 +308,17 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
     // tombait forcément aujourd'hui, même pour une session d'un autre jour).
     if (!nextOngoing) {
-      setHeureFin((prev) => prev ?? defaultEndFor(heureDebut));
+      setHeureFin((prev) => {
+        if (prev) return prev;
+        const end = defaultEndFor(heureDebut);
+        if (sheetType !== "nap") return end;
+        // Sieste : même jour que le début (elle ne passe pas minuit).
+        const endOfDay = new Date(heureDebut);
+        endOfDay.setHours(23, 59, 0, 0);
+        return new Date(Math.min(end.getTime(), endOfDay.getTime()));
+      });
     }
-  }, [heureDebut]);
+  }, [heureDebut, sheetType]);
 
   // ============================================
   // TYPE SELECTION
@@ -381,8 +389,21 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
       showAlert("Durée impossible", `Un sommeil ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
       return;
     }
-    // Durée inhabituelle (sieste > 6 h, nuit > 15 h) : sans doute une erreur.
-    const unusual = isSleep && !confirmedUnusual ? unusualSessionMessage(sheetType, heureDebut, isOngoing ? null : heureFin) : null;
+    // Une sieste ne passe pas minuit : sinon c'est une nuit (ou une erreur de date).
+    if (sheetType === "nap" && !isOngoing && heureFin && napCrossesMidnight(heureDebut, heureFin)) {
+      showAlert(
+        "Fin le lendemain",
+        "Une sieste se termine le même jour. Corrigez la date de fin, ou choisissez « Nuit ».",
+      );
+      return;
+    }
+    // Durée inhabituelle (sieste > 6 h, nuit > 15 h), ou sieste démarrée
+    // entre 20:00 et 5:00 (plutôt une nuit) : sans doute une erreur.
+    const unusual =
+      isSleep && !confirmedUnusual
+        ? unusualSessionMessage(sheetType, heureDebut, isOngoing ? null : heureFin) ??
+          (sheetType === "nap" ? lateNapMessage(heureDebut) : null)
+        : null;
     if (unusual) {
       showAlert("Durée inhabituelle", unusual, [
         { text: "Corriger", style: "cancel" },

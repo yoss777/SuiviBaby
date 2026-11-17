@@ -24,3 +24,8 @@ it("balade : fin le même jour que le début (jamais après 23:59)", () => {
   const late = suggestForgottenEnd(new Date(2026, 10, 16, 23, 30), "walk", new Date(2026, 10, 17, 19, 0).getTime())!;
   expect(late.getTime()).toBe(new Date(2026, 10, 16, 23, 59).getTime());
 });
+
+it("sieste oubliée : fin bornée à 23:59 du jour du début (jamais le lendemain)", () => {
+  const end = suggestForgottenEnd(new Date(2026, 10, 15, 23, 0), "nap", new Date(2026, 10, 16, 12, 0).getTime())!;
+  expect(end.getTime()).toBe(new Date(2026, 10, 15, 23, 59).getTime());
+});

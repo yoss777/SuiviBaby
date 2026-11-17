@@ -13,8 +13,8 @@ export function suggestForgottenEnd(start: Date, kind: "nap" | "night" | "walk",
   const startMs = start.getTime();
   if (!Number.isFinite(startMs) || nowMs - startMs < STALE_MS[kind]) return null;
   const end = Math.min(startMs + TYPICAL_MS[kind], nowMs);
-  if (kind !== "walk") return new Date(end);
-  // Balade : même jour que le début (le formulaire Balade ne passe pas minuit).
+  if (kind === "night") return new Date(end);
+  // Sieste et balade : même jour que le début (elles ne passent pas minuit).
   const endOfDay = new Date(start);
   endOfDay.setHours(23, 59, 0, 0);
   return new Date(Math.min(end, endOfDay.getTime()));

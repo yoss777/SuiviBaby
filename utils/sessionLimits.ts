@@ -43,3 +43,18 @@ export function unusualSessionMessage(
   if (!Number.isFinite(ms) || ms <= UNUSUAL_MS[kind] || ms >= MAX_SESSION_MS) return null;
   return `${durationLabel(ms)} pour ${KIND_LABEL[kind]}, c'est inhabituel : est-ce une erreur de date ou d'heure ?`;
 }
+
+/** Une sieste ne passe pas minuit : fin le même jour que le début. */
+export function napCrossesMidnight(start: Date, end: Date): boolean {
+  return (
+    end.getFullYear() !== start.getFullYear() || end.getMonth() !== start.getMonth() || end.getDate() !== start.getDate()
+  );
+}
+
+/** Sieste démarrée entre 20:00 et 5:00 : c'est plutôt une nuit (message à confirmer), sinon null. */
+export function lateNapMessage(start: Date): string | null {
+  const h = start.getHours();
+  if (h >= 5 && h < 20) return null;
+  const hh = `${String(h).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`;
+  return `Une sieste à ${hh} ? À cette heure-ci, c'est plutôt une nuit.`;
+}

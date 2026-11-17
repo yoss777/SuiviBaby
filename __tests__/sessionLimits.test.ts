@@ -29,3 +29,14 @@ it("durée inhabituelle : sieste > 6 h, nuit > 15 h, balade > 9 h (< 24 h) ; sin
   // En cours : jusqu'à maintenant.
   expect(unusualSessionMessage("nap", new Date(T - 8 * H), null, T)).toContain("8 h");
 });
+
+import { lateNapMessage, napCrossesMidnight } from "@/utils/sessionLimits";
+
+it("sieste : jamais le lendemain ; démarrée entre 20:00 et 5:00 → plutôt une nuit", () => {
+  const start = new Date(2026, 10, 16, 14, 0);
+  expect(napCrossesMidnight(start, new Date(2026, 10, 16, 16, 0))).toBe(false);
+  expect(napCrossesMidnight(start, new Date(2026, 10, 17, 0, 30))).toBe(true);
+  expect(lateNapMessage(new Date(2026, 10, 16, 14, 0))).toBeNull();
+  expect(lateNapMessage(new Date(2026, 10, 16, 22, 5))).toBe("Une sieste à 22:05 ? À cette heure-ci, c'est plutôt une nuit.");
+  expect(lateNapMessage(new Date(2026, 10, 17, 4, 30))).toContain("04:30");
+});
