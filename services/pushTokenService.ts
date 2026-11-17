@@ -40,6 +40,18 @@ let desiredWidgetChildId: string | null = null;
 let lastWidgetChildId: string | null = null;
 /** Compte du dernier enregistrement réussi (réenregistrement si le jeton a disparu). */
 let registeredUserId: string | null = null;
+/**
+ * Génération de session : avancée à chaque déconnexion. Un enregistrement
+ * commencé avant ne doit ni recréer le jeton du compte déconnecté (le serveur
+ * continuerait à lui envoyer les données du bébé), ni marquer son état.
+ */
+let sessionGen = 0;
+/** Génération du dernier enregistrement démarré (reconnexion rapide pendant une écriture). */
+let lastStartedGen = -1;
+/** Attente maximale d'un enregistrement en cours à la déconnexion. */
+export const SIGN_OUT_WAIT_MS = 5000;
+/** Enregistrement en cours (même compte, même session) : mutualisé. */
+let inFlight: { userId: string; gen: number; promise: Promise<void> } | null = null;
 /** Délais des nouvelles tentatives d'écriture de l'enfant du widget. */
 const WIDGET_CHILD_RETRY_MS = [10_000, 30_000, 120_000];
 /** Permission de notification accordée lors du dernier getExpoPushToken. */
@@ -149,7 +161,18 @@ async function linkKeyField(): Promise<{ widgetLinkKey?: string }> {
  * Enregistre le push token dans Firestore.
  * Utilise token comme ID de document pour idempotence.
  */
-export async function registerPushToken(userId: string): Promise<void> {
+export function registerPushToken(userId: string): Promise<void> {
+  if (inFlight && inFlight.userId === userId && inFlight.gen === sessionGen) return inFlight.promise;
+  const gen = sessionGen;
+  lastStartedGen = gen;
+  const promise = registerOnce(userId, gen).finally(() => {
+    if (inFlight?.promise === promise) inFlight = null;
+  });
+  inFlight = { userId, gen, promise };
+  return promise;
+}
+
+async function registerOnce(userId: string, gen: number): Promise<void> {
   try {
     const token = await getExpoPushToken();
     if (!token) return;
@@ -174,6 +197,12 @@ export async function registerPushToken(userId: string): Promise<void> {
     }
 
     const installed = await widgetInstalled();
+    const cap = await widgetCap();
+    const linkKey = await linkKeyField();
+    // Déconnexion pendant les lectures : rien n'est écrit.
+    if (gen !== sessionGen) return;
+    // Enfant réellement écrit (il peut changer pendant l'écriture).
+    const writtenChildId = desiredWidgetChildId;
     await setDoc(
       docRef,
       {
@@ -185,28 +214,42 @@ export async function registerPushToken(userId: string): Promise<void> {
         // Widget temps réel (E3) : fuseau pour le « jour », version et capacité.
         tz: deviceTimeZone(),
         appVersion: Constants.expoConfig?.version ?? null,
-        widgetCap: await widgetCap(),
+        widgetCap: cap,
         // Données du widget envoyées seulement si un widget est posé
         // (minimisation des données de santé) ; revu au retour au premier plan.
         // Inconnu (module absent) : champ inchangé ; absent = pas d'envoi.
         ...(installed == null ? {} : { widgetPush: installed }),
         // Clé des liens de cet appareil : le serveur l'ajoute aux liens du
         // widget qu'il réécrit (sinon, confirmation demandée à l'appui).
-        ...(await linkKeyField()),
+        ...linkKey,
         // Enfant affiché par le widget, s'il est déjà connu (sinon posé par
         // setWidgetChild). Jeton repris d'un autre compte : l'enfant de l'ancien
         // compte est retiré (sinon le serveur continuait à lui écrire ce bébé).
-        ...(desiredWidgetChildId
-          ? { widgetChildId: desiredWidgetChildId }
+        ...(writtenChildId
+          ? { widgetChildId: writtenChildId }
           : ownExisting
             ? {}
             : { widgetChildId: deleteField() }),
       },
       { merge: true },
     );
-    lastWidgetChildId = desiredWidgetChildId;
+    // Déconnexion pendant l'écriture : le jeton recréé est supprimé aussitôt,
+    // sauf si un enregistrement a démarré depuis (reconnexion rapide, même
+    // document) : c'est lui qui fait foi.
+    if (gen !== sessionGen) {
+      if (lastStartedGen > gen) return;
+      await deleteDoc(docRef).catch((error) =>
+        captureServiceError(error, { service: "pushToken", operation: "registerAfterSignOut" }),
+      );
+      return;
+    }
+    lastWidgetChildId = writtenChildId;
     registeredUserId = userId;
     lastWidgetPush = installed;
+    // Autre enfant voulu pendant l'écriture : on l'écrit à son tour.
+    if (desiredWidgetChildId && desiredWidgetChildId !== writtenChildId) {
+      scheduleWidgetChildWrite(desiredWidgetChildId, 0, 0);
+    }
   } catch (error) {
     console.error("Erreur registerPushToken:", error);
     captureServiceError(error, { service: "pushToken", operation: "registerPushToken" });
@@ -221,12 +264,30 @@ export async function removePushTokens(userId: string): Promise<void> {
   // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
   // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
   // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
+  sessionGen++;
   if (widgetChildTimer) clearTimeout(widgetChildTimer);
   widgetChildTimer = null;
   lastWidgetChildId = null;
   desiredWidgetChildId = null;
   registeredUserId = null;
   lastWidgetPush = null;
+  // Enregistrement en cours : il voit la nouvelle génération et n'écrit rien,
+  // ou supprime ce qu'il a recréé. On l'attend pour que cela se fasse avant la
+  // déconnexion Firebase (sinon refusé faute d'authentification).
+  // Attente bornée : hors ligne, l'écriture ne se termine qu'au retour du
+  // réseau ; la déconnexion ne doit jamais rester bloquée. Au-delà, la
+  // génération protège encore (rien de marqué, document supprimé à sa fin).
+  const pending = inFlight?.promise;
+  if (pending) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      pending.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, SIGN_OUT_WAIT_MS);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+  }
   try {
     const q = query(
       collection(db, COLLECTION),

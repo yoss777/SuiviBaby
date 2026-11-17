@@ -37,6 +37,7 @@ object WidgetPushGuards {
    * @param appWriteAtMs dernière écriture du widget par l'app (horloge du téléphone, 0 si aucune)
    * @param foreground app visible : ses écouteurs Firestore font foi
    * @param skewMs tolérance d'horloge entre le serveur et le téléphone
+   * @param clockOffsetMs écart d'horloge téléphone − serveur estimé ([clockOffsetMs]) ; 0 si inconnu
    */
   fun decide(
     childId: String?,
@@ -47,13 +48,58 @@ object WidgetPushGuards {
     appWriteAtMs: Long,
     foreground: Boolean,
     skewMs: Long = 2_000L,
+    clockOffsetMs: Long = 0L,
+    receivedAtMs: Long? = null,
   ): WidgetPushOutcome {
-    if (childId.isNullOrEmpty() || seq <= 0L || propsVersion != 1) return WidgetPushOutcome.INVALID
+    if (childId.isNullOrEmpty() || seq <= 0L || seq > MAX_SEQ || propsVersion != 1) return WidgetPushOutcome.INVALID
     if (foreground) return WidgetPushOutcome.FOREGROUND
     if (shownChildId.isNullOrEmpty() || shownChildId != childId) return WidgetPushOutcome.OTHER_CHILD
     if (seq <= lastSeq) return WidgetPushOutcome.STALE_SEQ
-    // Lecture serveur antérieure à ce que l'app a déjà écrit : ne pas revenir en arrière.
-    if (appWriteAtMs > 0L && seq + skewMs < appWriteAtMs) return WidgetPushOutcome.OLDER_THAN_APP
+    // Lecture serveur antérieure à ce que l'app a déjà écrit : ne pas revenir en
+    // arrière. Heure serveur ramenée à l'horloge du téléphone (écart estimé) :
+    // un téléphone en avance ne refuse plus les messages frais.
+    // Seulement dans les 10 min qui suivent l'écriture de l'app (la course à
+    // couvrir) : une estimation faussée par un changement d'heure ne bloque
+    // jamais le widget durablement.
+    val recentAppWrite = receivedAtMs == null || receivedAtMs - appWriteAtMs <= APP_GUARD_WINDOW_MS
+    if (appWriteAtMs > 0L && recentAppWrite && seq + clockOffsetMs + skewMs < appWriteAtMs) return WidgetPushOutcome.OLDER_THAN_APP
     return WidgetPushOutcome.APPLIED
   }
+
+  /** Séquence plausible (au-delà de l'an 2100 : message invalide, jamais retenu ; pas de débordement). */
+  const val MAX_SEQ = 4_102_444_800_000L
+  /** La garde « plus ancien que l'app » ne joue que juste après une écriture de l'app. */
+  const val APP_GUARD_WINDOW_MS = 10 * 60_000L
+  /** Échantillons gardés pour estimer l'écart d'horloge téléphone − serveur. */
+  const val OFFSET_SAMPLES = 10
+  /** Échantillons plus vieux (heure de réception) : oubliés. */
+  const val OFFSET_MAX_AGE_MS = 24 * 3_600_000L
+
+  /** Échantillon : (réception − heure serveur du message, heure de réception). */
+  private fun fresh(samples: List<Pair<Long, Long>>, nowMs: Long) =
+    samples.filter { (_, at) -> at <= nowMs + 60_000L && nowMs - at <= OFFSET_MAX_AGE_MS }
+
+  /**
+   * Écart d'horloge téléphone − serveur : plus petit échantillon des dernières
+   * 24 h, sans celui du message en cours. Sans historique : 0 (tolérance fixe
+   * seule). Même calcul que services/widgetPushIosState.ts.
+   */
+  fun clockOffsetMs(samples: List<Pair<Long, Long>>, nowMs: Long): Long =
+    fresh(samples, nowMs).minOfOrNull { it.first } ?: 0L
+
+  /** Ajoute l'échantillon d'un message bien formé (10 au plus, dernières 24 h). */
+  fun nextOffsetSamples(samples: List<Pair<Long, Long>>, sample: Long, nowMs: Long): List<Pair<Long, Long>> =
+    (fresh(samples, nowMs) + (sample to nowMs)).takeLast(OFFSET_SAMPLES)
+
+  /** « échantillon:réception,… » ; entrées illisibles ignorées. */
+  fun parseOffsets(raw: String?): List<Pair<Long, Long>> =
+    raw.orEmpty().split(',').mapNotNull { e ->
+      val parts = e.split(':')
+      val x = parts.getOrNull(0)?.toLongOrNull()
+      val at = parts.getOrNull(1)?.toLongOrNull()
+      if (parts.size == 2 && x != null && at != null) x to at else null
+    }
+
+  fun formatOffsets(samples: List<Pair<Long, Long>>): String =
+    samples.joinToString(",") { "${it.first}:${it.second}" }
 }

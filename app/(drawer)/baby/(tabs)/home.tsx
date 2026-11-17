@@ -275,6 +275,11 @@ export default function HomeDashboard() {
   // Bébé de la dernière réponse du serveur : ses données ne sont dans `data`
   // qu'après la fusion (anti-rebond de 50 ms), d'où le relais par l'effet de fusion.
   const serverChildRef = useRef<string | null>(null);
+  // Enfant actif à l'instant (lu après une attente : changé entre-temps ?).
+  const activeChildIdRef = useRef<string | undefined>(activeChild?.id);
+  useEffect(() => {
+    activeChildIdRef.current = activeChild?.id;
+  }, [activeChild?.id]);
 
   const [todayStats, setTodayStats] = useState<TodayStats>({
     meals: {
@@ -1397,6 +1402,9 @@ export default function HomeDashboard() {
           if (state?.runningSide) {
             await saveNursingTimer(childId, toggleSide(state, state.runningSide, now));
           }
+          // Bébé changé pendant l'attente : la feuille Repas ne s'ouvre pas pour
+          // un autre enfant (le chrono de celui-ci est bien arrêté).
+          if (activeChildIdRef.current !== childId) return;
           handleResumeNursing();
         })();
         return;
