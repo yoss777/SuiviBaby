@@ -12,5 +12,10 @@ const STALE_MS = { nap: STALE_NAP_MS, night: STALE_NIGHT_MS, walk: STALE_WALK_MS
 export function suggestForgottenEnd(start: Date, kind: "nap" | "night" | "walk", nowMs = Date.now()): Date | null {
   const startMs = start.getTime();
   if (!Number.isFinite(startMs) || nowMs - startMs < STALE_MS[kind]) return null;
-  return new Date(Math.min(startMs + TYPICAL_MS[kind], nowMs));
+  const end = Math.min(startMs + TYPICAL_MS[kind], nowMs);
+  if (kind !== "walk") return new Date(end);
+  // Balade : même jour que le début (le formulaire Balade ne passe pas minuit).
+  const endOfDay = new Date(start);
+  endOfDay.setHours(23, 59, 0, 0);
+  return new Date(Math.min(end, endOfDay.getTime()));
 }

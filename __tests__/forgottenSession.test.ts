@@ -15,3 +15,12 @@ it("oubliée : début + durée typique (sieste 1 h 30, nuit 10 h, balade 1 h)", 
   expect(suggestForgottenEnd(start, "night", NOW)!.getTime()).toBe(start.getTime() + 10 * H);
   expect(suggestForgottenEnd(new Date(NOW - 10 * H), "walk", NOW)!.getTime()).toBe(NOW - 9 * H);
 });
+
+it("balade : fin le même jour que le début (jamais après 23:59)", () => {
+  const start = new Date(2026, 10, 16, 20, 0); // 16/11 20:00 (heure locale)
+  const end = suggestForgottenEnd(start, "walk", new Date(2026, 10, 17, 19, 0).getTime())!;
+  expect(end.getDate()).toBe(16);
+  expect(end.getTime()).toBe(new Date(2026, 10, 16, 21, 0).getTime());
+  const late = suggestForgottenEnd(new Date(2026, 10, 16, 23, 30), "walk", new Date(2026, 10, 17, 19, 0).getTime())!;
+  expect(late.getTime()).toBe(new Date(2026, 10, 16, 23, 59).getTime());
+});

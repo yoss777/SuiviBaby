@@ -49,7 +49,7 @@ import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
 import { suggestForgottenEnd } from "@/utils/forgottenSession";
-import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
+import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, RUNNING_SESSION_WINDOW_MS, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
@@ -228,8 +228,8 @@ export default function HomeDashboard() {
     childId: activeChild?.id,
   });
 
-  // Sessions ouvertes sur la fenêtre du serveur (48 h) : une sieste démarrée
-  // avant hier, oubliée, restait invisible mais bloquait tout démarrage.
+  // Sessions ouvertes sur la fenêtre du serveur (24 h) : une session ouverte
+  // avant hier restait invisible mais bloquait tout démarrage.
   const { mergedEvents: openSessionEvents, setFirestoreEvents: setOpenSessionEvents } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
   });
@@ -668,8 +668,14 @@ export default function HomeDashboard() {
     [activeChild?.id, showToast],
   );
   const sommeilEnCours = useMemo(() => {
+    // « En cours » = ouverte depuis moins de 24 h, comme le serveur (au-delà,
+    // oubliée : elle ne bloque plus un démarrage, ni ici ni côté serveur).
     const open = (item: any) =>
-      !softDeletedIds.has(item.id) && !item.heureFin && !!item.heureDebut && isValidDate(toDate(item.heureDebut));
+      !softDeletedIds.has(item.id) &&
+      !item.heureFin &&
+      !!item.heureDebut &&
+      isValidDate(toDate(item.heureDebut)) &&
+      Date.now() - toDate(item.heureDebut).getTime() < RUNNING_SESSION_WINDOW_MS;
     return (
       data.sommeils.find(open) ??
       // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.
@@ -684,7 +690,8 @@ export default function HomeDashboard() {
       item.typeActivite === "promenade" &&
       !!item.heureDebut &&
       !item.heureFin &&
-      isValidDate(toDate(item.heureDebut));
+      isValidDate(toDate(item.heureDebut)) &&
+      Date.now() - toDate(item.heureDebut).getTime() < RUNNING_SESSION_WINDOW_MS;
     return (
       data.activites.find(open) ??
       // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.

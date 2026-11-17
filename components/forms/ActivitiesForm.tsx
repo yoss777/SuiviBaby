@@ -261,7 +261,10 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
     // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
     // tombait forcément aujourd'hui, même pour une session d'un autre jour).
     if (!nextOngoing) {
-      setHeureFin((prev) => prev ?? defaultEndFor(heureDebut));
+      // Même jour que le début (une balade ne passe pas minuit).
+      const endOfDay = new Date(heureDebut);
+      endOfDay.setHours(23, 59, 0, 0);
+      setHeureFin((prev) => prev ?? new Date(Math.min(defaultEndFor(heureDebut).getTime(), endOfDay.getTime())));
     }
   }, [heureDebut]);
 
@@ -274,13 +277,19 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
 
   const handleSubmit = async (confirmedUnusual = false) => {
     if (!activeChild?.id || isSubmitting) return;
+    // Fin telle qu'enregistrée (ramenée au jour du début, voir plus bas) : les
+    // contrôles de durée portent sur elle.
+    const finChecked = heureFin ? alignDateToDebut(heureFin, heureDebut) : null;
     // Une balade ne dure jamais 24 h (le serveur refuserait la durée, sans message).
-    if (isChronoMode && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
+    if (isChronoMode && !isOngoing && finChecked && exceedsMaxSession(heureDebut, finChecked)) {
       showAlert("Durée impossible", `Une balade ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
       return;
     }
     // Durée inhabituelle (balade > 9 h) : sans doute une erreur.
-    const unusual = isChronoMode && !confirmedUnusual ? unusualSessionMessage("walk", heureDebut, isOngoing ? null : heureFin) : null;
+    const unusual =
+      isChronoMode && !confirmedUnusual && !(finChecked && finChecked <= heureDebut)
+        ? unusualSessionMessage("walk", heureDebut, isOngoing ? null : finChecked)
+        : null;
     if (unusual) {
       showAlert("Durée inhabituelle", unusual, [
         { text: "Corriger", style: "cancel" },

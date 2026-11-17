@@ -86,7 +86,11 @@ function isPremium(subscriptionSnap, nowMs) {
 }
 
 /** Événements bruts de l'enfant → sources du module partagé (heures en ms). */
-function splitEvents(eventDocs) {
+// Comme la garde « déjà en cours » (events/callables.js) : au-delà de 24 h,
+// une session ouverte est oubliée, elle n'est plus « en cours ».
+const RUNNING_MAX_MS = 24 * 3600 * 1000;
+
+function splitEvents(eventDocs, nowMs = Date.now()) {
   const out = { tetees: [], biberons: [], solides: [], mictions: [], selles: [], others: [], sleeps: [], sleepNow: null, walkNow: null };
   for (const d of eventDocs) {
     const e = d.data();
@@ -114,11 +118,11 @@ function splitEvents(eventDocs) {
       default: {
         if (e.type === "sommeil") {
           out.sleeps.push({ ms, startMs, endMs });
-          if (Number.isFinite(startMs) && e.heureFin == null && (!out.sleepNow || startMs > out.sleepNow.startMs)) {
+          if (Number.isFinite(startMs) && e.heureFin == null && nowMs - startMs < RUNNING_MAX_MS && (!out.sleepNow || startMs > out.sleepNow.startMs)) {
             out.sleepNow = { startMs, isNap: typeof e.isNap === "boolean" ? e.isNap : null };
           }
         }
-        if (e.type === "activite" && e.typeActivite === "promenade" && Number.isFinite(startMs) && e.heureFin == null) {
+        if (e.type === "activite" && e.typeActivite === "promenade" && Number.isFinite(startMs) && e.heureFin == null && nowMs - startMs < RUNNING_MAX_MS) {
           if (!out.walkNow || startMs > out.walkNow.startMs) out.walkNow = { startMs };
         }
         // Champs utiles aux libellés du fil seulement (pas de note, pas d'auteur).
@@ -238,7 +242,7 @@ async function fanOutWidget(db, childId, { urgent }) {
     db.doc(`children/${childId}/live/nursing`).get(),
   ]);
   const seq = eventsSnap.readTime && typeof eventsSnap.readTime.toMillis === "function" ? eventsSnap.readTime.toMillis() : nowMs;
-  const split = splitEvents(eventsSnap.docs);
+  const split = splitEvents(eventsSnap.docs, nowMs);
   const nursing = widget.usableNursing(liveSnap.exists ? liveSnap.data() : null, nowMs);
   // Date illisible : « inconnu » (undefined), jamais « aucun repas noté ».
   const unknown = { unknownOnInvalid: true };
