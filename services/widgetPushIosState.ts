@@ -10,7 +10,38 @@ const K = {
   shown: "widgetPushIos:shown",
   seq: "widgetPushIos:seq",
   appAt: "widgetPushIos:appAt",
+  offsets: "widgetPushIos:offsets",
 } as const;
+
+/** Échantillons gardés pour estimer l'écart d'horloge téléphone − serveur. */
+const OFFSET_SAMPLES = 10;
+/** Échantillons plus vieux (heure de réception) : oubliés. */
+const OFFSET_MAX_AGE_MS = 24 * 3600_000;
+/** La garde « plus ancien que l'app » ne joue que juste après une écriture de l'app. */
+export const APP_GUARD_WINDOW_MS = 10 * 60_000;
+/** Séquence plausible (au-delà de l'an 2100 : message invalide, jamais retenu). */
+export const MAX_SEQ = 4_102_444_800_000;
+
+/** Échantillon d'horloge : [réception − heure serveur du message, heure de réception]. */
+export type OffsetSample = [number, number];
+
+const fresh = (samples: OffsetSample[], nowMs: number) =>
+  samples.filter(([x, at]) => Number.isFinite(x) && Number.isFinite(at) && at <= nowMs + 60_000 && nowMs - at <= OFFSET_MAX_AGE_MS);
+
+/**
+ * Écart d'horloge téléphone − serveur : plus petit échantillon des dernières
+ * 24 h (écart d'horloge + délai de livraison le plus court), sans celui du
+ * message en cours. Sans historique : 0 (tolérance fixe seule).
+ */
+export function clockOffsetMs(samples: OffsetSample[], nowMs: number): number {
+  const recent = fresh(samples, nowMs);
+  return recent.length ? Math.min(...recent.map(([x]) => x)) : 0;
+}
+
+/** Ajoute l'échantillon d'un message bien formé (10 au plus, dernières 24 h). */
+export function nextOffsetSamples(samples: OffsetSample[], sample: number, nowMs: number): OffsetSample[] {
+  return [...fresh(samples, nowMs), [sample, nowMs] as OffsetSample].slice(-OFFSET_SAMPLES);
+}
 
 export type WidgetPushIosState = {
   /** Enfant affiché par le widget (écrit par l'app) ; null : rien n'est appliqué. */
@@ -19,18 +50,32 @@ export type WidgetPushIosState = {
   lastSeq: number;
   /** Dernière écriture du widget par l'app (horloge du téléphone, ms). */
   appWriteAtMs: number;
+  /** Échantillons d'horloge, les plus récents à la fin. */
+  offsetSamples: OffsetSample[];
 };
 
 export async function readWidgetPushIosState(): Promise<WidgetPushIosState> {
   try {
-    const [shown, seq, appAt] = await Promise.all([
+    const [shown, seq, appAt, offsets] = await Promise.all([
       AsyncStorage.getItem(K.shown),
       AsyncStorage.getItem(K.seq),
       AsyncStorage.getItem(K.appAt),
+      AsyncStorage.getItem(K.offsets),
     ]);
-    return { shownChildId: shown || null, lastSeq: Number(seq) || 0, appWriteAtMs: Number(appAt) || 0 };
+    let offsetSamples: OffsetSample[] = [];
+    try {
+      const parsed = JSON.parse(offsets ?? "[]");
+      if (Array.isArray(parsed)) {
+        offsetSamples = parsed.filter(
+          (e): e is OffsetSample => Array.isArray(e) && e.length === 2 && e.every((v) => typeof v === "number" && Number.isFinite(v)),
+        );
+      }
+    } catch {
+      offsetSamples = [];
+    }
+    return { shownChildId: shown || null, lastSeq: Number(seq) || 0, appWriteAtMs: Number(appAt) || 0, offsetSamples };
   } catch {
-    return { shownChildId: null, lastSeq: 0, appWriteAtMs: 0 };
+    return { shownChildId: null, lastSeq: 0, appWriteAtMs: 0, offsetSamples: [] };
   }
 }
 
@@ -56,6 +101,11 @@ export function noteIosAppliedSeq(seq: number): Promise<void> {
   return set(K.seq, String(seq));
 }
 
+/** Échantillon d'écart d'horloge d'un message reçu (appliqué ou non). */
+export function noteIosOffsetSamples(samples: OffsetSample[]): Promise<void> {
+  return set(K.offsets, JSON.stringify(samples));
+}
+
 /** Déconnexion : plus rien n'est appliqué avant la prochaine écriture de l'app. */
 export async function clearIosWidgetPush(): Promise<void> {
   try {
@@ -75,13 +125,24 @@ export function decideWidgetPush(a: {
   state: WidgetPushIosState;
   foreground: boolean;
   skewMs?: number;
+  /** Écart d'horloge téléphone − serveur estimé (clockOffsetMs) ; 0 si inconnu. */
+  clockOffsetMs?: number;
+  /** Heure de réception (téléphone) ; sans elle, la garde « app » joue toujours. */
+  receivedAtMs?: number;
 }): WidgetPushDecision {
   const skew = a.skewMs ?? 2000;
-  if (!a.childId || !(a.seq > 0) || a.propsVersion !== 1) return "invalid";
+  const offset = a.clockOffsetMs ?? 0;
+  if (!a.childId || !(a.seq > 0) || a.seq > MAX_SEQ || a.propsVersion !== 1) return "invalid";
   if (a.foreground) return "fg";
   if (!a.state.shownChildId || a.state.shownChildId !== a.childId) return "child";
   if (a.seq <= a.state.lastSeq) return "seq";
-  // Lecture serveur antérieure à ce que l'app a déjà écrit : ne pas revenir en arrière.
-  if (a.state.appWriteAtMs > 0 && a.seq + skew < a.state.appWriteAtMs) return "app";
+  // Lecture serveur antérieure à ce que l'app a déjà écrit : ne pas revenir en
+  // arrière. Heure serveur ramenée à l'horloge du téléphone (écart estimé) :
+  // un téléphone en avance ne refuse plus les messages frais.
+  // Seulement dans les 10 min qui suivent l'écriture de l'app (la course à
+  // couvrir) : une estimation faussée par un changement d'heure ne bloque
+  // jamais le widget durablement.
+  const recentAppWrite = a.receivedAtMs == null || a.receivedAtMs - a.state.appWriteAtMs <= APP_GUARD_WINDOW_MS;
+  if (a.state.appWriteAtMs > 0 && recentAppWrite && a.seq + offset + skew < a.state.appWriteAtMs) return "app";
   return "ok";
 }

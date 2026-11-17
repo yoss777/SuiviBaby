@@ -22,6 +22,7 @@ object WidgetPushHandler {
   const val SEQ_KEY = "__sb_widget_seq"
   const val CHILD_KEY = "__sb_widget_child"
   const val APP_AT_KEY = "__sb_widget_app_at"
+  const val OFFSETS_KEY = "__sb_widget_clock_offsets"
   const val LOG_KEY = "__sb_widget_push_log"
   private const val LOG_MAX = 20
 
@@ -50,6 +51,7 @@ object WidgetPushHandler {
     msg.optJSONObject("p") ?: msg.optString("p").takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() }
 
   /** @return true si le message était destiné au widget (appliqué ou écarté). */
+  @Synchronized
   fun handle(context: Context, data: Map<String, String>, receivedAtMs: Long): Boolean {
     val msg = parse(data) ?: return false
     val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -73,6 +75,16 @@ object WidgetPushHandler {
       Log.i(TAG, "w0 -> ${outcome.code}")
       return true
     }
+    // Données d'un autre enfant que celui annoncé (ou d'enfant inconnu) : jamais écrites.
+    val propsChild = p?.optString("childId")?.ifEmpty { null }
+    if (p != null && propsChild != childId) {
+      appendLog(prefs, receivedAtMs, seq, WidgetPushOutcome.INVALID)
+      Log.i(TAG, "w1 s=$seq -> ${WidgetPushOutcome.INVALID.code} (child)")
+      return true
+    }
+    // Écart d'horloge téléphone − serveur estimé sur les messages des dernières 24 h.
+    val samples = WidgetPushGuards.parseOffsets(prefs.getString(OFFSETS_KEY, null))
+    val clockOffset = WidgetPushGuards.clockOffsetMs(samples, receivedAtMs)
     val outcome = WidgetPushGuards.decide(
       childId = childId,
       seq = seq,
@@ -81,10 +93,17 @@ object WidgetPushHandler {
       lastSeq = prefs.getLong(SEQ_KEY, 0L),
       appWriteAtMs = prefs.getLong(APP_AT_KEY, 0L),
       foreground = isForeground(context),
+      clockOffsetMs = clockOffset,
+      receivedAtMs = receivedAtMs,
     )
+    // Échantillon d'horloge des seuls messages bien formés (appliqués ou non).
+    if (outcome != WidgetPushOutcome.INVALID && p != null) {
+      prefs.edit()
+        .putString(OFFSETS_KEY, WidgetPushGuards.formatOffsets(WidgetPushGuards.nextOffsetSamples(samples, receivedAtMs - seq, receivedAtMs)))
+        .apply()
+    }
     var finalOutcome = outcome
     if (outcome == WidgetPushOutcome.APPLIED && p != null) {
-      if (!p.has("childId")) p.put("childId", childId)
       val written = prefs.edit()
         .putString(PROPS_KEY, p.toString())
         .putLong(SEQ_KEY, seq)

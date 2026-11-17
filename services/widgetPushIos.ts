@@ -11,8 +11,11 @@ import { clearNowWidget, writeServerWidgetProps } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
   clearIosWidgetPush,
+  clockOffsetMs,
   decideWidgetPush,
+  nextOffsetSamples,
   noteIosAppliedSeq,
+  noteIosOffsetSamples,
   readWidgetPushIosState,
   type WidgetPushDecision,
 } from "@/services/widgetPushIosState";
@@ -42,8 +45,21 @@ export function readW1(data: unknown): W1 | null {
   return null;
 }
 
-/** Applique un message serveur au widget si les gardes le permettent. */
-export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDecision | "write" | "wipe"> {
+// Messages traités un par un : deux réveils rapprochés lisaient le même état
+// et pouvaient écrire dans le désordre (séquence qui recule).
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Applique un message serveur au widget si les gardes le permettent (un à la fois). */
+export function handleWidgetPushIos(data: unknown, nowMs?: number): Promise<WidgetPushDecision | "write" | "wipe"> {
+  // Heure de réception, prise avant l'attente dans la file (sinon l'échantillon
+  // d'horloge comptait l'attente).
+  const receivedAt = nowMs ?? Date.now();
+  const run = queue.then(() => handleOne(data, receivedAt));
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+async function handleOne(data: unknown, nowMs: number): Promise<WidgetPushDecision | "write" | "wipe"> {
   const msg = readW1(data);
   if (!msg) return "invalid";
   const state = await readWidgetPushIosState();
@@ -66,13 +82,23 @@ export async function handleWidgetPushIos(data: unknown): Promise<WidgetPushDeci
     await clearIosWidgetPush();
     return "wipe";
   }
+  // Données d'un autre enfant que celui annoncé (ou d'enfant inconnu) : jamais écrites.
+  if (msg.p && msg.p.childId !== msg.c) return "invalid";
+  const seq = Number(msg.s);
+  const offset = clockOffsetMs(state.offsetSamples, nowMs);
   const decision = decideWidgetPush({
     childId: msg.c,
-    seq: Number(msg.s),
+    seq,
     propsVersion: Number(msg.p?.v ?? 0),
     state,
     foreground: AppState.currentState === "active",
+    clockOffsetMs: offset,
+    receivedAtMs: nowMs,
   });
+  // Échantillon d'horloge des seuls messages bien formés (appliqués ou non).
+  if (decision !== "invalid" && msg.p) {
+    await noteIosOffsetSamples(nextOffsetSamples(state.offsetSamples, nowMs - seq, nowMs));
+  }
   if (decision !== "ok" || !msg.p) return decision;
   // Écriture ratée : la séquence n'avance pas (le message suivant pourra
   // s'appliquer) et iOS reçoit « échec », pas « nouvelles données ».

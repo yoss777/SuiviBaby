@@ -11,7 +11,14 @@ jest.mock("@/services/widgetSync", () => ({
 }));
 
 import { handleWidgetPushIos, readW1 } from "@/services/widgetPushIos";
-import { clearIosWidgetPush, decideWidgetPush, noteIosAppSnapshot, readWidgetPushIosState } from "@/services/widgetPushIosState";
+import {
+  clearIosWidgetPush,
+  clockOffsetMs,
+  decideWidgetPush,
+  nextOffsetSamples,
+  noteIosAppSnapshot,
+  readWidgetPushIosState,
+} from "@/services/widgetPushIosState";
 
 const store = new Map<string, string>();
 const setAppState = (state: string) =>
@@ -35,7 +42,7 @@ beforeEach(() => {
 const msg = (s: number, c = "c1") => ({ t: "w1", c, s, p: { v: 1, childId: c, childName: "Léa" } });
 
 describe("gardes (comme WidgetPushGuards.kt)", () => {
-  const state = { shownChildId: "c1", lastSeq: 100, appWriteAtMs: 50_000 };
+  const state = { shownChildId: "c1", lastSeq: 100, appWriteAtMs: 50_000, offsetSamples: [] as [number, number][] };
   it("décisions", () => {
     expect(decideWidgetPush({ childId: "c1", seq: 60_000, propsVersion: 1, state, foreground: false })).toBe("ok");
     expect(decideWidgetPush({ childId: "c1", seq: 60_000, propsVersion: 1, state, foreground: true })).toBe("fg");
@@ -47,6 +54,83 @@ describe("gardes (comme WidgetPushGuards.kt)", () => {
       decideWidgetPush({ childId: "c1", seq: 60_000, propsVersion: 1, state: { ...state, shownChildId: null }, foreground: false }),
     ).toBe("child");
   });
+});
+
+describe("horloge du téléphone décalée (écart estimé, dernières 24 h)", () => {
+  const T = 1_000_000_000_000; // écriture de l'app, heure serveur
+  const AHEAD = 60_000; // téléphone en avance d'une minute
+  const history = (offset: number, at: number) => JSON.stringify([[offset + 300, at - 3_600_000], [offset + 200, at - 1_800_000]]);
+
+  it("écart = plus petit échantillon des dernières 24 h, sans le message en cours ; aucun : 0", () => {
+    expect(clockOffsetMs([[60_300, T - 10], [60_200, T - 20]], T)).toBe(60_200);
+    expect(clockOffsetMs([], T)).toBe(0);
+    expect(clockOffsetMs([[60_200, T - 25 * 3_600_000]], T)).toBe(0);
+    expect(clockOffsetMs([[-30_000, T - 10]], T)).toBe(-30_000);
+    expect(nextOffsetSamples(Array.from({ length: 12 }, (_, i) => [60_000 + i, T - i] as [number, number]), 60_500, T)).toHaveLength(10);
+  });
+
+  it("téléphone en avance : un message frais n'est plus refusé, un vieux livré en retard l'est", async () => {
+    await noteIosAppSnapshot("c1", T + AHEAD);
+    store.set("widgetPushIos:offsets", history(AHEAD, T + AHEAD));
+    expect(await handleWidgetPushIos(msg(T + 1_000), T + 1_000 + AHEAD + 1_200)).toBe("ok");
+    store.delete("widgetPushIos:seq");
+    expect(await handleWidgetPushIos(msg(T - 10_000), T + 10_000 + AHEAD)).toBe("app");
+  });
+
+  it("téléphone en retard : un vieux message reste refusé", async () => {
+    await noteIosAppSnapshot("c1", T - 30_000);
+    store.set("widgetPushIos:offsets", history(-30_000, T - 30_000));
+    expect(await handleWidgetPushIos(msg(T - 10_000), T - 30_000 + 15_000)).toBe("app");
+  });
+
+  it("sans historique : tolérance fixe de 2 s, la garde protège dès le premier message", async () => {
+    await noteIosAppSnapshot("c1", T);
+    expect(await handleWidgetPushIos(msg(T - 10_000), T + 30_000)).toBe("app");
+    expect(await handleWidgetPushIos(msg(T + 1_000), T + 2_000)).toBe("ok");
+  });
+
+  it("livraison très tardive : l'historique n'est pas effacé, le message reste refusé", async () => {
+    await noteIosAppSnapshot("c1", T);
+    store.set("widgetPushIos:offsets", history(0, T));
+    expect(await handleWidgetPushIos(msg(T - 60_000), T + 9 * 60_000)).toBe("app");
+    expect(JSON.parse(store.get("widgetPushIos:offsets")!)).toHaveLength(3);
+  });
+
+  it("plus de 10 min après l'écriture de l'app : la garde ne bloque plus (changement d'heure jamais durable)", async () => {
+    await noteIosAppSnapshot("c1", T);
+    store.set("widgetPushIos:offsets", history(-3_600_000, T));
+    expect(await handleWidgetPushIos(msg(T + 60_000), T + 11 * 60_000)).toBe("ok");
+  });
+
+  it("séquence aberrante ou données sans enfant : invalide, rien de retenu", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    expect(await handleWidgetPushIos(msg(5_000_000_000_000))).toBe("invalid");
+    expect(await handleWidgetPushIos({ t: "w1", c: "c1", s: 5_000, p: { v: 1, childName: "Léa" } })).toBe("invalid");
+    expect(store.has("widgetPushIos:offsets")).toBe(false);
+    expect(mockWrite).not.toHaveBeenCalled();
+  });
+
+  it("une erreur sur un message ne bloque pas les suivants", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    mockWrite.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    await expect(handleWidgetPushIos(msg(5_000))).rejects.toThrow("boom");
+    expect(await handleWidgetPushIos(msg(6_000))).toBe("ok");
+  });
+});
+
+it("données d'un autre enfant que celui annoncé : jamais écrites", async () => {
+  await noteIosAppSnapshot("c1", 1_000);
+  expect(await handleWidgetPushIos({ t: "w1", c: "c1", s: 5_000, p: { v: 1, childId: "c2", childName: "Autre" } })).toBe("invalid");
+  expect(mockWrite).not.toHaveBeenCalled();
+});
+
+it("deux messages reçus en même temps : traités un par un (la séquence ne recule jamais)", async () => {
+  await noteIosAppSnapshot("c1", 1_000);
+  const [a, b] = await Promise.all([handleWidgetPushIos(msg(6_000)), handleWidgetPushIos(msg(5_000))]);
+  expect([a, b]).toEqual(["ok", "seq"]);
+  expect((await readWidgetPushIosState()).lastSeq).toBe(6_000);
 });
 
 it("lit le message où qu'il soit (dataString, body, objet direct)", () => {
@@ -121,6 +205,13 @@ describe("effacement à distance (« w0 »)", () => {
     expect((await readWidgetPushIosState()).shownChildId).toBeNull();
     // Plus rien ne s'applique pour cet enfant ensuite.
     expect(await handleWidgetPushIos(msg(10_000))).toBe("child");
+  });
+
+  it("effacement et mise à jour reçus en même temps : la mise à jour ne revient jamais après l'effacement", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    const [wipe, update] = await Promise.all([handleWidgetPushIos(w0("c1")), handleWidgetPushIos(msg(10_000))]);
+    expect([wipe, update]).toEqual(["wipe", "child"]);
+    expect(mockWrite).toHaveBeenCalledTimes(1);
   });
 
   it("enfant affiché inconnu (état perdu) : effacé quand même", async () => {

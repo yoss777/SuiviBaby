@@ -21,9 +21,9 @@ jest.mock("@/modules/widget-push", () => ({
 }));
 
 import * as Notifications from "expo-notifications";
-import { getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
-import { refreshWidgetPresence, registerPushToken, removePushTokens, setWidgetChild } from "@/services/pushTokenService";
+import { refreshWidgetPresence, registerPushToken, removePushTokens, setWidgetChild, SIGN_OUT_WAIT_MS } from "@/services/pushTokenService";
 import { getDocs } from "firebase/firestore";
 
 const mocked = <T>(fn: T) => fn as unknown as jest.Mock;
@@ -183,6 +183,112 @@ describe("setWidgetChild", () => {
     for (let i = 0; i < 40; i++) await Promise.resolve();
     expect(mocked(setDoc).mock.calls.length).toBeGreaterThan(setCalls);
     expect(mocked(setDoc).mock.calls.at(-1)[1]).toMatchObject({ userId: "u1", widgetChildId: "c7" });
+  });
+});
+
+describe("courses avec la déconnexion et le changement d'enfant", () => {
+  /** Laisse avancer les promesses jusqu'à ce que la condition soit vraie. */
+  async function until(cond: () => boolean): Promise<void> {
+    for (let i = 0; i < 50 && !cond(); i++) await Promise.resolve();
+    if (!cond()) throw new Error("condition jamais atteinte");
+  }
+  /** setDoc qui reste en cours jusqu'à finish(). */
+  function holdSetDoc(): { finish: () => void } {
+    const ctl = { finish: () => {} };
+    mocked(setDoc).mockImplementation(() => new Promise<void>((r) => (ctl.finish = r)));
+    return { finish: () => ctl.finish() };
+  }
+  const lastSetDoc = () => (mocked(setDoc).mock.calls.at(-1) ?? [])[1] as Record<string, unknown>;
+
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(getDocs).mockResolvedValue({ docs: [] });
+    mocked(deleteDoc).mockResolvedValue(undefined);
+    mocked(updateDoc).mockResolvedValue(undefined);
+    await removePushTokens("u0"); // état propre
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    mocked(setDoc).mockReset();
+    mocked(getDoc).mockReset();
+    jest.useRealTimers();
+  });
+
+  it("déconnexion pendant les lectures : le jeton n'est jamais recréé", async () => {
+    let release!: (v: unknown) => void;
+    mocked(getDoc).mockImplementation(() => new Promise((r) => (release = r)));
+    const pending = registerPushToken("u1");
+    await until(() => !!release);
+    const signOut = removePushTokens("u1");
+    release({ exists: () => false });
+    await Promise.all([pending, signOut]);
+    expect(setDoc).not.toHaveBeenCalled();
+  });
+
+  it("déconnexion pendant l'écriture : supprimé avant la fin de la déconnexion", async () => {
+    const hold = holdSetDoc();
+    const pending = registerPushToken("u1");
+    await until(() => mocked(setDoc).mock.calls.length > 0);
+    let signedOut = false;
+    const signOut = removePushTokens("u1").then(() => (signedOut = true));
+    await Promise.resolve();
+    expect(signedOut).toBe(false); // attend l'enregistrement en cours
+    hold.finish();
+    await Promise.all([pending, signOut]);
+    expect(deleteDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it("hors ligne, enregistrement qui ne se termine pas : la déconnexion n'attend que 5 s", async () => {
+    const hold = holdSetDoc(); // ne se termine qu'à la fin du test
+    const pending = registerPushToken("u1");
+    await until(() => mocked(setDoc).mock.calls.length > 0);
+    let signedOut = false;
+    const signOut = removePushTokens("u1").then(() => (signedOut = true));
+    await Promise.resolve();
+    expect(signedOut).toBe(false);
+    jest.advanceTimersByTime(SIGN_OUT_WAIT_MS);
+    await signOut;
+    expect(signedOut).toBe(true);
+    expect(getDocs).toHaveBeenCalled();
+    // Réseau revenu : l'écriture se termine, le jeton recréé est supprimé.
+    hold.finish();
+    await pending;
+    expect(deleteDoc).toHaveBeenCalled();
+  });
+
+  it("reconnexion rapide pendant l'écriture : le jeton de la nouvelle session n'est jamais supprimé", async () => {
+    const hold = holdSetDoc();
+    const first = registerPushToken("u1");
+    await until(() => mocked(setDoc).mock.calls.length > 0);
+    // Déconnexion lancée, puis nouvelle connexion avant la fin de l'écriture.
+    const signOut = removePushTokens("u1");
+    const second = registerPushToken("u2");
+    hold.finish();
+    await until(() => mocked(setDoc).mock.calls.length > 1);
+    hold.finish();
+    await Promise.all([first, signOut, second]);
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(lastSetDoc()).toMatchObject({ userId: "u2" });
+  });
+
+  it("deux enregistrements simultanés du même compte : une seule écriture", async () => {
+    await Promise.all([registerPushToken("u1"), registerPushToken("u1")]);
+    expect(setDoc).toHaveBeenCalledTimes(1);
+  });
+
+  it("enfant changé pendant l'enregistrement : le nouvel enfant est écrit ensuite", async () => {
+    setWidgetChild("cA");
+    const hold = holdSetDoc();
+    const pending = registerPushToken("u1");
+    await until(() => mocked(setDoc).mock.calls.length > 0);
+    expect(lastSetDoc()).toMatchObject({ widgetChildId: "cA" });
+    setWidgetChild("cB");
+    hold.finish();
+    await pending;
+    jest.advanceTimersByTime(3000);
+    expect(mocked(updateDoc).mock.calls.map((c) => c[1])).toContainEqual({ widgetChildId: "cB" });
   });
 });
 
