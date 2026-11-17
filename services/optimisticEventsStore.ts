@@ -2,6 +2,7 @@
 // Events written via Cloud Functions are slow; this store lets the UI
 // show them instantly while the CF runs in the background.
 
+import { markWidgetUserAction } from "@/services/widgetUserAction";
 import { addBreadcrumb } from "@/utils/errorReporting";
 import { getEventTypeLabel } from "@/utils/eventTypeLabels";
 
@@ -104,6 +105,7 @@ export function generateTempId(): string {
  * can track the entry for confirmation/failure.
  */
 export function addOptimisticCreate(childId: string, event: any, tempId: string): void {
+  markWidgetUserAction();
   entries.set(tempId, {
     tempId,
     operation: 'create',
@@ -138,6 +140,7 @@ export function addOptimisticUpdate(
   newEvent: any,
   previousEvent: any,
 ): string {
+  markWidgetUserAction();
   const tempId = generateTempId();
   entries.set(tempId, {
     tempId,
@@ -248,6 +251,7 @@ export function failOptimistic(
   tempIdOrEventId: string,
   options: { retryable?: boolean } = {},
 ): (OptimisticFailure & { event: any; operation: OptimisticOperation }) | null {
+  markWidgetUserAction();
   let entry = entries.get(tempIdOrEventId);
 
   if (!entry) {
@@ -346,6 +350,7 @@ export function purgeQueuedOptimistic(match: {
   idempotencyKey?: string;
   eventId?: string;
 }): number {
+  markWidgetUserAction();
   let removed = 0;
   for (const [key, e] of entries) {
     const isCreateMatch =
@@ -372,6 +377,7 @@ export function purgeQueuedOptimistic(match: {
  * Unlike failOptimistic, this does NOT show an error toast.
  */
 export function removeOptimistic(tempIdOrEventId: string): void {
+  markWidgetUserAction();
   if (entries.delete(tempIdOrEventId)) {
     notify();
     return;

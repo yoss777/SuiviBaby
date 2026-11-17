@@ -8,6 +8,7 @@ import { AppState, Platform } from "react-native";
 
 import { clearWidgetPush, noteAppSnapshot } from "@/modules/widget-push";
 import { captureServiceError } from "@/utils/errorReporting";
+import { isWidgetUserActionRecent } from "@/services/widgetUserAction";
 import {
   EMPTY_NOW_WIDGET,
   EMPTY_NOW_WIDGET_NATIVE,
@@ -323,16 +324,20 @@ export function pushNowWidget(props: NowWidgetProps): void {
     return;
   }
   const livesChanged = lastLivesSig != null && livesSignature(props) !== lastLivesSig;
+  // Saisie de l'utilisateur à l'instant (repas, change…) : écrite tout de suite,
+  // en timeline courte sur iPhone, comme un démarrage ou un arrêt de session.
+  const userAction = isWidgetUserActionRecent();
   const immediate =
     props.childId !== lastChildId ||
     lastKey.includes('"loading":true') ||
     Date.now() - childSwitchedAt < WIDGET_CHILD_SWITCH_WINDOW_MS ||
     AppState.currentState !== "active" ||
-    livesChanged;
+    livesChanged ||
+    userAction;
   if (immediate) {
     // Démarrage / arrêt dans l'app au premier plan : timeline courte d'abord
     // (affichage rapide sur iPhone), la complète ensuite.
-    write(props, key, { quick: livesChanged && AppState.currentState === "active" });
+    write(props, key, { quick: (livesChanged || userAction) && AppState.currentState === "active" });
     return;
   }
   pendingRun = () => write(props, key);

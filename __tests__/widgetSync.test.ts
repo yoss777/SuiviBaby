@@ -26,6 +26,7 @@ import {
   resumeWidgetWrites,
 } from "@/services/widgetSync";
 import { captureServiceError } from "@/utils/errorReporting";
+import { __resetWidgetUserActionForTests, markWidgetUserAction } from "@/services/widgetUserAction";
 import { AppState } from "react-native";
 import { EMPTY_NOW_WIDGET, EMPTY_NOW_WIDGET_NATIVE, type NowWidgetProps } from "@/utils/widgetSnapshot";
 
@@ -49,6 +50,7 @@ beforeEach(() => {
   mockCalls.length = 0;
   widget = { updateSnapshot: jest.fn((p: NowWidgetProps) => mockCalls.push(`write:${p.childName}`)) };
   __resetWidgetSyncForTests(widget);
+  __resetWidgetUserActionForTests();
 });
 afterEach(() => jest.useRealTimers());
 
@@ -437,6 +439,30 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     // Sans heure de génération : ni « màj » ni expiration (le widget n'expire pas non plus).
     const bare = widgetQuickTimelinePlan(props({ generatedAtMs: undefined as any }), now).dates;
     expect(bare).not.toContain(now + 2 * 3600_000 + 1000);
+  });
+});
+
+describe("saisie de l'utilisateur : écrite tout de suite", () => {
+  it("repas ajouté (action marquée) : pas d'anti-rebond ; iPhone : timeline courte puis complète", () => {
+    const calls: number[] = [];
+    __resetWidgetSyncForTests({ updateSnapshot: jest.fn(), updateTimeline: (e: unknown[]) => calls.push(e.length) } as any);
+    pushNowWidget(props({ childName: "init" }));
+    jest.advanceTimersByTime(WIDGET_CHILD_SWITCH_WINDOW_MS);
+    calls.length = 0;
+    markWidgetUserAction();
+    pushNowWidget(props({ childName: "init", day: { ...EMPTY_NOW_WIDGET.day, mealsCount: 1 } as any }));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBeLessThanOrEqual(16);
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("sans action (données du serveur) : anti-rebond de 2 s inchangé", () => {
+    primed();
+    pushNowWidget(props({ childName: "serveur" }));
+    expect(widget.updateSnapshot).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(widget.updateSnapshot).toHaveBeenCalledTimes(1);
   });
 });
 
