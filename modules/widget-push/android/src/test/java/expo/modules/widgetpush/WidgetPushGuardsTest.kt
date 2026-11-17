@@ -29,6 +29,34 @@ class WidgetPushGuardsTest {
     // Tolérance d'horloge de 2 s.
     assertEquals(WidgetPushOutcome.APPLIED, decide(seq = 2_000_000L, appAt = 2_001_500L))
   }
+  @Test fun phoneClockAheadNoLongerRejectsFreshMessages() {
+    // Téléphone en avance d'une minute : l'app a écrit à 2_000_000 (serveur) = 2_060_000 (téléphone).
+    val appAt = 2_060_000L
+    assertEquals(WidgetPushOutcome.OLDER_THAN_APP, WidgetPushGuards.decide("c1", 2_001_000L, 1, "c1", 0L, appAt, false))
+    assertEquals(WidgetPushOutcome.APPLIED, WidgetPushGuards.decide("c1", 2_001_000L, 1, "c1", 0L, appAt, false, clockOffsetMs = 60_200L, receivedAtMs = 2_062_200L))
+    // Vieux message (lu 10 s avant l'écriture de l'app) : toujours refusé.
+    assertEquals(WidgetPushOutcome.OLDER_THAN_APP, WidgetPushGuards.decide("c1", 1_990_000L, 1, "c1", 0L, appAt, false, clockOffsetMs = 60_200L, receivedAtMs = 2_080_000L))
+  }
+  @Test fun theAppGuardOnlyPlaysRightAfterAnAppWrite() {
+    // Estimation faussée d'une heure : plus de blocage 10 min après l'écriture de l'app.
+    assertEquals(WidgetPushOutcome.APPLIED, WidgetPushGuards.decide("c1", 2_060_000L, 1, "c1", 0L, 2_000_000L, false, clockOffsetMs = -3_600_000L, receivedAtMs = 2_000_000L + 11 * 60_000L))
+  }
+  @Test fun rejectsAnAbsurdSequence() =
+    assertEquals(WidgetPushOutcome.INVALID, decide(seq = Long.MAX_VALUE))
+  @Test fun estimatesTheClockOffsetFromTheLastDay() {
+    val now = 1_000_000_000_000L
+    assertEquals(60_200L, WidgetPushGuards.clockOffsetMs(listOf(60_300L to now - 10, 60_200L to now - 20), now))
+    assertEquals(0L, WidgetPushGuards.clockOffsetMs(emptyList(), now))
+    assertEquals(0L, WidgetPushGuards.clockOffsetMs(listOf(60_200L to now - 25 * 3_600_000L), now))
+    assertEquals(-30_000L, WidgetPushGuards.clockOffsetMs(listOf(-30_000L to now - 10), now))
+    assertEquals(10, WidgetPushGuards.nextOffsetSamples((0L until 12L).map { (60_000L + it) to (now - it) }, 60_500L, now).size)
+  }
+  @Test fun parsesAndFormatsStoredSamples() {
+    val samples = listOf(60_200L to 1_000L, -30_000L to 2_000L)
+    assertEquals(samples, WidgetPushGuards.parseOffsets(WidgetPushGuards.formatOffsets(samples)))
+    assertEquals(emptyList<Pair<Long, Long>>(), WidgetPushGuards.parseOffsets(null))
+    assertEquals(listOf(5L to 6L), WidgetPushGuards.parseOffsets("abc,1:2:3,5:6,7"))
+  }
   @Test fun rejectsInvalidMessages() {
     assertEquals(WidgetPushOutcome.INVALID, decide(childId = null))
     assertEquals(WidgetPushOutcome.INVALID, decide(seq = 0L))
