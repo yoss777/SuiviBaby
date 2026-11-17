@@ -70,6 +70,7 @@ import { useModal } from "@/contexts/ModalContext";
 import { useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
 import { useWidgetActionGate, WIDGET_SMALL_CONFIRM_MESSAGE } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
+import { lateNapMessage } from "@/utils/sessionLimits";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1184,6 +1185,20 @@ export default function HomeDashboard() {
     startingRef.current[`${childId}:${kind}`] = Date.now();
   };
 
+  // Sieste démarrée entre 20:00 et 5:00 : c'est plutôt une nuit, on demande.
+  const askLateNap = useCallback((startNap: () => void, startNight: () => void) => {
+    const late = lateNapMessage(new Date());
+    if (!late) {
+      startNap();
+      return;
+    }
+    Alert.alert("Plutôt une nuit ?", late, [
+      { text: "Démarrer une nuit", onPress: startNight },
+      { text: "Démarrer une sieste", onPress: startNap },
+      { text: "Annuler", style: "cancel" },
+    ]);
+  }, []);
+
   const handleStartSleep = useCallback(
     (isNap: boolean, fromWidget = false) => {
       if (!activeChild?.id || sommeilEnCours) return false;
@@ -1374,19 +1389,25 @@ export default function HomeDashboard() {
       if (action === "sleep-start") {
         if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
         else {
+          const startWith = (nap: boolean) => {
+            const childId = activeChild?.id;
+            const startedAt = Date.now();
+            if (childId && handleStartSleep(nap, true)) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              showActionToast(
+                nap ? "Sieste démarrée" : "Nuit démarrée",
+                "Annuler",
+                () => undoWidgetStart("sleep", childId, startedAt),
+                5000, // durée demandée ; le minimum de 8 s (ACTION_TOAST_MIN_MS) s'applique
+              );
+              scheduleWidgetBack();
+            } else if (childId) showToast("Démarrage déjà en cours");
+          };
           const nap = opts?.nap ?? isNapHour(new Date());
-          const childId = activeChild?.id;
-          const startedAt = Date.now();
-          if (childId && handleStartSleep(nap, true)) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            showActionToast(
-              nap ? "Sieste démarrée" : "Nuit démarrée",
-              "Annuler",
-              () => undoWidgetStart("sleep", childId, startedAt),
-              5000, // durée demandée ; le minimum de 8 s (ACTION_TOAST_MIN_MS) s'applique
-            );
-            scheduleWidgetBack();
-          } else if (childId) showToast("Démarrage déjà en cours");
+          // Widget pas encore passé en « Nuit » : une sieste entre 20:00 et
+          // 5:00 est plutôt une nuit (règle de Yoss).
+          if (nap) askLateNap(() => startWith(true), () => startWith(false));
+          else startWith(false);
         }
         return;
       }
@@ -1468,6 +1489,7 @@ export default function HomeDashboard() {
       }
     },
     [
+      askLateNap,
       canManageContent,
       showToast,
       activeChild?.id,
@@ -2264,7 +2286,11 @@ export default function HomeDashboard() {
                       ? formatTime(toDate(sommeilEnCours.heureDebut))
                       : undefined
                   }
-                  onStartSleep={(isNap: boolean) => handleStartSleep(isNap)}
+                  onStartSleep={(isNap: boolean) =>
+                    isNap
+                      ? askLateNap(() => void handleStartSleep(true), () => void handleStartSleep(false))
+                      : handleStartSleep(false)
+                  }
                   onStopSleep={handleStopSleep}
                   onEditSleep={handleEditSleepInSheet}
                   showStopButton={canManageContent}
