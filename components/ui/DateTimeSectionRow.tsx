@@ -57,6 +57,11 @@ interface DateTimeSectionRowProps {
 
   // Heure fin constraints
   heureFinMinimumDate?: Date;
+  /**
+   * Sans date de fin : heure de fin choisie avant l'heure de début (= après
+   * minuit). Appelé à la place de l'ajustement silencieux (début + 1 min).
+   */
+  onEndBeforeStart?: (picked: Date) => void;
   heureFinMaximumDate?: Date;
 
   // Contraintes optionnelles sur la date principale (simple mode) et la date
@@ -135,6 +140,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   showDuration = false,
   // Constraints
   heureFinMinimumDate,
+  onEndBeforeStart,
   heureFinMaximumDate,
   minimumDate,
   maximumDate,
@@ -236,6 +242,14 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
 
   const handleHeureFinTimeChange = (date: Date) => {
     if (!onHeureFinChange) return;
+    if (!showEndDate && onEndBeforeStart) {
+      const sameDay = new Date(heureDebut);
+      sameDay.setHours(date.getHours(), date.getMinutes(), 0, 0);
+      if (sameDay.getTime() <= heureDebut.getTime()) {
+        onEndBeforeStart(date);
+        return;
+      }
+    }
     onHeureFinChange(resolveEndTime(heureDebut, date, heureFin ?? null, !!showEndDate));
   };
 

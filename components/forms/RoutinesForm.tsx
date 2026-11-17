@@ -300,6 +300,25 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     setChronoDirty(true);
   }, []);
 
+  // Sieste dont la fin passe minuit : elle ne peut pas finir le lendemain.
+  // On propose de l'enregistrer comme une nuit, avec les mêmes heures.
+  const askNapPastMidnight = (pickedEnd: Date) => {
+    const endNextDay = new Date(heureDebut);
+    endNextDay.setDate(endNextDay.getDate() + 1);
+    endNextDay.setHours(pickedEnd.getHours(), pickedEnd.getMinutes(), 0, 0);
+    showAlert("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", [
+      { text: "Corriger l'heure de fin", style: "cancel" },
+      {
+        text: "Enregistrer comme nuit",
+        onPress: () => {
+          handleSelectType("night");
+          setHeureFin(endNextDay);
+          setChronoDirty(true);
+        },
+      },
+    ]);
+  };
+
   const handleHeureFinChange = useCallback((nextDate: Date | null) => {
     setHeureFin(nextDate);
     setChronoDirty(true);
@@ -394,10 +413,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     }
     // Une sieste ne passe pas minuit : sinon c'est une nuit (ou une erreur de date).
     if (sheetType === "nap" && !isOngoing && heureFin && napCrossesMidnight(heureDebut, heureFin)) {
-      showAlert(
-        "Fin le lendemain",
-        "Une sieste se termine le même jour. Corrigez la date de fin, ou choisissez « Nuit ».",
-      );
+      askNapPastMidnight(heureFin);
       return;
     }
     // Durée inhabituelle (sieste > 6 h, nuit > 15 h), ou sieste démarrée
@@ -776,8 +792,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         // passe pas minuit). Nuit : date de fin au choix (le lendemain).
         showEndDate={sheetType !== "nap"}
         endDateLabel="Date fin"
-        heureFinMinimumDate={sheetType === "nap" ? heureDebut : undefined}
         heureFinMaximumDate={sheetType === "nap" ? napEndOfDay : undefined}
+        onEndBeforeStart={sheetType === "nap" ? askNapPastMidnight : undefined}
         showOngoingToggle
         isOngoing={isOngoing}
         onOngoingChange={handleOngoingChange}

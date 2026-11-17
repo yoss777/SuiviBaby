@@ -91,6 +91,41 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     spy.mockRestore();
   });
 
+  it("sieste arrêtée après minuit : question ; « Enregistrer comme nuit » écrit isNap false, « Annuler » remet la sieste", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    const nap = sleep({ isNap: true, heureDebut: new Date(NOW.getTime() - 12 * 3600_000 + 0) });
+    // Début la veille (NOW à 10:30 UTC, début 12 h avant, autre jour local).
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    result.current(nap as any);
+    expect(spy).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", expect.any(Array));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Enregistrer comme nuit")!.onPress!();
+    expect(spy).toHaveBeenCalledWith("c1", "ev1", expect.objectContaining({ isNap: false, heureFin: NOW }), nap);
+    const undo = mockShowUndoToast.mock.calls.at(-1)![1] as () => void;
+    undo();
+    expect(spy.mock.calls.at(-1)![2]).toMatchObject({ heureFin: null, duree: null, isNap: true });
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("nuit arrêtée après minuit : arrêt direct (pas de question)", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    const night = sleep({ isNap: false, heureDebut: new Date(new Date(NOW).setDate(NOW.getDate() - 1)) });
+    // Nuit de plus de 24 h refusée ailleurs : début la veille, mais moins de 24 h.
+    night.heureDebut = new Date(NOW.getTime() - 10 * 3600_000);
+    result.current(night as any);
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
   it("never records a duration below one minute", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));

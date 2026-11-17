@@ -1,10 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { Alert } from "react-native";
 import { useToast } from "@/contexts/ToastContext";
 import { modifierEvenementOptimistic } from "@/services/eventsService";
 import { isValidDate, toDate } from "@/utils/date";
 
 type TimedEvent = {
   id?: string;
+  type?: string;
+  isNap?: boolean | null;
   heureDebut?: unknown;
   heureFin?: unknown;
   duree?: number | null;
@@ -33,10 +36,15 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
 }: StopTimedEventParams<TEvent>) {
   const { showUndoToast, showToast } = useToast();
 
-  return useCallback(
+  const stop = useCallback(
     // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
     // `opts.onUndo` : appelé quand l'utilisateur touche « Annuler » (ex. annuler le retour auto du widget).
-    (event: TEvent | null | undefined, extra?: Record<string, unknown>, opts?: { onUndo?: () => void }) => {
+    // `opts.allowPastMidnight` : sieste convertie en nuit (déjà confirmée).
+    (
+      event: TEvent | null | undefined,
+      extra?: Record<string, unknown>,
+      opts?: { onUndo?: () => void; allowPastMidnight?: boolean },
+    ) => {
       if (!childId || !event?.id) return;
       const start = toDate(event.heureDebut);
       const heureFin = new Date();
@@ -52,6 +60,25 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         onTooLong?.(event);
         return;
       }
+      // Sieste arrêtée après minuit : une sieste ne finit pas le lendemain.
+      // On propose de l'enregistrer comme une nuit (mêmes heures), ou de
+      // corriger l'heure de fin dans le formulaire.
+      if (
+        !opts?.allowPastMidnight &&
+        event.type === "sommeil" &&
+        event.isNap !== false &&
+        isValidDate(start) &&
+        start.toDateString() !== heureFin.toDateString()
+      ) {
+        Alert.alert("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", [
+          { text: "Corriger l'heure de fin", style: "cancel", onPress: () => onTooLong?.(event) },
+          {
+            text: "Enregistrer comme nuit",
+            onPress: () => stopRef.current(event, { ...(extra ?? {}), isNap: false }, { ...opts, allowPastMidnight: true }),
+          },
+        ]);
+        return;
+      }
       const snapshot = event;
 
       modifierEvenementOptimistic(
@@ -61,7 +88,8 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         snapshot,
       );
 
-      const successLabel = getSuccessLabel(event, {
+      // Libellé selon l'état enregistré (« Nuit terminée » après conversion).
+      const successLabel = getSuccessLabel({ ...event, ...(extra ?? {}) } as TEvent, {
         elapsedMinutes,
         isUnderOneMinute,
       });
@@ -73,11 +101,22 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
           event.id!,
           // Les champs ajoutés à l'arrêt (endSource…) sont retirés aussi :
           // sinon la mesure compterait un arrêt annulé.
-          { heureFin: null, duree: null, ...Object.fromEntries(Object.keys(extra ?? {}).map((k) => [k, null])) } as any,
+          // Un champ qui existait avant (isNap d'une sieste convertie en nuit)
+          // reprend sa valeur ; les autres (endSource…) sont retirés.
+          {
+            heureFin: null,
+            duree: null,
+            ...Object.fromEntries(
+              Object.keys(extra ?? {}).map((k) => [k, (snapshot as Record<string, unknown>)[k] ?? null]),
+            ),
+          } as any,
           duree === undefined ? { ...snapshot, heureFin } : { ...snapshot, heureFin, duree },
         );
       }, undefined, 5000);
     },
     [childId, getSuccessLabel, showUndoToast, showToast, onTooLong],
   );
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
+  return stop;
 }
