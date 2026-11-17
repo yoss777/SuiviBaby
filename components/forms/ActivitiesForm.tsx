@@ -1,5 +1,5 @@
 // components/forms/ActivitiesForm.tsx
-import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL } from "@/utils/sessionLimits";
+import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL, unusualSessionMessage } from "@/utils/sessionLimits";
 import { otherWalkBlocksResume } from "@/utils/walkResume";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
@@ -272,11 +272,20 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
   useFormDirtyGuard({ duree, description, dateHeure, isOngoing, heureDebut, heureFin });
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmedUnusual = false) => {
     if (!activeChild?.id || isSubmitting) return;
     // Une balade ne dure jamais 24 h (le serveur refuserait la durée, sans message).
     if (isChronoMode && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
       showAlert("Durée impossible", `Une balade ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
+    // Durée inhabituelle (balade > 9 h) : sans doute une erreur.
+    const unusual = isChronoMode && !confirmedUnusual ? unusualSessionMessage("walk", heureDebut, isOngoing ? null : heureFin) : null;
+    if (unusual) {
+      showAlert("Durée inhabituelle", unusual, [
+        { text: "Corriger", style: "cancel" },
+        { text: "Enregistrer quand même", onPress: () => void handleSubmit(true) },
+      ]);
       return;
     }
     // Ensure heureFin is on the same day and strictly after heureDebut
@@ -622,7 +631,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               isSubmitting && styles.buttonDisabled,
               pressedOpacity(pressed, 0.2),
             ]}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >

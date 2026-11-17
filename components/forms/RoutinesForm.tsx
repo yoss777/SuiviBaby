@@ -1,5 +1,5 @@
 // components/forms/RoutinesForm.tsx
-import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL } from "@/utils/sessionLimits";
+import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL, unusualSessionMessage } from "@/utils/sessionLimits";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
@@ -373,11 +373,21 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   // les sélecteurs d'heure, pas les dates elles-mêmes).
   useFormDirtyGuard({ dateHeureDirty, dureeBain, temperatureEau, produits, noteBain, dateNezDirty, methodeNez, resultatNez, noteNez, chronoDirty, location, quality, noteSommeil, isNap: isEditing ? isNap : undefined });
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmedUnusual = false) => {
     if (!activeChild?.id || isSubmitting) return;
+    const isSleep = sheetType === "nap" || sheetType === "night";
     // Un sommeil ne dure jamais 24 h (le serveur refuserait la durée, sans message).
-    if (sheetType !== "nez" && sheetType !== "bain" && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
+    if (isSleep && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
       showAlert("Durée impossible", `Un sommeil ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
+    // Durée inhabituelle (sieste > 6 h, nuit > 15 h) : sans doute une erreur.
+    const unusual = isSleep && !confirmedUnusual ? unusualSessionMessage(sheetType, heureDebut, isOngoing ? null : heureFin) : null;
+    if (unusual) {
+      showAlert("Durée inhabituelle", unusual, [
+        { text: "Corriger", style: "cancel" },
+        { text: "Enregistrer quand même", onPress: () => void handleSubmit(true) },
+      ]);
       return;
     }
 
@@ -1097,7 +1107,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               isSubmitting && styles.buttonDisabled,
               pressedOpacity(pressed, 0.2),
             ]}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
