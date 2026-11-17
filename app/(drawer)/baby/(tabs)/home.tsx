@@ -73,6 +73,7 @@ import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/for
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   BackHandler,
   Easing,
@@ -212,7 +213,7 @@ export default function HomeDashboard() {
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showActionToast } = useToast();
-  const { showConfirm, showAlert } = useModal();
+  const { showConfirm } = useModal();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -1483,7 +1484,9 @@ export default function HomeDashboard() {
       showToast("Aucune session en cours");
       return;
     }
-    showAlert(
+    // Boîte native : plusieurs choix (la fenêtre de l'app n'a qu'un bouton
+    // d'action, « Arrêter la balade » disparaissait). Lien du petit widget iPhone.
+    Alert.alert(
       choices.length === 1 ? `${choices[0].text} ?` : "Arrêter quelle session ?",
       "Depuis le petit widget, l'arrêt est confirmé ici.",
       [
@@ -1491,7 +1494,7 @@ export default function HomeDashboard() {
         { text: "Annuler", style: "cancel" as const },
       ],
     );
-  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showAlert, showToast, runWidgetAction]);
+  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showToast, runWidgetAction]);
   const openWidgetLink = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => {
       if (action === "stop-pick") void pickStopFromWidget();
