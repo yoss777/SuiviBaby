@@ -349,12 +349,26 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const k = daysAgo(ms);
     return k <= 0 ? `dernier à ${clock(ms)}` : k === 1 ? `dernier hier à ${clock(ms)}` : `dernier le ${ddmm(ms)}`;
   };
-  // Affiché : « rappel · dernier à 12:00 » ; parlé (lateSay) : « rappel dépassé, dernier à 12:00 ».
-  const lateWhen = (ms: number) => `rappel · ${lastWhen(ms)}`;
+  // Affiché court (colonne étroite, tronqué sinon) : « rappel · hier 19:37 » ;
+  // parlé (lateSay) : « rappel dépassé, dernier hier à 19:37 ».
+  const lastShort = (ms: number) => {
+    const k = daysAgo(ms);
+    return k <= 0 ? clock(ms) : k === 1 ? `hier ${clock(ms)}` : `le ${ddmm(ms)}`;
+  };
+  const lateWhen = (ms: number) => `rappel · ${lastShort(ms)}`;
   const lateSay = (ms: number) => `rappel dépassé, ${lastWhen(ms)}`;
   // Pastille décorative : jamais lue (le sens est porté par le libellé de la tuile).
   const dotText = (color: string, size = 9) => <Text modifiers={[font({ size }), foregroundStyle(color), accessibilityHidden()]}>●</Text>;
+  // Icône de catégorie (SF Symbol) : décorative, le sens est dans le libellé du bloc.
+  const icon = (name: "fork.knife" | "drop.fill" | "moon.zzz.fill", color: string) => (
+    <Image systemName={name} size={10} color={color} modifiers={[accessibilityHidden()]} />
+  );
   const sinceTime = (l: WidgetLive) => (l.sinceMs ? clock(l.sinceMs) : l.sinceLabel.replace("depuis ", ""));
+  // Petit format, une seule sieste/nuit ou balade (Parent) : un seul lien pour
+  // tout le widget (limite d'Apple). Il arrête la session, SANS la clé de
+  // l'appareil : l'app demande « Arrêter la sieste ? » (Arrêter / Annuler),
+  // jamais d'arrêt sur un simple appui pour ouvrir l'app.
+  const smallStop = small && canWrite && lives.length === 1 && lives[0].kind !== "nursing" ? lives[0] : null;
   const stopOf = (l: WidgetLive) => (l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : "nursing-stop");
   // Même phrase qu'Android : « Arrêter la sieste », « la nuit », « la balade », « la tétée ».
   const stopSay = (l: WidgetLive) =>
@@ -390,7 +404,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       const other = withOther ? otherSide(l) : null;
       return `Tétée${l.pausedAtMs != null ? " en pause" : ""}${l.side ? ` · ${sideWord(l.side)}` : ""}${other ? ` · ${other}` : ""}`;
     }
-    return small ? labelOf(l) : `${labelOf(l)} · depuis ${sinceTime(l)}`;
+    return small ? labelOf(l) : `${labelOf(l)} · ${sinceTime(l)}`;
   };
   const tileMods = (l: WidgetLive, radius: number, pad: number) => [
     padding({ top: pad, bottom: pad, leading: pad + 2, trailing: pad + 2 }),
@@ -411,13 +425,30 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const under = l.kind === "nursing" ? (other ? `${other} · depuis ${sinceTime(l)}` : `depuis ${sinceTime(l)}`) : small ? `depuis ${sinceTime(l)}` : null;
     const underText = under ? <Text modifiers={[F(small ? 11 : 12), monospacedDigit(), foregroundStyle(T.softOnTile), ...fit1]}>{under}</Text> : null;
     if (small || !canWrite) {
+      // « ■ » visuel seulement (petit format : le lien est celui du widget, smallStop).
+      const stopMark =
+        smallStop === l ? (
+          <Text
+            modifiers={[F(13, "bold"), foregroundStyle(CAT[l.kind].text), padding({ leading: 8, trailing: 8, top: 6, bottom: 6 }), background(C.bg), clipShape("capsule"), accessibilityHidden()]}
+          >
+            ■
+          </Text>
+        ) : null;
       return (
         <VStack alignment="leading" spacing={3} modifiers={tileMods(l, 16, small ? 9 : 10)}>
           {tileLink(
             l,
             <VStack alignment="leading" spacing={3} modifiers={[accessibilityElement("ignore"), ...liveLabel(l)]}>
               {titleRow(l, tileTitle(l, false), small ? 12 : 13)}
-              {timerOf(l, small ? 26 : 30)}
+              {stopMark ? (
+                <HStack spacing={6} alignment="center">
+                  {timerOf(l, 26)}
+                  <Spacer />
+                  {stopMark}
+                </HStack>
+              ) : (
+                timerOf(l, small ? 26 : 30)
+              )}
               {underText}
             </VStack>,
           )}
@@ -436,7 +467,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <HStack spacing={8} alignment="center">
           {timerOf(l, 30, true)}
           <Spacer />
-          {stopChip(l, false, 44)}
+          {stopChip(l, true, 44)}
         </HStack>
       </VStack>
     );
@@ -510,11 +541,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           >
             {agoText(ms)}
           </Text>
-          {reminderPile(late, atMs) ? <VStack modifiers={[padding({ leading: 6 })]}>{reminderPile(late, atMs)}</VStack> : null}
+          {!small && reminderPile(late, atMs) ? <VStack modifiers={[padding({ leading: 6 })]}>{reminderPile(late, atMs)}</VStack> : null}
         </HStack>
       ) : (
         <Text modifiers={[F(15), foregroundStyle(C.soft), ...fit1]}>pas encore</Text>
       )}
+      {/* Petit format : pas la place à côté du chiffre (« ra… dé… ») : une ligne dessous. */}
+      {small && ms && (late || (atMs != null && atMs > now)) ? (
+        <Text modifiers={[F(11, late ? "semibold" : "regular"), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), ...fit1]}>
+          {late ? "rappel dépassé" : `rappel à ${clock(atMs as number)}`}
+        </Text>
+      ) : null}
     </VStack>
   );
 
@@ -686,24 +723,25 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     !day || dayStale ? null : (
       <HStack spacing={8} modifiers={[accessibilityElement("ignore"), accessibilityLabel(bandSay())]}>
         <HStack spacing={3}>
-          {dotText(mealLate && lives.length > 0 ? C.alert : CAT.meal.dot, 8)}
-          <Text modifiers={[F(11, "semibold"), foregroundStyle(C.strong), ...fit1]}>{`${day.mealsCount} rep.`}</Text>
+          {icon("fork.knife", mealLate && lives.length > 0 ? C.alert : CAT.meal.dot)}
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(mealLate && lives.length > 0 ? C.alert : C.strong), ...fit1]}>{`${day.mealsCount}`}</Text>
         </HStack>
         <HStack spacing={3}>
-          {dotText(diaperLate ? C.alert : CAT.diaper.dot, 8)}
-          <Text modifiers={[F(11, "semibold"), foregroundStyle(diaperLate ? C.alert : C.strong), ...fit1]}>{`${day.diapersCount} ch.`}</Text>
+          {icon("drop.fill", diaperLate ? C.alert : CAT.diaper.dot)}
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(diaperLate ? C.alert : C.strong), ...fit1]}>{`${day.diapersCount}`}</Text>
         </HStack>
         <HStack spacing={3}>
-          {dotText(CAT.sleep.dot, 8)}
-          <Text modifiers={[F(11, "semibold"), foregroundStyle(C.strong), ...fit1]}>{`${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`}</Text>
+          {icon("moon.zzz.fill", CAT.sleep.dot)}
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(C.strong), ...fit1]}>{sleepLabel(sleepNowMin)}</Text>
         </HStack>
       </HStack>
     );
 
   // Petit format : un seul lien (WidgetKit ignore les Link) — tétée en cours,
   // sinon repas si le bloc « Dernier repas » est affiché, sinon l'Accueil.
-  const smallUrl =
-    lives.some((l) => l.kind === "nursing") && lives.length === 1
+  const smallUrl = smallStop
+    ? actionUrl(stopOf(smallStop)).replace(/&k=[^&]*/, "")
+    : lives.some((l) => l.kind === "nursing") && lives.length === 1
       ? zoneUrl("nursing")
       : lives.length === 0 && !props.loading && props.lastMealMs
         ? zoneUrl("meal")
@@ -724,7 +762,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {header}
         {nowZone()}
         <Spacer />
-        {band()}
+        {/* Deux sessions ou plus : plus la place pour la bande du jour (collée au
+            bord, rognée) ; les sessions passent avant. */}
+        {lives.length >= 2 ? null : band()}
       </VStack>
     );
   }

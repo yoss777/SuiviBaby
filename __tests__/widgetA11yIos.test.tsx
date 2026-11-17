@@ -79,7 +79,7 @@ describe("phrases parlées", () => {
     });
     expect(d.a11y.some((l) => l.includes("rappel dépassé, dernier hier à 23:10"))).toBe(true);
     expect(d.a11y.join(" ")).not.toContain("rappel ·");
-    expect(allText(d)).toContain("rappel · dernier hier à 23:10");
+    expect(allText(d)).toContain("rappel · hier 23:10");
   });
 
   it("jours : « il y a 2 jours » parlé, « 2 j » affiché", () => {
@@ -93,7 +93,30 @@ describe("phrases parlées", () => {
     expect(d.a11y).toContain("3 repas, 2 changes, rappel dépassé, 1 heure et 35 minutes de sommeil".replace("2 changes, rappel dépassé", "2 changes, rappel dépassé"));
     const ok = show({}, "systemSmall");
     expect(ok.a11y).toContain("3 repas, 2 changes, 1 heure et 35 minutes de sommeil");
-    expect(allText(ok)).toContain("3 rep.");
+    expect(allText(ok)).not.toMatch(/rep\.|dodo/);
+  });
+
+  it("petit format : « rappel dépassé » sous le chiffre ; deux sessions : pas de bande du jour", () => {
+    const late = show({ alerts: { mealAtMs: NOW - H } }, "systemSmall");
+    expect(late.texts).toContain("rappel dépassé");
+    expect(late.texts).not.toContain("dépassé");
+    const two = show({ lives: [napLive(NOW - H), { ...napLive(NOW - 30 * 60_000), kind: "walk" } as any] }, "systemSmall");
+    expect(two.texts).not.toContain("1h35");
+  });
+
+  it("petit format, une sieste : « ■ » à côté du chrono, le widget ouvre l'arrêt SANS clé (l'app demande confirmation)", () => {
+    const d = show({ lives: [napLive(NOW - H)] }, "systemSmall");
+    expect(d.texts).toContain("■");
+    const stop = d.links.find((l) => l.includes("widget=sleep-stop"));
+    expect(stop).toBeDefined();
+    expect(stop).not.toContain("&k=");
+    // Deux sessions : impossible de savoir laquelle arrêter, ni « ■ » ni lien d'arrêt.
+    const two = show({ lives: [napLive(NOW - H), { ...napLive(NOW - 30 * 60_000), kind: "walk" } as any] }, "systemSmall");
+    expect(two.texts).not.toContain("■");
+    expect(two.links.some((l) => l.includes("-stop"))).toBe(false);
+    // Proche (lecture seule) : rien.
+    const ro = show({ lives: [napLive(NOW - H)], canWrite: false }, "systemSmall");
+    expect(ro.links.some((l) => l.includes("-stop"))).toBe(false);
   });
 
   it("données de plus de 2 h : « mis à jour à », « données à vérifier »", () => {
