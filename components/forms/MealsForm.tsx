@@ -1072,7 +1072,7 @@ export function MealsForm({
           </View>
           {!isEditing && runningSide && (
             <Text style={[styles.chronoHint, { color: nc.textLight }]}>
-              Le chrono continue même si vous fermez cette fenêtre. « Ajouter » garde la tétée en cours ; mettez en pause pour l'enregistrer terminée.
+              Le chrono continue même si vous fermez cette fenêtre. « Ajouter » garde la tétée en cours ; mettez en pause pour l&apos;enregistrer terminée.
             </Text>
           )}
           {/* Tétée lancée par erreur : on peut l'abandonner (confirmé). */}
