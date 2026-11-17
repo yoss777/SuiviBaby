@@ -52,6 +52,7 @@
           <li><a href="#finalites">Finalités et bases légales</a></li>
           <li><a href="#enfants">Données des enfants</a></li>
           <li><a href="#voix">Commande vocale et IA</a></li>
+          <li><a href="#widget">Widget de l'écran d'accueil</a></li>
           <li><a href="#destinataires">Destinataires et prestataires</a></li>
           <li><a href="#transferts">Transferts hors UE</a></li>
           <li><a href="#conservation">Durées de conservation</a></li>
@@ -66,7 +67,7 @@
         <header>
           <span class="eyebrow">Données personnelles</span>
           <h1>Politique de confidentialité</h1>
-          <p class="doc__meta">Version 2.2 — en vigueur au <time datetime="2026-11-06">6 novembre 2026</time></p>
+          <p class="doc__meta">Version 2.3 — en vigueur au <time datetime="2026-11-17">17 novembre 2026</time></p>
         </header>
 
         <aside class="doc__summary" aria-labelledby="essentiel">
@@ -75,6 +76,7 @@
             <li>Nous traitons les données de suivi de votre enfant, dont des <strong>données de santé</strong>, uniquement pour faire fonctionner l'application, et avec votre <strong>consentement explicite</strong>.</li>
             <li><strong>Aucune publicité, aucune revente</strong>, aucun traceur publicitaire.</li>
             <li>Certains prestataires techniques nous aident (hébergement, transcription vocale, e-mails…) : ils sont listés <a href="#destinataires">ci-dessous</a>, avec ce qu'ils reçoivent.</li>
+            <li>Si vous posez le <strong>widget</strong> sur votre écran d'accueil, un résumé du suivi y est affiché et mis à jour en temps réel : voir <a href="#widget">la section dédiée</a>.</li>
             <li>Vous pouvez <strong>exporter</strong> vos données et <strong>supprimer</strong> votre compte depuis l'application, à tout moment.</li>
           </ul>
         </aside>
@@ -83,7 +85,7 @@
           <h2 id="h-responsable">1. Responsable du traitement</h2>
           <p>Le responsable du traitement est <strong>TESFA</strong>, société par actions simplifiée au capital de 500 €, immatriculée au RCS de Paris sous le numéro 900 913 476, dont le siège est situé au 78 avenue des Champs-Élysées, 75008 Paris, France, éditrice de l'application et du site SuiviBaby.</p>
           <p>Pour toute question relative à vos données : <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.<br>
-          Délégué à la protection des données : non désigné (TESFA ne traite pas de données de santé à grande échelle au sens de l'article 37 du RGPD) ; pour toute question sur vos données, écrivez à la même adresse.</p>
+          Délégué à la protection des données : non désigné à ce jour, la désignation étant réévaluée chaque année au regard du nombre d'utilisateurs (article 37 du RGPD) ; pour toute question sur vos données, écrivez à la même adresse.</p>
         </section>
 
         <section id="donnees" aria-labelledby="h-donnees">
@@ -101,6 +103,7 @@
                 <tr><td>Partage</td><td>Invitations, codes de partage, droits d'accès, commentaires et réactions sur les événements</td><td>Vous et les personnes invitées</td></tr>
                 <tr><td>Préférences et consentements</td><td>Réglages, notifications, rappels, preuve horodatée de votre consentement aux CGU et au traitement des données de santé</td><td>Vous</td></tr>
                 <tr><td>Appareil</td><td>Jeton de notification push, plateforme, données techniques de diagnostic en cas d'erreur</td><td>Votre appareil</td></tr>
+                <tr><td>Widget de l'écran d'accueil (facultatif)</td><td>Résumé du suivi de l'enfant affiché par le widget (voir la section 6), présence d'un widget sur l'appareil, enfant affiché ; indication qu'un événement a été démarré ou arrêté depuis le widget</td><td>Calculé à partir de vos données ; votre appareil</td></tr>
                 <tr><td>Abonnement</td><td>Identifiant de compte pseudonyme, offre souscrite, statut et dates de l'abonnement (jamais vos coordonnées bancaires)</td><td>App Store / Google Play via RevenueCat</td></tr>
                 <tr><td>Signalements</td><td>Contenu signalé, motif, date, compte à l'origine du signalement</td><td>Vous</td></tr>
               </tbody>
@@ -120,6 +123,8 @@
                 <tr><td>Commande vocale</td><td>Couverte par le consentement explicite aux données de santé (art. 9.2.a) — fonction facultative ; une information sur les prestataires concernés (AssemblyAI, Anthropic) vous est présentée une seule fois, avant la première utilisation</td></tr>
                 <tr><td>Partager le suivi avec les personnes que vous invitez</td><td>Exécution du contrat et consentement (art. 6.1.b et 9.2.a)</td></tr>
                 <tr><td>Rappels et notifications push</td><td>Consentement (autorisation du système de votre téléphone, révocable)</td></tr>
+                <tr><td>Afficher un résumé du suivi sur le widget de l'écran d'accueil, mis à jour en temps réel</td><td>Votre consentement explicite aux données de santé (art. 9.2.a) — fonction facultative : rien n'est envoyé tant qu'aucun widget n'est posé</td></tr>
+                <tr><td>Compter, de façon globale, l'usage du widget (événements démarrés ou arrêtés depuis le widget)</td><td>Votre consentement explicite aux données de santé (art. 9.2.a) : l'indication est portée par l'événement, une donnée de santé</td></tr>
                 <tr><td>Récapitulatif hebdomadaire par e-mail</td><td>Consentement — envoyé uniquement si vous l'activez dans les réglages</td></tr>
                 <tr><td>E-mails de service (invitation, sécurité du compte, suppression)</td><td>Exécution du contrat</td></tr>
                 <tr><td>Gérer l'abonnement Premium</td><td>Exécution du contrat ; obligations légales comptables</td></tr>
@@ -148,8 +153,20 @@
           <p><strong>L'audio n'est pas conservé par SuiviBaby.</strong> Il est enregistré temporairement sur votre téléphone, puis supprimé dès la fin de la transcription (ou si vous annulez, ou en cas d'erreur) ; notre serveur ne le stocke pas. La transcription est supprimée chez AssemblyAI juste après le traitement ; si cette suppression échoue, elle est mise en file d'attente et retentée automatiquement (jusqu'à 5 essais), puis signalée à notre équipe pour suppression manuelle. Le texte transcrit est conservé dans un cache technique, utilisable 5 minutes pour éviter les doubles traitements, puis supprimé automatiquement (la purge peut prendre jusqu'à 24 heures). Le texte envoyé à Anthropic est celui que vous avez dicté, tel quel : <strong>si vous prononcez le prénom de votre enfant, ce prénom s'y trouve</strong>. SuiviBaby n'ajoute ni le profil de l'enfant ni votre identifiant de compte à ce qui est envoyé à Anthropic. Ces prestataires agissent comme sous-traitants. Anthropic s'engage contractuellement à ne pas entraîner ses modèles sur les contenus envoyés par l'API. Les conditions d'AssemblyAI, dans l'offre que nous utilisons aujourd'hui, l'autorisent en revanche à utiliser les données reçues pour améliorer ses modèles : nous supprimons chaque transcription chez AssemblyAI dès la fin du traitement, et nous travaillons à remplacer ce service par une transcription faite sur votre téléphone. Si vous ne le souhaitez pas, n'utilisez pas la commande vocale : la saisie manuelle n'envoie rien à ces prestataires.</p>
         </section>
 
+        <section id="widget" aria-labelledby="h-widget">
+          <h2 id="h-widget">6. Widget de l'écran d'accueil</h2>
+          <p>Le widget « Bébé maintenant » est facultatif : il n'existe que si vous le posez sur l'écran d'accueil (ou l'écran verrouillé de l'iPhone).</p>
+          <ul>
+            <li><strong>Ce qu'il affiche :</strong> le prénom de l'enfant, l'heure et le type du dernier repas et du dernier change, les compteurs du jour (repas, changes, quantité de lait, sommeil), les sessions en cours (sieste, nuit, balade, tétée et côté du sein), les rappels et, selon la taille du widget, les derniers événements des dernières 24 heures (7 au plus, par exemple « Tétée 12 min », « Biberon 120 ml », « Tire-lait », « Bain », « Nouvelle dent », humeur sous forme d'emoji). Les médicaments, vaccins, symptômes et vitamines saisies librement y apparaissent sous un libellé générique (« Médicament », « Vaccin »…), sans le nom saisi ; la température apparaît avec sa valeur (par exemple « Temp. 37,8 °C »).</li>
+            <li><strong>Qui peut le voir :</strong> il s'affiche sur l'écran de votre téléphone : <strong>toute personne qui voit votre écran peut le lire</strong>. Sur iPhone, son contenu est masqué tant que le téléphone est verrouillé par un code (écran verrouillé, mode En veille) ; sur Android, il n'est pas masqué.</li>
+            <li><strong>Mise à jour en temps réel :</strong> quand vous ou une personne invitée enregistrez un événement, notre serveur envoie le résumé aux appareils sur lesquels un widget est posé pour cet enfant, <strong>les vôtres et ceux des personnes invitées qui en ont posé un</strong>, chacun selon le consentement de son titulaire. Ce message passe par Expo, puis par Google (Firebase Cloud Messaging, sur Android) ou Apple (Apple Push Notification service, sur iPhone). Il est chiffré pendant le transport, mais pas de bout en bout : ces prestataires le traitent pour le remettre, et nous demandons qu'il expire au bout de 15 minutes s'il ne peut pas l'être. Le message contient ce résumé quelle que soit la taille du widget. Aucun résumé n'est envoyé à vos appareils sans votre consentement aux données de santé, ni après son retrait : seul un message vide, qui efface le widget, peut encore leur parvenir.</li>
+            <li><strong>Effacement :</strong> le widget est vidé quand vous vous déconnectez, retirez votre consentement ou supprimez votre compte ; nous demandons son effacement à distance si votre accès à l'enfant vous est retiré ou si le profil de l'enfant est supprimé. À défaut de réception, il se masque au plus tard 24 heures après sa dernière mise à jour (les données restent alors dans l'espace de l'application sur le téléphone jusqu'à la prochaine mise à jour ou la déconnexion).</li>
+            <li><strong>Mesure d'usage :</strong> quand vous démarrez ou arrêtez une session depuis le widget, nous l'indiquons sur l'événement, pour compter, de façon globale, l'usage du widget. Cette indication est couverte par votre consentement aux données de santé et suit l'événement (même durée de conservation, même suppression).</li>
+          </ul>
+        </section>
+
         <section id="destinataires" aria-labelledby="h-destinataires">
-          <h2 id="h-destinataires">6. Qui a accès à vos données</h2>
+          <h2 id="h-destinataires">7. Qui a accès à vos données</h2>
           <p>Vos données sont accessibles : à vous ; aux personnes que vous avez invitées, selon les droits que vous leur avez donnés ; à un nombre restreint de personnes habilitées de TESFA, uniquement lorsque c'est nécessaire (support à votre demande, traitement d'un signalement, sécurité) ; et aux sous-traitants suivants, qui agissent sur nos instructions :</p>
           <div class="table-wrap">
             <table>
@@ -161,7 +178,8 @@
                 <tr><td>Anthropic, PBC</td><td>Interprétation du texte dicté</td><td>Texte transcrit tel que dicté (peut contenir un prénom), heure locale</td><td>États-Unis</td></tr>
                 <tr><td>RevenueCat, Inc.</td><td>Gestion des abonnements</td><td>Identifiant de compte pseudonyme, statut d'achat</td><td>États-Unis</td></tr>
                 <tr><td>Resend (Plus Five Five, Inc.)</td><td>Envoi des e-mails</td><td>Adresse e-mail, contenu de l'e-mail (invitation, récapitulatif…)</td><td>États-Unis</td></tr>
-                <tr><td>Expo (650 Industries, Inc.)</td><td>Acheminement des notifications push</td><td>Jeton de l'appareil, texte de la notification (prénom de l'enfant, type d'événement et horaires, par exemple « Rappel repas — Léa : plus de 3 h depuis le dernier repas »)</td><td>États-Unis</td></tr>
+                <tr><td>Expo (650 Industries, Inc.)</td><td>Acheminement des notifications push et des mises à jour du widget</td><td>Jeton de l'appareil, texte de la notification (prénom de l'enfant, type d'événement et horaires, par exemple « Rappel repas — Léa : plus de 3 h depuis le dernier repas ») ; résumé affiché par le widget (voir la section 6), si un widget est posé</td><td>États-Unis</td></tr>
+                <tr><td>Apple Inc. (Apple Push Notification service) et Google (Firebase Cloud Messaging)</td><td>Remise des notifications et des mises à jour du widget au téléphone (Apple sur iPhone, Google sur Android)</td><td>Jeton de l'appareil, contenu de la notification ou de la mise à jour du widget</td><td>États-Unis</td></tr>
                 <tr><td>Functional Software, Inc. (Sentry)</td><td>Diagnostic des erreurs et des performances</td><td>Données techniques de l'appareil et de l'erreur, sans identifiant de compte</td><td>Union européenne (Allemagne)</td></tr>
               </tbody>
             </table>
@@ -170,12 +188,12 @@
         </section>
 
         <section id="transferts" aria-labelledby="h-transferts">
-          <h2 id="h-transferts">7. Transferts hors de l'Union européenne</h2>
+          <h2 id="h-transferts">8. Transferts hors de l'Union européenne</h2>
           <p>Les données de l'application, photos comprises, sont hébergées dans l'Union européenne (à l'exception de quelques photos anciennes encore en cours de migration depuis un espace de stockage aux États-Unis). Certains prestataires sont toutefois situés aux États-Unis. Ces transferts sont encadrés par la décision d'adéquation <strong>EU-US Data Privacy Framework</strong> lorsque le prestataire y est certifié, et à défaut par les <strong>clauses contractuelles types</strong> de la Commission européenne, complétées de mesures de sécurité (chiffrement, minimisation des données envoyées). Vous pouvez obtenir une copie des garanties applicables en écrivant à <a href="mailto:privacy@suivibaby.com">privacy@suivibaby.com</a>.</p>
         </section>
 
         <section id="conservation" aria-labelledby="h-conservation">
-          <h2 id="h-conservation">8. Combien de temps nous les conservons</h2>
+          <h2 id="h-conservation">9. Combien de temps nous les conservons</h2>
           <div class="table-wrap">
             <table>
               <caption class="sr-only">Durées de conservation</caption>
@@ -187,6 +205,8 @@
                 <tr><td>Enregistrement audio</td><td>Supprimé de votre téléphone après la transcription ; non conservé sur nos serveurs</td></tr>
                 <tr><td>Transcription vocale</td><td>Supprimée chez AssemblyAI aussitôt après traitement ; cache technique utilisable 5 minutes, purge automatique sous 24 heures au plus</td></tr>
                 <tr><td>Codes d'invitation</td><td>7 jours</td></tr>
+                <tr><td>Résumé affiché par le widget (sur votre téléphone)</td><td>Effacé à la déconnexion, au retrait du consentement et à la suppression du compte ; effacement à distance demandé si votre accès à l'enfant est retiré ; à défaut, masqué au plus tard 24 heures après la dernière mise à jour</td></tr>
+                <tr><td>Mises à jour du widget chez Expo, Apple et Google</td><td>Le temps de les remettre ; nous demandons qu'un message non remis expire au bout de 15 minutes</td></tr>
                 <tr><td>Journaux techniques et de sécurité</td><td>90 jours maximum</td></tr>
                 <tr><td>Preuve de consentement</td><td>5 ans après la suppression du compte, à titre de preuve en cas de litige (art. 6.1.f RGPD ; prescription de l'art. 2224 du Code civil), horodatage enregistré côté serveur</td></tr>
                 <tr><td>Données de facturation</td><td>10 ans (obligation comptable), conservées par les stores et notre prestataire d'abonnement</td></tr>
@@ -197,13 +217,13 @@
         </section>
 
         <section id="securite" aria-labelledby="h-securite">
-          <h2 id="h-securite">9. Sécurité</h2>
+          <h2 id="h-securite">10. Sécurité</h2>
           <p>Les échanges sont chiffrés (TLS) et les données sont chiffrées au repos par notre hébergeur. L'accès à chaque enfant est contrôlé par des règles strictes côté serveur : seules les personnes autorisées peuvent lire ou écrire ses données. L'application vérifie son intégrité auprès du serveur, et vous pouvez activer un verrouillage biométrique. Les données ne sont pas chiffrées de bout en bout : notre hébergeur détient les clés de chiffrement au repos.</p>
           <p>En cas de violation de données présentant un risque pour vos droits, nous notifierons la CNIL et, si nécessaire, vous en informerons dans les délais légaux.</p>
         </section>
 
         <section id="droits" aria-labelledby="h-droits">
-          <h2 id="h-droits">10. Vos droits</h2>
+          <h2 id="h-droits">11. Vos droits</h2>
           <p>Vous disposez des droits suivants sur vos données :</p>
           <ul>
             <li><strong>Accès</strong> et <strong>rectification</strong> : directement dans l'application, ou sur demande ;</li>
@@ -218,12 +238,12 @@
         </section>
 
         <section id="site" aria-labelledby="h-site">
-          <h2 id="h-site">11. Ce site web</h2>
+          <h2 id="h-site">12. Ce site web</h2>
           <p>Le site suivibaby.com <strong>ne dépose aucun cookie</strong> et n'utilise aucun outil de mesure d'audience ni de traceur. Seule votre préférence de thème (clair ou sombre) est mémorisée dans votre navigateur, sans être transmise. Notre hébergeur (Google Firebase Hosting) traite les journaux techniques de connexion (adresse IP, date, page demandée) pour assurer la sécurité et le bon fonctionnement du service.</p>
         </section>
 
         <section id="modifications" aria-labelledby="h-modifications">
-          <h2 id="h-modifications">12. Modifications</h2>
+          <h2 id="h-modifications">13. Modifications</h2>
           <p>Nous pouvons faire évoluer cette politique. En cas de changement important, notamment l'ajout d'un nouveau prestataire ou d'une nouvelle finalité, vous serez informé dans l'application ou par e-mail avant son entrée en vigueur ; si le changement nécessite votre consentement, nous vous le redemanderons. Les versions précédentes sont disponibles sur demande.</p>
         </section>
       </article>
