@@ -262,6 +262,9 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
+  // Fin d'une sieste : 23:59 du jour du début au plus tard.
+  const napEndOfDay = new Date(heureDebut);
+  napEndOfDay.setHours(23, 59, 0, 0);
   const [chronoDirty, setChronoDirty] = useState(() =>
     shouldForceChronoDirty(editData, sommeilEnCours),
   );
@@ -769,8 +772,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         onHeureFinChange={handleHeureFinChange}
         showStartDate
         startDateLabel="Date début"
-        showEndDate
+        // Sieste : même jour que le début, fin entre le début et 23:59 (elle ne
+        // passe pas minuit). Nuit : date de fin au choix (le lendemain).
+        showEndDate={sheetType !== "nap"}
         endDateLabel="Date fin"
+        heureFinMinimumDate={sheetType === "nap" ? heureDebut : undefined}
+        heureFinMaximumDate={sheetType === "nap" ? napEndOfDay : undefined}
         showOngoingToggle
         isOngoing={isOngoing}
         onOngoingChange={handleOngoingChange}
