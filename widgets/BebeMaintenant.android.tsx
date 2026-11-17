@@ -168,10 +168,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : l.kind === "nursing" ? "nursing-stop" : null;
   // Bouton « ■ Arrêter » (ou « ■ » quand la tuile est étroite), sur fond blanc
   // ou sombre pour se détacher de la tuile colorée.
-  const stopChip = (l: WidgetLive, h: number, compact: boolean) => (
+  // `w` : largeur fixe du « ■ » (cible tactile), sinon marges autour du texte.
+  const stopChip = (l: WidgetLive, h: number, compact: boolean, w?: number) => (
     <Box
       contentAlignment="center"
-      modifiers={[height(h), background(C.bg), cornerRadius(h / 2), padding(compact ? 8 : 10, 0, compact ? 8 : 10, 0), ...timedMods(stopOf(l) as "sleep-stop", stopSay(l))]}
+      modifiers={[height(h), background(C.bg), cornerRadius(h / 2), w != null ? width(w) : padding(compact ? 8 : 10, 0, compact ? 8 : 10, 0), ...timedMods(stopOf(l) as "sleep-stop", stopSay(l))]}
     >
       {txt(compact ? "■" : "■ Arrêter", CAT[l.kind].text, 12, true)}
     </Box>
@@ -305,7 +306,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Hauteur minimale d'une tuile seule (marges, titre, chrono de 10 sp) : si la
   // bande du bas la prive de cette place, la bande est retirée (plutôt qu'un débordement).
   const SINGLE_MIN = 2 * 10 + S(16) + 4 + Math.ceil(10 * 1.25 * FS);
-  const bandWanted = small && day && n <= 1 ? S(26) : 0;
+  // Bande du bas : emoji + nombre (« 🍼 3 », « 💧 2 », « 🌙 1h35 »). Largeur
+  // estimée : emoji ≈ 15 dp en 12 sp, écart de 4, nombre en gras. Si les trois
+  // cellules (et 4 dp entre elles) ne tiennent pas en largeur, la bande est retirée.
+  const bandEmojiW = Math.ceil(15 * FS);
+  const bandCellW = (value: string) => bandEmojiW + 4 + Math.ceil(textW12(value) * 1.08);
+  const bandValues = day
+    ? [`${day.mealsCount}`, `${day.diapersCount}`, sleepLabel(sleepNowMin).replace(" min", "m")]
+    : [];
+  const bandUsed = bandValues.reduce((sum, v) => sum + bandCellW(v), 0);
+  const bandFits = bandUsed + 8 <= innerW;
+  const bandWanted = small && day && n <= 1 && bandFits ? S(26) : 0;
   const bandH = n === 1 && bandWanted > 0 && zoneH - bandWanted < SINGLE_MIN ? 0 : bandWanted;
 
   const txt = (text: string, color: string, sp: number, bold = false, lines = 1) => (
@@ -539,12 +550,40 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     // La ligne « depuis » ne reste que si le chrono garde au moins 10 sp avec elle.
     const under = !tight && underWanted && capFor(2 + S(16)) >= 10 ? underWanted : null;
     const chronoSp = Math.max(6, Math.min(baseSp, capFor(under ? 2 + S(16) : 0)));
-    // Bouton d'arrêt : 44 dp si la tuile a la place (tétée avec « depuis » : un peu moins).
+    // Bouton d'arrêt sous le chrono (présentation moyenne) : 44 dp si la tuile a la place.
     const chipRoom =
       availH - 2 * tilePad - S(16) - 4 - Math.ceil(chronoSp * 1.25 * FS) - (under ? 2 + S(16) : 0) - 6;
     // Moins de 32 dp de place : pas de bouton (la tuile reste un lien) plutôt qu'un débordement.
     const chipH = Math.min(44, chipRoom);
-    const showChip = !tight && canWrite && (!small || bigText) && stopOf(l) != null && chipRoom >= 32;
+    const showChipBelow = !tight && canWrite && !small && stopOf(l) != null && chipRoom >= 32;
+    // Bouton « ■ » sur la ligne du chrono (petite présentation, ou moyenne quand
+    // il n'y a pas la place dessous) : on essaie d'abord marges pleines, avec le
+    // titre et « depuis », puis on resserre ; sans 32 dp de haut ou sans 10 sp
+    // pour le chrono à côté, pas de bouton.
+    const rowChip = (() => {
+      if (!canWrite || stopOf(l) == null || showChipBelow) return null;
+      // Pas de déstructuration ni de spread d'objet : le runtime du widget n'a pas les aides Babel.
+      const tries: { pad: number; title: boolean; under: boolean }[] = [];
+      for (const pad of [fullPad, 4]) {
+        for (const title of pad === 4 && !tight ? [true, false] : pad === fullPad ? [true] : [true, false]) {
+          if (underWanted && title) tries.push({ pad: pad, title: title, under: true });
+          tries.push({ pad: pad, title: title, under: false });
+        }
+      }
+      for (const t of tries) {
+        const room = availH - 2 * t.pad - (t.title ? S(16) + 4 : 0) - (t.under ? 2 + S(16) : 0);
+        if (room < 32) continue;
+        for (const cw of [40, 32, 16 + S(10)]) {
+          const chronoW = zoneW - 2 * t.pad - 6 - cw;
+          const sp = Math.min(small ? 28 : 36, Math.floor(chronoW / (4.3 * FS)), Math.floor(room / (1.25 * FS)));
+          if (sp >= 10) return { pad: t.pad, title: t.title, under: t.under, cw: cw, chronoW: chronoW, sp: sp, chipH: Math.min(44, room) };
+        }
+      }
+      return null;
+    })();
+    const padUsed = rowChip ? rowChip.pad : tilePad;
+    const titleShown = rowChip ? rowChip.title : !tight;
+    const underShown = rowChip ? (rowChip.under ? underWanted : null) : under;
     return (
       <Column
         verticalAlignment="center"
@@ -552,28 +591,42 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           size(zoneW, availH),
           background(k.tile),
           cornerRadius(16),
-          paddingAll(tilePad),
+          paddingAll(padUsed),
           ...tileMods(l),
         ]}
       >
-        {tight ? null : labelRow(k.text, k.dot, tileTitle(l, false), small ? 12 : 13)}
-        {tight ? null : gap(4)}
-        {chrono(l, chronoSp)}
-        {under ? gap(2) : null}
-        {under ? txt(under, C.softOnTile, small ? 12 : 13) : null}
-        {showChip ? gap(6) : null}
-        {showChip ? stopChip(l, chipH, false) : null}
+        {titleShown ? labelRow(k.text, k.dot, tileTitle(l, false), small ? 12 : 13) : null}
+        {titleShown ? gap(4) : null}
+        {rowChip ? (
+          <Row verticalAlignment="center">
+            <Box contentAlignment="centerStart" modifiers={[width(rowChip.chronoW)]}>
+              {chrono(l, rowChip.sp)}
+            </Box>
+            <Spacer modifiers={[width(6)]} />
+            {stopChip(l, rowChip.chipH, true, rowChip.cw)}
+          </Row>
+        ) : (
+          chrono(l, chronoSp)
+        )}
+        {underShown ? gap(2) : null}
+        {underShown ? txt(underShown, C.softOnTile, small ? 12 : 13) : null}
+        {showChipBelow ? gap(6) : null}
+        {showChipBelow ? stopChip(l, chipH, false) : null}
       </Column>
     );
   };
 
   const rowTile = (l: WidgetLive, h: number) => {
     const k = CAT[l.kind];
-    // Place pour le bouton : hauteur moins marges et titre ; sous 32 dp, pas de bouton.
-    const chipRoom = h - 12 - S(16);
-    const showChip = canWrite && stopOf(l) != null && chipRoom >= 32;
-    // Largeur réelle du bouton compact « ■ » (marges 8 + glyphe en sp) et écart de 6.
+    // Place pour le bouton : hauteur moins marges et titre ; sous 32 dp, pas de
+    // bouton. Marges verticales de 6, resserrées à 2 si c'est ce qui le fait tenir.
+    // Largeur réelle du bouton compact « ■ » (marges 8 + glyphe en sp) et écart de 6 ;
+    // il faut aussi 10 sp de chrono à côté, sinon pas de bouton.
     const chipWReal = 16 + Math.ceil(10 * FS);
+    const widthOk = Math.floor((zoneW - 20 - 6 - chipWReal) / (4.3 * FS)) >= 10;
+    const padV = h - 12 - S(16) >= 32 ? 6 : 2;
+    const chipRoom = h - 2 * padV - S(16);
+    const showChip = canWrite && stopOf(l) != null && chipRoom >= 32 && widthOk;
     const chronoW = showChip ? zoneW - 20 - 6 - chipWReal : zoneW - 20;
     // Chrono en sp : divisé par FS en largeur ; sa hauteur tient dans la ligne (chipRoom).
     const baseSp = showChip ? (small ? 20 : h >= 58 ? 24 : 20) : small ? 22 : h >= 58 ? 26 : 22;
@@ -585,7 +638,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           size(zoneW, h),
           background(k.tile),
           cornerRadius(12),
-          padding(10, 6, 10, 6),
+          padding(10, showChip ? padV : 6, 10, showChip ? padV : 6),
           ...tileMods(l),
         ]}
       >
@@ -666,7 +719,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {lives.map((l, i) => (
           <Column key={l.kind}>
             {i > 0 ? gap(GAPR) : null}
-            {n === 2 ? rowTile(l, rowH) : compactTile(l, rowH)}
+            {n === 2 && rowH >= 12 + S(16) + Math.ceil(10 * 1.25 * FS) ? rowTile(l, rowH) : compactTile(l, rowH)}
           </Column>
         ))}
       </Column>
@@ -833,22 +886,26 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // ----- Bande du bas (2×2, au plus une session) -----
   const band = () => {
     if (!bandH || !day || dayStale) return null;
-    const colW = Math.floor(innerW / 3);
-    // Description complète : « rep. », « ch. », « dodo » ne sont pas lus tels quels.
-    const cell = (dotColor: string, value: string, late: boolean, say: string) => (
-      <Row verticalAlignment="center" modifiers={[width(colW), semantics({ contentDescription: say })]}>
-        {dot(late ? C.alert : dotColor)}
+    // Emoji + nombre ; l'emoji remplace la pastille. TalkBack lit la description
+    // complète, pas l'emoji.
+    const cell = (emoji: string, value: string, late: boolean, say: string) => (
+      <Row verticalAlignment="center" modifiers={[width(bandCellW(value)), semantics({ contentDescription: say })]}>
+        {txt(emoji, C.strong, 12)}
         <Spacer modifiers={[width(4)]} />
         {txt(value, late ? C.alert : C.strong, 12, true)}
       </Row>
     );
+    const values = bandValues;
+    const bandGap = Math.max(0, Math.min(16, Math.floor((innerW - bandUsed) / 2)));
     return (
       <Column>
         {gap(8)}
-        <Row>
-          {cell(CAT.meal.dot, `${day.mealsCount} rep.`, mealLate && n > 0, `${day.mealsCount} repas${mealLate && n > 0 ? ", rappel dépassé" : ""}`)}
-          {cell(CAT.diaper.dot, `${day.diapersCount} ch.`, diaperLate, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? ", rappel dépassé" : ""}`)}
-          {cell(CAT.sleep.dot, `${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`, false, `${spokenDur(sleepNowMin)} de sommeil`)}
+        <Row verticalAlignment="center">
+          {cell("🍼", values[0], mealLate && n > 0, `${day.mealsCount} repas${mealLate && n > 0 ? ", rappel dépassé" : ""}`)}
+          <Spacer modifiers={[width(bandGap)]} />
+          {cell("💧", values[1], diaperLate, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? ", rappel dépassé" : ""}`)}
+          <Spacer modifiers={[width(bandGap)]} />
+          {cell("🌙", values[2], false, `${spokenDur(sleepNowMin)} de sommeil`)}
         </Row>
       </Column>
     );

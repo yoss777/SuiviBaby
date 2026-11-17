@@ -2,7 +2,7 @@
 // texte (fontScale), rendus sans Glance avec les vrais modificateurs d'@expo/ui.
 jest.mock("expo-widgets", () => ({ createWidget: (_n: string, fn: unknown) => fn }));
 
-import { NOW, H, at, napLive, widgetProps } from "./helpers/widgetFixtures";
+import { KEY, NOW, H, at, napLive, widgetProps } from "./helpers/widgetFixtures";
 import { allText, compileWidget, dumpWidget } from "./helpers/widgetTree";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -223,8 +223,10 @@ describe("bouton d'arrêt : jamais de débordement", () => {
     else expect(urlOf(walk(t).find((n) => descOf(n)?.startsWith("Sieste en cours")) as Node)).toBe("");
   });
 
-  it("320 × 130 : aucun bouton d'arrêt (jamais forcé à 32 dp)", () => {
-    expect(chipsOf(tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp: 130 }), "sleep-stop")).toHaveLength(0);
+  it("320 × 130 : le bouton passe sur la ligne du chrono, à 32 dp au moins (jamais forcé en dessous)", () => {
+    const stops = chipsOf(tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp: 130 }), "sleep-stop");
+    expect(stops).toHaveLength(1);
+    expect(heightOf(stops[0])).toBeGreaterThanOrEqual(32);
   });
 
   it("deux sessions dans une zone basse : pas de bouton sous 32 dp", () => {
@@ -330,5 +332,121 @@ describe("grand texte : tuiles de session sans débordement (A2, A3, A4, A7)", (
   it("2×2 sans la place pour la bande du bas : la bande est retirée plutôt que de déborder", () => {
     const t = tree({ lives: [napLive(NOW - H)] }, { widthDp: 110, heightDp: 110 }, { fontScale: 2 });
     expect(walk(t).map(descOf)).not.toContain("3 repas");
+  });
+
+  // ----- Petite présentation : « ■ » sur la ligne du chrono -----
+  describe.each([
+    [110, 1],
+    [160, 1],
+    [110, 1.3],
+    [160, 1.5],
+    [160, 2],
+    [220, 1],
+  ])("2×2 (%s dp), échelle %s : bouton d'arrêt à côté du chrono", (dp, FS) => {
+    const size = { widthDp: dp, heightDp: dp };
+    const cases: [string, Record<string, unknown>, string, string][] = [
+      ["sieste", napLive(NOW - H), "sleep-stop", "Arrêter la sieste"],
+      ["balade", walkLive(NOW - 20 * 60_000), "walk-stop", "Arrêter la balade"],
+      ["tétée", nursingLive(NOW - 5 * 60_000), "nursing-stop", "Arrêter la tétée"],
+    ];
+    it.each(cases)("une session (%s) : bouton présent s'il tient, dans les bornes, avec lien et clé", (_n, live, action, say) => {
+      const t = tree({ lives: [live] }, size, { fontScale: FS });
+      const [tile] = tiles(t);
+      const stops = chipsOf(t, action);
+      const h = modVal(tile, "size", "height") as number;
+      const w = modVal(tile, "size", "width") as number;
+      const pad = modVal(tile, "paddingAll", "all") as number;
+      // Tout tient dans la tuile, avec ou sans bouton.
+      expect(kids(tile).reduce((s, c) => s + hOf(c, FS), 0) + 2 * pad).toBeLessThanOrEqual(h);
+      if (!stops.length) return;
+      expect(stops).toHaveLength(1);
+      expect(heightOf(stops[0])).toBeGreaterThanOrEqual(32);
+      expect(descOf(stops[0])).toBe(say);
+      expect(urlOf(stops[0])).toContain(`widget=${action}`);
+      expect(urlOf(stops[0])).toContain(`&k=${KEY}`);
+      const line = kids(tile).find((c) => c.type === "Row" && chipsOf(c, action).length) as Node;
+      const [chronoBox, , chip] = kids(line);
+      expect(chip).toBe(stops[0]);
+      // Même ligne que le chrono, largeur : chrono + écart + bouton dans la tuile.
+      expect(kids(chronoBox).some((c) => ["ElapsedClockView", "ChronometerView"].includes(c.type) || natives(c).length > 0)).toBe(true);
+      expect(wOf(chronoBox) + 6 + wOf(chip) + 2 * pad).toBeLessThanOrEqual(w);
+      expect(wOf(chip)).toBeGreaterThanOrEqual(24);
+      for (const n of natives(line)) expect(nativeSp(n)).toBeGreaterThanOrEqual(10);
+    });
+
+    it("deux sessions : « ■ » compact par ligne s'il tient (24 × 32 au moins), sinon aucun", () => {
+      const t = tree({ lives: lives2() }, size, { fontScale: FS });
+      const rows = tiles(t);
+      expect(rows).toHaveLength(2);
+      const stops = [...chipsOf(t, "sleep-stop"), ...chipsOf(t, "walk-stop")];
+      expect([0, 2]).toContain(stops.length);
+      for (const c of stops) {
+        expect(heightOf(c)).toBeGreaterThanOrEqual(32);
+        expect(urlOf(c)).toContain(`&k=${KEY}`);
+      }
+      for (const r of rows) {
+        const h = modVal(r, "size", "height") as number;
+        const w = modVal(r, "size", "width") as number;
+        const pv = (r.props.modifiers as unknown as Record<string, unknown>[]).find((m) => m.$type === "padding") as unknown as Record<string, number>;
+        // Ligne trop basse : version compacte (Row), la hauteur est alors le maximum des enfants.
+        const used = r.type === "Row" ? Math.max(0, ...kids(r).map((c) => hOf(c, FS))) : kids(r).reduce((s, c) => s + hOf(c, FS), 0);
+        expect(used + (pv.top ?? 0) + (pv.bottom ?? 0)).toBeLessThanOrEqual(h);
+        const line = kids(r).find((c) => c.type === "Row" && chipsOf(c, "-stop").length > 0);
+        if (line) {
+          const [, , chip] = kids(line);
+          expect(r.type).toBe("Column");
+          expect(wOf(chip) || 16 + Math.ceil(10 * FS)).toBeGreaterThanOrEqual(24);
+          expect(wOf(kids(line)[0]) + 6 + (16 + Math.ceil(10 * FS)) + 20).toBeLessThanOrEqual(w);
+        }
+      }
+    });
+  });
+
+  it("2×2 : le bouton existe bien aux tailles courantes (160 × 160, une session et deux sessions)", () => {
+    expect(chipsOf(tree({ lives: [napLive(NOW - H)] }, { widthDp: 160, heightDp: 160 }), "sleep-stop")).toHaveLength(1);
+    expect(chipsOf(tree({ lives: [walkLive(NOW - H)] }, { widthDp: 110, heightDp: 110 }), "walk-stop")).toHaveLength(1);
+    expect(chipsOf(tree({ lives: [nursingLive(NOW - H)] }, { widthDp: 160, heightDp: 160 }), "nursing-stop")).toHaveLength(1);
+    const two = tree({ lives: lives2() }, { widthDp: 160, heightDp: 160 });
+    expect(chipsOf(two, "sleep-stop")).toHaveLength(1);
+    expect(chipsOf(two, "walk-stop")).toHaveLength(1);
+  });
+
+  it("2×2 : Proche (lecture seule) n'a aucun bouton d'arrêt", () => {
+    for (const lives of [[napLive(NOW - H)], lives2()]) {
+      expect(chipsOf(tree({ lives, canWrite: false }, { widthDp: 160, heightDp: 160 }), "-stop")).toHaveLength(0);
+    }
+  });
+
+  it("bande du 2×2 : emoji + nombre, plus d'abréviation ; descriptions inchangées", () => {
+    const t = tree({}, { widthDp: 160, heightDp: 160 });
+    const d = dumpWidget(t);
+    expect(d.texts).toEqual(expect.arrayContaining(["🍼", "3", "💧", "2", "🌙", "1h35"]));
+    const text = allText(d);
+    for (const old of ["rep.", "ch.", "dodo"]) expect(text).not.toContain(old);
+    expect(d.a11y).toEqual(expect.arrayContaining(["3 repas", "2 changes", "1 heure et 35 minutes de sommeil"]));
+  });
+
+  it("bande du 2×2 : rappel dépassé, nombre en rouge et description dite", () => {
+    const t = tree({ alerts: { mealAtMs: NOW - 60_000 }, lives: [] }, { widthDp: 160, heightDp: 160 });
+    // Au repos la bande ne garde le rouge que pendant une session ; avec session :
+    const running = tree({ alerts: { mealAtMs: NOW - 60_000, diaperAtMs: NOW - 60_000 }, lives: [walkLive(NOW - H)] }, { widthDp: 160, heightDp: 160 });
+    const d = dumpWidget(running);
+    expect(d.a11y).toEqual(expect.arrayContaining(["3 repas, rappel dépassé", "2 changes, rappel dépassé"]));
+    const reds = walk(running).filter((n) => n.type === "Text" && (n.props as unknown as { color?: string }).color === "#b91c1c");
+    expect(reds.map((n) => (n.props as unknown as { children: string }).children)).toEqual(expect.arrayContaining(["3", "2"]));
+    expect(dumpWidget(t).a11y).not.toContain("3 repas, rappel dépassé");
+  });
+
+  it("bande du 2×2 : les trois cellules tiennent dans la largeur intérieure", () => {
+    for (const FS of [1, 1.5, 2]) {
+      for (const dp of [130, 160, 200]) {
+        const t = tree({ day: { mealsCount: 12, bottleMl: 0, lastMealMs: NOW - H, diapersCount: 10, lastDiaperMs: NOW - H, sleepMinutes: 755 } }, { widthDp: dp, heightDp: 160 }, { fontScale: FS });
+        const cells = walk(t).filter((n) => n.type === "Row" && ["repas", "changes", "sommeil"].some((w) => (descOf(n) ?? "").includes(w)) && wOf(n) > 0 && kids(n).length === 3);
+        if (!cells.length) continue;
+        const gaps = walk(t).filter((n) => n.type === "Spacer" && wOf(n) > 0 && wOf(n) !== 4 && wOf(n) !== 6 && wOf(n) !== 8 && wOf(n) <= 16);
+        void gaps;
+        expect(cells.reduce((s, c) => s + wOf(c), 0)).toBeLessThanOrEqual(dp - 24);
+      }
+    }
   });
 });
