@@ -7,8 +7,17 @@
 // minuteur : l'Accueil ne se re-rend pas pendant la tétée.
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import { useFocusEffect } from "expo-router";
-import React, { memo, useCallback, useEffect, useState } from "react";
-import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  AppState,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import {
   isNursingDraftStale,
@@ -23,6 +32,8 @@ import {
 } from "@/constants/dashboardColors";
 import { useSheetState } from "@/contexts/SheetContext";
 import { useNightMode } from "@/hooks/useNightMode";
+import { radius } from "@/constants/tokens";
+import { startLoop } from "@/utils/motion";
 import { describeNursingDraft } from "@/utils/nursingDraftDisplay";
 
 /** Rafraîchissement du temps affiché pendant qu'un côté tourne. */
@@ -44,7 +55,10 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
   const [draft, setDraft] = useState<NursingTimerState | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const { isOpen: sheetOpen } = useSheetState();
-  const { minButtonSize } = useNightMode();
+  const { minButtonSize, animations } = useNightMode();
+  // Même respiration que les cartes Sieste / Balade en cours (accueil) : coupée
+  // la nuit et avec « Réduire les animations ».
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const reload = useCallback(() => {
     if (!childId) {
@@ -110,6 +124,33 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
     return reload();
   }, [stale, reload]);
 
+  // Respiration seulement quand un côté tourne (pas en pause).
+  const breathe = running && animations.decorative;
+  useEffect(() => {
+    if (!breathe) {
+      pulseAnim.setValue(1);
+      return;
+    }
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.02,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    startLoop(pulse);
+    return () => pulse.stop();
+  }, [breathe, pulseAnim]);
+
   if (!draft) return null;
 
   const display = describeNursingDraft(draft, now);
@@ -118,60 +159,81 @@ export const NursingInProgressBanner = memo(function NursingInProgressBanner({
   const accentText = getCategoryTextColors(colorScheme).alimentation;
 
   return (
-    <Pressable
-      onPress={onResume}
-      accessibilityRole="button"
-      accessibilityLabel={display.accessibilityLabel}
-      accessibilityHint="Ouvre le chrono de la tétée"
-      android_ripple={{ color: nc.backgroundPressed }}
-      style={({ pressed }) => [
-        styles.banner,
-        {
-          minHeight: minButtonSize,
-          // Android : le ripple suffit (pas de double retour au toucher).
-          backgroundColor:
-            pressed && Platform.OS !== "android" ? nc.backgroundPressed : cat.background,
-          borderColor: cat.border,
-        },
-      ]}
-      testID="nursing-in-progress-banner"
-    >
-      <View style={[styles.dot, { backgroundColor: running ? cat.primary : nc.textMuted }]} />
-      <FontAwesome name="person-breastfeeding" size={16} color={accentText} />
-      <View style={styles.labelColumn}>
-        <Text style={[styles.label, { color: nc.textStrong }]} numberOfLines={1}>
-          {display.label}
-        </Text>
-        <Text style={[styles.detail, { color: nc.textNormal }]} numberOfLines={1}>
-          {display.detail}
-        </Text>
-        {display.expiryLabel && (
+    <Animated.View style={[styles.wrap, { transform: [{ scale: pulseAnim }] }]}>
+      <Pressable
+        onPress={onResume}
+        accessibilityRole="button"
+        accessibilityLabel={display.accessibilityLabel}
+        accessibilityHint="Ouvre le chrono de la tétée"
+        android_ripple={{ color: nc.backgroundPressed }}
+        style={({ pressed }) => [
+          styles.banner,
+          {
+            minHeight: minButtonSize,
+            // Android : le ripple suffit (pas de double retour au toucher).
+            backgroundColor:
+              pressed && Platform.OS !== "android"
+                ? nc.backgroundPressed
+                : cat.background,
+            borderColor: cat.border,
+          },
+        ]}
+        testID="nursing-in-progress-banner"
+      >
+        <View
+          style={[
+            styles.dot,
+            { backgroundColor: running ? cat.primary : nc.textMuted },
+          ]}
+        />
+        <FontAwesome name="person-breastfeeding" size={16} color={accentText} />
+        <View style={styles.labelColumn}>
           <Text
-            style={[styles.expiry, { color: display.expiringSoon ? nc.errorText : nc.textNormal }]}
+            style={[styles.label, { color: nc.textStrong }]}
             numberOfLines={1}
           >
-            {display.expiryLabel}
+            {display.label}
           </Text>
-        )}
-      </View>
-      <Text style={[styles.action, { color: accentText }]}>Reprendre</Text>
-      <FontAwesome name="chevron-right" size={12} color={accentText} />
-    </Pressable>
+          <Text
+            style={[styles.detail, { color: nc.textNormal }]}
+            numberOfLines={1}
+          >
+            {display.detail}
+          </Text>
+          {display.expiryLabel && (
+            <Text
+              style={[
+                styles.expiry,
+                { color: display.expiringSoon ? nc.errorText : nc.textNormal },
+              ]}
+              numberOfLines={1}
+            >
+              {display.expiryLabel}
+            </Text>
+          )}
+        </View>
+        <Text style={[styles.action, { color: accentText }]}>Reprendre</Text>
+        <FontAwesome name="chevron-right" size={12} color={accentText} />
+      </Pressable>
+    </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
+  // Même marge latérale que les cartes du résumé (statsGroupContainer).
+  wrap: {
+    marginBottom: 12,
+    marginHorizontal: 20,
+  },
   banner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 14,
+    // Mêmes arrondis que les cartes Sieste / Balade en cours.
+    borderRadius: radius.lg,
     borderWidth: 1,
-    marginBottom: 12,
-    // Même marge latérale que les cartes du résumé (statsGroupContainer).
-    marginHorizontal: 20,
     // Borne le ripple Android aux coins arrondis (aucun badge ne déborde).
     overflow: "hidden",
   },
