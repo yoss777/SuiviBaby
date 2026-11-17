@@ -98,6 +98,13 @@ Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDI
 | A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | 🔄 DSN (UE) et jeton dans EAS, source maps activées (PR #14) ; événement de test à la prochaine version |
 | A7 | Sauvegardes Firestore + protection contre la suppression + alertes serveur et budget | 2026-11-19 | Yoss (gcloud) / Claude | D1 | Sauvegarde visible, restauration testée, alerte de test reçue | 🔄 Sauvegardes 7 j / 30 j, protection, 3 alertes e-mail, budget 25 €/mois en place ; test de restauration après la 1ʳᵉ sauvegarde |
 
+## 4 quinquies. Après la MEP — pistes produit validées
+
+| # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
+|---|---|---|---|---|---|---|
+| P1 | Accueil : bloc « En cours » en haut, qui regroupe toutes les sessions actives (tétée, sieste, balade) et n'apparaît que s'il y en a une ; les cartes Sommeil et Balade du bas restent les boutons de démarrage. Avis ECC (UX et architecture, 2026-11-17) : ne pas le faire avant la MEP ; un composant partagé `ActiveSessionCard`, à faire avec le découpage Sommeil / Hygiène des formulaires ; annoncer l'apparition du bloc aux lecteurs d'écran | après le 2/2/2027 | Claude | MEP | Une tétée et une sieste en cours apparaissent côte à côte en haut ; rien quand aucune session ; lecteur d'écran annonce le bloc | ⏳ |
+| P2 | Petit widget iPhone : reconnaître le ■ touché (boutons interactifs iOS 17+, patch natif d'expo-widgets : intent qui ouvre l'app avec le bon lien). Aujourd'hui l'app demande « Arrêter quelle session ? » | v1.1 | Claude | MEP | Prototype iOS 18 sur appareil, puis iOS 17 | ⏳ |
+
 ## 5. Décisions en attente (questions détaillées)
 
 > Chaque question indique le contexte, ce qui a été **vérifié** dans le projet
