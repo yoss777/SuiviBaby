@@ -1173,6 +1173,34 @@ export function ecouterEvenementsDuJour(
   }, onError);
 }
 
+/**
+ * Fenêtre des sessions « en cours » : la même que le serveur
+ * (functions/src/events/callables.js, RUNNING_SESSION_WINDOW_MS). Une sieste
+ * ou une balade ouverte avant hier n'était pas chargée par l'Accueil
+ * (événements depuis hier 0 h) mais bloquait tout nouveau démarrage.
+ */
+export const RUNNING_SESSION_WINDOW_MS = 48 * 3600 * 1000;
+
+/** Sessions ouvertes (sommeil, balade) des 48 dernières heures, en temps réel. */
+export function ecouterSessionsOuvertes(
+  childId: string,
+  callback: (events: any[]) => void,
+  onError?: (error: Error) => void,
+): () => void {
+  return ecouterEvenements(
+    childId,
+    (events) =>
+      callback(
+        events.filter(
+          (e: any) =>
+            e.heureDebut && !e.heureFin && (e.type === "sommeil" || (e.type === "activite" && e.typeActivite === "promenade")),
+        ),
+      ),
+    { type: ["sommeil", "activite"] as EventType[], depuis: new Date(Date.now() - RUNNING_SESSION_WINDOW_MS) },
+    onError,
+  );
+}
+
 /** Check if there are events before a given date. */
 export async function hasMoreEventsBefore(
   childId: string,

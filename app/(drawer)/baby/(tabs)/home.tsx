@@ -48,7 +48,7 @@ import { getAgeInWeeks } from "@/utils/ageUtils";
 import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
-import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
+import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
@@ -226,6 +226,17 @@ export default function HomeDashboard() {
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
   });
+
+  // Sessions ouvertes sur la fenêtre du serveur (48 h) : une sieste démarrée
+  // avant hier, oubliée, restait invisible mais bloquait tout démarrage.
+  const { mergedEvents: openSessionEvents, setFirestoreEvents: setOpenSessionEvents } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+  });
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setOpenSessionEvents([]);
+    return ecouterSessionsOuvertes(activeChild.id, setOpenSessionEvents);
+  }, [activeChild?.id, setOpenSessionEvents]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [loadError, setLoadError] = useState(false);
@@ -656,30 +667,29 @@ export default function HomeDashboard() {
     [activeChild?.id, showToast],
   );
   const sommeilEnCours = useMemo(() => {
-    return data.sommeils.find((item) => {
-      if (softDeletedIds.has(item.id) || item.heureFin || !item.heureDebut) {
-        return false;
-      }
-      return isValidDate(toDate(item.heureDebut));
-    });
-  }, [data.sommeils, softDeletedIds]);
+    const open = (item: any) =>
+      !softDeletedIds.has(item.id) && !item.heureFin && !!item.heureDebut && isValidDate(toDate(item.heureDebut));
+    return (
+      data.sommeils.find(open) ??
+      // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.
+      (openSessionEvents as any[]).find((e) => e.type === "sommeil" && open(e))
+    );
+  }, [data.sommeils, softDeletedIds, openSessionEvents]);
 
   // Promenade en cours detection (same pattern as sommeil)
   const promenadeEnCours = useMemo(() => {
-    return data.activites.find(
-      (item: any) => {
-        if (
-          softDeletedIds.has(item.id) ||
-          item.typeActivite !== "promenade" ||
-          !item.heureDebut ||
-          item.heureFin
-        ) {
-          return false;
-        }
-        return isValidDate(toDate(item.heureDebut));
-      },
+    const open = (item: any) =>
+      !softDeletedIds.has(item.id) &&
+      item.typeActivite === "promenade" &&
+      !!item.heureDebut &&
+      !item.heureFin &&
+      isValidDate(toDate(item.heureDebut));
+    return (
+      data.activites.find(open) ??
+      // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.
+      (openSessionEvents as any[]).find((e) => e.type === "activite" && open(e))
     );
-  }, [data.activites, softDeletedIds]);
+  }, [data.activites, softDeletedIds, openSessionEvents]);
 
   const handleEventEdit = useEventEditHandler(
     openSheet,
