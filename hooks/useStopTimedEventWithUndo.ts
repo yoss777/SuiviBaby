@@ -22,7 +22,12 @@ type StopTimedEventParams<TEvent extends TimedEvent> = {
    * Session de plus de 24 h (oubliée) : l'heure de fin réelle est inconnue et
    * le serveur refuserait la durée. On ouvre plutôt le formulaire pour la saisir.
    */
-  onTooLong?: (event: TEvent) => void;
+  /**
+   * Heure de fin à corriger dans le formulaire. `suggestedEnd` : fin proposée
+   * (sieste passée minuit : 23:59 du jour du début) ; sinon le formulaire
+   * propose lui-même une fin plausible pour une session oubliée.
+   */
+  onTooLong?: (event: TEvent, suggestedEnd?: Date) => void;
   getSuccessLabel: (
     event: TEvent,
     timing: { elapsedMinutes: number; isUnderOneMinute: boolean },
@@ -75,7 +80,15 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
           "Cette sieste passe minuit",
           "On l'enregistre comme une nuit, avec les mêmes heures ?",
           [
-            { text: "Corriger l'heure de fin", style: "cancel", onPress: () => onTooLong?.(event) },
+            {
+              text: "Corriger l'heure de fin",
+              style: "cancel",
+              onPress: () => {
+                const endOfStartDay = new Date(start);
+                endOfStartDay.setHours(23, 59, 0, 0);
+                onTooLong?.(event, endOfStartDay);
+              },
+            },
             {
               text: "Enregistrer comme nuit",
               onPress: () => stopRef.current(event, { ...(extra ?? {}), isNap: false }, { ...opts, allowPastMidnight: true }),

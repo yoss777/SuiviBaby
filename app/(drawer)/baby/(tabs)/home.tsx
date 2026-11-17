@@ -1244,11 +1244,12 @@ export default function HomeDashboard() {
   );
 
   // Session de plus de 24 h : formulaire pour l'heure de fin réelle (déclarés plus bas).
-  const editSleepRef = useRef<() => void>(() => {});
-  const editWalkRef = useRef<() => void>(() => {});
+  const editSleepRef = useRef<(suggestedEnd?: Date) => void>(() => {});
+  const editWalkRef = useRef<(suggestedEnd?: Date) => void>(() => {});
   const stopTimedEventWithUndo = useStopTimedEventWithUndo<any>({
     childId: activeChild?.id,
-    onTooLong: (event) => (event.type === "sommeil" ? editSleepRef.current() : editWalkRef.current()),
+    onTooLong: (event, suggestedEnd) =>
+      event.type === "sommeil" ? editSleepRef.current(suggestedEnd) : editWalkRef.current(suggestedEnd),
     getSuccessLabel: (event, { isUnderOneMinute }) => {
       const shortSuffix = isUnderOneMinute ? " (moins d'1 min)" : "";
       if (event.type === "sommeil") {
@@ -1264,7 +1265,9 @@ export default function HomeDashboard() {
     stopTimedEventWithUndo(sommeilEnCours);
   }, [sommeilEnCours, stopTimedEventWithUndo]);
 
-  const handleEditSleepInSheet = useCallback(() => {
+  // `suggestedEnd` : fin proposée par l'arrêt (sieste passée minuit). Appelé
+  // aussi comme onPress : un argument qui n'est pas une Date est ignoré.
+  const handleEditSleepInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
     if (sommeilEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
@@ -1274,7 +1277,10 @@ export default function HomeDashboard() {
     // Session oubliée (sieste > 6 h, nuit > 15 h) : le formulaire s'ouvre en
     // mode terminé, heure de fin plausible pré-remplie (à ajuster), sinon
     // l'heure saisie partait dans le début et la session restait ouverte.
-    const forgottenEnd = suggestForgottenEnd(start, sommeilEnCours.isNap === false ? "night" : "nap");
+    const forgottenEnd =
+      suggestedEnd instanceof Date
+        ? suggestedEnd
+        : suggestForgottenEnd(start, sommeilEnCours.isNap === false ? "night" : "nap");
 
     openSheet({
       ownerId: headerOwnerId.current,
@@ -1606,14 +1612,14 @@ export default function HomeDashboard() {
     open: openWidgetLink,
   });
 
-  const handleEditPromenadeInSheet = useCallback(() => {
+  const handleEditPromenadeInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
     if (promenadeEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
       return;
     }
     const start = toDate(promenadeEnCours.heureDebut);
-    const forgottenEnd = suggestForgottenEnd(start, "walk");
+    const forgottenEnd = suggestedEnd instanceof Date ? suggestedEnd : suggestForgottenEnd(start, "walk");
 
     openSheet({
       ownerId: headerOwnerId.current,

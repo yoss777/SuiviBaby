@@ -130,6 +130,25 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     spy.mockRestore();
   });
 
+  it("sieste passée minuit, « Corriger l'heure de fin » : formulaire avec 23:59 du jour du début proposé", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong }));
+    const nap = sleep({ isNap: true });
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    result.current(nap as any);
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Corriger l'heure de fin")!.onPress!();
+    const expected = new Date(nap.heureDebut);
+    expected.setHours(23, 59, 0, 0);
+    expect(onTooLong).toHaveBeenCalledWith(nap, expected);
+    expect(spy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
   it("nuit arrêtée après minuit : arrêt direct (pas de question)", () => {
     const { Alert } = require("react-native");
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
