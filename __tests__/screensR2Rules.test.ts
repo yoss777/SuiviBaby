@@ -50,7 +50,8 @@ describe("actions de ligne (alternative au glissement)", () => {
     expect(showRowActionMenu({ title: "Tétée", onEdit: jest.fn(), onDelete })).toBe(true);
     expect(onDelete).toHaveBeenCalled();
 
-    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    // Android : fenêtre de l'app (même style que les autres dialogues).
+    const alert = jest.spyOn(require("@/contexts/ModalContext"), "showAppAlert").mockImplementation(() => {});
     Object.defineProperty(Platform, "OS", { value: "android", configurable: true });
     showRowActionMenu({ title: "Tétée", onDelete });
     expect(alert).toHaveBeenCalled();

@@ -27,6 +27,13 @@ interface DateTimePickerRowProps {
   disabled?: boolean;
   onChange: (date: Date) => void;
   onPickerToggle?: (visible: boolean) => void;
+  /**
+   * Valeur validée (OK sur iOS, choix sur Android). Sur iOS, appelé une fois
+   * la roulette réellement fermée : une alerte ouverte pendant que la
+   * roulette est présentée n'est jamais affichée par iOS et bloque toutes
+   * les fenêtres suivantes.
+   */
+  onCommit?: (date: Date) => void;
   minimumDate?: Date;
   maximumDate?: Date;
   icon?: string; // FontAwesome6 icon name (optional, shown before label)
@@ -57,6 +64,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
   colorScheme,
   disabled = false,
   onChange,
+  onCommit,
   minimumDate,
   maximumDate,
   icon,
@@ -85,9 +93,12 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
   const handleChangeAndroid = useCallback(
     (_: unknown, date?: Date) => {
       setShowPicker(false);
-      if (date) onChange(date);
+      if (date) {
+        onChange(date);
+        onCommit?.(date);
+      }
     },
-    [onChange],
+    [onChange, onCommit],
   );
 
   // iOS spinner: onChange fires on every scroll tick. Update the form live
@@ -102,13 +113,37 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
     [onChange],
   );
 
+  // Valeur validée en attente de la fermeture effective de la roulette.
+  const commitRef = useRef<Date | null>(null);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushCommit = useCallback(() => {
+    if (commitTimerRef.current) {
+      clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    const committed = commitRef.current;
+    commitRef.current = null;
+    if (committed) onCommit?.(committed);
+  }, [onCommit]);
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    },
+    [],
+  );
+
   const handleConfirmIOS = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowPicker(false);
     if (!isSameDateTime(pendingValueRef.current, value)) {
       onChange(pendingValueRef.current);
     }
-  }, [onChange, value]);
+    if (onCommit) {
+      commitRef.current = pendingValueRef.current;
+      // onDismiss du Modal le déclenche ; filet si l'événement ne vient pas.
+      commitTimerRef.current = setTimeout(flushCommit, 800);
+    }
+  }, [onChange, onCommit, flushCommit, value]);
 
   const handleCancelIOS = useCallback(() => {
     pendingValueRef.current = openValueRef.current;
@@ -207,6 +242,7 @@ export const DateTimePickerRow = memo(function DateTimePickerRow({
           transparent
           animationType="fade"
           onRequestClose={handleCancelIOS}
+          onDismiss={flushCommit}
         >
           <Pressable style={styles.iosModalOverlay} onPress={handleCancelIOS}>
             <Pressable

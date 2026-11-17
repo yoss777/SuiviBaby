@@ -31,6 +31,24 @@ import {
   resetOptimisticStoreForTests,
 } from "@/services/optimisticEventsStore";
 
+// Fenêtres de l'app : relayées vers Alert.alert pour garder les assertions
+// sur les boutons (le rendu réel est couvert par ModalContextChoice.test).
+jest.mock("@/contexts/ModalContext", () => {
+  const { Alert } = require("react-native");
+  // Sans l'argument d'options (propre à la fenêtre de l'app).
+  const showAlert = (...args: unknown[]) =>
+    (Alert.alert as (...a: unknown[]) => void)(...args.slice(0, 3));
+  const api = {
+    showAlert,
+    showConfirm: jest.fn(),
+    hide: jest.fn(),
+    hasOpenModal: () => false,
+    subscribeProtectedModal: () => () => {},
+  };
+  return { useModal: () => api, useModalActions: () => api, showAppAlert: showAlert };
+});
+
+
 const NOW = new Date("2026-04-12T10:30:00.000Z");
 const getSuccessLabel = jest.fn(() => "Sommeil terminé");
 

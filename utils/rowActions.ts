@@ -3,9 +3,10 @@
 // actions d'accessibilité (rotor VoiceOver « Actions », menu TalkBack) et
 // menu à l'appui long, avec les mêmes deux actions : Modifier, Supprimer.
 import * as Haptics from "expo-haptics";
+
+import { showAppAlert } from "@/contexts/ModalContext";
 import {
   ActionSheetIOS,
-  Alert,
   Platform,
   type AccessibilityActionEvent,
   type AccessibilityActionInfo,
@@ -83,18 +84,15 @@ export function showRowActionMenu({
     );
     return true;
   }
-  Alert.alert(
-    title,
-    undefined,
-    [
-      { text: "Annuler", style: "cancel" },
-      ...(onDelete
-        ? [{ text: "Supprimer", style: "destructive" as const, onPress: onDelete }]
-        : []),
-      ...(onEdit ? [{ text: "Modifier", onPress: onEdit }] : []),
-    ],
-    { cancelable: true },
-  );
+  // Android : fenêtre de l'app (même style partout), Modifier puis
+  // Supprimer, « Annuler » en dernier.
+  showAppAlert(title, undefined, [
+    ...(onEdit ? [{ text: "Modifier", onPress: onEdit }] : []),
+    ...(onDelete
+      ? [{ text: "Supprimer", style: "destructive" as const, onPress: onDelete }]
+      : []),
+    { text: "Annuler", style: "cancel" as const },
+  ]);
   return true;
 }
 

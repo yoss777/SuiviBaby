@@ -75,7 +75,6 @@ import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/for
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   BackHandler,
   Easing,
@@ -215,7 +214,7 @@ export default function HomeDashboard() {
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showActionToast } = useToast();
-  const { showConfirm } = useModal();
+  const { showConfirm, showAlert } = useModal();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -1192,12 +1191,17 @@ export default function HomeDashboard() {
       startNap();
       return;
     }
-    Alert.alert("Plutôt une nuit ?", late, [
-      { text: "Démarrer une nuit", onPress: startNight },
-      { text: "Démarrer une sieste", onPress: startNap },
-      { text: "Annuler", style: "cancel" },
-    ]);
-  }, []);
+    showAlert(
+      "Plutôt une nuit ?",
+      late,
+      [
+        { text: "Démarrer une nuit", onPress: startNight },
+        { text: "Démarrer une sieste", onPress: startNap },
+        { text: "Annuler", style: "cancel" },
+      ],
+      { key: "late-nap" },
+    );
+  }, [showAlert]);
 
   const handleStartSleep = useCallback(
     (isNap: boolean, fromWidget = false) => {
@@ -1529,13 +1533,16 @@ export default function HomeDashboard() {
     if (activeChildIdRef.current !== childId) return;
     runWidgetActionRef.current(action);
   }, []);
-  // Boîte native à plusieurs choix (la fenêtre de l'app n'a qu'un bouton
-  // d'action). Android n'affiche que 3 boutons : « Annuler » y devient un
-  // appui hors de la boîte (cancelable).
+  // Choix depuis le petit widget : fenêtre de l'app (boutons empilés au-delà
+  // de deux), « Annuler » toujours en dernier, une seule question à la fois.
   const askNative = useCallback((title: string, buttons: { text: string; onPress: () => void }[]) => {
-    const withCancel = Platform.OS === "android" && buttons.length >= 3 ? buttons : [...buttons, { text: "Annuler", style: "cancel" as const, onPress: () => {} }];
-    Alert.alert(title, WIDGET_SMALL_CONFIRM_MESSAGE, withCancel, { cancelable: true });
-  }, []);
+    showAlert(
+      title,
+      WIDGET_SMALL_CONFIRM_MESSAGE,
+      [...buttons, { text: "Annuler", style: "cancel" }],
+      { key: `widget-ask:${title}` },
+    );
+  }, [showAlert]);
 
   // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
   // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).

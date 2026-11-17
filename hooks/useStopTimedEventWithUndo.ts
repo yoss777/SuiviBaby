@@ -1,6 +1,6 @@
-import { useCallback, useRef } from "react";
-import { Alert } from "react-native";
+import { useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/contexts/ToastContext";
+import { useModal } from "@/contexts/ModalContext";
 import { modifierEvenementOptimistic } from "@/services/eventsService";
 import { isValidDate, toDate } from "@/utils/date";
 
@@ -35,6 +35,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
   onTooLong,
 }: StopTimedEventParams<TEvent>) {
   const { showUndoToast, showToast } = useToast();
+  const { showAlert } = useModal();
 
   const stop = useCallback(
     // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
@@ -70,13 +71,19 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         isValidDate(start) &&
         start.toDateString() !== heureFin.toDateString()
       ) {
-        Alert.alert("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", [
-          { text: "Corriger l'heure de fin", style: "cancel", onPress: () => onTooLong?.(event) },
-          {
-            text: "Enregistrer comme nuit",
-            onPress: () => stopRef.current(event, { ...(extra ?? {}), isNap: false }, { ...opts, allowPastMidnight: true }),
-          },
-        ]);
+        showAlert(
+          "Cette sieste passe minuit",
+          "On l'enregistre comme une nuit, avec les mêmes heures ?",
+          [
+            { text: "Corriger l'heure de fin", style: "cancel", onPress: () => onTooLong?.(event) },
+            {
+              text: "Enregistrer comme nuit",
+              onPress: () => stopRef.current(event, { ...(extra ?? {}), isNap: false }, { ...opts, allowPastMidnight: true }),
+            },
+          ],
+          // Une seule question par session, même après plusieurs appuis.
+          { key: `nap-past-midnight:${event.id}` },
+        );
         return;
       }
       const snapshot = event;
@@ -114,9 +121,11 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         );
       }, undefined, 5000);
     },
-    [childId, getSuccessLabel, showUndoToast, showToast, onTooLong],
+    [childId, getSuccessLabel, showUndoToast, showToast, showAlert, onTooLong],
   );
   const stopRef = useRef(stop);
-  stopRef.current = stop;
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
   return stop;
 }
