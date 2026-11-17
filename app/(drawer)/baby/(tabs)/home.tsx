@@ -212,7 +212,7 @@ export default function HomeDashboard() {
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showActionToast } = useToast();
-  const { showConfirm } = useModal();
+  const { showConfirm, showAlert } = useModal();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -1468,9 +1468,40 @@ export default function HomeDashboard() {
     activeChildId: activeChild?.id,
     confirm: showConfirm,
   });
+  // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
+  // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).
+  const pickStopFromWidget = useCallback(async () => {
+    const childId = activeChild?.id;
+    if (!childId || !canManageContent) return;
+    const nursing = await loadNursingTimer(childId, Date.now()).catch(() => null);
+    if (activeChildIdRef.current !== childId) return;
+    const choices: { text: string; action: WidgetDeepLinkAction }[] = [];
+    if (sommeilEnCours) choices.push({ text: sommeilEnCours.isNap ? "Arrêter la sieste" : "Arrêter la nuit", action: "sleep-stop" });
+    if (promenadeEnCours) choices.push({ text: "Arrêter la balade", action: "walk-stop" });
+    if (nursing?.runningSide) choices.push({ text: "Arrêter la tétée", action: "nursing-stop" });
+    if (choices.length === 0) {
+      showToast("Aucune session en cours");
+      return;
+    }
+    showAlert(
+      choices.length === 1 ? `${choices[0].text} ?` : "Arrêter quelle session ?",
+      "Depuis le petit widget, l'arrêt est confirmé ici.",
+      [
+        ...choices.map((c) => ({ text: c.text, onPress: () => runWidgetAction(c.action) })),
+        { text: "Annuler", style: "cancel" as const },
+      ],
+    );
+  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showAlert, showToast, runWidgetAction]);
+  const openWidgetLink = useCallback(
+    (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => {
+      if (action === "stop-pick") void pickStopFromWidget();
+      else openFromWidget(action, opts);
+    },
+    [pickStopFromWidget, openFromWidget],
+  );
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,
-    open: openFromWidget,
+    open: openWidgetLink,
   });
 
   const handleEditPromenadeInSheet = useCallback(() => {

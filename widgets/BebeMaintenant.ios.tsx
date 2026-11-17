@@ -369,6 +369,16 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // l'appareil : l'app demande « Arrêter la sieste ? » (Arrêter / Annuler),
   // jamais d'arrêt sur un simple appui pour ouvrir l'app.
   const smallStop = small && canWrite && lives.length === 1 && lives[0].kind !== "nursing" ? lives[0] : null;
+  // Plusieurs sessions : l'app demande laquelle arrêter (« stop-pick »).
+  const smallPick = small && canWrite && lives.length >= 2;
+  // « ■ » visuel du petit format (le lien est celui du widget).
+  const stopMarkView = (l: WidgetLive, sp: number) => (
+    <Text
+      modifiers={[F(sp, "bold"), foregroundStyle(CAT[l.kind].text), padding({ leading: 7, trailing: 7, top: 4, bottom: 4 }), background(C.bg), clipShape("capsule"), accessibilityHidden()]}
+    >
+      ■
+    </Text>
+  );
   const stopOf = (l: WidgetLive) => (l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : "nursing-stop");
   // Même phrase qu'Android : « Arrêter la sieste », « la nuit », « la balade », « la tétée ».
   const stopSay = (l: WidgetLive) =>
@@ -426,14 +436,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const underText = under ? <Text modifiers={[F(small ? 11 : 12), monospacedDigit(), foregroundStyle(T.softOnTile), ...fit1]}>{under}</Text> : null;
     if (small || !canWrite) {
       // « ■ » visuel seulement (petit format : le lien est celui du widget, smallStop).
-      const stopMark =
-        smallStop === l ? (
-          <Text
-            modifiers={[F(13, "bold"), foregroundStyle(CAT[l.kind].text), padding({ leading: 8, trailing: 8, top: 6, bottom: 6 }), background(C.bg), clipShape("capsule"), accessibilityHidden()]}
-          >
-            ■
-          </Text>
-        ) : null;
+      const stopMark = smallStop === l ? stopMarkView(l, 13) : null;
       return (
         <VStack alignment="leading" spacing={3} modifiers={tileMods(l, 16, small ? 9 : 10)}>
           {tileLink(
@@ -486,7 +489,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           {timerOf(l, small ? 18 : 22)}
         </VStack>,
       )}
-      {canWrite && !small ? stopChip(l, true, 40) : null}
+      {canWrite && !small ? stopChip(l, true, 40) : smallPick ? stopMarkView(l, 11) : null}
     </HStack>
   );
   // Trois sessions : lignes compactes, sans « ■ » (le lien de la tuile reste).
@@ -741,6 +744,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // sinon repas si le bloc « Dernier repas » est affiché, sinon l'Accueil.
   const smallUrl = smallStop
     ? `${actionUrl(stopOf(smallStop)).replace(/&k=[^&]*/, "")}&ask=1`
+    : smallPick
+      ? `${homeUrl}?widget=stop-pick${child}&ask=1`
     : lives.some((l) => l.kind === "nursing") && lives.length === 1
       ? zoneUrl("nursing")
       : lives.length === 0 && !props.loading && props.lastMealMs

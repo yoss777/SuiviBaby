@@ -16,7 +16,9 @@ export type WidgetDeepLinkAction =
   | "sleep-start"
   | "sleep-stop"
   | "walk-start"
-  | "walk-stop";
+  | "walk-stop"
+  // Petit widget iPhone, plusieurs sessions : l'app demande laquelle arrêter.
+  | "stop-pick";
 
 const ACTIONS = new Set<string>([
   "meal",
@@ -28,6 +30,7 @@ const ACTIONS = new Set<string>([
   "sleep-stop",
   "walk-start",
   "walk-stop",
+  "stop-pick",
 ]);
 
 /** Lien d'une zone du widget (construit aussi dans le widget, runtime isolé). */

@@ -111,10 +111,10 @@ describe("phrases parlées", () => {
     expect(stop).toBeDefined();
     expect(stop).not.toContain("&k=");
     expect(stop).toContain("&ask=1");
-    // Deux sessions : impossible de savoir laquelle arrêter, ni « ■ » ni lien d'arrêt.
+    // Deux sessions : « ■ » sur chaque tuile, le widget ouvre le choix dans l'app (stop-pick).
     const two = show({ lives: [napLive(NOW - H), { ...napLive(NOW - 30 * 60_000), kind: "walk" } as any] }, "systemSmall");
-    expect(two.texts).not.toContain("■");
-    expect(two.links.some((l) => l.includes("-stop"))).toBe(false);
+    expect(two.texts.filter((t) => t === "■")).toHaveLength(2);
+    expect(two.links.some((l) => l.includes("widget=stop-pick") && l.includes("&ask=1"))).toBe(true);
     // Proche (lecture seule) : rien.
     const ro = show({ lives: [napLive(NOW - H)], canWrite: false }, "systemSmall");
     expect(ro.links.some((l) => l.includes("-stop"))).toBe(false);
