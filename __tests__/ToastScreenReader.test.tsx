@@ -1,6 +1,7 @@
 /* eslint-disable import/first */
-// Toasts avec un lecteur d'écran : durées allongées, annonce répétée une fois,
-// région vive « polite ».
+// Toasts avec un lecteur d'écran : durées allongées, annonce répétée une fois
+// (annonce vocale uniquement : pas de région vive, qui doublerait la lecture
+// sur Android).
 jest.mock("@gorhom/portal", () => ({
   Portal: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -145,6 +146,98 @@ describe("lecteur d'écran actif", () => {
     act(() => { jest.advanceTimersByTime(1000); });
     // Un, Deux, puis une seule répétition (celle de Deux)
     expect(announce.mock.calls.map((c) => c[0])).toEqual(["Un", "Deux", "Deux"]);
+  });
+});
+
+describe("répétition d'annonce : propriété du toast (R1)", () => {
+  beforeEach(() => {
+    mockReader = true;
+    mockFresh = true;
+  });
+
+  it("l'expiration de l'annulation juste après un nouveau toast n'efface pas sa répétition", () => {
+    setup();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 5000));
+    // Lecteur actif : l'annulation reste 20 s ; un nouveau toast arrive 200 ms avant la fin.
+    act(() => { jest.advanceTimersByTime(19_800); });
+    act(() => api.showToast("Enregistré"));
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
+    announce.mockClear();
+    act(() => { jest.advanceTimersByTime(300); });
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenLastCalledWith("Enregistré");
+  });
+
+  it("« Annuler » touché sur un toast plus ancien ne coupe pas la répétition du dernier toast", () => {
+    setup();
+    act(() => api.showUndoToast("Supprimé", jest.fn()));
+    act(() => { jest.advanceTimersByTime(1000); });
+    act(() => api.showToast("Enregistré"));
+    announce.mockClear();
+    fireEvent.press(screen.getByLabelText("Annuler"));
+    act(() => { jest.advanceTimersByTime(500); });
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenLastCalledWith("Enregistré");
+  });
+
+  it("« Annuler » sur le toast qui vient d'être annoncé : sa répétition est coupée", () => {
+    setup();
+    act(() => api.showUndoToast("Supprimé", jest.fn()));
+    act(() => { jest.advanceTimersByTime(100); });
+    announce.mockClear();
+    fireEvent.press(screen.getByLabelText("Annuler"));
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(announce).not.toHaveBeenCalled();
+  });
+});
+
+describe("lecture fraîche tardive : pas de résurrection (R4)", () => {
+  beforeEach(() => {
+    mockReader = false;
+    mockFresh = true;
+  });
+
+  it("annulation touchée avant la réponse : le toast ne revient pas et onExpire ne part pas", async () => {
+    setup();
+    const onUndo = jest.fn();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", onUndo, onExpire, 5000));
+    fireEvent.press(screen.getByLabelText("Annuler"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Supprimé")).toBeNull();
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("fermeture avant la réponse : le toast d'info ne revient pas", async () => {
+    setup();
+    act(() => api.showToast("Enregistré"));
+    act(() => api.dismissToast());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Enregistré")).toBeNull();
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(screen.queryByText("Enregistré")).toBeNull();
+  });
+
+  it("fermeture d'une annulation avant la réponse : exécutée une fois, sans minuteur résiduel", async () => {
+    setup();
+    const onExpire = jest.fn();
+    act(() => api.showUndoToast("Supprimé", jest.fn(), onExpire, 5000));
+    act(() => api.dismissToast());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Supprimé")).toBeNull();
   });
 });
 

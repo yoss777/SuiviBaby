@@ -60,10 +60,11 @@ describe("accessibilité", () => {
   it("repas au repos et lignes « Aujourd'hui » : contenu dans le libellé", () => {
     const d = show();
     expect(d.a11y.some((a) => a.startsWith("Dernier repas") && a.endsWith("Noter un repas"))).toBe(true);
-    expect(d.a11y).toContain("3 repas. Noter un repas");
-    expect(d.a11y).toContain("2 changes. Noter un change");
+    // La sous-ligne est dite aussi, comme sur iPhone (A6).
+    expect(d.a11y).toContain("3 repas, dernier à 13:00. Noter un repas");
+    expect(d.a11y).toContain("2 changes, dernier à 12:00. Noter un change");
     expect(d.a11y).toContain("1 heure et 35 minutes de sommeil. Noter un sommeil");
-    expect(show({ alerts: { mealAtMs: NOW - 60_000 } }).a11y).toContain("3 repas, rappel dépassé. Noter un repas");
+    expect(show({ alerts: { mealAtMs: NOW - 60_000 } }).a11y).toContain("3 repas, rappel dépassé, dernier à 13:00. Noter un repas");
   });
 
   it("espaces de la liste « Aujourd'hui » : ni lien ni description", () => {
@@ -75,12 +76,40 @@ describe("accessibilité", () => {
     }
   });
 
-  it("racine courte : prénom, sessions, fraîcheur ; pas de phrase d'aide", () => {
+  it("racine courte : le prénom seul ; sessions et fraîcheur lues par leurs propres nœuds (A5)", () => {
     const d = show({ lives: [napLive(NOW - H)], generatedAtMs: NOW - 3 * H, recent: [BAIN] });
-    const root = d.a11y.find((a) => a.startsWith("Léa"));
-    expect(root).toBe("Léa. Sieste en cours depuis 14:00, 1 heure. À vérifier, informations mises à jour à 12:00");
-    expect(root).not.toContain("Toucher");
-    expect(root).not.toContain("Derniers évènements");
+    expect(d.a11y.find((a) => a.startsWith("Léa"))).toBe("Léa");
+    expect(d.a11y.filter((a) => a.startsWith("Sieste en cours"))).toEqual(["Sieste en cours depuis 14:00, 1 heure"]);
+    expect(d.a11y.filter((a) => a.includes("mis à jour à 12:00") || a.includes("Mis à jour à 12:00"))).toHaveLength(1);
+  });
+
+  it("racine en chargement : prénom et « Mise à jour en cours »", () => {
+    expect(show({ loading: true }).a11y.find((a) => a.startsWith("Léa"))).toBe("Léa. Mise à jour en cours");
+  });
+
+  it("autre sein dit en toutes lettres : jamais « min » ni « 1h08 » (A1)", () => {
+    const nurse = (otherSideLabel: string) => ({ ...nursingLive(NOW - 10 * 60_000), side: "D", otherSideLabel });
+    const say = (label: string) => show({ lives: [nurse(label)] }).a11y.find((a) => a.startsWith("Tétée en cours")) ?? "";
+    expect(say("G 12 min")).toContain("autre sein gauche, 12 minutes");
+    expect(say("G 1 min")).toContain("autre sein gauche, 1 minute,");
+    expect(say("G 1h08")).toContain("autre sein gauche, 1 heure et 8 minutes");
+    expect(say("G 2h00")).toContain("autre sein gauche, 2 heures,");
+    expect(say("G 12 min")).not.toMatch(/\bmin\b/);
+    expect(say("G 1h08")).not.toContain("1h08");
+  });
+
+  it("lignes « Aujourd'hui » : sous-ligne dite (jour d'hier, biberon, aucun noté) (A6)", () => {
+    const d = show({
+      day: { mealsCount: 2, bottleMl: 120, lastMealMs: at(0, 14, 0), diapersCount: 1, lastDiaperMs: at(-1, 19, 37), sleepMinutes: 0, noMealEver: false },
+    }).a11y;
+    expect(d).toContain("2 repas, à 14:00, 120 millilitres. Noter un repas");
+    expect(d).toContain("1 change, dernier hier à 19:37. Noter un change");
+    const none = show({
+      day: { mealsCount: 0, bottleMl: 0, lastMealMs: null, diapersCount: 0, lastDiaperMs: null, sleepMinutes: 0, noMealEver: true, noDiaperEver: true },
+      lastMealMs: null,
+    }).a11y;
+    expect(none).toContain("0 repas, aucun noté. Noter un repas");
+    expect(none).toContain("0 change, aucun noté. Noter un change");
   });
 
   it("lignes du fil : non cliquables, « à HH:MM, libellé » (humeur pour un jalon)", () => {
@@ -210,5 +239,96 @@ describe("libellés d'arrêt parlés", () => {
     expect(show({ lives: [{ ...napLive(NOW - H), nap: false }] }).a11y).toContain("Arrêter la nuit");
     expect(show({ lives: [walkLive(NOW - H)] }).a11y).toContain("Arrêter la balade");
     expect(show({ lives: [nursingLive(NOW - H)] }).a11y).toContain("Arrêter la tétée");
+  });
+});
+
+// ----- Grand texte : somme des hauteurs et largeurs fixes <= place disponible -----
+describe("grand texte : tuiles de session sans débordement (A2, A3, A4, A7)", () => {
+  const TILE = ["#ECE8F4", "#E6F2DE", "#FBE1EA"];
+  const kids = (n: Node): Node[] => {
+    const out: Node[] = [];
+    const add = (c: unknown) => {
+      if (Array.isArray(c)) c.forEach(add);
+      else if (c && typeof c === "object" && "type" in (c as object)) out.push(c as Node);
+    };
+    add(n.props.children);
+    return out;
+  };
+  const modVal = (n: Node, key: string, field: string) =>
+    (n.props.modifiers ?? []).map((m) => m as Record<string, unknown>).find((m) => m.$type === key)?.[field] as number | undefined;
+  const fontOf = (n: Node) => (n.props as unknown as { style?: { fontSize?: number } }).style?.fontSize;
+  const nativeSp = (n: Node) => (n.props as unknown as { fontSize: number }).fontSize;
+  // Hauteur occupée : explicite si posée, sinon texte (1,25 × sp × échelle), ligne = max, colonne = somme.
+  const hOf = (n: Node, FS: number): number => {
+    const explicit = modVal(n, "height", "height") ?? modVal(n, "size", "height");
+    if (explicit !== undefined) return explicit;
+    if (n.type === "Text") return Math.ceil((fontOf(n) ?? 12) * 1.25 * FS);
+    if (n.type === "Row") return Math.max(0, ...kids(n).map((c) => hOf(c, FS)));
+    if (n.type === "Column") return kids(n).reduce((s, c) => s + hOf(c, FS), 0);
+    return 0;
+  };
+  const wOf = (n: Node): number => modVal(n, "width", "width") ?? modVal(n, "size", "width") ?? 0;
+  const tiles = (t: Node) =>
+    walk(t).filter(
+      (n) => (n.type === "Column" || n.type === "Row") && modVal(n, "size", "width") !== undefined && TILE.some((c) => JSON.stringify(n.props.modifiers).includes(c)),
+    );
+  const lives2 = () => [napLive(NOW - H), walkLive(NOW - 20 * 60_000)];
+  const lives3 = () => [napLive(NOW - H), walkLive(NOW - 20 * 60_000), nursingLive(NOW - 5 * 60_000)];
+  const natives = (t: Node) => walk(t).filter((n) => ["ElapsedClockView", "ChronometerView"].includes(n.type));
+
+  describe.each([1.3, 1.5, 2])("échelle %s", (FS) => {
+    it("deux sessions : hauteur de la ligne (titre + chrono/bouton) et largeur du chrono tiennent", () => {
+      const t = tree({ lives: lives2() }, { widthDp: 320, heightDp: 330 }, { fontScale: FS });
+      const rows = tiles(t);
+      expect(rows).toHaveLength(2);
+      for (const r of rows) {
+        const h = modVal(r, "size", "height") as number;
+        const w = modVal(r, "size", "width") as number;
+        // padding(10, 6, 10, 6)
+        expect(kids(r).reduce((s, c) => s + hOf(c, FS), 0) + 12).toBeLessThanOrEqual(h);
+        const line = kids(r).find((c) => c.type === "Row" && kids(c).some((k) => k.type === "Spacer"));
+        if (line) {
+          const widths = kids(line).reduce((s, c) => s + (wOf(c) || (c.type === "Box" ? 16 + Math.ceil(10 * FS) : 0)), 0);
+          expect(widths + 20).toBeLessThanOrEqual(w);
+        }
+      }
+      for (const n of natives(t)) expect(nativeSp(n)).toBeLessThanOrEqual(Math.max(10, Math.floor((296 - 20) / (4.3 * FS))));
+    });
+
+    it("trois sessions : titre + chrono tiennent en largeur et en hauteur ; chrono jamais plus haut que la ligne", () => {
+      const t = tree({ lives: lives3() }, { widthDp: 320, heightDp: 330 }, { fontScale: FS });
+      const rows = tiles(t);
+      expect(rows).toHaveLength(3);
+      for (const r of rows) {
+        const h = modVal(r, "size", "height") as number;
+        const w = modVal(r, "size", "width") as number;
+        expect(kids(r).reduce((s, c) => s + wOf(c), 0) + 20).toBeLessThanOrEqual(w);
+        expect(Math.max(...kids(r).map((c) => hOf(c, FS)))).toBeLessThanOrEqual(h - 4);
+        // Colonne du titre agrandie avec la police (S()), sans dépasser la moitié de la ligne.
+        expect(wOf(kids(r)[0])).toBe(Math.min(Math.ceil(56 * FS), Math.floor((w - 20) / 2)));
+      }
+    });
+
+    it("2×2 (110 × 110) avec une session : la tuile tient dans sa zone", () => {
+      const t = tree({ lives: [napLive(NOW - H)] }, { widthDp: 110, heightDp: 110 }, { fontScale: FS });
+      const [tile] = tiles(t);
+      const h = modVal(tile, "size", "height") as number;
+      const pad = modVal(tile, "paddingAll", "all") as number;
+      expect(kids(tile).reduce((s, c) => s + hOf(c, FS), 0) + 2 * pad).toBeLessThanOrEqual(h);
+      // La zone elle-même tient dans le widget : en-tête + écart + zone <= intérieur.
+      expect(Math.ceil(22 * FS) + 4 + h).toBeLessThanOrEqual(110 - 24);
+    });
+  });
+
+  it("chrono d'une tuile seule : divisé par l'échelle (A2), plafonné par la hauteur (A7)", () => {
+    const sp = (FS: number, heightDp: number) =>
+      nativeSp(natives(tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp }, { fontScale: FS }))[0]);
+    expect(sp(2, 330)).toBeLessThan(sp(1, 330));
+    expect(sp(1.5, 140)).toBeLessThan(sp(1.5, 330));
+  });
+
+  it("2×2 sans la place pour la bande du bas : la bande est retirée plutôt que de déborder", () => {
+    const t = tree({ lives: [napLive(NOW - H)] }, { widthDp: 110, heightDp: 110 }, { fontScale: 2 });
+    expect(walk(t).map(descOf)).not.toContain("3 repas");
   });
 });

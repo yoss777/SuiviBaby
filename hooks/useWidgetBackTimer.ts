@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
-import { ACTION_TOAST_MIN_MS } from "@/contexts/ToastContext";
+import { ACTION_TOAST_MIN_MS } from "@/constants/toast";
 import { useScreenReaderEnabled } from "@/hooks/useScreenReaderEnabled";
 import { moveAppToBack } from "@/modules/widget-push";
 import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";

@@ -114,6 +114,19 @@ describe("phrases parlées", () => {
   });
 });
 
+describe("lot 5 : dernière passe d'accessibilité", () => {
+  it("tuile tétée : une seule étiquette (le lien), pas son contenu en double (I4)", () => {
+    const d = show({ lives: [nursing], ...TL });
+    expect(d.a11y.filter((a) => a.startsWith("Tétée en cours, sein gauche"))).toHaveLength(1);
+  });
+
+  it("rappel dépassé (écran verrouillé) : « rappel dépassé », pas « en retard » (I6)", () => {
+    const d = show({ lastMealMs: NOW - 2 * H, alerts: { mealAtMs: NOW - 60_000 } }, "accessoryRectangular");
+    expect(d.a11y).toContain("Dernier repas à 13:00, rappel dépassé");
+    expect(d.a11y.join("|")).not.toContain("en retard");
+  });
+});
+
 describe("lot 2 : phrases parlées", () => {
   it("tétée en pause : « Tétée en pause, sein gauche, depuis 14:20 » (pas « en cours … en pause »)", () => {
     const paused = { ...nursing, otherSideLabel: null, sinceLabel: "depuis 14:20", pausedAtMs: NOW - 5 * 60_000 };
@@ -166,7 +179,11 @@ describe("éléments décoratifs, indications, mise en page", () => {
 
   it("indications sur les boutons et les zones, sans rôle bouton", () => {
     const d = show({ lives: [napLive(NOW - H)] });
-    expect(d.hints).toContain("Ouvre SuiviBaby et arrête le sommeil");
+    // Même mot que le libellé « Arrêter la sieste » (I5).
+    expect(d.hints).toContain("Ouvre SuiviBaby et arrête la sieste");
+    expect(d.hints).not.toContain("Ouvre SuiviBaby et arrête le sommeil");
+    const nuit = show({ lives: [{ ...napLive(NOW - H), nap: false }] });
+    expect(nuit.hints).toContain("Ouvre SuiviBaby et arrête la nuit");
     expect(d.hints).toContain("Ouvre SuiviBaby et démarre une balade");
     expect(d.hints).toContain("Ouvre SuiviBaby et permet de noter un repas");
     expect(d.traits).not.toContain("isButton");

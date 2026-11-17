@@ -54,3 +54,41 @@ it("échec de la lecture : le cache est conservé", async () => {
   (AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockRejectedValue(new Error("boom"));
   await expect(svc.refreshScreenReader()).resolves.toBe(false);
 });
+
+it("échec de la lecture avec un cache à true : le cache reste true", async () => {
+  const { svc, fire } = load(false);
+  fire(true);
+  expect(svc.isScreenReaderOnNow()).toBe(true);
+  (AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockRejectedValue(new Error("boom"));
+  await expect(svc.refreshScreenReader()).resolves.toBe(true);
+  expect(svc.isScreenReaderOnNow()).toBe(true);
+});
+
+it("une lecture fraîche ancienne n'écrase pas un événement plus récent (R2)", async () => {
+  const { svc, fire } = load(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  // Lecture lancée (réponse « faux » en attente), puis l'événement système « vrai » arrive.
+  let answer!: (on: boolean) => void;
+  (AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockImplementation(
+    () => new Promise<boolean>((resolve) => (answer = resolve)),
+  );
+  const pending = svc.refreshScreenReader();
+  fire(true);
+  answer(false);
+  await expect(pending).resolves.toBe(true);
+  expect(svc.isScreenReaderOnNow()).toBe(true);
+});
+
+it("une lecture fraîche sans événement entre-temps met bien le cache à jour", async () => {
+  const { svc } = load(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  let answer!: (on: boolean) => void;
+  (AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockImplementation(
+    () => new Promise<boolean>((resolve) => (answer = resolve)),
+  );
+  const pending = svc.refreshScreenReader();
+  answer(true);
+  await expect(pending).resolves.toBe(true);
+});

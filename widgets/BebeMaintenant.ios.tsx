@@ -227,6 +227,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       </VStack>
     </Link>
   );
+  // Une seule étiquette : sur la tuile tétée, c'est le lien qui la porte (son contenu
+  // est ignoré) ; ailleurs, le contenu.
+  const liveLabel = (l: WidgetLive) => (l.kind === "nursing" && !small ? [] : [accessibilityLabel(a11yOf(l))]);
   // Tuile tétée : le lien couvre le contenu, pas « ■ Arrêter » (pas de lien dans un lien).
   const tileLink = (l: WidgetLive, content: React.ReactElement) =>
     l.kind === "nursing" && !small ? zone("nursing", a11yOf(l), content, `tile-${l.kind}`) : content;
@@ -290,7 +293,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   if (family === "accessoryRectangular") {
     const restSayAcc = props.lastMealMs
       ? mealLate
-        ? `Repas en retard, dernier à ${clock(props.lastMealMs)}`
+        ? `Dernier repas à ${clock(props.lastMealMs)}, rappel dépassé`
         : `Dernier repas à ${clock(props.lastMealMs)}`
       : "Dernier repas : pas encore";
     return (
@@ -364,7 +367,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     <Link
       key={`stop-${l.kind}`}
       destination={actionUrl(stopOf(l))}
-      modifiers={[accessibilityLabel(stopSay(l)), accessibilityHint(`Ouvre SuiviBaby et arrête ${stopWhat(l)}`)]}
+      modifiers={[accessibilityLabel(stopSay(l)), accessibilityHint(stopSay(l).replace(/^Arrêter /, "Ouvre SuiviBaby et arrête "))]}
     >
       <HStack modifiers={[frame({ minWidth: compact ? 40 : 44, minHeight: minH, alignment: "center" }), contentShape(shapes.rectangle())]}>
         <Text
@@ -412,7 +415,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <VStack alignment="leading" spacing={3} modifiers={tileMods(l, 16, small ? 9 : 10)}>
           {tileLink(
             l,
-            <VStack alignment="leading" spacing={3} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
+            <VStack alignment="leading" spacing={3} modifiers={[accessibilityElement("ignore"), ...liveLabel(l)]}>
               {titleRow(l, tileTitle(l, false), small ? 12 : 13)}
               {timerOf(l, small ? 26 : 30)}
               {underText}
@@ -425,7 +428,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <VStack alignment="leading" spacing={2} modifiers={tileMods(l, 16, 8)}>
         {tileLink(
           l,
-          <VStack alignment="leading" spacing={2} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
+          <VStack alignment="leading" spacing={2} modifiers={[accessibilityElement("ignore"), ...liveLabel(l)]}>
             {titleRow(l, tileTitle(l, false), 13)}
             {underText}
           </VStack>,
@@ -446,7 +449,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <VStack
           alignment="leading"
           spacing={1}
-          modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l)), frame({ maxWidth: 10000, alignment: "leading" })]}
+          modifiers={[accessibilityElement("ignore"), ...liveLabel(l), frame({ maxWidth: 10000, alignment: "leading" })]}
         >
           {titleRow(l, tileTitle(l, !small), 12)}
           {timerOf(l, small ? 18 : 22)}
@@ -460,7 +463,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     <HStack spacing={6} modifiers={tileMods(l, 12, 4)}>
       {tileLink(
         l,
-        <HStack spacing={5} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
+        <HStack spacing={5} modifiers={[accessibilityElement("ignore"), ...liveLabel(l)]}>
           {dotText(CAT[l.kind].dot, 8)}
           <Text modifiers={[F(12, "semibold"), foregroundStyle(CAT[l.kind].text), ...fit1]}>
             {l.kind === "nursing" && l.side ? `${CAT.nursing.short} ${l.side}` : labelOf(l)}

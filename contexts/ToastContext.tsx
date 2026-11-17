@@ -2,6 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
+import {
+  ACTION_TOAST_MIN_MS,
+  SR_ACTION_TOAST_MIN_MS,
+  SR_INFO_TOAST_MIN_MS,
+} from "@/constants/toast";
 import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";
 import { toastBottomOffset } from "@/utils/toastInset";
 
@@ -36,12 +41,9 @@ type ToastContextValue = {
   setBottomInset: (height: number) => void;
 };
 
-/** Un toast avec action reste au moins 8 s (WCAG 2.2.1, temps suffisant). */
-export const ACTION_TOAST_MIN_MS = 8000;
-
-/** Lecteur d'écran actif : un toast avec « Annuler » reste au moins 20 s, un toast d'info ou d'erreur 5 s. */
-export const SR_ACTION_TOAST_MIN_MS = 20000;
-export const SR_INFO_TOAST_MIN_MS = 5000;
+// Durées minimales : définies dans constants/toast.ts, ré-exportées ici pour
+// les imports existants.
+export { ACTION_TOAST_MIN_MS, SR_ACTION_TOAST_MIN_MS, SR_INFO_TOAST_MIN_MS };
 /** Lecteur d'écran : l'annonce est répétée une fois après ce délai (la 1re peut être couverte par le focus). */
 const SR_REANNOUNCE_MS = 500;
 
@@ -108,7 +110,9 @@ const STACK_GAP = 56;
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
-  const reannounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Minuteur de répétition de l'annonce : il appartient à un toast (`owner`) ;
+  // l'expiration ou l'annulation d'un autre toast ne l'efface pas.
+  const reannounceRef = useRef<{ owner: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [info, setInfo] = useState<InfoToast | null>(null);
   const [undos, setUndos] = useState<{ key: number; message: string }[]>([]);
   const [bottomInset, setBottomInsetState] = useState(0);
@@ -131,18 +135,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const clearReannounce = useCallback(() => {
-    if (reannounceTimerRef.current) {
-      clearTimeout(reannounceTimerRef.current);
-      reannounceTimerRef.current = null;
-    }
+  // Sans `owner` : efface sans condition (fermeture générale). Avec : seulement
+  // si la répétition en cours est celle de ce toast.
+  const clearReannounce = useCallback((owner?: string) => {
+    const current = reannounceRef.current;
+    if (!current || (owner !== undefined && current.owner !== owner)) return;
+    clearTimeout(current.timer);
+    reannounceRef.current = null;
   }, []);
 
   const takePending = useCallback(
     (key: number): PendingUndo | null => {
       const entry = pendingRef.current.find((item) => item.key === key) ?? null;
       if (!entry) return null;
-      clearReannounce();
+      clearReannounce(`undo:${key}`);
       clearTimeout(entry.timer);
       pendingRef.current = pendingRef.current.filter((item) => item.key !== key);
       syncUndos();
@@ -181,20 +187,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     () => () => {
       pendingRef.current.forEach((entry) => clearTimeout(entry.timer));
       if (infoTimerRef.current) clearTimeout(infoTimerRef.current);
-      if (reannounceTimerRef.current) clearTimeout(reannounceTimerRef.current);
+      if (reannounceRef.current) clearTimeout(reannounceRef.current.timer);
     },
     [],
   );
 
   // Annonce vocale, répétée une fois après ~0,5 s si un lecteur d'écran est
   // actif à ce moment-là (la 1re annonce peut être couverte par le focus).
-  const say = useCallback((text: string, actionLabel?: string) => {
+  // Un nouveau `say` remplace la répétition du toast précédent.
+  const say = useCallback((owner: string, text: string, actionLabel?: string) => {
     announce(text, actionLabel);
-    if (reannounceTimerRef.current) clearTimeout(reannounceTimerRef.current);
-    reannounceTimerRef.current = setTimeout(() => {
-      reannounceTimerRef.current = null;
+    if (reannounceRef.current) clearTimeout(reannounceRef.current.timer);
+    const timer = setTimeout(() => {
+      if (reannounceRef.current?.timer === timer) reannounceRef.current = null;
       if (isScreenReaderOnNow()) announce(text, actionLabel);
     }, SR_REANNOUNCE_MS);
+    reannounceRef.current = { owner, timer };
   }, []);
 
   // Le cache du lecteur d'écran peut être en retard : lecture fraîche, puis le
@@ -229,7 +237,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showToast = useCallback(
     (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
-      say(text);
+      say("info", text);
       showInfo({ message: text, action: null, position: toastPosition }, durationMs, SR_INFO_TOAST_MIN_MS);
     },
     [showInfo, say],
@@ -250,7 +258,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         { key, message: text, onUndo, onExpire: onExpire ?? null, timer },
       ];
       syncUndos();
-      say(text, "Annuler");
+      say(`undo:${key}`, text, "Annuler");
       extendWhenReaderOn(Math.max(durationMs, SR_ACTION_TOAST_MIN_MS), startedAt, (remaining) => {
         const entry = pendingRef.current.find((item) => item.key === key);
         if (!entry) return;
@@ -264,14 +272,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const undoLatest = useCallback(() => {
     const latest = pendingRef.current[pendingRef.current.length - 1];
     if (!latest) return;
-    clearReannounce();
+    // takePending efface la répétition de ce toast seulement.
     const entry = takePending(latest.key);
     entry?.onUndo();
-  }, [takePending, clearReannounce]);
+  }, [takePending]);
 
   const showActionToast = useCallback(
     (text: string, actionLabel: string, onAction: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
-      say(text, actionLabel);
+      say("info", text, actionLabel);
       showInfo(
         {
           message: text,
@@ -279,6 +287,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           action: {
             label: actionLabel,
             onPress: () => {
+              clearReannounce("info");
               clearInfoTimer();
               setInfo(null);
               onAction();
@@ -289,7 +298,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         SR_ACTION_TOAST_MIN_MS,
       );
     },
-    [clearInfoTimer, showInfo, say],
+    [clearInfoTimer, clearReannounce, showInfo, say],
   );
 
   // Valeur stable : le message affiché reste en état local du provider, les

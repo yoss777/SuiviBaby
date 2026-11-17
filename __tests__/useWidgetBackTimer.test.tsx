@@ -3,7 +3,7 @@
 import { act, renderHook } from "@testing-library/react-native";
 import { Platform } from "react-native";
 
-import { ACTION_TOAST_MIN_MS } from "@/contexts/ToastContext";
+import { ACTION_TOAST_MIN_MS } from "@/constants/toast";
 import { WIDGET_BACK_DELAY_MS, useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
 
 const mockBack = jest.fn();
@@ -27,8 +27,6 @@ jest.mock("@/services/screenReader", () => ({
     return () => mockListeners.delete(fn);
   },
 }));
-jest.mock("@gorhom/portal", () => ({ Portal: ({ children }: { children: unknown }) => children }));
-jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 const realOS = Platform.OS;
 beforeEach(() => {
@@ -105,6 +103,20 @@ it("cache à false au schedule puis lecture fraîche à true : minuteur annulé"
   await act(async () => {
     result.current.schedule();
   });
+  act(() => { jest.advanceTimersByTime(60_000); });
+  expect(mockBack).not.toHaveBeenCalled();
+});
+
+it("cache false, lecture fraîche true, « Annuler » touché avant la réponse : aucun retour, aucun minuteur", async () => {
+  mockFresh = true;
+  const { result } = renderHook(() => useWidgetBackTimer());
+  act(() => result.current.schedule());
+  act(() => result.current.cancel());
+  // La réponse fraîche arrive après l'annulation.
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(mockReader).toBe(true);
   act(() => { jest.advanceTimersByTime(60_000); });
   expect(mockBack).not.toHaveBeenCalled();
 });

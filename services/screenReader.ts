@@ -5,6 +5,9 @@
 import { AccessibilityInfo } from "react-native";
 
 let current = false;
+// Version des mises à jour poussées par le système : une lecture fraîche partie
+// avant un événement « screenReaderChanged » ne doit pas écraser l'état plus récent.
+let eventVersion = 0;
 const listeners = new Set<(on: boolean) => void>();
 
 function set(next: boolean) {
@@ -15,9 +18,10 @@ function set(next: boolean) {
 
 /** Lecture fraîche de l'état système ; met le cache à jour. */
 export async function refreshScreenReader(): Promise<boolean> {
+  const startedAt = eventVersion;
   try {
     const value = await AccessibilityInfo.isScreenReaderEnabled?.();
-    set(!!value);
+    if (eventVersion === startedAt) set(!!value);
   } catch {
     // Environnement sans AccessibilityInfo (tests) : on garde le cache.
   }
@@ -38,7 +42,10 @@ export function subscribeScreenReader(fn: (on: boolean) => void): () => void {
 }
 
 try {
-  AccessibilityInfo.addEventListener?.("screenReaderChanged", (v: boolean) => set(!!v));
+  AccessibilityInfo.addEventListener?.("screenReaderChanged", (v: boolean) => {
+    eventVersion += 1;
+    set(!!v);
+  });
 } catch {
   // idem
 }
