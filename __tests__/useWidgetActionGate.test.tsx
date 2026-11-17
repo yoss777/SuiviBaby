@@ -33,8 +33,14 @@ it("clé absente ou fausse : confirmation ; l'action n'est faite qu'après « co
   hook.result.current("walk-start");
   await flush();
   expect(run).not.toHaveBeenCalled();
-  expect(confirm).toHaveBeenCalledWith("Arrêter le sommeil en cours ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function));
-  expect(confirm).toHaveBeenCalledWith("Démarrer une balade ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function));
+  expect(confirm).toHaveBeenCalledWith("Arrêter le sommeil en cours ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function), {
+    confirmText: "Arrêter",
+    destructive: false,
+  });
+  expect(confirm).toHaveBeenCalledWith("Démarrer une balade ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function), {
+    confirmText: "Démarrer",
+    destructive: false,
+  });
   confirm.mock.calls[0][2]();
   expect(run).toHaveBeenCalledWith("sleep-stop", undefined);
 });

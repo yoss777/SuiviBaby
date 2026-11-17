@@ -5,12 +5,20 @@
 // hors de la fonction (couleurs et libellés sont donc déclarés dedans).
 // Les données viennent de utils/widgetSnapshot.ts (updateSnapshot depuis l'app).
 // Le chrono défile seul (Text timerInterval) : aucun rechargement dépensé.
+// Accessibilité : chaque tuile se lit comme une phrase (accessibilityElement
+// "ignore" + libellé parlé, sans abréviation), polices en styles de texte
+// (Dynamic Type, plafonné), cibles tactiles ≥ 40-44 pt quand la place le permet.
 import { HStack, Image, Link, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  accessibilityAddTraits,
+  accessibilityElement,
+  accessibilityHidden,
+  accessibilityHint,
   accessibilityLabel,
   background,
   clipShape,
   contentShape,
+  dynamicTypeSize,
   padding,
   shapes,
   containerBackground,
@@ -47,8 +55,33 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     sleep: { label: "Sommeil", symbol: "moon.zzz.fill", color: C.sleep, path: "sleep" },
     walk: { label: "Balade", symbol: "figure.walk", color: C.walk, path: "walk" },
   };
+  // Polices : styles de texte (suivent Dynamic Type), jamais de taille fixe.
+  // 11 caption2, 12 caption, 13 footnote, 14-17 subheadline, 18-21 title3,
+  // 22-25 title2, 26-29 title, 30+ largeTitle.
+  const textStyleOf = (size: number) =>
+    size >= 30
+      ? "largeTitle"
+      : size >= 26
+        ? "title"
+        : size >= 22
+          ? "title2"
+          : size >= 18
+            ? "title3"
+            : size >= 14
+              ? "subheadline"
+              : size >= 13
+                ? "footnote"
+                : size >= 12
+                  ? "caption"
+                  : "caption2";
+  const F = (size: number, weight?: "regular" | "semibold" | "bold") =>
+    font(weight ? { textStyle: textStyleOf(size), weight } : { textStyle: textStyleOf(size) });
+  const fit1 = [lineLimit(1), minimumScaleFactor(0.8)];
   const now = environment.date ? new Date(environment.date).getTime() : Date.now();
   const family = environment.widgetFamily;
+  const isAccessory = family === "accessoryInline" || family === "accessoryRectangular";
+  // Plafond Dynamic Type : écran verrouillé xLarge, écran d'accueil xxxLarge.
+  const typeCap = dynamicTypeSize({ max: isAccessory ? "xLarge" : "xxxLarge" });
   // Tétée oubliée (brouillon expiré : 3 h sans action, 1 h en pause) : retirée, comme dans l'app.
   const alive = (l: WidgetLive | null | undefined) =>
     !!l && !(l.expiresAtMs != null && (environment.date ? new Date(environment.date).getTime() : Date.now()) >= l.expiresAtMs);
@@ -84,14 +117,93 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // zones ouvrent un formulaire (repas, change, tétée en cours).
   const homeUrl = "suivibaby:///baby/home";
   const zoneUrl = (action: "meal" | "diaper" | "nursing" | "sleep") => (canWrite ? `${homeUrl}?widget=${action}${child}` : homeUrl);
-  const ZONE_SAY = { meal: "Noter un repas", diaper: "Noter un change", nursing: "Ouvrir la tétée en cours", sleep: "Noter un sommeil" };
+  const ZONE_HINT = {
+    meal: "Ouvre SuiviBaby et permet de noter un repas",
+    diaper: "Ouvre SuiviBaby et permet de noter un change",
+    nursing: "Ouvre SuiviBaby sur la tétée en cours",
+    sleep: "Ouvre SuiviBaby et permet de noter un sommeil",
+  };
+  const small = family === "systemSmall";
+
+  // ----- Horloge et durées (affichées et parlées) -----
+  const clock = (ms: number | null | undefined) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "—");
+  const dayKey = (ms: number) => {
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  const daysAgo = (ms: number) => Math.round((dayKey(now) - dayKey(ms)) / 86400000);
+  const ddmm = (ms: number) => {
+    const d = new Date(ms);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  // Durées à la minute (« 45 min », « 1h08 ») comme Android, calculées depuis
+  // l'heure de l'entrée de timeline (services/widgetSync.ts). Hors timeline
+  // (ancienne app, timeline épuisée) : compteurs natifs d'iOS, avec secondes.
+  const inTimeline = props.timelineEndMs != null && now < props.timelineEndMs;
+  const minutesBetween = (startMs: number, endMs: number) =>
+    // Minutes « à la pendule » (secondes du début ignorées), comme Android et l'Accueil.
+    Math.max(0, Math.floor(endMs / 60000) - Math.floor(startMs / 60000));
+  const minutesText = (startMs: number) => {
+    const m = minutesBetween(startMs, now);
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+  };
+  // Durée parlée, sans abréviation : « 45 minutes », « 1 heure et 8 minutes ».
+  const minutesSay = (m: number) => {
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    const mm = `${r} minute${r > 1 ? "s" : ""}`;
+    return h === 0 ? mm : `${h} heure${h > 1 ? "s" : ""}${r ? ` et ${mm}` : ""}`;
+  };
+  const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
+  const isDaysAgo = (ms: number) => now - ms >= (23 * 60 + 50) * 60000;
+  const agoText = (ms: number) => (isDaysAgo(ms) ? `${Math.max(1, Math.round((now - ms) / 86400000))} j` : minutesText(ms));
+  const agoSay = (ms: number) => {
+    if (!isDaysAgo(ms)) return minutesSay(minutesBetween(ms, now));
+    const n = Math.max(1, Math.round((now - ms) / 86400000));
+    return `${n} jour${n > 1 ? "s" : ""}`;
+  };
+  const sideWord = (side: string | null | undefined) => (side === "G" ? "gauche" : side === "D" ? "droit" : "");
+  const otherSide = (l: WidgetLive) =>
+    l.otherSideLabel ? l.otherSideLabel.replace(/^G /, "gauche ").replace(/^D /, "droit ") : null;
+
+  // Phrase parlée d'une session : « Sieste en cours depuis 14:00, 45 minutes »,
+  // « Tétée en cours, sein gauche, depuis 14:20 ». Durée seulement quand la
+  // timeline la donne à la minute (sinon le chrono natif défile seul).
+  const a11yOf = (l: WidgetLive) => {
+    const side = l.side ? `, sein ${sideWord(l.side)}` : "";
+    const dur = inTimeline && l.timerStartMs ? `, ${minutesSay(minutesBetween(l.timerStartMs, l.pausedAtMs ?? now))}` : "";
+    return `${labelOf(l)} en cours${side}${side ? "," : ""} ${l.sinceLabel}${dur}${l.pausedAtMs != null ? ", en pause" : ""}`;
+  };
+  const liveA11y = lives.map(a11yOf).join(". ");
+
+  const timerOf = (l: WidgetLive | null, size: number, hide = false) => {
+    const hid = hide ? [accessibilityHidden()] : [];
+    return l && l.kind !== "nursing" && inTimeline ? (
+      <Text modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}>
+        {minutesText(l.timerStartMs)}
+      </Text>
+    ) : l ? (
+      <Text
+        timerInterval={{ lower: new Date(l.timerStartMs), upper: far }}
+        countsDown={false}
+        pauseTime={l.pausedAtMs != null ? new Date(l.pausedAtMs) : undefined}
+        modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}
+      />
+    ) : null;
+  };
+  const timer = (size: number) => timerOf(live, size);
+  const far = new Date(now + 24 * 3600 * 1000);
+  // Info de plus de 2 h : on dit de quand elle date.
+  const generatedAt = props.generatedAtMs ?? 0;
+  const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
+
   // Le lien enveloppe la zone : padding, fond et cadre sont posés sur l'enfant,
   // sinon (modificateurs posés hors du Link) les bords tombent sur le fond.
   const zone = (action: "meal" | "diaper" | "nursing" | "sleep", say: string, content: React.ReactElement, key?: string) => (
     <Link
       key={key ?? action}
       destination={zoneUrl(action)}
-      modifiers={[accessibilityLabel(`${say}. ${canWrite ? ZONE_SAY[action] : "Consulter dans SuiviBaby"}`)]}
+      modifiers={[accessibilityLabel(say), accessibilityHint(canWrite ? ZONE_HINT[action] : "Ouvre SuiviBaby pour consulter")]}
     >
       <VStack alignment="leading" spacing={0} modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), contentShape(shapes.rectangle())]}>
         {content}
@@ -101,7 +213,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Tuile tétée : le lien couvre le contenu, pas « ■ Arrêter » (pas de lien dans un lien).
   const tileLink = (l: WidgetLive, content: React.ReactElement) =>
     l.kind === "nursing" && !small ? zone("nursing", a11yOf(l), content, `tile-${l.kind}`) : content;
-  const far = new Date(now + 24 * 3600 * 1000);
   // Compteurs d'un jour passé (minuit franchi sans nouvel envoi) : masqués.
   const dayStart = props.dayStartMs ?? 0;
   const nextMidnight = dayStart > 0
@@ -112,39 +223,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const sleepFrom =
     props.day?.sleepRunningFromMs != null && lives.some((l) => l.kind === "sleep") ? Math.min(props.day.sleepRunningFromMs, now) : null;
   const sleepNowMin = (props.day?.sleepMinutes ?? 0) + (sleepFrom != null ? Math.max(0, Math.floor(now / 60000) - Math.floor(sleepFrom / 60000)) : 0);
-  // Info de plus de 2 h : on dit de quand elle date.
-  const generatedAt = props.generatedAtMs ?? 0;
-  const dataStale = generatedAt > 0 && now - generatedAt > 2 * 3600 * 1000;
-
-  // Durées à la minute (« 45 min », « 1h08 ») comme Android, calculées depuis
-  // l'heure de l'entrée de timeline (services/widgetSync.ts). Hors timeline
-  // (ancienne app, timeline épuisée) : compteurs natifs d'iOS, avec secondes.
-  const inTimeline = props.timelineEndMs != null && now < props.timelineEndMs;
-  const minutesText = (startMs: number) => {
-    // Minutes « à la pendule » (secondes du début ignorées), comme Android et l'Accueil.
-    const m = Math.max(0, Math.floor(now / 60000) - Math.floor(startMs / 60000));
-    return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
-  };
-  // Sommeil, promenade : « 0 min » dès le départ, comme Android (pas de
-  // secondes la 1re minute : non fiable sur Android, même comportement voulu).
-  const timerOf = (l: WidgetLive | null, size: number) =>
-    l && l.kind !== "nursing" && inTimeline ? (
-      <Text modifiers={[font({ size, weight: "bold" }), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1)]}>
-        {minutesText(l.timerStartMs)}
-      </Text>
-    ) : l ? (
-      <Text
-        timerInterval={{ lower: new Date(l.timerStartMs), upper: far }}
-        countsDown={false}
-        pauseTime={l.pausedAtMs != null ? new Date(l.pausedAtMs) : undefined}
-        modifiers={[font({ size, weight: "bold" }), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1)]}
-      />
-    ) : null;
-  const timer = (size: number) => timerOf(live, size);
-
-  const a11yOf = (l: WidgetLive) =>
-    `${labelOf(l)} en cours${l.side ? `, sein ${l.side === "G" ? "gauche" : "droit"}` : ""}, ${l.sinceLabel}${l.pausedAtMs != null ? ", en pause" : ""}`;
-  const liveA11y = lives.map(a11yOf).join(". ");
 
   // Données de plus de 24 h (membre retiré du foyer, consentement retiré,
   // app plus ouverte) : ni prénom ni données, seulement une invitation à
@@ -152,12 +230,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // préparée, services/widgetSync.ts) : garanti sans réseau ni notification.
   if (generatedAt > 0 && now - generatedAt > 24 * 3600 * 1000) {
     const msg = "Ouvrez SuiviBaby pour mettre à jour";
-    if (family === "accessoryInline") return <Text modifiers={[widgetURL(homeUrl)]}>SuiviBaby</Text>;
-    if (family === "accessoryRectangular" || family === "accessoryCircular") {
+    const say = `SuiviBaby. ${msg}`;
+    if (family === "accessoryInline") return <Text modifiers={[widgetURL(homeUrl), accessibilityLabel(say), typeCap]}>SuiviBaby</Text>;
+    if (family === "accessoryRectangular") {
       return (
-        <VStack alignment="leading" spacing={2} modifiers={[widgetURL(homeUrl)]}>
-          <Text modifiers={[font({ size: 13, weight: "semibold" })]}>SuiviBaby</Text>
-          {family === "accessoryRectangular" ? <Text modifiers={[font({ size: 12 })]}>{msg}</Text> : null}
+        <VStack alignment="leading" spacing={2} modifiers={[widgetURL(homeUrl), accessibilityElement("ignore"), accessibilityLabel(say), typeCap]}>
+          <Text modifiers={[F(13, "semibold")]}>SuiviBaby</Text>
+          <Text modifiers={[F(12)]}>{msg}</Text>
         </VStack>
       );
     }
@@ -165,11 +244,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <VStack
         alignment="leading"
         spacing={6}
-        modifiers={[bg, widgetURL(homeUrl), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" }), accessibilityLabel(`SuiviBaby. ${msg}`)]}
+        modifiers={[bg, widgetURL(homeUrl), frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" }), accessibilityElement("ignore"), accessibilityLabel(say), typeCap]}
       >
-        <Text modifiers={[font({ size: 13, weight: "bold" }), foregroundStyle(C.strong)]}>SuiviBaby</Text>
+        <Text modifiers={[F(13, "bold"), foregroundStyle(C.strong)]}>SuiviBaby</Text>
         <Spacer />
-        <Text modifiers={[font({ size: 14 }), foregroundStyle(C.soft)]}>{msg}</Text>
+        <Text modifiers={[F(14), foregroundStyle(C.soft), ...fit1]}>{msg}</Text>
       </VStack>
     );
   }
@@ -177,31 +256,54 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // ----- Écran verrouillé -----
   if (family === "accessoryInline") {
     return live ? (
-      <Text modifiers={[widgetURL(url), privacySensitive()]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
+      <Text modifiers={[widgetURL(url), privacySensitive(), accessibilityLabel(a11yOf(live)), typeCap]}>{`${info?.label}${live.side ? ` ${live.side}` : ""} ${live.sinceLabel}`}</Text>
     ) : (
-      <Text modifiers={[widgetURL(url), privacySensitive()]}>
+      <Text
+        modifiers={[
+          widgetURL(url),
+          privacySensitive(),
+          accessibilityLabel(props.lastMealMs ? `Dernier repas à ${clock(props.lastMealMs)}` : "SuiviBaby"),
+          typeCap,
+        ]}
+      >
         {props.lastMealMs ? `Repas à ${new Date(props.lastMealMs).toTimeString().slice(0, 5)}` : "SuiviBaby"}
       </Text>
     );
   }
   if (family === "accessoryRectangular") {
+    const other = live ? otherSide(live) : null;
+    const restSayAcc = props.lastMealMs
+      ? mealLate
+        ? `Repas en retard, dernier à ${clock(props.lastMealMs)}`
+        : `Dernier repas à ${clock(props.lastMealMs)}`
+      : "Dernier repas : pas encore";
     return (
-      <VStack alignment="leading" spacing={2} modifiers={[widgetURL(url), privacySensitive()]}>
+      <VStack
+        alignment="leading"
+        spacing={2}
+        modifiers={[
+          widgetURL(url),
+          privacySensitive(),
+          accessibilityElement("ignore"),
+          accessibilityLabel(live ? `${a11yOf(live)}${other ? `. Autre sein, ${other}` : ""}` : restSayAcc),
+          typeCap,
+        ]}
+      >
         {live ? (
           <>
-            <Text modifiers={[font({ size: 13, weight: "semibold" })]}>
+            <Text modifiers={[F(13, "semibold")]}>
               {`${info?.label}${live.side ? ` · ${live.side}` : ""}${live.pausedAtMs != null ? " · en pause" : ""}`}
             </Text>
             {timer(22)}
-            {live.otherSideLabel ? <Text modifiers={[font({ size: 12 })]}>{live.otherSideLabel}</Text> : null}
+            {live.otherSideLabel ? <Text modifiers={[F(12)]}>{live.otherSideLabel}</Text> : null}
           </>
         ) : (
           <>
-            <Text modifiers={[font({ size: 13, weight: "semibold" })]}>{mealLate ? "Repas en retard" : "Dernier repas"}</Text>
+            <Text modifiers={[F(13, "semibold")]}>{mealLate ? "Repas en retard" : "Dernier repas"}</Text>
             {props.lastMealMs ? (
-              <Text date={new Date(props.lastMealMs)} dateStyle="relative" modifiers={[font({ size: 20, weight: "bold" }), monospacedDigit()]} />
+              <Text date={new Date(props.lastMealMs)} dateStyle="relative" modifiers={[F(20, "bold"), monospacedDigit()]} />
             ) : (
-              <Text modifiers={[font({ size: 15 })]}>—</Text>
+              <Text modifiers={[F(15)]}>—</Text>
             )}
           </>
         )}
@@ -218,55 +320,47 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const CAT = {
     nursing: { short: "Tétée", dot: "#D66B8F", tile: dark ? "#393243" : "#FBE1EA", text: dark ? "#E88FAE" : "#A63D62" },
     sleep: { short: "Sommeil", dot: "#7C6BA4", tile: dark ? "#2c3246" : "#ECE8F4", text: dark ? "#A898D0" : "#5B4A85" },
-    walk: { short: "Balade", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
+    // Texte vert sur tuile claire : #386F26 sur #E6F2DE = 5,2:1 (AA exige 4,5:1).
+    walk: { short: "Balade", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#386F26" },
     meal: { dot: "#E8785A", text: dark ? "#E8785A" : "#A83F23" },
     diaper: { dot: "#5BA4A4", text: dark ? "#5BA4A4" : "#2B6A6A" },
   };
-  const small = family === "systemSmall";
   const day = props.day;
-  const clock = (ms: number | null | undefined) => (ms ? new Date(ms).toTimeString().slice(0, 5) : "—");
-  const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
-  const dayKey = (ms: number) => {
-    const d = new Date(ms);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  };
-  const daysAgo = (ms: number) => Math.round((dayKey(now) - dayKey(ms)) / 86400000);
-  const ddmm = (ms: number) => {
-    const d = new Date(ms);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-  };
   const lastWhen = (ms: number) => {
     const k = daysAgo(ms);
     return k <= 0 ? `dernier à ${clock(ms)}` : k === 1 ? `dernier hier à ${clock(ms)}` : `dernier le ${ddmm(ms)}`;
   };
-  const lateWhen = (ms: number) => {
-    const k = daysAgo(ms);
-    return k <= 0 ? `rappel · dernier à ${clock(ms)}` : k === 1 ? `rappel · dernier hier à ${clock(ms)}` : `rappel · dernier le ${ddmm(ms)}`;
-  };
-  const agoText = (ms: number) =>
-    now - ms >= (23 * 60 + 50) * 60000 ? `${Math.max(1, Math.round((now - ms) / 86400000))} j` : minutesText(ms);
-  const dotText = (color: string, size = 9) => <Text modifiers={[font({ size }), foregroundStyle(color)]}>●</Text>;
-  const sideWord = (side: string | null | undefined) => (side === "G" ? "gauche" : side === "D" ? "droit" : "");
-  const otherSide = (l: WidgetLive) =>
-    l.otherSideLabel ? l.otherSideLabel.replace(/^G /, "gauche ").replace(/^D /, "droit ") : null;
+  // Affiché : « rappel · dernier à 12:00 » ; parlé (lateSay) : « rappel dépassé, dernier à 12:00 ».
+  const lateWhen = (ms: number) => `rappel · ${lastWhen(ms)}`;
+  const lateSay = (ms: number) => `rappel dépassé, ${lastWhen(ms)}`;
+  // Pastille décorative : jamais lue (le sens est porté par le libellé de la tuile).
+  const dotText = (color: string, size = 9) => <Text modifiers={[font({ size }), foregroundStyle(color), accessibilityHidden()]}>●</Text>;
   const sinceTime = (l: WidgetLive) => (l.sinceMs ? clock(l.sinceMs) : l.sinceLabel.replace("depuis ", ""));
   const stopOf = (l: WidgetLive) => (l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : "nursing-stop");
+  const stopWhat = (l: WidgetLive) => (l.kind === "sleep" ? "le sommeil" : l.kind === "walk" ? "la balade" : "la tétée");
 
-  // Bouton « ■ Arrêter » (ou « ■ ») sur fond du widget, comme Android.
-  const stopChip = (l: WidgetLive, compact: boolean) => (
-    <Link key={`stop-${l.kind}`} destination={actionUrl(stopOf(l))} modifiers={[accessibilityLabel(`Arrêter : ${labelOf(l)}`)]}>
-      <Text
-        modifiers={[
-          font({ size: 12, weight: "semibold" }),
-          foregroundStyle(CAT[l.kind].text),
-          lineLimit(1),
-          padding({ top: 6, bottom: 6, leading: compact ? 10 : 12, trailing: compact ? 10 : 12 }),
-          background(C.bg),
-          clipShape("capsule"),
-        ]}
-      >
-        {compact ? "■" : "■ Arrêter"}
-      </Text>
+  // Bouton « ■ Arrêter » (ou « ■ ») sur fond du widget, comme Android. Zone
+  // tactile : 44 pt (tuile seule), 40 pt (deux sessions) ; la pastille reste petite.
+  const stopChip = (l: WidgetLive, compact: boolean, minH: number) => (
+    <Link
+      key={`stop-${l.kind}`}
+      destination={actionUrl(stopOf(l))}
+      modifiers={[accessibilityLabel(`Arrêter : ${labelOf(l)}`), accessibilityHint(`Ouvre SuiviBaby et arrête ${stopWhat(l)}`)]}
+    >
+      <HStack modifiers={[frame({ minWidth: compact ? 40 : 44, minHeight: minH, alignment: "center" }), contentShape(shapes.rectangle())]}>
+        <Text
+          modifiers={[
+            F(12, "semibold"),
+            foregroundStyle(CAT[l.kind].text),
+            ...fit1,
+            padding({ top: 6, bottom: 6, leading: compact ? 10 : 12, trailing: compact ? 10 : 12 }),
+            background(C.bg),
+            clipShape("capsule"),
+          ]}
+        >
+          {compact ? "■" : "■ Arrêter"}
+        </Text>
+      </HStack>
     </Link>
   );
   const tileTitle = (l: WidgetLive, withOther: boolean) => {
@@ -285,56 +379,77 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const titleRow = (l: WidgetLive, text: string, sp: number) => (
     <HStack spacing={5}>
       {dotText(CAT[l.kind].dot, 8)}
-      <Text modifiers={[font({ size: sp, weight: "semibold" }), foregroundStyle(CAT[l.kind].text), lineLimit(1), minimumScaleFactor(0.8)]}>{text}</Text>
+      <Text modifiers={[F(sp, "semibold"), foregroundStyle(CAT[l.kind].text), ...fit1]}>{text}</Text>
     </HStack>
   );
-  // Une session : grande tuile (titre, chrono, autre sein, « ■ Arrêter »).
+  // Une session : grande tuile (titre, [autre sein], chrono et « ■ Arrêter » sur la même ligne).
+  // Petit format : un seul lien pour tout le widget, pas de « ■ ».
   const singleTile = (l: WidgetLive) => {
     const other = l.kind === "nursing" ? otherSide(l) : null;
     const under = l.kind === "nursing" ? (other ? `${other} · depuis ${sinceTime(l)}` : `depuis ${sinceTime(l)}`) : small ? `depuis ${sinceTime(l)}` : null;
+    const underText = under ? <Text modifiers={[F(small ? 11 : 12), monospacedDigit(), foregroundStyle(T.softOnTile), ...fit1]}>{under}</Text> : null;
+    if (small || !canWrite) {
+      return (
+        <VStack alignment="leading" spacing={3} modifiers={tileMods(l, 16, small ? 9 : 10)}>
+          {tileLink(
+            l,
+            <VStack alignment="leading" spacing={3} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
+              {titleRow(l, tileTitle(l, false), small ? 12 : 13)}
+              {timerOf(l, small ? 26 : 30)}
+              {underText}
+            </VStack>,
+          )}
+        </VStack>
+      );
+    }
     return (
-      <VStack alignment="leading" spacing={3} modifiers={tileMods(l, 16, small ? 9 : 10)}>
+      <VStack alignment="leading" spacing={2} modifiers={tileMods(l, 16, 8)}>
         {tileLink(
           l,
-          <VStack alignment="leading" spacing={3} modifiers={[accessibilityLabel(a11yOf(l))]}>
-            {titleRow(l, tileTitle(l, false), small ? 12 : 13)}
-            {timerOf(l, small ? 26 : 30)}
-            {under ? <Text modifiers={[font({ size: small ? 11 : 12 }), monospacedDigit(), foregroundStyle(T.softOnTile), lineLimit(1)]}>{under}</Text> : null}
+          <VStack alignment="leading" spacing={2} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
+            {titleRow(l, tileTitle(l, false), 13)}
+            {underText}
           </VStack>,
         )}
-        {canWrite && !small ? stopChip(l, false) : null}
+        <HStack spacing={8} alignment="center">
+          {timerOf(l, 30, true)}
+          <Spacer />
+          {stopChip(l, false, 44)}
+        </HStack>
       </VStack>
     );
   };
-  // Deux sessions : une tuile par session, chrono et « ■ » à droite.
+  // Deux sessions : une tuile par session, chrono et « ■ » (40 pt) à droite.
   const rowTile = (l: WidgetLive) => (
     <HStack spacing={6} alignment="bottom" modifiers={tileMods(l, 12, 6)}>
       {tileLink(
         l,
-        <VStack alignment="leading" spacing={1} modifiers={[accessibilityLabel(a11yOf(l)), frame({ maxWidth: 10000, alignment: "leading" })]}>
+        <VStack
+          alignment="leading"
+          spacing={1}
+          modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l)), frame({ maxWidth: 10000, alignment: "leading" })]}
+        >
           {titleRow(l, tileTitle(l, !small), 12)}
           {timerOf(l, small ? 18 : 22)}
         </VStack>,
       )}
-      {/* Petit format : un seul lien pour tout le widget, pas de « ■ ». */}
-      {canWrite && !small ? stopChip(l, true) : null}
+      {canWrite && !small ? stopChip(l, true, 40) : null}
     </HStack>
   );
-  // Trois sessions : lignes compactes.
+  // Trois sessions : lignes compactes, sans « ■ » (le lien de la tuile reste).
   const compactTile = (l: WidgetLive) => (
     <HStack spacing={6} modifiers={tileMods(l, 12, 4)}>
       {tileLink(
         l,
-        <HStack spacing={5} modifiers={[accessibilityLabel(a11yOf(l))]}>
+        <HStack spacing={5} modifiers={[accessibilityElement("ignore"), accessibilityLabel(a11yOf(l))]}>
           {dotText(CAT[l.kind].dot, 8)}
-          <Text modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(CAT[l.kind].text), lineLimit(1)]}>
+          <Text modifiers={[F(12, "semibold"), foregroundStyle(CAT[l.kind].text), ...fit1]}>
             {l.kind === "nursing" && l.side ? `${CAT.nursing.short} ${l.side}` : labelOf(l)}
           </Text>
           <Spacer />
           {timerOf(l, 15)}
         </HStack>,
       )}
-      {canWrite && !small ? stopChip(l, true) : null}
     </HStack>
   );
 
@@ -342,32 +457,33 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const reminderPile = (late: boolean, atMs: number | null | undefined) =>
     late || (atMs != null && atMs > now) ? (
       <VStack alignment="leading" spacing={0}>
-        <Text modifiers={[font({ size: 12, weight: late ? "semibold" : "regular" }), foregroundStyle(late ? C.alert : C.soft)]}>rappel</Text>
-        <Text modifiers={[font({ size: 12 }), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft)]}>{late ? "dépassé" : clock(atMs)}</Text>
+        <Text modifiers={[F(12, late ? "semibold" : "regular"), foregroundStyle(late ? C.alert : C.soft), ...fit1]}>rappel</Text>
+        <Text modifiers={[F(12), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), ...fit1]}>{late ? "dépassé" : clock(atMs)}</Text>
       </VStack>
     ) : null;
   const underHour = (ms: number) => now - ms < 3600000;
   const restSay = (label: string, ms: number | null | undefined, late: boolean) =>
-    ms ? `${label} il y a ${agoText(ms)}${late ? ", rappel dépassé" : ""}` : `${label} : pas encore`;
+    ms ? `${label} il y a ${agoSay(ms)}${late ? ", rappel dépassé" : ""}` : `${label} : pas encore`;
   const restBlock = (label: string, cat: { dot: string; text: string }, ms: number | null | undefined, late: boolean, atMs: number | null | undefined, sp: number) => (
     <VStack alignment="leading" spacing={0}>
       <HStack spacing={5}>
         {dotText(late ? C.alert : cat.dot, 8)}
-        <Text modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(late ? C.alert : cat.text), lineLimit(1)]}>{label}</Text>
+        <Text modifiers={[F(12, "semibold"), foregroundStyle(late ? C.alert : cat.text), ...fit1]}>{label}</Text>
       </HStack>
       {ms ? (
         <HStack spacing={0} alignment="lastTextBaseline">
-          <Text modifiers={[font({ size: 12 }), foregroundStyle(late ? C.alert : C.soft), padding({ trailing: 4 })]}>il y a</Text>
-          {/* Boîte de largeur fixe (≈ 3 × la taille, « 14h52 »), comme Android :
-              « rappel / dépassé » reste à la même place d'une ligne à l'autre. */}
+          <Text modifiers={[F(12), foregroundStyle(late ? C.alert : C.soft), padding({ trailing: 4 }), ...fit1]}>il y a</Text>
+          {/* Boîte de largeur minimale (≈ 3 × la taille, « 14h52 »), comme Android :
+              « rappel / dépassé » reste à la même place d'une ligne à l'autre ;
+              elle grandit avec Dynamic Type. */}
           <Text
             modifiers={[
-              font({ size: underHour(ms) ? Math.round(sp * 0.8) : sp, weight: "bold" }),
+              F(underHour(ms) ? Math.round(sp * 0.8) : sp, "bold"),
               monospacedDigit(),
               foregroundStyle(late ? C.alert : C.strong),
               minimumScaleFactor(0.7),
               lineLimit(1),
-              frame({ width: underHour(ms) ? Math.ceil(sp * 0.8 * 3.8) : Math.ceil(sp * 3), alignment: "leading" }),
+              frame({ minWidth: underHour(ms) ? Math.ceil(sp * 0.8 * 3.8) : Math.ceil(sp * 3), alignment: "leading" }),
             ]}
           >
             {agoText(ms)}
@@ -375,14 +491,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           {reminderPile(late, atMs) ? <VStack modifiers={[padding({ leading: 6 })]}>{reminderPile(late, atMs)}</VStack> : null}
         </HStack>
       ) : (
-        <Text modifiers={[font({ size: 15 }), foregroundStyle(C.soft)]}>pas encore</Text>
+        <Text modifiers={[F(15), foregroundStyle(C.soft), ...fit1]}>pas encore</Text>
       )}
     </VStack>
   );
 
   // Zone « Maintenant » (gauche) : chargement, sessions ou repos.
   const nowZone = () => {
-    if (props.loading) return <Text modifiers={[font({ size: small ? 12 : 14 }), foregroundStyle(C.soft)]}>Mise à jour…</Text>;
+    if (props.loading) return <Text modifiers={[F(small ? 12 : 14), foregroundStyle(C.soft), ...fit1]}>Mise à jour…</Text>;
     if (lives.length === 1) return singleTile(lives[0]);
     if (lives.length > 1) {
       return (
@@ -395,7 +511,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       return props.lastMealMs ? (
         restBlock("Dernier repas", CAT.meal, props.lastMealMs, mealLate, props.alerts.mealAtMs, 26)
       ) : (
-        <Text modifiers={[font({ size: 12 }), foregroundStyle(C.soft)]}>Aucun repas noté</Text>
+        <Text modifiers={[F(12), foregroundStyle(C.soft), ...fit1]}>Aucun repas noté</Text>
       );
     }
     return (
@@ -406,41 +522,63 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   };
 
-  // Colonne « Aujourd'hui » (droite), comme Android.
+  // Colonne « Aujourd'hui » (droite), comme Android. Zone tactile : 44 pt en
+  // grand ; en moyen la hauteur du widget (3 lignes + en-tête) ne permet pas plus de 32.
+  const ROW_H = family === "systemLarge" ? 44 : 32;
   const dayRow = (color: string, main: string, sub: string | null, late: boolean) => (
-    <HStack spacing={8} alignment="center" modifiers={[frame({ minHeight: 32, alignment: "leading" })]}>
+    <HStack spacing={8} alignment="center" modifiers={[frame({ minHeight: ROW_H, alignment: "leading" })]}>
       {dotText(late ? C.alert : color)}
       <VStack alignment="leading" spacing={0}>
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), monospacedDigit(), foregroundStyle(late ? C.alert : C.strong), lineLimit(1)]}>{main}</Text>
-        {sub ? <Text modifiers={[font({ size: 12 }), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), lineLimit(1), minimumScaleFactor(0.8)]}>{sub}</Text> : null}
+        <Text modifiers={[F(15, "semibold"), monospacedDigit(), foregroundStyle(late ? C.alert : C.strong), ...fit1]}>{main}</Text>
+        {sub ? <Text modifiers={[F(12), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), ...fit1]}>{sub}</Text> : null}
       </VStack>
     </HStack>
   );
-  const mealSub = day?.lastMealMs
-    ? mealLate
-      ? lateWhen(day.lastMealMs)
-      : day.bottleMl > 0 && daysAgo(day.lastMealMs) <= 0
-        ? `${clock(day.lastMealMs)} · ${day.bottleMl} ml`
-        : lastWhen(day.lastMealMs)
-    : day?.noMealEver
-      ? "aucun noté"
-      : null;
-  const diaperSub = day?.lastDiaperMs ? (diaperLate ? lateWhen(day.lastDiaperMs) : lastWhen(day.lastDiaperMs)) : day?.noDiaperEver ? "aucun noté" : null;
-  // Largeur fixe de la colonne, comme Android (38 % de l'intérieur, 112 à 156).
+  // Sous-titre affiché (spoken = false) et parlé (spoken = true).
+  const mealSubOf = (spoken: boolean) =>
+    day?.lastMealMs
+      ? mealLate
+        ? spoken
+          ? lateSay(day.lastMealMs)
+          : lateWhen(day.lastMealMs)
+        : day.bottleMl > 0 && daysAgo(day.lastMealMs) <= 0
+          ? spoken
+            ? `à ${clock(day.lastMealMs)}, ${day.bottleMl} millilitres`
+            : `${clock(day.lastMealMs)} · ${day.bottleMl} ml`
+          : lastWhen(day.lastMealMs)
+      : day?.noMealEver
+        ? "aucun noté"
+        : null;
+  const diaperSubOf = (spoken: boolean) =>
+    day?.lastDiaperMs
+      ? diaperLate
+        ? spoken
+          ? lateSay(day.lastDiaperMs)
+          : lateWhen(day.lastDiaperMs)
+        : lastWhen(day.lastDiaperMs)
+      : day?.noDiaperEver
+        ? "aucun noté"
+        : null;
+  const mealSub = mealSubOf(false);
+  const diaperSub = diaperSubOf(false);
+  const mealSay = mealSubOf(true);
+  const diaperSay = diaperSubOf(true);
+  // Largeur minimale de la colonne, comme Android (38 % de l'intérieur, 112 à 156) ;
+  // elle peut grandir un peu avec Dynamic Type, le texte se réduit au-delà.
   const DAY_W = family === "systemLarge" ? 136 : 126;
   const dayColumn = () =>
     !day ? null : dayStale ? (
-      <VStack alignment="leading" spacing={2} modifiers={[frame({ width: DAY_W, alignment: "topLeading" })]}>
-        <Text modifiers={[font({ size: 14, weight: "semibold" }), foregroundStyle(C.strong)]}>Nouvelle journée</Text>
-        <Text modifiers={[font({ size: 11 }), foregroundStyle(C.soft)]}>Mise à jour à la prochaine saisie</Text>
+      <VStack alignment="leading" spacing={2} modifiers={[frame({ minWidth: DAY_W, maxWidth: Math.round(DAY_W * 1.25), alignment: "topLeading" })]}>
+        <Text modifiers={[F(14, "semibold"), foregroundStyle(C.strong), ...fit1]}>Nouvelle journée</Text>
+        <Text modifiers={[F(11), foregroundStyle(C.soft), minimumScaleFactor(0.8)]}>Mise à jour à la prochaine saisie</Text>
       </VStack>
     ) : (
-      <VStack alignment="leading" spacing={0} modifiers={[frame({ minWidth: DAY_W, maxWidth: DAY_W, maxHeight: 10000, alignment: "topLeading" })]}>
-        {zone("meal", `${day.mealsCount} repas${mealSub ? `, ${mealSub}` : ""}`, dayRow(CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate), "row-meal")}
+      <VStack alignment="leading" spacing={0} modifiers={[frame({ minWidth: DAY_W, maxWidth: Math.round(DAY_W * 1.25), maxHeight: 10000, alignment: "topLeading" })]}>
+        {zone("meal", `${day.mealsCount} repas${mealSay ? `, ${mealSay}` : ""}`, dayRow(CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate), "row-meal")}
         <Spacer />
         {zone(
           "diaper",
-          `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperSub ? `, ${diaperSub}` : ""}`,
+          `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperSay ? `, ${diaperSay}` : ""}`,
           dayRow(CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate),
           "row-diaper",
         )}
@@ -451,39 +589,45 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   // En-tête : prénom seul dans une pastille, « màj HH:MM » si les données
   // datent de plus de 2 h, boutons « ▶ Sieste/Nuit » et « ▶ Balade » (Parent,
-  // hors session du même type ; pas en petit format).
+  // hors session du même type ; pas en petit format). Zone tactile 32 pt.
   const firstName = props.childName ? props.childName.trim().split(/\s+/)[0] : "SuiviBaby";
-  const headChip = (label: string, action: string, cat: { tile: string; text: string }) => (
-    <Link
-      key={action}
-      destination={actionUrl(action)}
-      modifiers={[
-        accessibilityLabel(
-          action === "walk-start" ? "Démarrer une balade" : label.includes("Nuit") ? "Démarrer la nuit" : "Démarrer une sieste",
-        ),
-      ]}
-    >
-      <Text
+  const headChip = (label: string, action: string, cat: { tile: string; text: string }) => {
+    const walk = action === "walk-start";
+    const night = label.includes("Nuit");
+    return (
+      <Link
+        key={action}
+        destination={actionUrl(action)}
         modifiers={[
-          font({ size: 11, weight: "semibold" }),
-          foregroundStyle(cat.text),
-          lineLimit(1),
-          padding({ top: 4, bottom: 4, leading: 9, trailing: 9 }),
-          background(cat.tile),
-          clipShape("capsule"),
+          accessibilityLabel(walk ? "Démarrer une balade" : night ? "Démarrer la nuit" : "Démarrer une sieste"),
+          accessibilityHint(`Ouvre SuiviBaby et démarre ${walk ? "une balade" : night ? "la nuit" : "une sieste"}`),
         ]}
       >
-        {label}
-      </Text>
-    </Link>
-  );
+        <HStack modifiers={[frame({ minHeight: 32, alignment: "center" }), contentShape(shapes.rectangle())]}>
+          <Text
+            modifiers={[
+              F(11, "semibold"),
+              foregroundStyle(cat.text),
+              ...fit1,
+              padding({ top: 4, bottom: 4, leading: 9, trailing: 9 }),
+              background(cat.tile),
+              clipShape("capsule"),
+            ]}
+          >
+            {label}
+          </Text>
+        </HStack>
+      </Link>
+    );
+  };
+  const staleAlert = lives.length > 0 && !small;
   const header = (
     <HStack spacing={6}>
       <Text
         modifiers={[
-          font({ size: small ? 12 : 13, weight: "bold" }),
+          F(small ? 12 : 13, "bold"),
           foregroundStyle(T.pillText),
-          lineLimit(1),
+          ...fit1,
           padding({ top: 3, bottom: 3, leading: 9, trailing: 9 }),
           background(T.pillBg),
           clipShape("capsule"),
@@ -492,8 +636,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {firstName}
       </Text>
       {dataStale ? (
-        <Text modifiers={[font({ size: 11 }), foregroundStyle(lives.length && !small ? C.alert : C.soft), lineLimit(1)]}>
-          {`${lives.length && !small ? "à vérifier · " : ""}màj ${clock(generatedAt)}`}
+        <Text
+          modifiers={[
+            F(11),
+            foregroundStyle(staleAlert ? C.alert : C.soft),
+            ...fit1,
+            accessibilityLabel(`${staleAlert ? "Données à vérifier, " : ""}mis à jour à ${clock(generatedAt)}`),
+          ]}
+        >
+          {`${staleAlert ? "à vérifier · " : ""}màj ${clock(generatedAt)}`}
         </Text>
       ) : null}
       <Spacer />
@@ -504,20 +655,25 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     </HStack>
   );
   // Petit format : bande « N rep. · N ch. · Xh dodo » sous la zone, comme Android 2×2.
+  // Lue d'un bloc, sans abréviation.
+  const bandSay = () =>
+    !day
+      ? ""
+      : `${day.mealsCount} repas${mealLate && lives.length > 0 ? ", rappel dépassé" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? ", rappel dépassé" : ""}, ${minutesSay(sleepNowMin)} de sommeil`;
   const band = () =>
     !day || dayStale ? null : (
-      <HStack spacing={8}>
+      <HStack spacing={8} modifiers={[accessibilityElement("ignore"), accessibilityLabel(bandSay())]}>
         <HStack spacing={3}>
           {dotText(mealLate && lives.length > 0 ? C.alert : CAT.meal.dot, 8)}
-          <Text modifiers={[font({ size: 11, weight: "semibold" }), foregroundStyle(C.strong), lineLimit(1)]}>{`${day.mealsCount} rep.`}</Text>
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(C.strong), ...fit1]}>{`${day.mealsCount} rep.`}</Text>
         </HStack>
         <HStack spacing={3}>
           {dotText(diaperLate ? C.alert : CAT.diaper.dot, 8)}
-          <Text modifiers={[font({ size: 11, weight: "semibold" }), foregroundStyle(diaperLate ? C.alert : C.strong), lineLimit(1)]}>{`${day.diapersCount} ch.`}</Text>
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(diaperLate ? C.alert : C.strong), ...fit1]}>{`${day.diapersCount} ch.`}</Text>
         </HStack>
         <HStack spacing={3}>
           {dotText(CAT.sleep.dot, 8)}
-          <Text modifiers={[font({ size: 11, weight: "semibold" }), foregroundStyle(C.strong), lineLimit(1)]}>{`${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`}</Text>
+          <Text modifiers={[F(11, "semibold"), foregroundStyle(C.strong), ...fit1]}>{`${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`}</Text>
         </HStack>
       </HStack>
     );
@@ -537,6 +693,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     widgetURL(small ? smallUrl : homeUrl),
     frame({ maxWidth: 10000, maxHeight: 10000, alignment: "topLeading" }),
     privacySensitive(),
+    typeCap,
   ];
 
   if (small) {
@@ -555,14 +712,14 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, maxHeight: 10000, alignment: "leading" })]}>
         {nowZone()}
       </VStack>
-      {day ? <VStack modifiers={[frame({ minWidth: 1, maxWidth: 1, maxHeight: 10000 }), background(C.rule)]}>{null}</VStack> : null}
+      {day ? <VStack modifiers={[frame({ minWidth: 1, maxWidth: 1, maxHeight: 10000 }), background(C.rule), accessibilityHidden()]}>{null}</VStack> : null}
       {dayColumn()}
     </HStack>
   );
 
   if (family !== "systemLarge") {
     return (
-      <VStack alignment="leading" spacing={6} modifiers={container}>
+      <VStack alignment="leading" spacing={2} modifiers={container}>
         {header}
         {top}
       </VStack>
@@ -584,16 +741,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       {top}
       {events.length ? (
         <VStack alignment="leading" spacing={5}>
-          <Text modifiers={[font({ size: 12, weight: "semibold" }), foregroundStyle(C.soft)]}>Évènements récents</Text>
-          {events.map((e, i) => (
-            <HStack key={`${e.ms}-${i}`} spacing={6}>
-              {dotText((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? C.meal : e.kind === "diaper" ? C.diaper : C.soft))}
-              <Text modifiers={[font({ size: 13 }), monospacedDigit(), foregroundStyle(C.soft)]}>
-                {`${daysAgo(e.ms) >= 1 ? "hier " : ""}${clock(e.ms)}`}
-              </Text>
-              <Text modifiers={[font({ size: 13 }), foregroundStyle(C.strong), lineLimit(1)]}>{e.label}</Text>
-            </HStack>
-          ))}
+          <Text modifiers={[F(12, "semibold"), foregroundStyle(C.soft), ...fit1, accessibilityAddTraits(["isHeader"])]}>Évènements récents</Text>
+          {events.map((e, i) => {
+            const when = `${daysAgo(e.ms) >= 1 ? "hier " : ""}${clock(e.ms)}`;
+            return (
+              <HStack key={`${e.ms}-${i}`} spacing={6} modifiers={[accessibilityElement("ignore"), accessibilityLabel(`${when}, ${e.label}`)]}>
+                {dotText((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? C.meal : e.kind === "diaper" ? C.diaper : C.soft))}
+                <Text modifiers={[F(13), monospacedDigit(), foregroundStyle(C.soft), ...fit1]}>{when}</Text>
+                <Text modifiers={[F(13), foregroundStyle(C.strong), ...fit1]}>{e.label}</Text>
+              </HStack>
+            );
+          })}
         </VStack>
       ) : null}
     </VStack>

@@ -26,7 +26,8 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
 
   return useCallback(
     // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
-    (event: TEvent | null | undefined, extra?: Record<string, unknown>) => {
+    // `opts.onUndo` : appelé quand l'utilisateur touche « Annuler » (ex. annuler le retour auto du widget).
+    (event: TEvent | null | undefined, extra?: Record<string, unknown>, opts?: { onUndo?: () => void }) => {
       if (!childId || !event?.id) return;
       const start = toDate(event.heureDebut);
       const heureFin = new Date();
@@ -52,6 +53,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       });
 
       showUndoToast(successLabel, () => {
+        opts?.onUndo?.();
         modifierEvenementOptimistic(
           childId,
           event.id!,

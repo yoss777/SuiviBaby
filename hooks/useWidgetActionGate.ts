@@ -27,7 +27,12 @@ export function useWidgetActionGate(opts: {
   run: (action: WidgetDeepLinkAction, o?: RunOpts) => void;
   canManageContent: boolean;
   activeChildId: string | undefined;
-  confirm: (title: string, message: string, onConfirm: () => void) => void;
+  confirm: (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    opts?: { confirmText?: string; destructive?: boolean },
+  ) => void;
 }): (action: WidgetDeepLinkAction, o?: RunOpts & { linkKey?: string }) => void {
   const runRef = useRef(opts.run);
   runRef.current = opts.run;
@@ -58,7 +63,11 @@ export function useWidgetActionGate(opts: {
       void isWidgetLinkKeyValid(o?.linkKey).then((ok) => {
         if (!mountedRef.current || childRef.current !== childId) return;
         if (ok) run();
-        else confirm(title, WIDGET_ACTION_CONFIRM_MESSAGE, run);
+        else {
+          // « Démarrer » / « Arrêter » en couleur normale (pas « Supprimer » rouge).
+          const confirmText = action.endsWith("-start") ? "Démarrer" : "Arrêter";
+          confirm(title, WIDGET_ACTION_CONFIRM_MESSAGE, run, { confirmText, destructive: false });
+        }
       });
     },
     [canManageContent, confirm],
