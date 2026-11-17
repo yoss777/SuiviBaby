@@ -2,9 +2,16 @@ const admin = require("firebase-admin");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
 const { checkRateLimit } = require("../shared/rateLimit");
+const { versionAtLeast } = require("../shared/consent");
 
 /** Version of the privacy policy the health data consent refers to (public/privacy.html). */
-const HEALTH_CONSENT_VERSION = "2.2";
+const HEALTH_CONSENT_VERSION = "2.3";
+/**
+ * Versions accepted from the app. 2.2: apps ≤ 1.0.21 still ask for it (the
+ * widget is not described there: the widget server push requires
+ * app_config/widgetPush.minConsentVersion, see shared/consent.js).
+ */
+const ACCEPTED_CONSENT_VERSIONS = new Set(["2.2", HEALTH_CONSENT_VERSION]);
 /** Proof of consent is kept this long after the account is deleted. */
 const CONSENT_RETENTION_YEARS = 5;
 
@@ -29,7 +36,7 @@ const recordHealthConsent = onCall(
     const uid = request.auth.uid;
     const data = request.data || {};
 
-    if (data.version !== HEALTH_CONSENT_VERSION) {
+    if (!ACCEPTED_CONSENT_VERSIONS.has(data.version)) {
       throw new HttpsError("invalid-argument", "Version de la politique de confidentialité invalide.");
     }
     const { platform } = data;
@@ -44,27 +51,37 @@ const recordHealthConsent = onCall(
     const record = {
       uid,
       type: "health_data",
-      version: HEALTH_CONSENT_VERSION,
+      version: data.version,
       granted: true,
       grantedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     if (typeof platform === "string") record.platform = platform;
     await db.collection("consent_records").add(record);
 
+    // Consent already granted for a more recent version (e.g. 2.3 from a
+    // newer app, then an old app on another device asks for 2.2): the proof
+    // above records what was accepted, but the preference keeps the most
+    // recent version — never downgraded (widget wiped, newer app asking again).
+    const prefsRef = db.doc(`user_preferences/${uid}`);
+    const current = (await prefsRef.get()).data()?.healthDataConsent;
+    if (current?.granted === true && current.version !== data.version && versionAtLeast(current.version, data.version)) {
+      return { version: data.version };
+    }
+
     // mergeFields replaces the whole healthDataConsent map (no deep merge):
     // a previous withdrawnAt or an older field must not survive a new grant.
-    await db.doc(`user_preferences/${uid}`).set(
+    await prefsRef.set(
       {
         healthDataConsent: {
           granted: true,
           grantedAt: new Date().toISOString(),
-          version: HEALTH_CONSENT_VERSION,
+          version: data.version,
         },
       },
       { mergeFields: ["healthDataConsent"] }
     );
 
-    return { version: HEALTH_CONSENT_VERSION };
+    return { version: data.version };
   }
 );
 

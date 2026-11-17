@@ -6,8 +6,24 @@ import { httpsCallable } from "firebase/functions";
 import { Platform } from "react-native";
 import { db, functions } from "@/config/firebase";
 
-/** Bump whenever the consent text / privacy policy changes materially. */
-export const HEALTH_CONSENT_VERSION = "2.2";
+/**
+ * Bump whenever the consent text / privacy policy changes materially.
+ * 2.3 : widget d'écran d'accueil (résumé envoyé via Expo, FCM et APNs).
+ */
+export const HEALTH_CONSENT_VERSION = "2.3";
+
+/** « 2.10 » ≥ « 2.3 » : comparaison numérique, partie par partie. */
+export function consentVersionAtLeast(version: unknown, min: string): boolean {
+  if (typeof version !== "string" || !/^\d{1,3}(\.\d{1,3}){0,2}$/.test(version)) return false;
+  const a = version.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
 
 export interface HealthDataConsent {
   granted: boolean;
@@ -31,7 +47,9 @@ export function hasValidHealthConsent(
     !!consent &&
     typeof consent === "object" &&
     consent.granted === true &&
-    consent.version === HEALTH_CONSENT_VERSION
+    // Version actuelle ou plus récente (donnée par une app plus récente sur un
+    // autre appareil) : jamais redemandé pour une version plus ancienne.
+    consentVersionAtLeast(consent.version, HEALTH_CONSENT_VERSION)
   );
 }
 

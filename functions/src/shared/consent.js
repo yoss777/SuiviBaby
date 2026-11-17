@@ -11,11 +11,19 @@ function hasValidHealthConsent(prefs) {
 /**
  * Widget (envoi des données de santé hors de l'app, via Expo/FCM/APNs) :
  * consentement donné ET d'une version au moins égale à celle dont la
- * politique décrit le widget. À relever (ex. « 2.3 ») avec la mise à jour de
- * la politique de confidentialité : le widget ne part alors qu'aux comptes
- * qui l'ont acceptée, sans toucher aux rappels (toute version, ci-dessus).
+ * politique décrit le widget (2.3). Version exigée réglable sans déploiement
+ * (`app_config/widgetPush.minConsentVersion`) : on la passe à « 2.3 » une fois
+ * l'app qui recueille ce consentement publiée, sinon le temps réel s'arrêtait
+ * pour tous ceux qui n'ont pas encore mis à jour. Les rappels, eux, gardent
+ * toute version (ci-dessus).
  */
 const WIDGET_MIN_CONSENT_VERSION = "2.2";
+
+/** Version exigée pour le widget : réglage valide (« 2.3 ») sinon la valeur par défaut. */
+function widgetMinConsentVersion(config) {
+  const v = config?.minConsentVersion;
+  return typeof v === "string" && /^\d{1,3}(\.\d{1,3}){0,2}$/.test(v) ? v : WIDGET_MIN_CONSENT_VERSION;
+}
 
 function versionAtLeast(version, min) {
   if (typeof version !== "string") return false;
@@ -37,5 +45,6 @@ module.exports = {
   hasValidHealthConsent,
   hasWidgetHealthConsent,
   versionAtLeast,
+  widgetMinConsentVersion,
   WIDGET_MIN_CONSENT_VERSION,
 };

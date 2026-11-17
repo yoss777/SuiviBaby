@@ -203,18 +203,29 @@ describe("fanOutWidget", () => {
     expect(pushed().some((m) => m.to === "ExponentPushToken[m1]")).toBe(true);
   });
 
+  it("version exigée réglable (app_config) : 2.3 écarte un consentement 2.2 ; réglage invalide → 2.2", async () => {
+    const base = seed({ "user_preferences/dad": { healthDataConsent: { granted: true, version: "2.2" } } });
+    memoryStore({ ...base, "app_config/widgetPush": { ...base["app_config/widgetPush"], minConsentVersion: "2.3" } });
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).not.toContain("ExponentPushToken[a1]");
+    jest.clearAllMocks();
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+    memoryStore({ ...base, "app_config/widgetPush": { ...base["app_config/widgetPush"], minConsentVersion: "2.3; drop" } });
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(pushed().length).toBeGreaterThan(1);
+  });
+
   it("consentement d'une version trop ancienne pour le widget : aucune donnée envoyée", async () => {
     memoryStore(seed({ "user_preferences/dad": { healthDataConsent: { granted: true, version: "2.1" } } }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
   });
 
-  it("température : jamais la valeur chiffrée dans le message", async () => {
+  it("température : la valeur mesurée, comme dans l'app (choix produit, politique 2.3)", async () => {
     memoryStore(seed({ "events/t1": { childId: "c1", userId: "dad", type: "temperature", date: ts(NOW - HOUR), valeur: 38.5 } }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
     const raw = JSON.stringify(pushed().map((m) => m.data));
-    expect(raw).not.toContain("38");
-    expect(raw).toContain("Température");
+    expect(raw).toContain("Temp. 38,5 °C");
   });
 
   it("médicament et vaccin : ni le nom saisi ni aucun texte libre dans le message", async () => {

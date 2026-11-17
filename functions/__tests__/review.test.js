@@ -52,9 +52,9 @@ describe("health consent: replace and withdraw", () => {
     });
     await expect(fns.withdrawHealthConsent(call("u1"))).resolves.toEqual({ success: true });
     const [, rec] = keys(docs, "consent_records/").map((k) => [k, docs.get(k)])[0];
-    expect(rec).toEqual({ uid: "u1", type: "health_data", granted: false, withdrawnAt: "TS", version: "2.2" });
+    expect(rec).toEqual({ uid: "u1", type: "health_data", granted: false, withdrawnAt: "TS", version: "2.3" });
     expect(docs.get("user_preferences/u1").healthDataConsent).toEqual({
-      granted: false, withdrawnAt: expect.stringMatching(/^\d{4}-/), version: "2.2",
+      granted: false, withdrawnAt: expect.stringMatching(/^\d{4}-/), version: "2.3",
     });
     expect(docs.get("user_preferences/u1").theme).toBe("dark");
   });
