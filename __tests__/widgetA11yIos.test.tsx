@@ -53,15 +53,17 @@ describe("phrases parlées", () => {
 
   it("tétée : côté dit en toutes lettres, « sein gauche »", () => {
     const d = show({ lives: [nursing], ...TL });
-    expect(d.a11y.some((l) => l.startsWith("Tétée en cours, sein gauche, depuis 14:48"))).toBe(true);
+    expect(d.a11y.some((l) => l.startsWith("Tétée en cours, sein gauche, autre sein droit, 12 minutes, depuis 14:48"))).toBe(true);
     expect(d.a11y.join(" ")).not.toMatch(/sein G\b/);
   });
 
   it("écran verrouillé : phrases complètes (tétée en cours, repos, expiré)", () => {
     const rect = show({ lives: [nursing] }, "accessoryRectangular");
-    expect(rect.a11y.join("|")).toContain("Tétée en cours, sein gauche, depuis 14:48. Autre sein, droit 12 min");
+    expect(rect.a11y).toContain("Tétée en cours, sein gauche, autre sein droit, 12 minutes, depuis 14:48");
+    // Pas de doublon « Autre sein » ajouté à la fin, jamais « min » abrégé
+    expect(rect.a11y.join("|")).not.toMatch(/Autre sein|\bmin\b/);
     const inline = show({ lives: [nursing] }, "accessoryInline");
-    expect(inline.a11y).toContain("Tétée en cours, sein gauche, depuis 14:48");
+    expect(inline.a11y).toContain("Tétée en cours, sein gauche, autre sein droit, 12 minutes, depuis 14:48");
     expect(show({}, "accessoryRectangular").a11y).toContain("Dernier repas à 13:00");
     for (const f of ["accessoryRectangular", "accessoryInline"]) {
       expect(show({ generatedAtMs: NOW - 25 * H }, f).a11y).toContain("SuiviBaby. Ouvrez SuiviBaby pour mettre à jour");
@@ -106,9 +108,52 @@ describe("phrases parlées", () => {
       { recent: [{ ms: at(-1, 23, 10), label: "Biberon 120 ml", kind: "meal" }, { ms: at(0, 14, 5), label: "Change", kind: "diaper" }] },
       "systemLarge",
     );
-    expect(d.a11y).toContain("hier 23:10, Biberon 120 ml");
-    expect(d.a11y).toContain("14:05, Change");
+    expect(d.a11y).toContain("hier à 23:10, Biberon 120 ml");
+    expect(d.a11y).toContain("à 14:05, Change");
     expect(d.traits).toContain("isHeader");
+  });
+});
+
+describe("lot 2 : phrases parlées", () => {
+  it("tétée en pause : « Tétée en pause, sein gauche, depuis 14:20 » (pas « en cours … en pause »)", () => {
+    const paused = { ...nursing, otherSideLabel: null, sinceLabel: "depuis 14:20", pausedAtMs: NOW - 5 * 60_000 };
+    const d = show({ lives: [paused] });
+    expect(d.a11y).toContain("Tétée en pause, sein gauche, depuis 14:20");
+    expect(d.a11y.join("|")).not.toContain("en cours");
+  });
+
+  it("autre sein : « 1h08 » dit « 1 heure et 8 minutes »", () => {
+    const d = show({ lives: [{ ...nursing, otherSideLabel: "G 1h08", side: "D" }] });
+    expect(d.a11y.some((l) => l.includes("autre sein gauche, 1 heure et 8 minutes"))).toBe(true);
+  });
+
+  it("hors timeline : le chrono natif reste lisible (durée dite) ; en timeline : masqué", () => {
+    const off = show({ lives: [napLive(NOW - 45 * 60_000)] });
+    const on = show({ lives: [napLive(NOW - 45 * 60_000)], ...TL });
+    expect(on.hidden).toBeGreaterThan(off.hidden);
+  });
+
+  it("boutons d'arrêt : phrases identiques à Android", () => {
+    expect(show({ lives: [napLive(NOW - H)] }).a11y).toContain("Arrêter la sieste");
+    expect(show({ lives: [{ ...napLive(NOW - H), nap: false }] }).a11y).toContain("Arrêter la nuit");
+    expect(show({ lives: [walk] }).a11y).toContain("Arrêter la balade");
+    expect(show({ lives: [nursing] }).a11y).toContain("Arrêter la tétée");
+  });
+
+  it("sommeil du jour dit en minutes complètes, jamais « min » ni « 1h35 »", () => {
+    const d = show({});
+    expect(d.a11y).toContain("1 heure et 35 minutes de sommeil");
+    expect(d.a11y.join("|")).not.toMatch(/\d+h\d+|\bmin\b/);
+  });
+
+  it("jalon d'humeur : « humeur 😊 »", () => {
+    const d = show({ recent: [{ ms: at(0, 14, 0), label: "😊", kind: "other", icon: "jalon" }] }, "systemLarge");
+    expect(d.a11y).toContain("à 14:00, humeur 😊");
+  });
+
+  it("police 30 : style « title » (28 pt), plus de largeTitle", () => {
+    expect(source).not.toMatch(/"largeTitle"/);
+    expect(source).toMatch(/size>=26\?"title"/);
   });
 });
 

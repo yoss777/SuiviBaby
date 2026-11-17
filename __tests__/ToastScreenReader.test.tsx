@@ -7,12 +7,29 @@ jest.mock("@gorhom/portal", () => ({
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
-let mockReader = false;
-jest.mock("@/hooks/useScreenReaderEnabled", () => ({ useScreenReaderEnabled: () => mockReader }));
+// Faux service lecteur d'écran : cache synchrone + lecture fraîche pilotables.
+let mockReader = false; // état « cache »
+let mockFresh = false; // réponse de la lecture fraîche
+const mockListeners = new Set<(on: boolean) => void>();
+const mockSetReader = (on: boolean) => {
+  mockReader = on;
+  mockListeners.forEach((fn) => fn(on));
+};
+jest.mock("@/services/screenReader", () => ({
+  isScreenReaderOnNow: () => mockReader,
+  refreshScreenReader: async () => {
+    if (mockFresh !== mockReader) mockSetReader(mockFresh);
+    return mockReader;
+  },
+  subscribeScreenReader: (fn: (on: boolean) => void) => {
+    mockListeners.add(fn);
+    return () => mockListeners.delete(fn);
+  },
+}));
 
 import React from "react";
 import { AccessibilityInfo } from "react-native";
-import { act, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { ToastProvider, useToast } from "@/contexts/ToastContext";
 
 let api: ReturnType<typeof useToast>;
@@ -25,6 +42,8 @@ let announce: jest.SpyInstance;
 beforeEach(() => {
   jest.useFakeTimers();
   mockReader = false;
+  mockFresh = false;
+  mockListeners.clear();
   announce = jest.spyOn(AccessibilityInfo, "announceForAccessibility").mockImplementation(() => {});
   announce.mockClear();
 });
@@ -37,6 +56,7 @@ const setup = () => render(<ToastProvider><Probe /></ToastProvider>);
 describe("lecteur d'écran actif", () => {
   beforeEach(() => {
     mockReader = true;
+    mockFresh = true;
   });
 
   it("toast avec « Annuler » : au moins 20 s (suppression avec annulation)", () => {
@@ -96,10 +116,75 @@ describe("lecteur d'écran actif", () => {
     expect(announce).toHaveBeenLastCalledWith("Balade démarrée. Action disponible : Annuler.");
   });
 
-  it("région vive polie sur le conteneur du toast", () => {
+  it("pas de région vive (triple lecture sur Android)", () => {
     setup();
     act(() => api.showToast("Enregistré"));
-    expect(screen.getByTestId("toast-info").props.accessibilityLiveRegion).toBe("polite");
+    expect(screen.getByTestId("toast-info").props.accessibilityLiveRegion).toBeUndefined();
+  });
+
+  it("la répétition est annulée si le toast est fermé avant 0,5 s", () => {
+    setup();
+    act(() => api.showToast("Enregistré"));
+    act(() => api.dismissToast());
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("la répétition est annulée par « Annuler » et remplacée par un nouveau toast", () => {
+    setup();
+    act(() => api.showUndoToast("Supprimé", jest.fn()));
+    act(() => { jest.advanceTimersByTime(200); });
+    fireEvent.press(screen.getByLabelText("Annuler"));
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(announce).toHaveBeenCalledTimes(1);
+
+    announce.mockClear();
+    act(() => api.showToast("Un"));
+    act(() => { jest.advanceTimersByTime(200); });
+    act(() => api.showToast("Deux"));
+    act(() => { jest.advanceTimersByTime(1000); });
+    // Un, Deux, puis une seule répétition (celle de Deux)
+    expect(announce.mock.calls.map((c) => c[0])).toEqual(["Un", "Deux", "Deux"]);
+  });
+});
+
+describe("cache en retard : lecteur d'écran détecté après l'affichage", () => {
+  it("toast d'action prolongé à 20 s quand la lecture fraîche répond vrai", async () => {
+    mockReader = false;
+    mockFresh = true;
+    setup();
+    await act(async () => {
+      api.showActionToast("Sieste démarrée", "Annuler", jest.fn(), 5000);
+    });
+    act(() => { jest.advanceTimersByTime(19_999); });
+    expect(screen.queryByText("Sieste démarrée")).not.toBeNull();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(screen.queryByText("Sieste démarrée")).toBeNull();
+  });
+
+  it("toast d'info prolongé à 5 s", async () => {
+    mockFresh = true;
+    setup();
+    await act(async () => {
+      api.showToast("Enregistré");
+    });
+    act(() => { jest.advanceTimersByTime(4999); });
+    expect(screen.queryByText("Enregistré")).not.toBeNull();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(screen.queryByText("Enregistré")).toBeNull();
+  });
+
+  it("annulation en attente prolongée à 20 s", async () => {
+    mockFresh = true;
+    setup();
+    const onExpire = jest.fn();
+    await act(async () => {
+      api.showUndoToast("Supprimé", jest.fn(), onExpire, 5000);
+    });
+    act(() => { jest.advanceTimersByTime(19_999); });
+    expect(onExpire).not.toHaveBeenCalled();
+    act(() => { jest.advanceTimersByTime(1); });
+    expect(onExpire).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -48,7 +48,7 @@ afterEach(() => jest.useRealTimers());
 
 describe("accessibilité", () => {
   it("tuiles sieste et balade : phrase avec heure de début et durée", () => {
-    expect(show({ lives: [napLive(NOW - 68 * 60_000)] }).a11y).toContain("Sieste en cours depuis 13:52, 1 heure 08");
+    expect(show({ lives: [napLive(NOW - 68 * 60_000)] }).a11y).toContain("Sieste en cours depuis 13:52, 1 heure et 8 minutes");
     expect(show({ lives: [walkLive(NOW - 25 * 60_000)] }).a11y).toContain("Balade en cours depuis 14:35, 25 minutes");
   });
 
@@ -62,7 +62,7 @@ describe("accessibilité", () => {
     expect(d.a11y.some((a) => a.startsWith("Dernier repas") && a.endsWith("Noter un repas"))).toBe(true);
     expect(d.a11y).toContain("3 repas. Noter un repas");
     expect(d.a11y).toContain("2 changes. Noter un change");
-    expect(d.a11y).toContain("1 heure 35 de sommeil. Noter un sommeil");
+    expect(d.a11y).toContain("1 heure et 35 minutes de sommeil. Noter un sommeil");
     expect(show({ alerts: { mealAtMs: NOW - 60_000 } }).a11y).toContain("3 repas, rappel dépassé. Noter un repas");
   });
 
@@ -120,7 +120,7 @@ describe("accessibilité", () => {
     const d = walk(tree({ lives: [napLive(NOW - H)], alerts: { mealAtMs: NOW - 1000 } }, { widthDp: 200, heightDp: 200 })).map(descOf);
     expect(d).toContain("3 repas, rappel dépassé");
     expect(d).toContain("2 changes");
-    expect(d).toContain("1 heure 35 de sommeil");
+    expect(d).toContain("1 heure et 35 minutes de sommeil");
   });
 
   it("textes lus tels quels : « Mise à jour en cours », « Mis à jour à 12:00 »", () => {
@@ -161,8 +161,54 @@ describe("grand texte (fontScale)", () => {
     expect(headerH(t)).toBeGreaterThan(headerH(base)!);
   });
 
+  it.each([1.3, 1.5])("échelle %s, largeur 420 : démarrage (▶) et arrêt (■) conservés", (fontScale) => {
+    const size = { widthDp: 420, heightDp: 330 };
+    const running = tree({ lives: [napLive(NOW - H)] }, size, { fontScale });
+    const stops = chipsOf(running, "sleep-stop");
+    expect(stops).toHaveLength(1);
+    expect(heightOf(stops[0])).toBeGreaterThanOrEqual(40);
+    expect(descOf(stops[0])).toBe("Arrêter la sieste");
+    expect(chipsOf(running, "walk-start")).toHaveLength(1);
+    const idle = tree({}, size, { fontScale });
+    expect(chipsOf(idle, "sleep-start")).toHaveLength(1);
+    expect(chipsOf(idle, "walk-start")).toHaveLength(1);
+    for (const c of [...chipsOf(idle, "sleep-start"), ...chipsOf(idle, "walk-start")]) expect(heightOf(c)).toBeGreaterThanOrEqual(32);
+  });
+
+  it("échelle 1,5, largeur étroite (< 250) : pas de boutons de démarrage", () => {
+    const t = tree({}, { widthDp: 200, heightDp: 330 }, { fontScale: 1.5 });
+    expect(chipsOf(t, "sleep-start")).toHaveLength(0);
+  });
+
   it("échelle 3 : plafonnée à 2, sans erreur", () => {
     const t = tree({ lives: [napLive(NOW - H)] }, BIG, { fontScale: 3 });
     expect(headerH(t)).toBe(Math.ceil(22 * 2));
+  });
+});
+
+describe("bouton d'arrêt : jamais de débordement", () => {
+  it.each([130, 160])("une session, 320 × %s dp : bouton absent (la tuile reste un lien) ou contenu", (heightDp) => {
+    const t = tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp });
+    const stops = chipsOf(t, "sleep-stop");
+    if (stops.length) expect(heightOf(stops[0])).toBeGreaterThanOrEqual(32);
+    else expect(urlOf(walk(t).find((n) => descOf(n)?.startsWith("Sieste en cours")) as Node)).toBe("");
+  });
+
+  it("320 × 130 : aucun bouton d'arrêt (jamais forcé à 32 dp)", () => {
+    expect(chipsOf(tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp: 130 }), "sleep-stop")).toHaveLength(0);
+  });
+
+  it("deux sessions dans une zone basse : pas de bouton sous 32 dp", () => {
+    const t = tree({ lives: [napLive(NOW - H), walkLive(NOW - 20 * 60_000)] }, { widthDp: 320, heightDp: 160 });
+    expect(chipsOf(t, "-stop")).toHaveLength(0);
+  });
+});
+
+describe("libellés d'arrêt parlés", () => {
+  it("sieste, nuit, balade, tétée", () => {
+    expect(show({ lives: [napLive(NOW - H)] }).a11y).toContain("Arrêter la sieste");
+    expect(show({ lives: [{ ...napLive(NOW - H), nap: false }] }).a11y).toContain("Arrêter la nuit");
+    expect(show({ lives: [walkLive(NOW - H)] }).a11y).toContain("Arrêter la balade");
+    expect(show({ lives: [nursingLive(NOW - H)] }).a11y).toContain("Arrêter la tétée");
   });
 });

@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
-import { useScreenReaderEnabled } from "@/hooks/useScreenReaderEnabled";
+import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";
 import { toastBottomOffset } from "@/utils/toastInset";
 
 type ToastAction = {
@@ -108,9 +108,6 @@ const STACK_GAP = 56;
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
-  const screenReaderOn = useScreenReaderEnabled();
-  const screenReaderRef = useRef(screenReaderOn);
-  screenReaderRef.current = screenReaderOn;
   const reannounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [info, setInfo] = useState<InfoToast | null>(null);
   const [undos, setUndos] = useState<{ key: number; message: string }[]>([]);
@@ -119,6 +116,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setBottomInsetState(Math.max(0, Math.round(height)));
   }, []);
   const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const infoSeqRef = useRef(0);
   const pendingRef = useRef<PendingUndo[]>([]);
   const nextKeyRef = useRef(1);
 
@@ -133,16 +131,24 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const clearReannounce = useCallback(() => {
+    if (reannounceTimerRef.current) {
+      clearTimeout(reannounceTimerRef.current);
+      reannounceTimerRef.current = null;
+    }
+  }, []);
+
   const takePending = useCallback(
     (key: number): PendingUndo | null => {
       const entry = pendingRef.current.find((item) => item.key === key) ?? null;
       if (!entry) return null;
+      clearReannounce();
       clearTimeout(entry.timer);
       pendingRef.current = pendingRef.current.filter((item) => item.key !== key);
       syncUndos();
       return entry;
     },
-    [syncUndos],
+    [syncUndos, clearReannounce],
   );
 
   // Exécute tout de suite toutes les suppressions en attente (arrière-plan,
@@ -157,10 +163,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [syncUndos]);
 
   const dismiss = useCallback(() => {
+    clearReannounce();
     flushPendingUndos();
     clearInfoTimer();
     setInfo(null);
-  }, [clearInfoTimer, flushPendingUndos]);
+  }, [clearInfoTimer, clearReannounce, flushPendingUndos]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -179,35 +186,51 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // Annonce vocale ; avec un lecteur d'écran, répétée une fois après ~0,5 s.
+  // Annonce vocale, répétée une fois après ~0,5 s si un lecteur d'écran est
+  // actif à ce moment-là (la 1re annonce peut être couverte par le focus).
   const say = useCallback((text: string, actionLabel?: string) => {
     announce(text, actionLabel);
     if (reannounceTimerRef.current) clearTimeout(reannounceTimerRef.current);
-    reannounceTimerRef.current = null;
-    if (!screenReaderRef.current) return;
     reannounceTimerRef.current = setTimeout(() => {
       reannounceTimerRef.current = null;
-      announce(text, actionLabel);
+      if (isScreenReaderOnNow()) announce(text, actionLabel);
     }, SR_REANNOUNCE_MS);
   }, []);
 
+  // Le cache du lecteur d'écran peut être en retard : lecture fraîche, puis le
+  // minuteur en cours est prolongé jusqu'au minimum « lecteur d'écran ».
+  const extendWhenReaderOn = useCallback((totalMs: number, startedAt: number, reschedule: (remainingMs: number) => void) => {
+    if (isScreenReaderOnNow()) return;
+    void refreshScreenReader().then((on) => {
+      if (!on) return;
+      reschedule(Math.max(0, totalMs - (Date.now() - startedAt)));
+    });
+  }, []);
+
   const showInfo = useCallback(
-    (next: InfoToast, durationMs: number) => {
+    (next: InfoToast, baseMs: number, srMinMs: number) => {
       setInfo(next);
       clearInfoTimer();
-      infoTimerRef.current = setTimeout(() => {
+      const seq = ++infoSeqRef.current;
+      const expire = () => {
         setInfo(null);
         infoTimerRef.current = null;
-      }, durationMs);
+      };
+      const startedAt = Date.now();
+      infoTimerRef.current = setTimeout(expire, Math.max(baseMs, isScreenReaderOnNow() ? srMinMs : 0));
+      extendWhenReaderOn(Math.max(baseMs, srMinMs), startedAt, (remaining) => {
+        if (infoSeqRef.current !== seq || !infoTimerRef.current) return;
+        clearTimeout(infoTimerRef.current);
+        infoTimerRef.current = setTimeout(expire, remaining);
+      });
     },
-    [clearInfoTimer],
+    [clearInfoTimer, extendWhenReaderOn],
   );
 
   const showToast = useCallback(
     (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
       say(text);
-      const minMs = screenReaderRef.current ? SR_INFO_TOAST_MIN_MS : 0;
-      showInfo({ message: text, action: null, position: toastPosition }, Math.max(durationMs, minMs));
+      showInfo({ message: text, action: null, position: toastPosition }, durationMs, SR_INFO_TOAST_MIN_MS);
     },
     [showInfo, say],
   );
@@ -215,27 +238,36 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showUndoToast = useCallback(
     (text: string, onUndo: () => void, onExpire?: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
       const key = nextKeyRef.current++;
-      const actionMinMs = () => (screenReaderRef.current ? SR_ACTION_TOAST_MIN_MS : ACTION_TOAST_MIN_MS);
-      const timer = setTimeout(() => {
+      const baseMs = Math.max(durationMs, ACTION_TOAST_MIN_MS);
+      const expire = () => {
         const entry = takePending(key);
         entry?.onExpire?.();
-      }, Math.max(durationMs, actionMinMs()));
+      };
+      const startedAt = Date.now();
+      const timer = setTimeout(expire, Math.max(baseMs, isScreenReaderOnNow() ? SR_ACTION_TOAST_MIN_MS : 0));
       pendingRef.current = [
         ...pendingRef.current,
         { key, message: text, onUndo, onExpire: onExpire ?? null, timer },
       ];
       syncUndos();
       say(text, "Annuler");
+      extendWhenReaderOn(Math.max(durationMs, SR_ACTION_TOAST_MIN_MS), startedAt, (remaining) => {
+        const entry = pendingRef.current.find((item) => item.key === key);
+        if (!entry) return;
+        clearTimeout(entry.timer);
+        entry.timer = setTimeout(expire, remaining);
+      });
     },
-    [syncUndos, takePending, say],
+    [syncUndos, takePending, say, extendWhenReaderOn],
   );
 
   const undoLatest = useCallback(() => {
     const latest = pendingRef.current[pendingRef.current.length - 1];
     if (!latest) return;
+    clearReannounce();
     const entry = takePending(latest.key);
     entry?.onUndo();
-  }, [takePending]);
+  }, [takePending, clearReannounce]);
 
   const showActionToast = useCallback(
     (text: string, actionLabel: string, onAction: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
@@ -253,7 +285,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             },
           },
         },
-        Math.max(durationMs, screenReaderRef.current ? SR_ACTION_TOAST_MIN_MS : ACTION_TOAST_MIN_MS),
+        Math.max(durationMs, ACTION_TOAST_MIN_MS),
+        SR_ACTION_TOAST_MIN_MS,
       );
     },
     [clearInfoTimer, showInfo, say],
@@ -322,7 +355,6 @@ function ToastView({
     <View
       testID={testID}
       pointerEvents={action ? "box-none" : "none"}
-      accessibilityLiveRegion="polite"
       style={[styles.toast, action && styles.toastWithAction, positionStyle]}
     >
       <Text style={[styles.toastText, action && styles.toastTextWithAction]}>{message}</Text>

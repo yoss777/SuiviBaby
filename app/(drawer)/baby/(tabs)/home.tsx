@@ -1206,7 +1206,7 @@ export default function HomeDashboard() {
   });
 
   // Tap direct — écrit heureFin/duree immédiatement, sans passer par la sheet.
-  // Toast Annuler (5 s) : rouvre l'event via 2ᵉ écriture (heureFin/duree → null).
+  // Toast Annuler (5 s demandées, 8 s au minimum : ACTION_TOAST_MIN_MS) : rouvre l'event via 2ᵉ écriture (heureFin/duree → null).
   const handleStopSleep = useCallback(() => {
     stopTimedEventWithUndo(sommeilEnCours);
   }, [sommeilEnCours, stopTimedEventWithUndo]);
@@ -1334,10 +1334,10 @@ export default function HomeDashboard() {
         return;
       }
       // Démarrer / arrêter depuis le widget : même effet que les boutons de
-      // l'Accueil (arrêt avec « Annuler » pendant 5 s).
+      // l'Accueil (arrêt avec « Annuler » pendant 8 s au minimum).
       // Démarrage depuis le widget : message « … démarrée · Annuler » avec
       // vibration, marqué source "widget" (mesure), puis retour à l'écran
-      // d'accueil après 5 s sans toucher l'écran (Android).
+      // d'accueil après 8,5 s sans toucher l'écran (Android).
       if (action === "sleep-start") {
         if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
         else {
@@ -1350,7 +1350,7 @@ export default function HomeDashboard() {
               nap ? "Sieste démarrée" : "Nuit démarrée",
               "Annuler",
               () => undoWidgetStart("sleep", childId, startedAt),
-              5000,
+              5000, // durée demandée ; le minimum de 8 s (ACTION_TOAST_MIN_MS) s'applique
             );
             scheduleWidgetBack();
           } else if (childId) showToast("Démarrage déjà en cours");
@@ -1372,7 +1372,7 @@ export default function HomeDashboard() {
           const startedAt = Date.now();
           if (childId && handleStartPromenade(true)) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk", childId, startedAt), 5000);
+            showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk", childId, startedAt), 5000); // minimum de 8 s appliqué
             scheduleWidgetBack();
           } else if (childId) showToast("Démarrage déjà en cours");
         }

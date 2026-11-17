@@ -57,13 +57,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   // Polices : styles de texte (suivent Dynamic Type), jamais de taille fixe.
   // 11 caption2, 12 caption, 13 footnote, 14-17 subheadline, 18-21 title3,
-  // 22-25 title2, 26-29 title, 30+ largeTitle.
+  // 22-25 title2, 26+ title (28 pt ; pas de largeTitle, 34 pt trop grand pour la tuile).
   const textStyleOf = (size: number) =>
-    size >= 30
-      ? "largeTitle"
-      : size >= 26
-        ? "title"
-        : size >= 22
+    size >= 26
+      ? "title"
+      : size >= 22
           ? "title2"
           : size >= 18
             ? "title3"
@@ -165,19 +163,38 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const sideWord = (side: string | null | undefined) => (side === "G" ? "gauche" : side === "D" ? "droit" : "");
   const otherSide = (l: WidgetLive) =>
     l.otherSideLabel ? l.otherSideLabel.replace(/^G /, "gauche ").replace(/^D /, "droit ") : null;
+  // Autre sein parlé, sans abréviation : « droit, 12 minutes » (jamais « droit 12 min »).
+  const otherSay = (l: WidgetLive) => {
+    const m = l.otherSideLabel ? /^([GD]) (.+)$/.exec(l.otherSideLabel) : null;
+    if (!m) return otherSide(l);
+    const dur = /^(\d+) min$/.exec(m[2]);
+    const hm = /^(\d+)h(\d{2})$/.exec(m[2]);
+    const said = dur ? minutesSay(Number(dur[1])) : hm ? minutesSay(Number(hm[1]) * 60 + Number(hm[2])) : m[2].replace(/\bmin\b/g, "minutes");
+    return `${sideWord(m[1])}, ${said}`;
+  };
 
   // Phrase parlée d'une session : « Sieste en cours depuis 14:00, 45 minutes »,
   // « Tétée en cours, sein gauche, depuis 14:20 ». Durée seulement quand la
   // timeline la donne à la minute (sinon le chrono natif défile seul).
   const a11yOf = (l: WidgetLive) => {
-    const side = l.side ? `, sein ${sideWord(l.side)}` : "";
-    const dur = inTimeline && l.timerStartMs ? `, ${minutesSay(minutesBetween(l.timerStartMs, l.pausedAtMs ?? now))}` : "";
-    return `${labelOf(l)} en cours${side}${side ? "," : ""} ${l.sinceLabel}${dur}${l.pausedAtMs != null ? ", en pause" : ""}`;
+    const dur = inTimeline && l.timerStartMs ? minutesSay(minutesBetween(l.timerStartMs, l.pausedAtMs ?? now)) : null;
+    if (l.kind === "nursing") {
+      // Comme Android : « Tétée en pause, sein gauche, autre sein droit, 12 minutes, depuis 14:20 ».
+      const parts = [`Tétée${l.pausedAtMs != null ? " en pause" : " en cours"}`];
+      if (l.side) parts.push(`sein ${sideWord(l.side)}`);
+      if (l.otherSideLabel) parts.push(`autre sein ${otherSay(l)}`);
+      parts.push(l.sinceLabel);
+      if (dur) parts.push(dur);
+      return parts.join(", ");
+    }
+    return `${labelOf(l)} en cours ${l.sinceLabel}${dur ? `, ${dur}` : ""}${l.pausedAtMs != null ? ", en pause" : ""}`;
   };
   const liveA11y = lives.map(a11yOf).join(". ");
 
   const timerOf = (l: WidgetLive | null, size: number, hide = false) => {
-    const hid = hide ? [accessibilityHidden()] : [];
+    // Masqué seulement en timeline : le libellé dit alors les minutes. Hors timeline
+    // la durée n'est dite nulle part ailleurs : le chrono natif reste lisible.
+    const hid = hide && inTimeline ? [accessibilityHidden()] : [];
     return l && l.kind !== "nursing" && inTimeline ? (
       <Text modifiers={[F(size, "bold"), monospacedDigit(), foregroundStyle(dataStale ? C.soft : C.strong), minimumScaleFactor(0.7), lineLimit(1), ...hid]}>
         {minutesText(l.timerStartMs)}
@@ -271,7 +288,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   }
   if (family === "accessoryRectangular") {
-    const other = live ? otherSide(live) : null;
     const restSayAcc = props.lastMealMs
       ? mealLate
         ? `Repas en retard, dernier à ${clock(props.lastMealMs)}`
@@ -285,7 +301,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           widgetURL(url),
           privacySensitive(),
           accessibilityElement("ignore"),
-          accessibilityLabel(live ? `${a11yOf(live)}${other ? `. Autre sein, ${other}` : ""}` : restSayAcc),
+          accessibilityLabel(live ? a11yOf(live) : restSayAcc),
           typeCap,
         ]}
       >
@@ -337,6 +353,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const dotText = (color: string, size = 9) => <Text modifiers={[font({ size }), foregroundStyle(color), accessibilityHidden()]}>●</Text>;
   const sinceTime = (l: WidgetLive) => (l.sinceMs ? clock(l.sinceMs) : l.sinceLabel.replace("depuis ", ""));
   const stopOf = (l: WidgetLive) => (l.kind === "sleep" ? "sleep-stop" : l.kind === "walk" ? "walk-stop" : "nursing-stop");
+  // Même phrase qu'Android : « Arrêter la sieste », « la nuit », « la balade », « la tétée ».
+  const stopSay = (l: WidgetLive) =>
+    l.kind === "sleep" ? (l.nap === true ? "Arrêter la sieste" : l.nap === false ? "Arrêter la nuit" : "Arrêter le sommeil") : `Arrêter ${stopWhat(l)}`;
   const stopWhat = (l: WidgetLive) => (l.kind === "sleep" ? "le sommeil" : l.kind === "walk" ? "la balade" : "la tétée");
 
   // Bouton « ■ Arrêter » (ou « ■ ») sur fond du widget, comme Android. Zone
@@ -345,7 +364,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     <Link
       key={`stop-${l.kind}`}
       destination={actionUrl(stopOf(l))}
-      modifiers={[accessibilityLabel(`Arrêter : ${labelOf(l)}`), accessibilityHint(`Ouvre SuiviBaby et arrête ${stopWhat(l)}`)]}
+      modifiers={[accessibilityLabel(stopSay(l)), accessibilityHint(`Ouvre SuiviBaby et arrête ${stopWhat(l)}`)]}
     >
       <HStack modifiers={[frame({ minWidth: compact ? 40 : 44, minHeight: minH, alignment: "center" }), contentShape(shapes.rectangle())]}>
         <Text
@@ -583,7 +602,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           "row-diaper",
         )}
         <Spacer />
-        {zone("sleep", `${sleepLabel(sleepNowMin)} de sommeil`, dayRow(CAT.sleep.dot, sleepLabel(sleepNowMin), "de sommeil", false), "row-sleep")}
+        {zone("sleep", `${minutesSay(sleepNowMin)} de sommeil`, dayRow(CAT.sleep.dot, sleepLabel(sleepNowMin), "de sommeil", false), "row-sleep")}
       </VStack>
     );
 
@@ -744,8 +763,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           <Text modifiers={[F(12, "semibold"), foregroundStyle(C.soft), ...fit1, accessibilityAddTraits(["isHeader"])]}>Évènements récents</Text>
           {events.map((e, i) => {
             const when = `${daysAgo(e.ms) >= 1 ? "hier " : ""}${clock(e.ms)}`;
+            const labelSay = e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label;
             return (
-              <HStack key={`${e.ms}-${i}`} spacing={6} modifiers={[accessibilityElement("ignore"), accessibilityLabel(`${when}, ${e.label}`)]}>
+              <HStack key={`${e.ms}-${i}`} spacing={6} modifiers={[accessibilityElement("ignore"), accessibilityLabel(`${daysAgo(e.ms) >= 1 ? "hier " : ""}à ${clock(e.ms)}, ${labelSay}`)]}>
                 {dotText((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? C.meal : e.kind === "diaper" ? C.diaper : C.soft))}
                 <Text modifiers={[F(13), monospacedDigit(), foregroundStyle(C.soft), ...fit1]}>{when}</Text>
                 <Text modifiers={[F(13), foregroundStyle(C.strong), ...fit1]}>{e.label}</Text>

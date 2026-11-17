@@ -116,6 +116,18 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     );
   });
 
+  it("opts.onUndo est appelé quand l'utilisateur annule (et pas avant)", () => {
+    jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+    const onUndo = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    result.current(sleep(), undefined, { onUndo });
+    expect(onUndo).not.toHaveBeenCalled();
+
+    (mockShowUndoToast.mock.calls[0][1] as () => void)();
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+
   it("does nothing without a child or an event id", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     renderHook(() => useStopTimedEventWithUndo({ childId: null, getSuccessLabel })).result.current(sleep());

@@ -9,13 +9,12 @@ import { Platform } from "react-native";
 import { ACTION_TOAST_MIN_MS } from "@/contexts/ToastContext";
 import { useScreenReaderEnabled } from "@/hooks/useScreenReaderEnabled";
 import { moveAppToBack } from "@/modules/widget-push";
+import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";
 
 export const WIDGET_BACK_DELAY_MS = ACTION_TOAST_MIN_MS + 500;
 
 export function useWidgetBackTimer(): { schedule: () => void; cancel: () => void } {
   const screenReaderOn = useScreenReaderEnabled();
-  const screenReaderRef = useRef(screenReaderOn);
-  screenReaderRef.current = screenReaderOn;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancel = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -24,12 +23,21 @@ export function useWidgetBackTimer(): { schedule: () => void; cancel: () => void
   const schedule = useCallback(() => {
     if (Platform.OS !== "android") return;
     cancel();
-    if (screenReaderRef.current) return;
-    timerRef.current = setTimeout(() => {
+    if (isScreenReaderOnNow()) return;
+    const timer = setTimeout(() => {
       timerRef.current = null;
       void moveAppToBack();
     }, WIDGET_BACK_DELAY_MS);
+    timerRef.current = timer;
+    // Le cache peut être en retard : lecture fraîche, on désarme si un lecteur est actif.
+    void refreshScreenReader().then((on) => {
+      if (on && timerRef.current === timer) cancel();
+    });
   }, [cancel]);
+  // Lecteur d'écran activé pendant que le minuteur est armé : annulé.
+  useEffect(() => {
+    if (screenReaderOn) cancel();
+  }, [screenReaderOn, cancel]);
   useEffect(() => cancel, [cancel]);
   return { schedule, cancel };
 }
