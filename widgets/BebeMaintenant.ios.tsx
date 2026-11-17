@@ -740,7 +740,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Petit format : un seul lien (WidgetKit ignore les Link) — tétée en cours,
   // sinon repas si le bloc « Dernier repas » est affiché, sinon l'Accueil.
   const smallUrl = smallStop
-    ? actionUrl(stopOf(smallStop)).replace(/&k=[^&]*/, "")
+    ? `${actionUrl(stopOf(smallStop)).replace(/&k=[^&]*/, "")}&ask=1`
     : lives.some((l) => l.kind === "nursing") && lives.length === 1
       ? zoneUrl("nursing")
       : lives.length === 0 && !props.loading && props.lastMealMs

@@ -110,6 +110,7 @@ describe("phrases parlées", () => {
     const stop = d.links.find((l) => l.includes("widget=sleep-stop"));
     expect(stop).toBeDefined();
     expect(stop).not.toContain("&k=");
+    expect(stop).toContain("&ask=1");
     // Deux sessions : impossible de savoir laquelle arrêter, ni « ■ » ni lien d'arrêt.
     const two = show({ lives: [napLive(NOW - H), { ...napLive(NOW - 30 * 60_000), kind: "walk" } as any] }, "systemSmall");
     expect(two.texts).not.toContain("■");
