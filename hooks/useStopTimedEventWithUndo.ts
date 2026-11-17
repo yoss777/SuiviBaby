@@ -10,8 +10,16 @@ type TimedEvent = {
   duree?: number | null;
 };
 
+/** Durée maximale acceptée par le serveur (validation.js : 1440 min) ; au-delà, l'arrêt échouait sans rien dire. */
+export const MAX_TIMED_EVENT_MINUTES = 1440;
+
 type StopTimedEventParams<TEvent extends TimedEvent> = {
   childId?: string | null;
+  /**
+   * Session de plus de 24 h (oubliée) : l'heure de fin réelle est inconnue et
+   * le serveur refuserait la durée. On ouvre plutôt le formulaire pour la saisir.
+   */
+  onTooLong?: (event: TEvent) => void;
   getSuccessLabel: (
     event: TEvent,
     timing: { elapsedMinutes: number; isUnderOneMinute: boolean },
@@ -21,8 +29,9 @@ type StopTimedEventParams<TEvent extends TimedEvent> = {
 export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
   childId,
   getSuccessLabel,
+  onTooLong,
 }: StopTimedEventParams<TEvent>) {
-  const { showUndoToast } = useToast();
+  const { showUndoToast, showToast } = useToast();
 
   return useCallback(
     // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
@@ -38,6 +47,11 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       const elapsedMinutes = Math.round(elapsedMs / 60000);
       const isUnderOneMinute = elapsedMs < 60_000;
       const duree = hasStart ? Math.max(1, elapsedMinutes) : undefined;
+      if (duree !== undefined && duree > MAX_TIMED_EVENT_MINUTES) {
+        showToast("Plus de 24 h : indiquez l'heure de fin réelle");
+        onTooLong?.(event);
+        return;
+      }
       const snapshot = event;
 
       modifierEvenementOptimistic(
@@ -64,6 +78,6 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
         );
       }, undefined, 5000);
     },
-    [childId, getSuccessLabel, showUndoToast],
+    [childId, getSuccessLabel, showUndoToast, showToast, onTooLong],
   );
 }

@@ -1121,7 +1121,9 @@ export default function ActivitiesScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
+  const editRef = useRef<() => void>(() => {});
   const stopTimedPromenadeWithUndo = useStopTimedEventWithUndo<ActivityEventWithId>({
+    onTooLong: () => editRef.current(),
     childId: activeChild?.id,
     getSuccessLabel: (_event, { isUnderOneMinute }) =>
       `Balade terminée${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
@@ -1153,6 +1155,7 @@ export default function ActivitiesScreen() {
       promenadeEnCours: { id: promenadeEnCours.id },
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
+  editRef.current = handleEditPromenadeInSheet;
 
 
   const renderEventItem = (event: ActivityEventWithId, isLast = false, isFirstInList = false) => {

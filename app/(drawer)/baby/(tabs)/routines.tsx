@@ -1154,7 +1154,9 @@ export default function RoutinesScreen() {
   // ============================================
   // STOP ONGOING SLEEP
   // ============================================
+  const editRef = useRef<() => void>(() => {});
   const stopTimedSleepWithUndo = useStopTimedEventWithUndo<SommeilEvent & { id: string }>({
+    onTooLong: () => editRef.current(),
     childId: activeChild?.id,
     getSuccessLabel: (event, { isUnderOneMinute }) =>
       `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
@@ -1190,6 +1192,7 @@ export default function RoutinesScreen() {
       sommeilEnCours: { id: sommeilEnCours.id },
     });
   }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
+  editRef.current = handleEditSleepInSheet;
 
   // ============================================
   // RENDER HELPERS

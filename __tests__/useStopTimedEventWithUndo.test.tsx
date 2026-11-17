@@ -4,8 +4,9 @@
 // écritures optimistes, en attendant la fin de l'envoi serveur.
 
 const mockShowUndoToast = jest.fn();
+const mockShowToast = jest.fn();
 jest.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showUndoToast: mockShowUndoToast }),
+  useToast: () => ({ showUndoToast: mockShowUndoToast, showToast: mockShowToast }),
 }));
 jest.mock("@/utils/errorReporting", () => ({
   addBreadcrumb: jest.fn(),
@@ -76,6 +77,18 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     const undo = mockShowUndoToast.mock.calls.at(-1)[1];
     undo();
     expect(modifier).toHaveBeenLastCalledWith("c1", "ev1", { heureFin: null, duree: null, endSource: null }, expect.anything());
+  });
+
+  it("session de plus de 24 h : pas d'écriture (refusée par le serveur), formulaire pour l'heure de fin réelle", () => {
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong }));
+    const old = sleep({ heureDebut: new Date(NOW.getTime() - 27 * 3600_000) });
+    result.current(old);
+    expect(spy).not.toHaveBeenCalled();
+    expect(onTooLong).toHaveBeenCalledWith(old);
+    expect(mockShowToast).toHaveBeenCalledWith("Plus de 24 h : indiquez l'heure de fin réelle");
+    spy.mockRestore();
   });
 
   it("never records a duration below one minute", () => {

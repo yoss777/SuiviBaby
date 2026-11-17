@@ -1200,8 +1200,12 @@ export default function HomeDashboard() {
     [activeChild?.id, sommeilEnCours, showToast],
   );
 
+  // Session de plus de 24 h : formulaire pour l'heure de fin réelle (déclarés plus bas).
+  const editSleepRef = useRef<() => void>(() => {});
+  const editWalkRef = useRef<() => void>(() => {});
   const stopTimedEventWithUndo = useStopTimedEventWithUndo<any>({
     childId: activeChild?.id,
+    onTooLong: (event) => (event.type === "sommeil" ? editSleepRef.current() : editWalkRef.current()),
     getSuccessLabel: (event, { isUnderOneMinute }) => {
       const shortSuffix = isUnderOneMinute ? " (moins d'1 min)" : "";
       if (event.type === "sommeil") {
@@ -1529,6 +1533,8 @@ export default function HomeDashboard() {
       promenadeEnCours,
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
+  editSleepRef.current = handleEditSleepInSheet;
+  editWalkRef.current = handleEditPromenadeInSheet;
 
   // ============================================
   // EFFECTS
