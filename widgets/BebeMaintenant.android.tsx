@@ -45,6 +45,10 @@ import {
 const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) => {
   "widget";
   const dark = environment.colorScheme === "dark";
+  // Échelle de police du système (patch expo-widgets) : les hauteurs et largeurs
+  // fixes suivent le texte ; dès 1,3, présentation compacte.
+  const FS = Math.min(2, (environment as WidgetEnvironment & { fontScale?: number }).fontScale ?? 1);
+  const S = (v: number) => Math.ceil(v * FS);
   const C = {
     bg: dark ? "#1f2937" : "#ffffff",
     strong: dark ? "#f9fafb" : "#1f2937",
@@ -60,7 +64,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const CAT = {
     nursing: { label: "Tétée", short: "Tétée", dot: "#D66B8F", tile: dark ? "#393243" : "#FBE1EA", text: dark ? "#E88FAE" : "#A63D62" },
     sleep: { label: "Sommeil", short: "Sommeil", dot: "#7C6BA4", tile: dark ? "#2c3246" : "#ECE8F4", text: dark ? "#A898D0" : "#5B4A85" },
-    walk: { label: "Balade", short: "Balade", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#3F7A2A" },
+    walk: { label: "Balade", short: "Balade", dot: "#8BC46B", tile: dark ? "#2e3f3e" : "#E6F2DE", text: dark ? "#8BC46B" : "#386F26" },
     meal: { dot: "#E8785A", text: dark ? "#E8785A" : "#A83F23" },
     diaper: { dot: "#5BA4A4", text: dark ? "#5BA4A4" : "#2B6A6A" },
   };
@@ -124,14 +128,6 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     ];
   };
 
-  // Lignes de la liste de droite sans formulaire (évènements, espaces) : une
-  // LazyColumn garde l'appui pour elle, il n'atteint pas le fond du widget et
-  // ne faisait rien. Lien vers l'Accueil, comme le fond (et comme l'iPhone).
-  const homeMods = (say: string) => [
-    createModifier("openUrl", { url: "suivibaby:///baby/home" }),
-    semantics({ contentDescription: `${say}. Ouvrir SuiviBaby` }),
-  ];
-
   // Démarrer / arrêter sieste-nuit et promenade (Parent seulement) : l'appui
   // ouvre l'app, qui agit tout de suite (hooks/useWidgetDeepLink.ts).
   // Sieste ou nuit selon l'heure, même règle que utils/sleepPeriod.ts.
@@ -177,6 +173,13 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
   const sleepLabel = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`);
+  // Durée dite par TalkBack : « 25 minutes », « 1 heure 08 », « 2 heures ».
+  const spokenDur = (m: number) => {
+    if (m < 60) return `${m} minute${m > 1 ? "s" : ""}`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return `${h} heure${h > 1 ? "s" : ""}${r ? ` ${String(r).padStart(2, "0")}` : ""}`;
+  };
   const sideWord = (s: string | null | undefined) => (s === "G" ? "gauche" : s === "D" ? "droit" : "");
   const otherSide = (l: WidgetLive) =>
     l.otherSideLabel ? l.otherSideLabel.replace(/^G /, "gauche ").replace(/^D /, "droit ") : null;
@@ -217,6 +220,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   // Largeur estimée d'un texte en 12 sp (Roboto) : chiffres 6,9 dp, lettres ≈ 5,2.
   const textW12 = (t: string) =>
+    FS *
     [...t].reduce((w, c) => w + (/[0-9]/.test(c) ? 6.9 : c === ":" ? 2.8 : c === "/" ? 3.6 : c === " " || c === "·" ? 3 : 5.2), 0);
   // « dernier à 19:37 », « dernier hier à 19:37 », « dernier le 11/11 » (L2,
   // choix de Yoss). Si ça ne tient pas : sans « dernier », puis sans « à » ;
@@ -260,10 +264,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const env = environment as WidgetEnvironment & { widthDp?: number; heightDp?: number };
   const W = env.widthDp && env.widthDp > 0 ? env.widthDp : 420;
   const H = env.heightDp && env.heightDp > 0 ? env.heightDp : 222;
-  const small = W < 250;
+  const small = W < 250 || FS >= 1.3;
   const PAD = small ? 12 : 14;
   // En-tête : le prénom, dans une pastille, doit se lire avant tout le reste.
-  const HEAD_H = small ? 22 : 26;
+  // 34 dp : les boutons « ▶ » de 32 dp tiennent dans l'en-tête.
+  const HEAD_H = S(small ? 22 : 34);
   const HEAD_GAP = small ? 4 : 6;
   const innerW = Math.floor(W - PAD * 2);
   const innerH = Math.floor(H - PAD * 2);
@@ -274,7 +279,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const showDay = !small && day != null;
   const Rw = showDay ? Math.min(156, Math.max(112, Math.round(innerW * 0.38))) : 0;
   const zoneW = showDay ? innerW - Rw - SEP : innerW;
-  const bandH = small && day && n <= 1 ? 26 : 0;
+  const bandH = small && day && n <= 1 ? S(26) : 0;
 
   const txt = (text: string, color: string, sp: number, bold = false, lines = 1) => (
     <Text color={color} style={{ fontSize: sp, fontWeight: bold ? "bold" : "normal" }} maxLines={lines}>
@@ -312,7 +317,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     );
   // Les vues natives prennent toute la hauteur disponible : boîte de hauteur fixe.
   const fixedLine = (sp: number, child: React.ReactNode) => (
-    <Box contentAlignment="centerStart" modifiers={[height(Math.ceil(sp * 1.25))]}>
+    <Box contentAlignment="centerStart" modifiers={[height(Math.ceil(sp * 1.25 * FS))]}>
       {child}
     </Box>
   );
@@ -342,6 +347,30 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   // Rappel réglé, pas encore dépassé : annoncé à l'avance.
   const upcoming = (atMs: number | null | undefined) => (atMs != null && atMs > now ? `rappel à ${clock(atMs)}` : null);
 
+  // Libellés lus par TalkBack. Le libellé n'est recalculé qu'à chaque rendu : on
+  // lit l'heure (toujours juste) plutôt qu'une durée « il y a » qui vieillirait.
+  const a11yLive = (l: WidgetLive) => {
+    if (l.kind === "nursing") {
+      const parts = [`Tétée${l.pausedAtMs != null ? " en pause" : " en cours"}`];
+      if (l.side) parts.push(`sein ${sideWord(l.side)}`);
+      if (l.otherSideLabel) parts.push(`autre sein ${otherSide(l)}`);
+      parts.push(l.sinceLabel);
+      return parts.join(", ");
+    }
+    return `${labelOf(l)} en cours, ${l.sinceLabel}`;
+  };
+  // Sieste, nuit, balade : « Sieste en cours depuis 13:14, 25 minutes ».
+  const liveSay = (l: WidgetLive) =>
+    l.kind === "nursing"
+      ? a11yLive(l)
+      : `${labelOf(l)} en cours depuis ${sinceTime(l)}, ${spokenDur(Math.max(0, Math.floor(now / 60000) - Math.floor(l.timerStartMs / 60000)))}`;
+  // Zone d'une session : tétée = lien + libellé ; sommeil, balade = libellé seul
+  // (l'appui sur la tuile ouvre l'app).
+  const tileMods = (l: WidgetLive) =>
+    l.kind === "nursing" ? linkMods("nursing", a11yLive(l)) : [semantics({ contentDescription: liveSay(l) })];
+  const a11yLast = (what: string, ms: number, late: boolean, atMs: number | null | undefined) =>
+    `${what} ${whenSpoken(ms)}${late ? ", rappel dépassé" : atMs != null && atMs > now ? `, rappel à ${clock(atMs)}` : ""}`;
+
   // Au repos, dernier repas puis dernier change, l'un sous l'autre (P4,
   // cellule design 17/20) : les deux questions de la nuit. Par bloc :
   // « ● Dernier repas », puis « il y a 6h58 » ; à droite du chiffre, une
@@ -351,16 +380,16 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const restDualZone = (h: number) => {
     const sp = 12;
     const big = h >= 150 ? 30 : h >= 120 ? 28 : 24;
-    const bigH = Math.ceil(big * 1.2);
+    const bigH = Math.ceil(big * 1.2 * FS);
     // « 14h52 » mesuré ≈ 3 × la taille sur le S21 : colonne fixe, chiffres alignés.
-    const numW = Math.ceil(big * 3);
+    const numW = Math.ceil(big * 3 * FS);
     // Glance n'aligne pas les lignes de base : « il y a » remonté au pied du chiffre.
     const baseLift = big >= 28 ? 3 : 2;
     // Largeur fixe (« il y a » ≈ 20 dp en 12 sp, marge pour la police agrandie) :
     // sans elle, Glance place le chiffre différemment d'une ligne à l'autre.
-    const AGO_W = 28;
+    const AGO_W = S(28);
     const blockGap = h >= 120 ? 8 : 4;
-    const blockH = Math.max(48, 16 + 2 + bigH);
+    const blockH = Math.max(S(48), S(16) + 2 + bigH);
     const block = (
       label: string,
       accent: string,
@@ -381,7 +410,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       // peu plus petit et boîte plus large ; redessin prévu au passage à 1 h.
       const underHour = ms != null && !old && now - ms < HOUR;
       const numSp = underHour ? Math.round(big * 0.8) : big;
-      const boxW = underHour ? Math.ceil(numSp * 3.8) : numW;
+      const boxW = underHour ? Math.ceil(numSp * 3.8 * FS) : numW;
       return (
         <Column key={action} verticalAlignment="center" modifiers={[size(zoneW, blockH), ...linkMods(action, say)]}>
           {labelRow(late ? C.alert : accent, late ? C.alert : dotColor, label, sp)}
@@ -440,7 +469,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const at = `${mealWord && !small ? `${mealWord} ` : "à "}${clock(props.lastMealMs)}`;
     const ahead = upcoming(props.alerts.mealAtMs);
     return (
-      <Column verticalAlignment="center" modifiers={[size(zoneW, h), ...linkMods("meal")]}>
+      <Column verticalAlignment="center" modifiers={[size(zoneW, h), ...linkMods("meal", a11yLast("Dernier repas", props.lastMealMs, mealLate, props.alerts.mealAtMs))]}>
         {labelRow(
           mealLate ? C.alert : CAT.meal.text,
           mealLate ? C.alert : CAT.meal.dot,
@@ -471,6 +500,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     // Tétée : l'autre sein et l'heure de début passent sous le chrono (titre déjà long).
     const other = l.kind === "nursing" ? otherSide(l) : null;
     const under = l.kind === "nursing" ? (other ? `${other} · depuis ${sinceTime(l)}` : `depuis ${sinceTime(l)}`) : small ? `depuis ${sinceTime(l)}` : null;
+    const tilePad = small ? 10 : 12;
+    // Bouton d'arrêt : 44 dp si la tuile a la place (tétée avec « depuis » : un peu moins).
+    const chipRoom =
+      zoneH - bandH - 2 * tilePad - S(16) - 4 - Math.ceil(chronoSp * 1.25 * FS) - (under ? 2 + S(16) : 0) - 6;
+    const chipH = Math.max(32, Math.min(44, chipRoom));
     return (
       <Column
         verticalAlignment="center"
@@ -478,8 +512,8 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           size(zoneW, zoneH - bandH),
           background(k.tile),
           cornerRadius(16),
-          paddingAll(small ? 10 : 12),
-          ...(l.kind === "nursing" ? linkMods("nursing") : []),
+          paddingAll(tilePad),
+          ...tileMods(l),
         ]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, false), small ? 12 : 13)}
@@ -489,7 +523,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         {under ? txt(under, C.softOnTile, small ? 12 : 13) : null}
         {canWrite && !small && stopOf(l) ? gap(6) : null}
         {canWrite && !small && stopOf(l) ? (
-          stopChip(l, 26, false)
+          stopChip(l, chipH, false)
         ) : null}
       </Column>
     );
@@ -505,7 +539,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           background(k.tile),
           cornerRadius(12),
           padding(10, 6, 10, 6),
-          ...(l.kind === "nursing" ? linkMods("nursing") : []),
+          ...tileMods(l),
         ]}
       >
         {labelRow(k.text, k.dot, tileTitle(l, !small), 12)}
@@ -517,7 +551,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
               {chrono(l, small ? 20 : h >= 58 ? 24 : 20)}
             </Box>
             <Spacer modifiers={[width(6)]} />
-            {stopChip(l, small ? 24 : 26, true)}
+            {stopChip(l, Math.max(24, Math.min(40, h - 20)), true)}
           </Row>
         ) : (
           chrono(l, small ? 22 : h >= 58 ? 26 : 22)
@@ -539,7 +573,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           background(k.tile),
           cornerRadius(12),
           padding(10, 0, 10, 0),
-          ...(l.kind === "nursing" ? linkMods("nursing") : []),
+          ...tileMods(l),
         ]}
       >
         <Row verticalAlignment="center" modifiers={[width(labelW)]}>
@@ -547,11 +581,11 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           <Spacer modifiers={[width(5)]} />
           {txt(label, k.text, small ? 11 : 12, true)}
         </Row>
-        <Box contentAlignment="centerEnd" modifiers={[width(zoneW - 20 - labelW - (canWrite && stopOf(l) ? 34 : 0))]}>
+        {/* Pas de bouton d'arrêt à 3 sessions : trop petit pour le doigt ; l'appui
+            sur la tuile ouvre l'app. */}
+        <Box contentAlignment="centerEnd" modifiers={[width(zoneW - 20 - labelW)]}>
           {chrono(l, small ? 16 : h >= 36 ? 20 : 16)}
         </Box>
-        {canWrite && stopOf(l) ? <Spacer modifiers={[width(6)]} /> : null}
-        {canWrite && stopOf(l) ? stopChip(l, Math.min(24, h - 4), true) : null}
       </Row>
     );
   };
@@ -561,7 +595,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     if (props.loading) {
       return (
         <Column verticalAlignment="center" modifiers={[size(zoneW, zoneH)]}>
-          {txt("Mise à jour…", C.soft, small ? 12 : 14)}
+          {txt("Mise à jour en cours", C.soft, small ? 12 : 14)}
         </Column>
       );
     }
@@ -600,18 +634,15 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     // Rythme unique (4×2 comme 4×3) : trois items de 48 dp (repas et change
     // ouvrent chacun leur formulaire), 8 dp entre eux et sous le sommeil, titre
     // de 28 dp : 20 dp visibles entre chaque bloc de texte. Lignes du fil de 24 dp.
-    const ITEM_H = 48;
+    const ITEM_H = S(48);
     const ITEM_GAP = 8;
-    const TITLE_H = 28;
-    const ROW_H = 24;
-    const item = (key: string, dotColor: string, value: string | React.ReactNode, sub: string | null, late: boolean) => (
+    const TITLE_H = S(28);
+    const ROW_H = S(24);
+    const item = (key: "meal" | "diaper" | "sleep", dotColor: string, value: string | React.ReactNode, sub: string | null, late: boolean, say: string) => (
       <Row
         key={key}
         verticalAlignment="center"
-        modifiers={[
-          size(Rw, ITEM_H),
-          ...(key === "meal" || key === "diaper" || key === "sleep" ? linkMods(key) : homeMods(sub ?? key)),
-        ]}
+        modifiers={[size(Rw, ITEM_H), ...linkMods(key, say)]}
       >
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(8)]} />
@@ -661,26 +692,43 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const events = props.recent ?? [];
     return (
       <LazyColumn modifiers={[size(Rw, zoneH)]}>
-        {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate)}
-        <Spacer key="gap-meal-diaper" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} />
-        {item("diaper", CAT.diaper.dot, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`, diaperSub, diaperLate)}
-        <Spacer key="gap-diaper-sleep" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} />
+        {item("meal", CAT.meal.dot, `${day.mealsCount} repas`, mealSub, mealLate, `${day.mealsCount} repas${mealLate ? ", rappel dépassé" : ""}`)}
+        <Spacer key="gap-meal-diaper" modifiers={[size(Rw, ITEM_GAP)]} />
+        {item(
+          "diaper",
+          CAT.diaper.dot,
+          `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}`,
+          diaperSub,
+          diaperLate,
+          `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? ", rappel dépassé" : ""}`,
+        )}
+        <Spacer key="gap-diaper-sleep" modifiers={[size(Rw, ITEM_GAP)]} />
         {item(
           "sleep",
           CAT.sleep.dot,
           sleepBaseMs != null ? fixedLine(15, elapsed(sleepBaseMs, C.strong, 15)) : sleepLabel(day.sleepMinutes),
           "de sommeil",
           false,
+          `${spokenDur(sleepNowMin)} de sommeil`,
         )}
-        {events.length ? <Spacer key="gap-sleep-title" modifiers={[size(Rw, ITEM_GAP), ...homeMods("Aujourd'hui")]} /> : null}
+        {events.length ? <Spacer key="gap-sleep-title" modifiers={[size(Rw, ITEM_GAP)]} /> : null}
         {events.length ? (
-          <Column key="events-title" modifiers={[size(Rw, TITLE_H), ...homeMods("Évènements récents")]} verticalAlignment="center">
+          <Column key="events-title" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
             {txt("Évènements récents", C.soft, 12)}
           </Column>
         ) : null}
         {events.flatMap((e, i) => {
           const row = (
-            <Row key={`ev-${i}-${e.ms}`} verticalAlignment="center" modifiers={[size(Rw, ROW_H), ...homeMods(`${clock(e.ms)} ${e.label}`)]}>
+            <Row
+              key={`ev-${i}-${e.ms}`}
+              verticalAlignment="center"
+              modifiers={[
+                size(Rw, ROW_H),
+                semantics({
+                  contentDescription: `${e.ms < dayStart ? "hier " : ""}à ${clock(e.ms)}, ${e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label}`,
+                }),
+              ]}
+            >
               {dot((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? CAT.meal.dot : e.kind === "diaper" ? CAT.diaper.dot : C.soft))}
               <Spacer modifiers={[width(6)]} />
               {txt(clock(e.ms), C.soft, 12)}
@@ -692,7 +740,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           const firstOfYesterday = e.ms < dayStart && (i === 0 || events[i - 1].ms >= dayStart);
           return firstOfYesterday
             ? [
-                <Column key="events-yesterday" modifiers={[size(Rw, TITLE_H), ...homeMods("Hier")]} verticalAlignment="center">
+                <Column key="events-yesterday" modifiers={[size(Rw, TITLE_H)]} verticalAlignment="center">
                   {txt("Hier", C.soft, 12)}
                 </Column>,
                 row,
@@ -707,8 +755,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   const band = () => {
     if (!bandH || !day || dayStale) return null;
     const colW = Math.floor(innerW / 3);
-    const cell = (dotColor: string, value: string, late: boolean) => (
-      <Row verticalAlignment="center" modifiers={[width(colW)]}>
+    // Description complète : « rep. », « ch. », « dodo » ne sont pas lus tels quels.
+    const cell = (dotColor: string, value: string, late: boolean, say: string) => (
+      <Row verticalAlignment="center" modifiers={[width(colW), semantics({ contentDescription: say })]}>
         {dot(late ? C.alert : dotColor)}
         <Spacer modifiers={[width(4)]} />
         {txt(value, late ? C.alert : C.strong, 12, true)}
@@ -718,9 +767,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       <Column>
         {gap(8)}
         <Row>
-          {cell(CAT.meal.dot, `${day.mealsCount} rep.`, mealLate && n > 0)}
-          {cell(CAT.diaper.dot, `${day.diapersCount} ch.`, diaperLate)}
-          {cell(CAT.sleep.dot, `${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`, false)}
+          {cell(CAT.meal.dot, `${day.mealsCount} rep.`, mealLate && n > 0, `${day.mealsCount} repas${mealLate && n > 0 ? ", rappel dépassé" : ""}`)}
+          {cell(CAT.diaper.dot, `${day.diapersCount} ch.`, diaperLate, `${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? ", rappel dépassé" : ""}`)}
+          {cell(CAT.sleep.dot, `${sleepLabel(sleepNowMin).replace(" min", "m")} dodo`, false, `${spokenDur(sleepNowMin)} de sommeil`)}
         </Row>
       </Column>
     );
@@ -772,52 +821,20 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
 
   // « màj 14:02 » à côté du prénom : l'info date de cette heure-là.
   const staleTag = dataStale ? (
-    <Row verticalAlignment="center">
+    <Row
+      verticalAlignment="center"
+      modifiers={[semantics({ contentDescription: `${liveStale ? "À vérifier, mis" : "Mis"} à jour à ${clock(generatedAt)}` })]}
+    >
       <Spacer modifiers={[width(8)]} />
       {txt(`${liveStale && !small ? "à vérifier · " : ""}màj ${clock(generatedAt)}`, liveStale ? C.alert : C.soft, small ? 11 : 12)}
     </Row>
   ) : null;
 
-  // Libellé lu par TalkBack sur tout le widget (le clic ouvre l'app).
-  const a11yLive = (l: WidgetLive) => {
-    if (l.kind === "nursing") {
-      const parts = [`Tétée${l.pausedAtMs != null ? " en pause" : " en cours"}`];
-      if (l.side) parts.push(`sein ${sideWord(l.side)}`);
-      if (l.otherSideLabel) parts.push(`autre sein ${otherSide(l)}`);
-      parts.push(l.sinceLabel);
-      return parts.join(", ");
-    }
-    return `${labelOf(l)} en cours, ${l.sinceLabel}`;
-  };
   const a11yParts = [name];
   if (props.loading) a11yParts.push("Mise à jour en cours");
-  if (n > 0) a11yParts.push(...lives.map(a11yLive));
-  // Le libellé n'est recalculé qu'à chaque rendu : on lit l'heure (toujours
-  // juste) plutôt qu'une durée « il y a » qui vieillirait entre deux rendus.
-  const a11yLast = (what: string, ms: number, late: boolean, atMs: number | null | undefined) =>
-    `${what} ${whenSpoken(ms)}${late ? ", rappel dépassé" : atMs != null && atMs > now ? `, rappel à ${clock(atMs)}` : ""}`;
-  if (n === 0 && props.lastMealMs) a11yParts.push(a11yLast("Dernier repas", props.lastMealMs, mealLate, props.alerts.mealAtMs));
-  if (restDual && day?.lastDiaperMs) a11yParts.push(a11yLast("Dernier change", day.lastDiaperMs, diaperLate, props.alerts.diaperAtMs));
-  if (day && !dayStale) {
-    a11yParts.push(
-      `Aujourd'hui : ${day.mealsCount} repas${mealLate ? " (rappel dépassé)" : ""}, ${day.diapersCount} change${day.diapersCount > 1 ? "s" : ""}${diaperLate ? " (rappel dépassé)" : ""}, ${sleepLabel(sleepNowMin)} de sommeil`,
-    );
-  }
+  if (n > 0) a11yParts.push(...lives.map(liveSay));
   if (dataStale) a11yParts.push(`${liveStale ? "À vérifier, informations" : "Informations"} mises à jour à ${clock(generatedAt)}`);
-  // Le fil, lu aussi : les 3 derniers évènements (les plus récents d'abord).
-  const lastEvents = (props.recent ?? []).slice(0, 3);
-  if (lastEvents.length && !props.loading) {
-    a11yParts.push(
-      `Derniers évènements : ${lastEvents
-        .map((e) => `${e.ms < dayStart ? "hier " : ""}${clock(e.ms)}, ${e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label}`)
-        .join(" ; ")}`,
-    );
-  }
-  a11yParts.push(
-    canWrite
-      ? "Toucher le repas ou le change pour noter, les boutons pour démarrer ou arrêter un sommeil ou une balade, ailleurs pour ouvrir SuiviBaby"
-      : "Toucher pour consulter dans SuiviBaby",
-  );
+  // Le détail (repas, change, journée, fil) est lu zone par zone : un nœud par zone.
   const a11y = semantics({ contentDescription: a11yParts.join(". ") });
 
   // Boutons « ▶ Sieste / ▶ Nuit » et « ▶ Promenade » dans l'en-tête de la

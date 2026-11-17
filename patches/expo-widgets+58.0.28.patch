@@ -207,10 +207,10 @@ index 3df9e4a..82679ae 100644
      else -> null
    } ?: GlanceModifier
 diff --git a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
-index edabde8..9369a25 100644
+index edabde8..8a916fc 100644
 --- a/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
 +++ b/node_modules/expo-widgets/android/src/main/java/expo/modules/widgets/ExpoWidgetsPeekWidget.kt
-@@ -25,7 +25,13 @@ internal class ExpoWidgetsPeekWidget(
+@@ -25,7 +25,15 @@ internal class ExpoWidgetsPeekWidget(
      val layout = WidgetsLayoutRegistry.layout(appContext, widgetName)
        ?: return createErrorRoot("No layout found for $widgetName")
      val props = WidgetsLayoutRegistry.props(appContext, widgetName)
@@ -219,6 +219,8 @@ index edabde8..9369a25 100644
 +    val environment = getWidgetEnvironment(appContext) + mapOf(
 +      "widthDp" to size.width.value.toDouble(),
 +      "heightDp" to size.height.value.toDouble(),
++      // Échelle de police du système (grand texte) : le widget agrandit ses hauteurs fixes.
++      "fontScale" to context.resources.configuration.fontScale.toDouble(),
 +      // Niveau des ajouts natifs SuiviBaby : 3 = ChronometerView, ElapsedClockView, RefreshAtView.
 +      "nativeLevel" to 3.0
 +    )
