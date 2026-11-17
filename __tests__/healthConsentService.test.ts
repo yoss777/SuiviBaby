@@ -29,21 +29,30 @@ describe("healthConsentService", () => {
     resetHealthConsentCache();
   });
 
-  it("exposes the 2.2 consent version", () => {
-    expect(HEALTH_CONSENT_VERSION).toBe("2.2");
+  it("exposes the 2.3 consent version", () => {
+    expect(HEALTH_CONSENT_VERSION).toBe("2.3");
   });
 
   describe("hasValidHealthConsent", () => {
+    it("accepts a newer version given by a more recent app (2.4, 2.10, 3.0)", () => {
+      for (const version of ["2.4", "2.10", "3.0"]) {
+        expect(hasValidHealthConsent({ granted: true, grantedAt: "x", version })).toBe(true);
+      }
+    });
+
     it("accepts a granted consent with the current version", () => {
       expect(
-        hasValidHealthConsent({ granted: true, grantedAt: "x", version: "2.2" }),
+        hasValidHealthConsent({ granted: true, grantedAt: "x", version: "2.3" }),
       ).toBe(true);
     });
     it.each([
       [undefined],
       [null],
-      [{ granted: false, grantedAt: "x", version: "2.2" }],
+      [{ granted: false, grantedAt: "x", version: "2.3" }],
       [{ granted: true, grantedAt: "x", version: "1.0" }],
+      // 2.2 : la politique ne décrivait pas encore le widget, redemandé.
+      [{ granted: true, grantedAt: "x", version: "2.2" }],
+      [{ granted: true, grantedAt: "x", version: "2.3 " }],
       [{ granted: true, grantedAt: "x" }],
       ["garbage"],
     ])("rejects %p", (value) => {
@@ -66,7 +75,7 @@ describe("healthConsentService", () => {
 
     it("returns true and caches the result for the uid (single read)", async () => {
       (getDoc as jest.Mock).mockResolvedValue(
-        snap({ healthDataConsent: { granted: true, grantedAt: "x", version: "2.2" } }),
+        snap({ healthDataConsent: { granted: true, grantedAt: "x", version: "2.3" } }),
       );
       await expect(fetchHealthConsentStatus("u1")).resolves.toBe(true);
       await expect(fetchHealthConsentStatus("u1")).resolves.toBe(true);
@@ -88,9 +97,9 @@ describe("healthConsentService", () => {
 
   describe("recordHealthConsent", () => {
     it("calls the callable with version and platform and marks uid as consented", async () => {
-      mockCallable.mockResolvedValue({ data: { version: "2.2" } });
+      mockCallable.mockResolvedValue({ data: { version: "2.3" } });
       await recordHealthConsent("u1");
-      expect(mockCallable).toHaveBeenCalledWith({ version: "2.2", platform: "ios" });
+      expect(mockCallable).toHaveBeenCalledWith({ version: "2.3", platform: "ios" });
       // cached: no Firestore read needed afterwards
       await expect(fetchHealthConsentStatus("u1")).resolves.toBe(true);
       expect(getDoc).not.toHaveBeenCalled();
@@ -106,19 +115,19 @@ describe("healthConsentService", () => {
 
   describe("withdrawHealthConsent", () => {
     it("calls the callable and clears the verified cache", async () => {
-      mockCallable.mockResolvedValue({ data: { version: "2.2" } });
+      mockCallable.mockResolvedValue({ data: { version: "2.3" } });
       await recordHealthConsent("u1");
       mockCallable.mockResolvedValue({ data: { success: true } });
       await withdrawHealthConsent();
       expect(mockCallable).toHaveBeenLastCalledWith({});
       (getDoc as jest.Mock).mockResolvedValue(
-        snap({ healthDataConsent: { granted: false, grantedAt: "x", version: "2.2" } }),
+        snap({ healthDataConsent: { granted: false, grantedAt: "x", version: "2.3" } }),
       );
       await expect(fetchHealthConsentStatus("u1")).resolves.toBe(false);
     });
 
     it("does not clear the cache when the server call fails", async () => {
-      mockCallable.mockResolvedValue({ data: { version: "2.2" } });
+      mockCallable.mockResolvedValue({ data: { version: "2.3" } });
       await recordHealthConsent("u1");
       mockCallable.mockRejectedValue(new Error("network"));
       await expect(withdrawHealthConsent()).rejects.toThrow("network");

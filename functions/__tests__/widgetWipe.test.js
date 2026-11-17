@@ -100,6 +100,28 @@ describe("déclencheurs", () => {
     expect(pushed()).toHaveLength(2);
   });
 
+  it("consentement redescendu sous la version exigée (ancienne app) : effacement ; autre réglage : rien", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, minConsentVersion: "2.3" } }));
+    const fn = wipe.onWidgetConsentChanged;
+    const v23 = { healthDataConsent: { granted: true, version: "2.3" } };
+    await run(fn, { uid: "dad" }, v23, { ...v23, theme: "dark" });
+    expect(pushed()).toHaveLength(0);
+    await run(fn, { uid: "dad" }, v23, { healthDataConsent: { granted: true, version: "2.2" } });
+    expect(pushed()).toHaveLength(3);
+  });
+
+  it("réglage invalide de version exigée : retombe sur 2.2 (un passage 2.3 → 2.2 n'efface rien)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, minConsentVersion: "2.3 " } }));
+    await run(wipe.onWidgetConsentChanged, { uid: "dad" }, { healthDataConsent: { granted: true, version: "2.3" } }, { healthDataConsent: { granted: true, version: "2.2" } });
+    expect(pushed()).toHaveLength(0);
+  });
+
+  it("retrait d'un consentement 2.2 alors que 2.3 est exigé : effacement quand même", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, minConsentVersion: "2.3" } }));
+    await run(wipe.onWidgetConsentChanged, { uid: "dad" }, { healthDataConsent: { granted: true, version: "2.2" } }, { healthDataConsent: { granted: false, version: "2.3" } });
+    expect(pushed()).toHaveLength(3);
+  });
+
   it("consentement santé retiré : effacement ; toujours valide : rien", async () => {
     memoryStore(seed());
     const ok = { healthDataConsent: { granted: true, version: "2.2" } };

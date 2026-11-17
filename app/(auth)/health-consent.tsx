@@ -147,8 +147,9 @@ export default function HealthConsentScreen() {
           <Text style={[styles.body, { color: nc.textLight }]}>
             Pour le suivi de votre enfant : {COLLECTED_DATA}. Ce sont des
             données de santé : la loi exige votre consentement explicite pour
-            les traiter. En acceptant, vous confirmez agir en tant que
-            titulaire de l&apos;autorité parentale de cet enfant.
+            les traiter. En acceptant, vous confirmez être titulaire de
+            l&apos;autorité parentale de cet enfant, ou agir avec l&apos;accord
+            de celui-ci.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
@@ -156,8 +157,16 @@ export default function HealthConsentScreen() {
           </Text>
           <Text style={[styles.body, { color: nc.textLight }]}>
             Uniquement pour faire fonctionner l&apos;application : enregistrer
-            le suivi, l&apos;afficher, le partager avec les personnes que vous
-            invitez et produire vos statistiques.
+            le suivi, l&apos;afficher (y compris sur le widget de l&apos;écran
+            d&apos;accueil si vous en posez un, lisible par toute personne qui
+            voit votre écran), le partager avec les personnes que vous invitez,
+            produire vos statistiques et compter, de façon globale, l&apos;usage
+            de fonctions comme le widget.
+          </Text>
+          <Text style={[styles.body, { color: nc.textLight }]}>
+            Nouveau (version 2.3) : si vous posez le widget de l&apos;écran
+            d&apos;accueil, un résumé du suivi y est affiché et lui est envoyé en
+            temps réel via Expo, Apple ou Google.
           </Text>
 
           <Text style={[styles.sectionTitle, { color: nc.textStrong }]}>
@@ -177,7 +186,13 @@ export default function HealthConsentScreen() {
           </Bullet>
           <Bullet>
             Expo : notifications push, qui contiennent le prénom de
-            l&apos;enfant et des horaires.
+            l&apos;enfant et des horaires, et mises à jour du widget (résumé du
+            suivi) si vous en posez un.
+          </Bullet>
+          <Bullet>
+            Apple et Google : remise de ces notifications et mises à jour au
+            téléphone (Apple Push Notification service, Firebase Cloud
+            Messaging).
           </Bullet>
           <Bullet>
             AssemblyAI : transcription de la voix, uniquement si vous utilisez

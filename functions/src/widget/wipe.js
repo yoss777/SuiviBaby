@@ -1,5 +1,6 @@
 // Effacement à distance du widget « Bébé maintenant ».
-// Un membre retiré d'un foyer, un consentement santé retiré ou un compte
+// Un membre retiré d'un foyer, un consentement santé retiré (ou d'une version
+// qui ne couvre plus le widget) ou un compte
 // supprimé : le widget de ses appareils ne doit plus montrer le prénom ni les
 // données du bébé. Le serveur envoie un message « w0 » (données vides) aux
 // appareils qui affichent cet enfant, puis efface l'enfant de leur jeton.
@@ -13,7 +14,7 @@ const admin = require("firebase-admin");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const widget = require("../../shared/widget");
 const reminderLib = require("../../lib/reminders");
-const { hasValidHealthConsent } = require("../shared/consent");
+const { hasWidgetHealthConsent, widgetMinConsentVersion } = require("../shared/consent");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
 
 const WIPE_CAP = 2;
@@ -125,8 +126,20 @@ const onWidgetConsentChanged = onDocumentWritten(
   async (event) => {
     const before = event.data?.before?.exists ? event.data.before.data() : null;
     const after = event.data?.after?.exists ? event.data.after.data() : null;
-    if (before && hasValidHealthConsent(before) && !(after && hasValidHealthConsent(after))) {
-      await wipeWidgetForUser(admin.firestore(), event.params.uid, null);
+    // Consentement retiré, ou redescendu sous la version qui décrit le widget
+    // (nouveau consentement donné par une ancienne app) : effacement.
+    if (!before?.healthDataConsent?.granted) return;
+    // Autres réglages (thème, notifications…) : rien à lire ni à effacer.
+    const consentOf = (d) => `${d?.healthDataConsent?.granted === true}|${d?.healthDataConsent?.version ?? ""}`;
+    if (after && consentOf(before) === consentOf(after)) return;
+    const db = admin.firestore();
+    const config = (await db.doc("app_config/widgetPush").get()).data() || {};
+    const min = widgetMinConsentVersion(config);
+    // Retrait (toute version : l'app a pu remplir le widget elle-même), ou
+    // passage sous la version qui couvre le widget.
+    const withdrawn = after?.healthDataConsent?.granted !== true;
+    if (withdrawn || (hasWidgetHealthConsent(before, min) && !hasWidgetHealthConsent(after, min))) {
+      await wipeWidgetForUser(db, event.params.uid, null);
     }
   },
 );

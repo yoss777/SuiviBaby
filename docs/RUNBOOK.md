@@ -345,6 +345,19 @@ Condition : `app_config.minVersion` > 1.0.9. **Non remplie au 2026-11-07** : `mi
 vaut 1.0.6, donc des utilisateurs 1.0.6 à 1.0.9 dépendent encore de ces règles. Ne pas
 retirer avant que la condition soit vraie.
 
+**Consentement 2.3 (widget)** : le serveur accepte encore les consentements « 2.2 »
+des apps ≤ 1.0.21 (`ACCEPTED_CONSENT_VERSIONS`, `functions/src/deletion/consent.js`).
+Bascule, dans cet ordre :
+
+1. Publier l'app 1.0.22 (consentement 2.3, politique 2.3).
+2. Passer `app_config/widgetPush.minConsentVersion` à `"2.3"` (console Firestore, aucun
+   déploiement). Les comptes restés en 2.2 ne reçoivent plus de données dans leur
+   widget ; ce qui y est déjà affiché se masque sous 24 h.
+3. Quand `app_config.minVersion` ≥ 1.0.22 : retirer « 2.2 » d'`ACCEPTED_CONSENT_VERSIONS`.
+
+Prochain relèvement de version (2.4…) : déployer d'abord le serveur qui l'accepte,
+puis publier l'app (l'app accepte toute version ≥ la sienne, le serveur une liste fermée).
+
 **Événements en écriture serveur seule (2026-11-17, lot 5 jalon 2)** : `firestore.rules`
 refuse create/update sur `events` côté client ; tout passe par les callables
 (`validateAndCreateEvent`, `validateAndUpdateEvent`, `deleteEventCascade`). Preuve : aucune

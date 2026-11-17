@@ -23,7 +23,7 @@ const admin = require("firebase-admin");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const widget = require("../../shared/widget");
 const reminderLib = require("../../lib/reminders");
-const { hasWidgetHealthConsent } = require("../shared/consent");
+const { hasWidgetHealthConsent, widgetMinConsentVersion } = require("../shared/consent");
 const { subscriptionStateFrom, isEntitledStatus } = require("../billing/subscription");
 const { usersWithPendingDeletion } = require("../notifications/eligibility");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
@@ -126,8 +126,10 @@ function splitEvents(eventDocs) {
           ms,
           type: e.type,
           nomVitamine: e.nomVitamine,
-          // Ni nom de médicament ou de vaccin (saisie libre), ni valeur de
-          // température : libellés génériques.
+          // Ni nom de médicament ou de vaccin (saisie libre) : libellés
+          // génériques. Température : la valeur mesurée (choix produit,
+          // 16/11/2026, décrit dans la politique 2.3), comme l'app.
+          valeur: e.type === "temperature" && typeof e.valeur === "number" ? e.valeur : undefined,
           typeActivite: e.typeActivite,
           duree: e.duree,
           isNap: e.isNap,
@@ -211,6 +213,7 @@ async function fanOutWidget(db, childId, { urgent }) {
   const config = (await db.doc("app_config/widgetPush").get()).data() || {};
   if (config.enabled !== true) return log("disabled");
   const allowUids = Array.isArray(config.allowUids) ? new Set(config.allowUids) : null;
+  const minConsent = widgetMinConsentVersion(config);
 
   const childSnap = await db.doc(`children/${childId}`).get();
   if (!childSnap.exists || childSnap.data()?.deletedAt) return log("no-child");
@@ -251,7 +254,7 @@ async function fanOutWidget(db, childId, { urgent }) {
       const prefsSnap = await db.doc(`user_preferences/${uid}`).get();
       const prefs = prefsSnap.exists ? prefsSnap.data() : {};
       // Consentement santé d'une version qui couvre le widget (shared/consent).
-      if (!hasWidgetHealthConsent(prefs)) {
+      if (!hasWidgetHealthConsent(prefs, minConsent)) {
         stats.skipped++;
         continue;
       }

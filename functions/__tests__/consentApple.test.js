@@ -18,10 +18,30 @@ describe("recordHealthConsent", () => {
     await expect(fns.recordHealthConsent({ auth: null, data: { version: "2.2" } })).rejects.toThrow("Authentification");
   });
 
-  it.each([[undefined], ["1.0"], [2.2], [null], ["2.2 "]])("rejects version %p", async (version) => {
+  it.each([[undefined], ["1.0"], ["2.1"], ["2.4"], [2.2], [null], ["2.2 "]])("rejects version %p", async (version) => {
     const docs = memoryStore({});
     await expect(fns.recordHealthConsent(call("u1", { version }))).rejects.toMatchObject({ code: "invalid-argument" });
     expect([...docs.keys()].filter((k) => k.startsWith("consent_records/"))).toEqual([]);
+  });
+
+  it("accepts 2.3 (widget described) and still 2.2 (apps ≤ 1.0.21), recording the version given", async () => {
+    const docs = memoryStore({});
+    await expect(fns.recordHealthConsent(call("u1", { version: "2.3" }))).resolves.toEqual({ version: "2.3" });
+    expect(docs.get("user_preferences/u1").healthDataConsent.version).toBe("2.3");
+    await expect(fns.recordHealthConsent(call("u2", { version: "2.2" }))).resolves.toEqual({ version: "2.2" });
+    expect(docs.get("user_preferences/u2").healthDataConsent.version).toBe("2.2");
+  });
+
+  it("old app asking for 2.2 over a granted 2.3: proof recorded, preference kept at 2.3 (never downgraded)", async () => {
+    const docs = memoryStore({ "user_preferences/u1": { healthDataConsent: { granted: true, grantedAt: "x", version: "2.3" } } });
+    await expect(fns.recordHealthConsent(call("u1", { version: "2.2" }))).resolves.toEqual({ version: "2.2" });
+    expect(docs.get("user_preferences/u1").healthDataConsent).toEqual({ granted: true, grantedAt: "x", version: "2.3" });
+    const records = [...docs.entries()].filter(([p]) => p.startsWith("consent_records/"));
+    expect(records.map(([, r]) => r.version)).toEqual(["2.2"]);
+    // Après un retrait, une ancienne app peut redonner 2.2 (rien de plus récent n'est accordé).
+    docs.set("user_preferences/u2", { healthDataConsent: { granted: false, version: "2.3" } });
+    await fns.recordHealthConsent(call("u2", { version: "2.2" }));
+    expect(docs.get("user_preferences/u2").healthDataConsent).toMatchObject({ granted: true, version: "2.2" });
   });
 
   it("rejects missing data", async () => {
