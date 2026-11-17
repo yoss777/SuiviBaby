@@ -107,3 +107,31 @@ describe("ModalContext : dialogues à plusieurs choix", () => {
     expect(screen.getByText("Supprimer")).toBeTruthy();
   });
 });
+
+describe("ModalContext : deux boutons à libellé long", () => {
+  it("« Enregistrer quand même » : boutons empilés, action en haut, Corriger en dessous", () => {
+    setup();
+    act(() =>
+      modal.showAlert("Plutôt une nuit ?", "m", [
+        { text: "Corriger", style: "cancel" },
+        { text: "Enregistrer quand même" },
+      ]),
+    );
+    const labels = screen.getAllByRole("button").map((b) => b.props.children ?? "");
+    const texts = screen.getAllByText(/Corriger|Enregistrer quand même/).map((t) => t.props.children);
+    expect(texts).toEqual(["Enregistrer quand même", "Corriger"]);
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("buttonsFitSideBySide (petits écrans, texte agrandi)", () => {
+  const { buttonsFitSideBySide } = require("@/components/ui/ConfirmModal");
+  it("iPhone SE : « Annuler / Supprimer » côte à côte, « Enregistrer quand même » empilé", () => {
+    expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1)).toBe(true);
+    expect(buttonsFitSideBySide(["Corriger", "Enregistrer quand même"], 320, 1)).toBe(false);
+  });
+  it("texte agrandi : empilé plus tôt", () => {
+    expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 393, 1)).toBe(true);
+    expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1.5)).toBe(false);
+  });
+});

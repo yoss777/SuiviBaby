@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import {
   getNeutralColors,
@@ -54,6 +54,24 @@ const normalizeConfirmColor = (color: string) =>
     ? DESTRUCTIVE_COLOR
     : color;
 const NOOP = () => {};
+/**
+ * Deux boutons côte à côte seulement si le plus long libellé tient sur une
+ * ligne dans la moitié de la fenêtre, selon la largeur de l'écran et la
+ * taille du texte réglée par l'utilisateur (iPhone SE, texte agrandi).
+ * Sinon : boutons empilés, action en haut, annulation en dessous.
+ */
+const AVG_CHAR_WIDTH = 8.5; // pt, texte 14-15 semi-gras
+export function buttonsFitSideBySide(
+  labels: string[],
+  windowWidth: number,
+  fontScale: number,
+): boolean {
+  const dialogWidth = Math.min(windowWidth - 2 * space.lg, 420);
+  const buttonWidth = (dialogWidth - 2 * space.lg - space.sm) / 2;
+  const textWidth = buttonWidth - 2 * space.md;
+  const longest = Math.max(...labels.map((l) => l.length));
+  return longest * AVG_CHAR_WIDTH * Math.max(1, fontScale) <= textWidth;
+}
 
 export function ConfirmModal({
   visible,
@@ -85,6 +103,46 @@ export function ConfirmModal({
   const confirmButtonColor = normalizeConfirmColor(confirmButtonColorProp);
   const resolvedConfirmTextColor =
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const stacked = !buttonsFitSideBySide([confirmText, cancelText], windowWidth, fontScale);
+  const cancelButton = (
+    <Pressable
+      key="cancel"
+      style={({ pressed }) => [
+        styles.modalButton,
+        stacked ? styles.stackedButton : styles.rowButton,
+        { backgroundColor: cancelBg },
+        pressedOpacity(pressed),
+      ]}
+      android_ripple={ripple}
+      onPress={onCancel}
+      accessibilityRole="button"
+    >
+      <Text style={[styles.cancelButtonText, { color: cancelInk }]}>
+        {cancelText}
+      </Text>
+    </Pressable>
+  );
+  const confirmButton = (
+    <Pressable
+      key="confirm"
+      style={({ pressed }) => [
+        styles.modalButton,
+        stacked ? styles.stackedButton : styles.rowButton,
+        { backgroundColor: confirmButtonColor },
+        pressedOpacity(pressed),
+      ]}
+      android_ripple={ripple}
+      onPress={onConfirm}
+      accessibilityRole="button"
+    >
+      <Text
+        style={[styles.confirmButtonText, { color: resolvedConfirmTextColor }]}
+      >
+        {confirmText}
+      </Text>
+    </Pressable>
+  );
   return (
     <Modal
       visible={visible}
@@ -100,47 +158,17 @@ export function ConfirmModal({
           style={[styles.modalContent, { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}
         >
-          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
+          <Text style={[styles.modalTitle, { color: ink }]} accessibilityRole="header">
+            {title}
+          </Text>
           {typeof message === "string" ? (
             <Text style={[styles.modalSubtitle, { color: ink }]}>{message}</Text>
           ) : (
             <View style={styles.modalMessageContainer}>{message}</View>
           )}
 
-          <View style={styles.modalButtons}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalButton,
-                { backgroundColor: cancelBg },
-                pressedOpacity(pressed),
-              ]}
-              android_ripple={ripple}
-              onPress={onCancel}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.cancelButtonText, { color: cancelInk }]}>
-                {cancelText}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalButton,
-                { backgroundColor: confirmButtonColor },
-                pressedOpacity(pressed),
-              ]}
-              android_ripple={ripple}
-              onPress={onConfirm}
-              accessibilityRole="button"
-            >
-              <Text
-                style={[
-                  styles.confirmButtonText,
-                  { color: resolvedConfirmTextColor },
-                ]}
-              >
-                {confirmText}
-              </Text>
-            </Pressable>
+          <View style={stacked ? styles.modalButtonsStacked : styles.modalButtons}>
+            {stacked ? [confirmButton, cancelButton] : [cancelButton, confirmButton]}
           </View>
         </Pressable>
       </Pressable>
@@ -172,6 +200,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: space.md,
+    textAlign: "center",
   },
   modalMessageContainer: {
     marginBottom: space.md,
@@ -180,19 +209,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: space.sm,
   },
+  modalButtonsStacked: {
+    flexDirection: "column",
+    gap: space.sm,
+  },
   modalButton: {
-    flex: 1,
     minHeight: 44,
     paddingVertical: space.sm,
+    paddingHorizontal: space.md,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden", // borne le ripple Android au bouton
   },
+  rowButton: {
+    flex: 1,
+  },
+  stackedButton: {
+    alignSelf: "stretch",
+  },
   cancelButtonText: {
     fontWeight: "600",
+    textAlign: "center",
   },
   confirmButtonText: {
     fontWeight: "700",
+    textAlign: "center",
   },
 });
