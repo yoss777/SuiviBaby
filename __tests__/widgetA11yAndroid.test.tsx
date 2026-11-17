@@ -324,7 +324,8 @@ describe("grand texte : tuiles de session sans débordement (A2, A3, A4, A7)", (
 
   it("chrono d'une tuile seule : divisé par l'échelle (A2), plafonné par la hauteur (A7)", () => {
     const sp = (FS: number, heightDp: number) =>
-      nativeSp(natives(tree({ lives: [napLive(NOW - H)] }, { widthDp: 320, heightDp }, { fontScale: FS }))[0]);
+      // Sans bouton (Proche) : on ne mesure que la mise à l'échelle du chrono.
+      nativeSp(natives(tree({ lives: [napLive(NOW - H)], canWrite: false }, { widthDp: 320, heightDp }, { fontScale: FS }))[0]);
     expect(sp(2, 330)).toBeLessThan(sp(1, 330));
     expect(sp(1.5, 140)).toBeLessThan(sp(1.5, 330));
   });

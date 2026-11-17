@@ -555,7 +555,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
       availH - 2 * tilePad - S(16) - 4 - Math.ceil(chronoSp * 1.25 * FS) - (under ? 2 + S(16) : 0) - 6;
     // Moins de 32 dp de place : pas de bouton (la tuile reste un lien) plutôt qu'un débordement.
     const chipH = Math.min(44, chipRoom);
-    const showChipBelow = !tight && canWrite && !small && stopOf(l) != null && chipRoom >= 32;
+    // « ■ » toujours sur la ligne du chrono, en moyen comme en petit (comme
+    // l'iPhone, choix de Yoss) : plus de « ■ Arrêter » sous le chrono.
+    const showChipBelow = false && !tight && canWrite && !small && stopOf(l) != null && chipRoom >= 32;
     // Bouton « ■ » sur la ligne du chrono (petite présentation, ou moyenne quand
     // il n'y a pas la place dessous) : on essaie d'abord marges pleines, avec le
     // titre et « depuis », puis on resserre ; sans 32 dp de haut ou sans 10 sp
