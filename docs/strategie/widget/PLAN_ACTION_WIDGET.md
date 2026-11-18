@@ -142,6 +142,8 @@ Même format à chaque fois, pour comparer les notes d'une revue à l'autre :
 
 ## Prochain chantier : temps réel entre appareils (après le jalon 4, validé par Yoss le 18/11)
 
+**Cadrage complet (18/11, 9 agents) : [SESSIONS_EN_DIRECT.md](SESSIONS_EN_DIRECT.md).** Les notifications de widget d'iOS 26 sont vérifiées (elles existent), mais expo-widgets ne les gère pas : elles sont reportées en V2.
+
 Besoin : une session (tétée, sieste, balade) doit se suivre **en direct** sur tous les téléphones du foyer. Aujourd'hui, un autre iPhone peut avoir jusqu'à 2 min de retard (plafond Apple des notifications silencieuses, voir LOT5_JALON4_PERF.md).
 
 À cadrer :
