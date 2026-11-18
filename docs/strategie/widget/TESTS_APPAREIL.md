@@ -43,7 +43,7 @@ problème) · ⏳ en cours · — pas encore testé.
 | 23 | Android, widget posé puis retiré, app non rouverte : une saisie sur un autre téléphone ne laisse rien sur ce téléphone (`readReceiveLog` : « nowidget ») | — | Revue en profondeur, N |
 | 24 | Deux iPhone dans le foyer, pauses ou changements de côté rapprochés : les deux widgets à jour au plus 2 min après | — | Revue en profondeur, M |
 | 25 | Android, app fermée : `readReceiveLog` ne montre pas de « fg » (garde de premier plan) | — | À vérifier, `isForeground` |
-| 26 | Android (Samsung), sieste au-delà d'1 h, téléphone en veille passée l'heure pleine : rallumer l'écran et chronométrer le temps avant que « 3 min » devienne « 1h03 » | — | Décision de Yoss (18/11) : test d'abord. Quelques secondes → on garde « 5 min » ; sinon → « 0h05 » dès le début (format toujours juste) |
+| 26 | Android (Samsung), sieste au-delà d'1 h, téléphone en veille passée l'heure pleine : rallumer l'écran et chronométrer le temps avant que « 3 min » devienne « 1h03 » | ✅ 18/11 (1.0.21) | Sieste depuis 15:52, écran éteint et veille légère de 16:48 à 16:55. Au premier relevé, 7 s après le réveil (déverrouillage compris) : « 1h03 », jamais « 3 min ». **On garde « 5 min »** (règle décidée par Yoss). Veille profonde non forcée (Android l'a refusée, débogage sans fil actif) : à revoir si un cas réel montre une durée fausse |
 
 ## Après les tests
 

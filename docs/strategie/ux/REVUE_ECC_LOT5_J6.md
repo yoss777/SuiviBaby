@@ -120,7 +120,7 @@ Mêmes 11 volets, sur la branche de la PR #116. Chaque agent a vérifié que les
 **Faux constat :** « aucun test des règles de `live/nursing` ». Ils existent, dans `__tests__/liveNursing.rules.test.ts`.
 
 **Décision à prendre (Yoss) :**
-- Android, chrono d'une session au-delà d'1 h : le motif « m min » ne passe à « 1h05 » que sur une alarme inexacte. Sous Doze, on peut voir « 5 min » pour une sieste de 1 h 05. Deux options : afficher « 0h05 » dès le début (toujours juste), ou garder « 5 min » et accepter ce risque. **Décidé le 18/11 : test d'abord** (test 26 de TESTS_APPAREIL.md). Correction en quelques secondes après le réveil de l'écran → on garde « 5 min » ; sinon → « 0h05 ».
+- Android, chrono d'une session au-delà d'1 h : le motif « m min » ne passe à « 1h05 » que sur une alarme inexacte. Sous Doze, on peut voir « 5 min » pour une sieste de 1 h 05. Deux options : afficher « 0h05 » dès le début (toujours juste), ou garder « 5 min » et accepter ce risque. **Décidé le 18/11 : test d'abord** (test 26 de TESTS_APPAREIL.md). Correction en quelques secondes après le réveil de l'écran → on garde « 5 min » ; sinon → « 0h05 ». **Résultat le 18/11 : « 1h03 » affiché dès le premier relevé après le réveil, format « 5 min » conservé.**
 
 **Résiduel (P2 ou à vérifier sur téléphone) :**
 - Jeton d'un téléphone déconnecté de force : il reste côté serveur tant que personne ne se reconnecte sur ce téléphone. Les envois continuent et le téléphone les ignore. Piste côté serveur : écarter les jetons sans `lastUsedAt` récent.
