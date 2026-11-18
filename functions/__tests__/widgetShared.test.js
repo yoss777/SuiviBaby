@@ -129,6 +129,17 @@ describe("assemble + build (fuseau du serveur)", () => {
     expect(none.day.sleepRunningFromMs).toBeNull();
   });
 
+  test("session oubliée ? : seuils sieste 6 h, nuit 15 h, balade 9 h", () => {
+    const H = 3600 * 1000;
+    expect([w.STALE_NAP_MS, w.STALE_NIGHT_MS, w.STALE_WALK_MS]).toEqual([6 * H, 15 * H, 9 * H]);
+    const nap = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, sleepStartMs: at(10), sleepIsNap: true }, paris), paris);
+    expect(nap.live.staleAtMs).toBe(at(10) + 6 * H);
+    const night = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, sleepStartMs: at(10), sleepIsNap: false }, paris), paris);
+    expect(night.live.staleAtMs).toBe(at(10) + 15 * H);
+    const walk = w.buildNowWidgetProps(w.assembleNowWidgetInput({ ...base, sleepStartMs: null, walkStartMs: at(10) }, paris), paris);
+    expect(walk.live.staleAtMs).toBe(at(10) + 9 * H);
+  });
+
   test("tétée en cours et promenade : deux sessions, la tétée d'abord", () => {
     const nursing = { leftSeconds: 120, rightSeconds: 0, runningSide: "right", runningSince: at(16, 50), startedAt: at(16, 45), updatedAt: at(16, 50) };
     const props = w.buildNowWidgetProps(

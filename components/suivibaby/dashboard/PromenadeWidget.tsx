@@ -22,6 +22,8 @@ import {
 import { startLoop } from "@/utils/motion";
 import { isNightHour } from "@/utils/decorativeMotion";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
+import { STALE_WALK_MS } from "@/utils/widgetSnapshot";
+import { StaleSessionNotice } from "./StaleSessionNotice";
 
 export interface PromenadeWidgetProps {
   isActive: boolean;
@@ -67,6 +69,8 @@ export const PromenadeWidget = memo(function PromenadeWidget({
     startTimestamp !== undefined
       ? clockMinutesBetween(startTimestamp, currentTime.getTime())
       : elapsedMinutesProp;
+  // Balade > 9 h : probablement oubliée (jamais arrêtée seule).
+  const isStale = isActive && startTimestamp !== undefined && currentTime.getTime() - startTimestamp >= STALE_WALK_MS;
   useAnnounceActiveChange(isActive, "Balade démarrée", "Balade terminée");
   const nc = getNeutralColors(colorScheme);
   const accentColor = eventColors.activite.dark;
@@ -159,7 +163,7 @@ export const PromenadeWidget = memo(function PromenadeWidget({
       accessibilityRole={isActive ? "timer" : undefined}
       accessibilityLabel={
         isActive
-          ? `Balade en cours depuis ${formatDuration(elapsedMinutes)}`
+          ? `Balade en cours depuis ${formatDuration(elapsedMinutes)}${isStale ? ", oubliée ? à vérifier" : ""}`
           : "Démarrer une balade"
       }
     >
@@ -206,6 +210,13 @@ export const PromenadeWidget = memo(function PromenadeWidget({
             <Text style={[styles.subtitle, { color: subtitleColor }]}>
               Début {startTime}
             </Text>
+          )}
+          {isStale && (
+            <StaleSessionNotice
+              colorScheme={colorScheme}
+              onFix={showStopButton && onEdit ? handleEdit : undefined}
+              fixAccessibilityLabel="Corriger l'heure de fin de la balade"
+            />
           )}
           {showStopButton && (
             <View style={styles.actionRow}>

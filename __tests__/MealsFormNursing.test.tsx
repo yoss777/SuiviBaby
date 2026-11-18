@@ -104,6 +104,24 @@ describe("MealsForm : chrono tétée", () => {
     expect(mockShowToast).toHaveBeenCalled();
   });
 
+  it("« Ajouter » avec un côté en cours : tétée gardée EN COURS (rien d'enregistré, chrono conservé)", async () => {
+    const onSuccess = jest.fn();
+    renderForm({ onSuccess });
+    fireEvent.press(await screen.findByLabelText("Démarrer le côté gauche"));
+    fireEvent.press(screen.getByLabelText("Ajouter"));
+    expect(mockAjouter).not.toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalled();
+    await waitFor(() => expect(JSON.parse(store.get(nursingTimerStorageKey("c1"))!).runningSide).toBe("left"));
+  });
+
+  it("« Ajouter » après une pause : la tétée est enregistrée terminée", async () => {
+    renderForm();
+    fireEvent.press(await screen.findByLabelText("Démarrer le côté gauche"));
+    fireEvent.press(screen.getByLabelText("Mettre en pause le côté gauche"));
+    fireEvent.press(screen.getByLabelText("Ajouter"));
+    expect(mockAjouter).toHaveBeenCalledWith("c1", expect.objectContaining({ type: "tetee" }));
+  });
+
   it("rouvrir la feuille sur Tétée reprend le chrono en cours", async () => {
     const running = toggleSide(EMPTY_NURSING_TIMER, "left", Date.now() - 5 * 60 * 1000);
     store.set(nursingTimerStorageKey("c1"), JSON.stringify(running));

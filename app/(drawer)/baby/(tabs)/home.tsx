@@ -48,7 +48,9 @@ import { getAgeInWeeks } from "@/utils/ageUtils";
 import { getDateTime, isValidDate, toDate } from "@/utils/date";
 import { buildEventDetails, getDayLabel } from "@/utils/eventDisplay";
 import { formatSleepLocationWithNote } from "@/utils/sleepDisplay";
-import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, obtenirEvenements, supprimerEvenement } from "@/services/eventsService";
+import { suggestForgottenEnd } from "@/utils/forgottenSession";
+import { ajouterEvenementOptimistic, ecouterEvenementsDuJour, ecouterSessionsOuvertes, obtenirEvenements, RUNNING_SESSION_WINDOW_MS, supprimerEvenement } from "@/services/eventsService";
+import { captureServiceError } from "@/utils/errorReporting";
 import { obtenirPreferencesNotifications } from "@/services/userPreferencesService";
 import { getPreferencesCache } from "@/services/userPreferencesCache";
 import {
@@ -66,9 +68,10 @@ import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useWidgetDeepLink, type WidgetDeepLinkAction } from "@/hooks/useWidgetDeepLink";
 import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
-import { useWidgetActionGate } from "@/hooks/useWidgetActionGate";
+import { useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
+import { useWidgetActionGate, WIDGET_SMALL_CONFIRM_MESSAGE } from "@/hooks/useWidgetActionGate";
 import { isNapHour } from "@/utils/sleepPeriod";
-import { moveAppToBack } from "@/modules/widget-push";
+import { lateNapMessage } from "@/utils/sessionLimits";
 import { loadNursingTimer, saveNursingTimer, toggleSide } from "@/components/forms/nursingTimer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -212,7 +215,7 @@ export default function HomeDashboard() {
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
   const { openSheet: openSheetRaw } = useSheet();
   const { showToast, showActionToast } = useToast();
-  const { showConfirm } = useModal();
+  const { showConfirm, showAlert } = useModal();
   const scheduleDelete = useDeleteWithUndo();
   // R7: Reminder prefs come from BabyContext's real-time listener (no extra Firestore read)
   const remindersEnabled = reminderPreferences.enabled;
@@ -225,6 +228,22 @@ export default function HomeDashboard() {
   } = useMergedOptimisticEvents<any>({
     childId: activeChild?.id,
   });
+
+  // Sessions ouvertes sur la fenêtre du serveur (24 h) : une session ouverte
+  // avant hier restait invisible mais bloquait tout démarrage.
+  const { mergedEvents: openSessionEvents, setFirestoreEvents: setOpenSessionEvents } = useMergedOptimisticEvents<any>({
+    childId: activeChild?.id,
+  });
+  useEffect(() => {
+    if (!activeChild?.id) return;
+    setOpenSessionEvents([]);
+    return ecouterSessionsOuvertes(activeChild.id, setOpenSessionEvents, (error) => {
+      // Jamais silencieux : sans cette écoute, une session ouverte peut rester
+      // invisible et bloquer un démarrage (« déjà en cours »).
+      captureServiceError(error, { service: "home", operation: "ecouterSessionsOuvertes" });
+      showToast("Sessions en cours indisponibles : vérifiez la connexion.", 5000);
+    });
+  }, [activeChild?.id, setOpenSessionEvents, showToast]);
 
   const [refreshTick, setRefreshTick] = useState(0);
   const [loadError, setLoadError] = useState(false);
@@ -655,30 +674,36 @@ export default function HomeDashboard() {
     [activeChild?.id, showToast],
   );
   const sommeilEnCours = useMemo(() => {
-    return data.sommeils.find((item) => {
-      if (softDeletedIds.has(item.id) || item.heureFin || !item.heureDebut) {
-        return false;
-      }
-      return isValidDate(toDate(item.heureDebut));
-    });
-  }, [data.sommeils, softDeletedIds]);
+    // « En cours » = ouverte depuis moins de 24 h, comme le serveur (au-delà,
+    // oubliée : elle ne bloque plus un démarrage, ni ici ni côté serveur).
+    const open = (item: any) =>
+      !softDeletedIds.has(item.id) &&
+      !item.heureFin &&
+      !!item.heureDebut &&
+      isValidDate(toDate(item.heureDebut)) &&
+      Date.now() - toDate(item.heureDebut).getTime() < RUNNING_SESSION_WINDOW_MS;
+    return (
+      data.sommeils.find(open) ??
+      // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.
+      (openSessionEvents as any[]).find((e) => e.type === "sommeil" && open(e))
+    );
+  }, [data.sommeils, softDeletedIds, openSessionEvents]);
 
   // Promenade en cours detection (same pattern as sommeil)
   const promenadeEnCours = useMemo(() => {
-    return data.activites.find(
-      (item: any) => {
-        if (
-          softDeletedIds.has(item.id) ||
-          item.typeActivite !== "promenade" ||
-          !item.heureDebut ||
-          item.heureFin
-        ) {
-          return false;
-        }
-        return isValidDate(toDate(item.heureDebut));
-      },
+    const open = (item: any) =>
+      !softDeletedIds.has(item.id) &&
+      item.typeActivite === "promenade" &&
+      !!item.heureDebut &&
+      !item.heureFin &&
+      isValidDate(toDate(item.heureDebut)) &&
+      Date.now() - toDate(item.heureDebut).getTime() < RUNNING_SESSION_WINDOW_MS;
+    return (
+      data.activites.find(open) ??
+      // Ouverte avant hier (hors des événements chargés) : la même que voit le serveur.
+      (openSessionEvents as any[]).find((e) => e.type === "activite" && open(e))
     );
-  }, [data.activites, softDeletedIds]);
+  }, [data.activites, softDeletedIds, openSessionEvents]);
 
   const handleEventEdit = useEventEditHandler(
     openSheet,
@@ -1165,6 +1190,25 @@ export default function HomeDashboard() {
     startingRef.current[`${childId}:${kind}`] = Date.now();
   };
 
+  // Sieste démarrée entre 20:00 et 5:00 : c'est plutôt une nuit, on demande.
+  const askLateNap = useCallback((startNap: () => void, startNight: () => void) => {
+    const late = lateNapMessage(new Date());
+    if (!late) {
+      startNap();
+      return;
+    }
+    showAlert(
+      "Plutôt une nuit ?",
+      late,
+      [
+        { text: "Démarrer une nuit", onPress: startNight },
+        { text: "Démarrer une sieste", onPress: startNap },
+        { text: "Annuler", style: "cancel" },
+      ],
+      { key: "late-nap" },
+    );
+  }, [showAlert]);
+
   const handleStartSleep = useCallback(
     (isNap: boolean, fromWidget = false) => {
       if (!activeChild?.id || sommeilEnCours) return false;
@@ -1199,8 +1243,13 @@ export default function HomeDashboard() {
     [activeChild?.id, sommeilEnCours, showToast],
   );
 
+  // Session de plus de 24 h : formulaire pour l'heure de fin réelle (déclarés plus bas).
+  const editSleepRef = useRef<(suggestedEnd?: Date) => void>(() => {});
+  const editWalkRef = useRef<(suggestedEnd?: Date) => void>(() => {});
   const stopTimedEventWithUndo = useStopTimedEventWithUndo<any>({
     childId: activeChild?.id,
+    onTooLong: (event, suggestedEnd) =>
+      event.type === "sommeil" ? editSleepRef.current(suggestedEnd) : editWalkRef.current(suggestedEnd),
     getSuccessLabel: (event, { isUnderOneMinute }) => {
       const shortSuffix = isUnderOneMinute ? " (moins d'1 min)" : "";
       if (event.type === "sommeil") {
@@ -1211,18 +1260,27 @@ export default function HomeDashboard() {
   });
 
   // Tap direct — écrit heureFin/duree immédiatement, sans passer par la sheet.
-  // Toast Annuler (5 s) : rouvre l'event via 2ᵉ écriture (heureFin/duree → null).
+  // Toast Annuler (5 s demandées, 8 s au minimum : ACTION_TOAST_MIN_MS) : rouvre l'event via 2ᵉ écriture (heureFin/duree → null).
   const handleStopSleep = useCallback(() => {
     stopTimedEventWithUndo(sommeilEnCours);
   }, [sommeilEnCours, stopTimedEventWithUndo]);
 
-  const handleEditSleepInSheet = useCallback(() => {
+  // `suggestedEnd` : fin proposée par l'arrêt (sieste passée minuit). Appelé
+  // aussi comme onPress : un argument qui n'est pas une Date est ignoré.
+  const handleEditSleepInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
     if (sommeilEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
       return;
     }
     const start = toDate(sommeilEnCours.heureDebut);
+    // Session oubliée (sieste > 6 h, nuit > 15 h) : le formulaire s'ouvre en
+    // mode terminé, heure de fin plausible pré-remplie (à ajuster), sinon
+    // l'heure saisie partait dans le début et la session restait ouverte.
+    const forgottenEnd =
+      suggestedEnd instanceof Date
+        ? suggestedEnd
+        : suggestForgottenEnd(start, sommeilEnCours.isNap === false ? "night" : "nap");
 
     openSheet({
       ownerId: headerOwnerId.current,
@@ -1234,6 +1292,7 @@ export default function HomeDashboard() {
         type: "sommeil",
         date: start,
         heureDebut: start,
+        ...(forgottenEnd ? { heureFin: forgottenEnd } : {}),
         isNap: sommeilEnCours.isNap,
         location: sommeilEnCours.location,
         quality: sommeilEnCours.quality,
@@ -1328,22 +1387,8 @@ export default function HomeDashboard() {
     [scheduleDelete, showToast],
   );
 
-  // Android : après une action lancée depuis le widget, retour à l'écran
-  // d'accueil au bout de 5 s si l'écran n'est pas touché entre-temps.
-  const widgetBackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelWidgetBack = useCallback(() => {
-    if (widgetBackTimerRef.current) clearTimeout(widgetBackTimerRef.current);
-    widgetBackTimerRef.current = null;
-  }, []);
-  const scheduleWidgetBack = useCallback(() => {
-    if (Platform.OS !== "android") return;
-    cancelWidgetBack();
-    widgetBackTimerRef.current = setTimeout(() => {
-      widgetBackTimerRef.current = null;
-      void moveAppToBack();
-    }, 5500);
-  }, [cancelWidgetBack]);
-  useEffect(() => cancelWidgetBack, [cancelWidgetBack]);
+  // Android : retour auto à l'Accueil après une action du widget (hooks/useWidgetBackTimer.ts).
+  const { schedule: scheduleWidgetBack, cancel: cancelWidgetBack } = useWidgetBackTimer();
 
   const runWidgetAction = useCallback(
     (action: WidgetDeepLinkAction, opts?: { nap?: boolean }) => {
@@ -1353,33 +1398,39 @@ export default function HomeDashboard() {
         return;
       }
       // Démarrer / arrêter depuis le widget : même effet que les boutons de
-      // l'Accueil (arrêt avec « Annuler » pendant 5 s).
+      // l'Accueil (arrêt avec « Annuler » pendant 8 s au minimum).
       // Démarrage depuis le widget : message « … démarrée · Annuler » avec
       // vibration, marqué source "widget" (mesure), puis retour à l'écran
-      // d'accueil après 5 s sans toucher l'écran (Android).
+      // d'accueil après 8,5 s sans toucher l'écran (Android).
       if (action === "sleep-start") {
         if (sommeilEnCours) showToast(sommeilEnCours.isNap ? "Sieste déjà en cours" : "Nuit déjà en cours");
         else {
+          const startWith = (nap: boolean) => {
+            const childId = activeChild?.id;
+            const startedAt = Date.now();
+            if (childId && handleStartSleep(nap, true)) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              showActionToast(
+                nap ? "Sieste démarrée" : "Nuit démarrée",
+                "Annuler",
+                () => undoWidgetStart("sleep", childId, startedAt),
+                5000, // durée demandée ; le minimum de 8 s (ACTION_TOAST_MIN_MS) s'applique
+              );
+              scheduleWidgetBack();
+            } else if (childId) showToast("Démarrage déjà en cours");
+          };
           const nap = opts?.nap ?? isNapHour(new Date());
-          const childId = activeChild?.id;
-          const startedAt = Date.now();
-          if (childId && handleStartSleep(nap, true)) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            showActionToast(
-              nap ? "Sieste démarrée" : "Nuit démarrée",
-              "Annuler",
-              () => undoWidgetStart("sleep", childId, startedAt),
-              5000,
-            );
-            scheduleWidgetBack();
-          } else if (childId) showToast("Démarrage déjà en cours");
+          // Widget pas encore passé en « Nuit » : une sieste entre 20:00 et
+          // 5:00 est plutôt une nuit (règle de Yoss).
+          if (nap) askLateNap(() => startWith(true), () => startWith(false));
+          else startWith(false);
         }
         return;
       }
       if (action === "sleep-stop") {
         if (sommeilEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" });
+          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
           scheduleWidgetBack();
         } else showToast("Aucun sommeil en cours");
         return;
@@ -1391,7 +1442,7 @@ export default function HomeDashboard() {
           const startedAt = Date.now();
           if (childId && handleStartPromenade(true)) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk", childId, startedAt), 5000);
+            showActionToast("Balade démarrée", "Annuler", () => undoWidgetStart("walk", childId, startedAt), 5000); // minimum de 8 s appliqué
             scheduleWidgetBack();
           } else if (childId) showToast("Démarrage déjà en cours");
         }
@@ -1400,7 +1451,7 @@ export default function HomeDashboard() {
       if (action === "walk-stop") {
         if (promenadeEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" });
+          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
           scheduleWidgetBack();
         } else showToast("Aucune balade en cours");
         return;
@@ -1454,6 +1505,7 @@ export default function HomeDashboard() {
       }
     },
     [
+      askLateNap,
       canManageContent,
       showToast,
       activeChild?.id,
@@ -1465,6 +1517,7 @@ export default function HomeDashboard() {
       showActionToast,
       undoWidgetStart,
       scheduleWidgetBack,
+      cancelWidgetBack,
       openSheetRaw,
       handleResumeNursing,
       handleEditSleepInSheet,
@@ -1481,18 +1534,92 @@ export default function HomeDashboard() {
     activeChildId: activeChild?.id,
     confirm: showConfirm,
   });
+  // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
+  // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).
+  // Dernière version de runWidgetAction : un choix fait dans une boîte restée
+  // ouverte agit sur l'état actuel, pas sur celui de son ouverture.
+  const runWidgetActionRef = useRef(runWidgetAction);
+  runWidgetActionRef.current = runWidgetAction;
+  // Choix confirmé dans une boîte native : seulement si le bébé n'a pas changé.
+  const runPicked = useCallback((childId: string, action: WidgetDeepLinkAction) => {
+    if (activeChildIdRef.current !== childId) return;
+    runWidgetActionRef.current(action);
+  }, []);
+  // Choix depuis le petit widget : fenêtre de l'app (boutons empilés au-delà
+  // de deux), « Annuler » toujours en dernier, une seule question à la fois.
+  const askNative = useCallback((title: string, buttons: { text: string; onPress: () => void }[]) => {
+    showAlert(
+      title,
+      WIDGET_SMALL_CONFIRM_MESSAGE,
+      [...buttons, { text: "Annuler", style: "cancel" }],
+      { key: `widget-ask:${title}` },
+    );
+  }, [showAlert]);
+
+  // Petit widget iPhone avec plusieurs sessions (un seul lien) : on demande
+  // laquelle arrêter ; chaque choix fait l'arrêt habituel (avec « Annuler »).
+  const pickStopFromWidget = useCallback(async () => {
+    const childId = activeChild?.id;
+    if (!childId) return;
+    if (!canManageContent) {
+      showToast("Seuls les parents peuvent faire une saisie");
+      return;
+    }
+    const nursing = await loadNursingTimer(childId, Date.now()).catch(() => null);
+    if (activeChildIdRef.current !== childId) return;
+    const choices: { text: string; action: WidgetDeepLinkAction }[] = [];
+    if (sommeilEnCours) choices.push({ text: sommeilEnCours.isNap ? "Arrêter la sieste" : "Arrêter la nuit", action: "sleep-stop" });
+    if (promenadeEnCours) choices.push({ text: "Arrêter la balade", action: "walk-stop" });
+    if (nursing?.runningSide) choices.push({ text: "Arrêter la tétée", action: "nursing-stop" });
+    if (choices.length === 0) {
+      showToast("Aucune session en cours");
+      return;
+    }
+    askNative(
+      choices.length === 1 ? `${choices[0].text} ?` : "Arrêter quelle session ?",
+      choices.map((c) => ({ text: c.text, onPress: () => runPicked(childId, c.action) })),
+    );
+  }, [activeChild?.id, canManageContent, sommeilEnCours, promenadeEnCours, showToast, askNative, runPicked]);
+
+  // Petit widget iPhone, tétée : un appui sert aussi à changer de côté, d'où
+  // « Voir la tétée » (feuille Repas, sans rien arrêter).
+  const askNursingStopFromWidget = useCallback(async () => {
+    const childId = activeChild?.id;
+    if (!childId) return;
+    const nursing = await loadNursingTimer(childId, Date.now()).catch(() => null);
+    if (activeChildIdRef.current !== childId) return;
+    if (!nursing?.runningSide) {
+      // Widget pas encore à jour : rien à arrêter, on ouvre la tétée.
+      runPicked(childId, "nursing");
+      return;
+    }
+    askNative("Arrêter la tétée ?", [
+      { text: "Arrêter et enregistrer", onPress: () => runPicked(childId, "nursing-stop") },
+      { text: "Voir la tétée", onPress: () => runPicked(childId, "nursing") },
+    ]);
+  }, [activeChild?.id, askNative, runPicked]);
+
+  const openWidgetLink = useCallback(
+    (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => {
+      if (action === "stop-pick") void pickStopFromWidget();
+      else if (action === "nursing-stop" && opts?.fromSmall && canManageContent) void askNursingStopFromWidget();
+      else openFromWidget(action, opts);
+    },
+    [pickStopFromWidget, askNursingStopFromWidget, openFromWidget, canManageContent],
+  );
   useWidgetDeepLink({
     ready: isDataLoaded && canManageKnown && dataChildId != null && dataChildId === activeChild?.id,
-    open: openFromWidget,
+    open: openWidgetLink,
   });
 
-  const handleEditPromenadeInSheet = useCallback(() => {
+  const handleEditPromenadeInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !promenadeEnCours?.id) return;
     if (promenadeEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
       return;
     }
     const start = toDate(promenadeEnCours.heureDebut);
+    const forgottenEnd = suggestedEnd instanceof Date ? suggestedEnd : suggestForgottenEnd(start, "walk");
 
     openSheet({
       ownerId: headerOwnerId.current,
@@ -1503,11 +1630,14 @@ export default function HomeDashboard() {
         typeActivite: "promenade",
         date: start,
         heureDebut: start,
+        ...(forgottenEnd ? { heureFin: forgottenEnd } : {}),
         description: promenadeEnCours.description ?? promenadeEnCours.note,
       },
       promenadeEnCours,
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
+  editSleepRef.current = handleEditSleepInSheet;
+  editWalkRef.current = handleEditPromenadeInSheet;
 
   // ============================================
   // EFFECTS
@@ -2175,7 +2305,11 @@ export default function HomeDashboard() {
                       ? formatTime(toDate(sommeilEnCours.heureDebut))
                       : undefined
                   }
-                  onStartSleep={(isNap: boolean) => handleStartSleep(isNap)}
+                  onStartSleep={(isNap: boolean) =>
+                    isNap
+                      ? askLateNap(() => void handleStartSleep(true), () => void handleStartSleep(false))
+                      : handleStartSleep(false)
+                  }
                   onStopSleep={handleStopSleep}
                   onEditSleep={handleEditSleepInSheet}
                   showStopButton={canManageContent}

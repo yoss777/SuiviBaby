@@ -1,4 +1,5 @@
 // components/forms/RoutinesForm.tsx
+import { defaultEndFor, exceedsMaxSession, lateNapMessage, MAX_SESSION_LABEL, napCrossesMidnight, unusualSessionMessage } from "@/utils/sessionLimits";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { formatTemperatureFr } from "@/utils/frenchNumber";
@@ -26,7 +27,7 @@ import {
 import { toDate } from "@/utils/date";
 import FontAwesome from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -261,6 +262,14 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const [heureFin, setHeureFin] = useState<Date | null>(
     editData?.heureFin ? toDate(editData.heureFin) : null,
   );
+  // Fin d'une sieste : 23:59 du jour du début au plus tard.
+  // Même objet tant que le début ne change pas (un nouvel objet à chaque rendu
+  // relançait le sélecteur natif).
+  const napEndOfDay = useMemo(() => {
+    const d = new Date(heureDebut);
+    d.setHours(23, 59, 0, 0);
+    return d;
+  }, [heureDebut]);
   const [chronoDirty, setChronoDirty] = useState(() =>
     shouldForceChronoDirty(editData, sommeilEnCours),
   );
@@ -296,6 +305,32 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
     setChronoDirty(true);
   }, []);
 
+  // Sieste dont la fin passe minuit : elle ne peut pas finir le lendemain.
+  // On propose de l'enregistrer comme une nuit, avec les mêmes heures.
+  // Appelé à la validation de la roulette (jamais pendant qu'elle est
+  // affichée) ou à l'enregistrement. Une seule fenêtre à la fois (clé).
+  const askNapPastMidnight = (pickedEnd: Date) => {
+    const endNextDay = new Date(heureDebut);
+    endNextDay.setDate(endNextDay.getDate() + 1);
+    endNextDay.setHours(pickedEnd.getHours(), pickedEnd.getMinutes(), 0, 0);
+    showAlert(
+      "Cette sieste passe minuit",
+      "On l'enregistre comme une nuit, avec les mêmes heures ?",
+      [
+        { text: "Corriger l'heure de fin", style: "cancel" },
+        {
+          text: "Enregistrer comme nuit",
+          onPress: () => {
+            handleSelectType("night");
+            setHeureFin(endNextDay);
+            setChronoDirty(true);
+          },
+        },
+      ],
+      { key: "nap-past-midnight-form" },
+    );
+  };
+
   const handleHeureFinChange = useCallback((nextDate: Date | null) => {
     setHeureFin(nextDate);
     setChronoDirty(true);
@@ -304,7 +339,20 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   const handleOngoingChange = useCallback((nextOngoing: boolean) => {
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
-  }, []);
+    // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
+    // tombait forcément aujourd'hui, même pour une session d'un autre jour).
+    if (!nextOngoing) {
+      setHeureFin((prev) => {
+        if (prev) return prev;
+        const end = defaultEndFor(heureDebut);
+        if (sheetType !== "nap") return end;
+        // Sieste : même jour que le début (elle ne passe pas minuit).
+        const endOfDay = new Date(heureDebut);
+        endOfDay.setHours(23, 59, 0, 0);
+        return new Date(Math.min(end.getTime(), endOfDay.getTime()));
+      });
+    }
+  }, [heureDebut, sheetType]);
 
   // ============================================
   // TYPE SELECTION
@@ -367,8 +415,41 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
   // les sélecteurs d'heure, pas les dates elles-mêmes).
   useFormDirtyGuard({ dateHeureDirty, dureeBain, temperatureEau, produits, noteBain, dateNezDirty, methodeNez, resultatNez, noteNez, chronoDirty, location, quality, noteSommeil, isNap: isEditing ? isNap : undefined });
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmedUnusual = false) => {
     if (!activeChild?.id || isSubmitting) return;
+    const isSleep = sheetType === "nap" || sheetType === "night";
+    // Un sommeil ne dure jamais 24 h (le serveur refuserait la durée, sans message).
+    if (isSleep && !isOngoing && heureFin && exceedsMaxSession(heureDebut, heureFin)) {
+      showAlert("Durée impossible", `Un sommeil ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
+    // En modification, heures inchangées (note, lieu, qualité) : on n'interroge
+    // pas sur une saisie déjà enregistrée.
+    const timesTouched = !isEditing || chronoDirty;
+    // Une sieste ne passe pas minuit : sinon c'est une nuit (ou une erreur de date).
+    if (timesTouched && sheetType === "nap" && !isOngoing && heureFin && napCrossesMidnight(heureDebut, heureFin)) {
+      askNapPastMidnight(heureFin);
+      return;
+    }
+    // Durée inhabituelle (sieste > 6 h, nuit > 15 h), ou sieste démarrée
+    // entre 20:00 et 5:00 (plutôt une nuit) : sans doute une erreur.
+    if (isSleep && timesTouched && !confirmedUnusual) {
+      const unusualDuration = unusualSessionMessage(sheetType, heureDebut, isOngoing ? null : heureFin);
+      const lateNap = sheetType === "nap" ? lateNapMessage(heureDebut) : null;
+      const message = unusualDuration ?? lateNap;
+      if (message) {
+        showAlert(
+          unusualDuration ? "Durée inhabituelle" : "Plutôt une nuit ?",
+          message,
+          [
+            { text: "Corriger", style: "cancel" },
+            { text: "Enregistrer quand même", onPress: () => void handleSubmit(true) },
+          ],
+          { key: "sleep-unusual" },
+        );
+        return;
+      }
+    }
 
     setIsSubmitting(true);
 
@@ -437,13 +518,19 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         // If sommeilEnCours prop is provided, use it; otherwise query Firestore
         let hasOngoingSleep = !!sommeilEnCours;
         if (!sommeilEnCours && activeChild?.id) {
-          const recentSleeps = await obtenirEvenements(activeChild.id, {
-            type: "sommeil" as EventType,
-            limite: 5,
-          });
-          hasOngoingSleep = recentSleeps.some(
-            (e: any) => e.heureDebut && !e.heureFin,
-          );
+          // Lecture impossible (hors ligne…) : on continue, le serveur refuse
+          // un second sommeil en cours et le signale (plus de bouton gelé).
+          try {
+            const recentSleeps = await obtenirEvenements(activeChild.id, {
+              type: "sommeil" as EventType,
+              limite: 5,
+            });
+            hasOngoingSleep = recentSleeps.some(
+              (e: any) => e.heureDebut && !e.heureFin,
+            );
+          } catch {
+            hasOngoingSleep = false;
+          }
         }
         if (hasOngoingSleep) {
           showAlert(
@@ -727,8 +814,12 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
         onHeureFinChange={handleHeureFinChange}
         showStartDate
         startDateLabel="Date début"
-        showEndDate
+        // Sieste : même jour que le début, fin entre le début et 23:59 (elle ne
+        // passe pas minuit). Nuit : date de fin au choix (le lendemain).
+        showEndDate={sheetType !== "nap"}
         endDateLabel="Date fin"
+        heureFinMaximumDate={sheetType === "nap" ? napEndOfDay : undefined}
+        onEndBeforeStart={sheetType === "nap" ? askNapPastMidnight : undefined}
         showOngoingToggle
         isOngoing={isOngoing}
         onOngoingChange={handleOngoingChange}
@@ -1086,7 +1177,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
               isSubmitting && styles.buttonDisabled,
               pressedOpacity(pressed, 0.2),
             ]}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >

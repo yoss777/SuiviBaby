@@ -57,6 +57,11 @@ interface DateTimeSectionRowProps {
 
   // Heure fin constraints
   heureFinMinimumDate?: Date;
+  /**
+   * Sans date de fin : heure de fin choisie avant l'heure de début (= après
+   * minuit). Appelé à la place de l'ajustement silencieux (début + 1 min).
+   */
+  onEndBeforeStart?: (picked: Date) => void;
   heureFinMaximumDate?: Date;
 
   // Contraintes optionnelles sur la date principale (simple mode) et la date
@@ -135,6 +140,7 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
   showDuration = false,
   // Constraints
   heureFinMinimumDate,
+  onEndBeforeStart,
   heureFinMaximumDate,
   minimumDate,
   maximumDate,
@@ -234,9 +240,32 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
     onHeureFinChange(next);
   };
 
+  // Début ramené à la minute : la roulette n'a pas de secondes, sinon choisir
+  // la minute du début compterait comme « avant le début » (et un début à
+  // 23:59:30 dépasserait le maximum 23:59 de la roulette).
+  // (Pas de hook ici : après le retour du mode simple. Le sélecteur natif
+  // compare des millisecondes, un nouvel objet Date ne le relance pas.)
+  const heureDebutMinute = new Date(heureDebut);
+  heureDebutMinute.setSeconds(0, 0);
+  const endIsBeforeStart = (date: Date) => {
+    const sameDay = new Date(heureDebut);
+    sameDay.setHours(date.getHours(), date.getMinutes(), 0, 0);
+    return sameDay.getTime() < heureDebutMinute.getTime();
+  };
+
   const handleHeureFinTimeChange = (date: Date) => {
     if (!onHeureFinChange) return;
+    // Fin avant le début sans date de fin (sieste) : ignorée pendant le
+    // défilement ; la question est posée à la validation (handleHeureFinCommit).
+    if (!showEndDate && onEndBeforeStart && endIsBeforeStart(date)) return;
     onHeureFinChange(resolveEndTime(heureDebut, date, heureFin ?? null, !!showEndDate));
+  };
+
+  // Appelé une fois la roulette fermée (jamais pendant qu'elle est affichée).
+  const handleHeureFinCommit = (date: Date) => {
+    if (!showEndDate && onEndBeforeStart && endIsBeforeStart(date)) {
+      onEndBeforeStart(date);
+    }
   };
 
   const defaultStartDateLabel = showEndDate ? "Date début" : "Date";
@@ -343,9 +372,10 @@ export const DateTimeSectionRow = memo(function DateTimeSectionRow({
           colorScheme={colorScheme}
           disabled={disabled}
           onChange={handleHeureFinTimeChange}
+          onCommit={onEndBeforeStart ? handleHeureFinCommit : undefined}
           onPickerToggle={onPickerToggle}
           // Avec une date de fin, toute heure est permise (le lendemain est déduit).
-          minimumDate={heureFinMinimumDate ?? (showEndDate ? undefined : heureDebut)}
+          minimumDate={heureFinMinimumDate ?? (showEndDate ? undefined : heureDebutMinute)}
           maximumDate={heureFinMaximumDate}
         />
       )}

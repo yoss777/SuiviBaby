@@ -1,4 +1,6 @@
 // components/forms/ActivitiesForm.tsx
+import { defaultEndFor, exceedsMaxSession, MAX_SESSION_LABEL, unusualSessionMessage } from "@/utils/sessionLimits";
+import { otherWalkBlocksResume } from "@/utils/walkResume";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
 import { DateTimeSectionRow } from "@/components/ui/DateTimeSectionRow";
 import { SheetFooter } from "@/components/forms/SheetFooter";
@@ -256,7 +258,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   const handleOngoingChange = useCallback((nextOngoing: boolean) => {
     setIsOngoing(nextOngoing);
     setChronoDirty(true);
-  }, []);
+    // Terminer : fin pré-remplie (sinon « Date fin » restait masquée et la fin
+    // tombait forcément aujourd'hui, même pour une session d'un autre jour).
+    if (!nextOngoing) {
+      // Même jour que le début (une balade ne passe pas minuit).
+      const endOfDay = new Date(heureDebut);
+      endOfDay.setHours(23, 59, 0, 0);
+      setHeureFin((prev) => prev ?? new Date(Math.min(defaultEndFor(heureDebut).getTime(), endOfDay.getTime())));
+    }
+  }, [heureDebut]);
 
   // ============================================
   // HANDLERS
@@ -265,8 +275,28 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
   // Garde-fou : la feuille demande confirmation avant de fermer une saisie modifiée.
   useFormDirtyGuard({ duree, description, dateHeure, isOngoing, heureDebut, heureFin });
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmedUnusual = false) => {
     if (!activeChild?.id || isSubmitting) return;
+    // Fin telle qu'enregistrée (ramenée au jour du début, voir plus bas) : les
+    // contrôles de durée portent sur elle.
+    const finChecked = heureFin ? alignDateToDebut(heureFin, heureDebut) : null;
+    // Une balade ne dure jamais 24 h (le serveur refuserait la durée, sans message).
+    if (isChronoMode && !isOngoing && finChecked && exceedsMaxSession(heureDebut, finChecked)) {
+      showAlert("Durée impossible", `Une balade ne peut pas durer ${MAX_SESSION_LABEL} ou plus. Vérifiez la date et l'heure de fin.`);
+      return;
+    }
+    // Durée inhabituelle (balade > 9 h) : sans doute une erreur.
+    const unusual =
+      isChronoMode && !confirmedUnusual && !(finChecked && finChecked <= heureDebut)
+        ? unusualSessionMessage("walk", heureDebut, isOngoing ? null : finChecked)
+        : null;
+    if (unusual) {
+      showAlert("Durée inhabituelle", unusual, [
+        { text: "Corriger", style: "cancel" },
+        { text: "Enregistrer quand même", onPress: () => void handleSubmit(true) },
+      ]);
+      return;
+    }
     // Ensure heureFin is on the same day and strictly after heureDebut
     if (isChronoMode && !isOngoing && heureFin) {
       const aligned = alignDateToDebut(heureFin, heureDebut);
@@ -308,9 +338,15 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
           return;
         }
       }
-      const isEditingSamePromenade =
-        editData && promenadeEnCours && editData.id === promenadeEnCours.id;
-      if (isChronoMode && isOngoing && isEditing && !isEditingSamePromenade) {
+      if (
+        otherWalkBlocksResume({
+          isChronoMode,
+          isOngoing,
+          isEditing: !!isEditing,
+          editId: editData?.id,
+          runningId: promenadeEnCours?.id,
+        })
+      ) {
         showAlert(
           "Attention",
           "Une autre balade est déjà en cours. Terminez-la d'abord.",
@@ -604,7 +640,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               isSubmitting && styles.buttonDisabled,
               pressedOpacity(pressed, 0.2),
             ]}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >

@@ -2,7 +2,7 @@
 // confirmation ; jamais sur un autre bébé ni après démontage.
 import { act, renderHook } from "@testing-library/react-native";
 
-import { WIDGET_ACTION_CONFIRM_MESSAGE, useWidgetActionGate } from "@/hooks/useWidgetActionGate";
+import { WIDGET_ACTION_CONFIRM_MESSAGE, WIDGET_SMALL_CONFIRM_MESSAGE, useWidgetActionGate } from "@/hooks/useWidgetActionGate";
 
 const KEY = "0123456789abcdef0123456789abcdef";
 jest.mock("@/services/widgetLinkKey", () => ({
@@ -33,10 +33,27 @@ it("clé absente ou fausse : confirmation ; l'action n'est faite qu'après « co
   hook.result.current("walk-start");
   await flush();
   expect(run).not.toHaveBeenCalled();
-  expect(confirm).toHaveBeenCalledWith("Arrêter le sommeil en cours ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function));
-  expect(confirm).toHaveBeenCalledWith("Démarrer une balade ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function));
+  expect(confirm).toHaveBeenCalledWith("Arrêter le sommeil en cours ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function), {
+    confirmText: "Arrêter",
+    destructive: false,
+  });
+  expect(confirm).toHaveBeenCalledWith("Démarrer une balade ?", WIDGET_ACTION_CONFIRM_MESSAGE, expect.any(Function), {
+    confirmText: "Démarrer",
+    destructive: false,
+  });
   confirm.mock.calls[0][2]();
   expect(run).toHaveBeenCalledWith("sleep-stop", undefined);
+});
+
+it("petit widget iPhone (ask=1) : arrêt toujours confirmé, message propre au petit widget", async () => {
+  const { run, confirm, hook } = setup();
+  hook.result.current("sleep-stop", { fromSmall: true, linkKey: KEY });
+  await flush();
+  expect(run).not.toHaveBeenCalled();
+  expect(confirm).toHaveBeenCalledWith("Arrêter le sommeil en cours ?", WIDGET_SMALL_CONFIRM_MESSAGE, expect.any(Function), {
+    confirmText: "Arrêter",
+    destructive: false,
+  });
 });
 
 it("ouvrir un formulaire : jamais de confirmation", async () => {

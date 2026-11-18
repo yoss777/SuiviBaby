@@ -2,6 +2,12 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@gorhom/portal";
+import {
+  ACTION_TOAST_MIN_MS,
+  SR_ACTION_TOAST_MIN_MS,
+  SR_INFO_TOAST_MIN_MS,
+} from "@/constants/toast";
+import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";
 import { toastBottomOffset } from "@/utils/toastInset";
 
 type ToastAction = {
@@ -35,8 +41,11 @@ type ToastContextValue = {
   setBottomInset: (height: number) => void;
 };
 
-/** Un toast avec action reste au moins 8 s (WCAG 2.2.1, temps suffisant). */
-export const ACTION_TOAST_MIN_MS = 8000;
+// Durées minimales : définies dans constants/toast.ts, ré-exportées ici pour
+// les imports existants.
+export { ACTION_TOAST_MIN_MS, SR_ACTION_TOAST_MIN_MS, SR_INFO_TOAST_MIN_MS };
+/** Lecteur d'écran : l'annonce est répétée une fois après ce délai (la 1re peut être couverte par le focus). */
+const SR_REANNOUNCE_MS = 500;
 
 const ToastContext = createContext<ToastContextValue>({
   showToast: () => {},
@@ -101,6 +110,9 @@ const STACK_GAP = 56;
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  // Minuteur de répétition de l'annonce : il appartient à un toast (`owner`) ;
+  // l'expiration ou l'annulation d'un autre toast ne l'efface pas.
+  const reannounceRef = useRef<{ owner: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [info, setInfo] = useState<InfoToast | null>(null);
   const [undos, setUndos] = useState<{ key: number; message: string }[]>([]);
   const [bottomInset, setBottomInsetState] = useState(0);
@@ -108,6 +120,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setBottomInsetState(Math.max(0, Math.round(height)));
   }, []);
   const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const infoSeqRef = useRef(0);
   const pendingRef = useRef<PendingUndo[]>([]);
   const nextKeyRef = useRef(1);
 
@@ -122,16 +135,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Sans `owner` : efface sans condition (fermeture générale). Avec : seulement
+  // si la répétition en cours est celle de ce toast.
+  const clearReannounce = useCallback((owner?: string) => {
+    const current = reannounceRef.current;
+    if (!current || (owner !== undefined && current.owner !== owner)) return;
+    clearTimeout(current.timer);
+    reannounceRef.current = null;
+  }, []);
+
   const takePending = useCallback(
     (key: number): PendingUndo | null => {
       const entry = pendingRef.current.find((item) => item.key === key) ?? null;
       if (!entry) return null;
+      clearReannounce(`undo:${key}`);
       clearTimeout(entry.timer);
       pendingRef.current = pendingRef.current.filter((item) => item.key !== key);
       syncUndos();
       return entry;
     },
-    [syncUndos],
+    [syncUndos, clearReannounce],
   );
 
   // Exécute tout de suite toutes les suppressions en attente (arrière-plan,
@@ -146,10 +169,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [syncUndos]);
 
   const dismiss = useCallback(() => {
+    clearReannounce();
     flushPendingUndos();
     clearInfoTimer();
     setInfo(null);
-  }, [clearInfoTimer, flushPendingUndos]);
+  }, [clearInfoTimer, clearReannounce, flushPendingUndos]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -163,57 +187,99 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     () => () => {
       pendingRef.current.forEach((entry) => clearTimeout(entry.timer));
       if (infoTimerRef.current) clearTimeout(infoTimerRef.current);
+      if (reannounceRef.current) clearTimeout(reannounceRef.current.timer);
     },
     [],
   );
 
+  // Annonce vocale, répétée une fois après ~0,5 s si un lecteur d'écran est
+  // actif à ce moment-là (la 1re annonce peut être couverte par le focus).
+  // Un nouveau `say` remplace la répétition du toast précédent.
+  const say = useCallback((owner: string, text: string, actionLabel?: string) => {
+    announce(text, actionLabel);
+    if (reannounceRef.current) clearTimeout(reannounceRef.current.timer);
+    const timer = setTimeout(() => {
+      if (reannounceRef.current?.timer === timer) reannounceRef.current = null;
+      if (isScreenReaderOnNow()) announce(text, actionLabel);
+    }, SR_REANNOUNCE_MS);
+    reannounceRef.current = { owner, timer };
+  }, []);
+
+  // Le cache du lecteur d'écran peut être en retard : lecture fraîche, puis le
+  // minuteur en cours est prolongé jusqu'au minimum « lecteur d'écran ».
+  const extendWhenReaderOn = useCallback((totalMs: number, startedAt: number, reschedule: (remainingMs: number) => void) => {
+    if (isScreenReaderOnNow()) return;
+    void refreshScreenReader().then((on) => {
+      if (!on) return;
+      reschedule(Math.max(0, totalMs - (Date.now() - startedAt)));
+    });
+  }, []);
+
   const showInfo = useCallback(
-    (next: InfoToast, durationMs: number) => {
+    (next: InfoToast, baseMs: number, srMinMs: number) => {
       setInfo(next);
       clearInfoTimer();
-      infoTimerRef.current = setTimeout(() => {
+      const seq = ++infoSeqRef.current;
+      const expire = () => {
         setInfo(null);
         infoTimerRef.current = null;
-      }, durationMs);
+      };
+      const startedAt = Date.now();
+      infoTimerRef.current = setTimeout(expire, Math.max(baseMs, isScreenReaderOnNow() ? srMinMs : 0));
+      extendWhenReaderOn(Math.max(baseMs, srMinMs), startedAt, (remaining) => {
+        if (infoSeqRef.current !== seq || !infoTimerRef.current) return;
+        clearTimeout(infoTimerRef.current);
+        infoTimerRef.current = setTimeout(expire, remaining);
+      });
     },
-    [clearInfoTimer],
+    [clearInfoTimer, extendWhenReaderOn],
   );
 
   const showToast = useCallback(
     (text: string, durationMs = 2600, toastPosition: "top" | "bottom" = "bottom") => {
-      announce(text);
-      showInfo({ message: text, action: null, position: toastPosition }, durationMs);
+      say("info", text);
+      showInfo({ message: text, action: null, position: toastPosition }, durationMs, SR_INFO_TOAST_MIN_MS);
     },
-    [showInfo],
+    [showInfo, say],
   );
 
   const showUndoToast = useCallback(
     (text: string, onUndo: () => void, onExpire?: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
       const key = nextKeyRef.current++;
-      const timer = setTimeout(() => {
+      const baseMs = Math.max(durationMs, ACTION_TOAST_MIN_MS);
+      const expire = () => {
         const entry = takePending(key);
         entry?.onExpire?.();
-      }, Math.max(durationMs, ACTION_TOAST_MIN_MS));
+      };
+      const startedAt = Date.now();
+      const timer = setTimeout(expire, Math.max(baseMs, isScreenReaderOnNow() ? SR_ACTION_TOAST_MIN_MS : 0));
       pendingRef.current = [
         ...pendingRef.current,
         { key, message: text, onUndo, onExpire: onExpire ?? null, timer },
       ];
       syncUndos();
-      announce(text, "Annuler");
+      say(`undo:${key}`, text, "Annuler");
+      extendWhenReaderOn(Math.max(durationMs, SR_ACTION_TOAST_MIN_MS), startedAt, (remaining) => {
+        const entry = pendingRef.current.find((item) => item.key === key);
+        if (!entry) return;
+        clearTimeout(entry.timer);
+        entry.timer = setTimeout(expire, remaining);
+      });
     },
-    [syncUndos, takePending],
+    [syncUndos, takePending, say, extendWhenReaderOn],
   );
 
   const undoLatest = useCallback(() => {
     const latest = pendingRef.current[pendingRef.current.length - 1];
     if (!latest) return;
+    // takePending efface la répétition de ce toast seulement.
     const entry = takePending(latest.key);
     entry?.onUndo();
   }, [takePending]);
 
   const showActionToast = useCallback(
     (text: string, actionLabel: string, onAction: () => void, durationMs = ACTION_TOAST_MIN_MS) => {
-      announce(text, actionLabel);
+      say("info", text, actionLabel);
       showInfo(
         {
           message: text,
@@ -221,6 +287,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           action: {
             label: actionLabel,
             onPress: () => {
+              clearReannounce("info");
               clearInfoTimer();
               setInfo(null);
               onAction();
@@ -228,9 +295,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           },
         },
         Math.max(durationMs, ACTION_TOAST_MIN_MS),
+        SR_ACTION_TOAST_MIN_MS,
       );
     },
-    [clearInfoTimer, showInfo],
+    [clearInfoTimer, clearReannounce, showInfo, say],
   );
 
   // Valeur stable : le message affiché reste en état local du provider, les

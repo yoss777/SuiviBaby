@@ -20,6 +20,45 @@ export function isNotFoundError(error: unknown): boolean {
   return errorCode(error).endsWith("not-found");
 }
 
+const PERMANENT_CODES = [
+  "invalid-argument",
+  "permission-denied",
+  "not-found",
+  "unauthenticated",
+  "failed-precondition",
+  "already-exists",
+  "out-of-range",
+  "aborted",
+];
+
+/**
+ * Refus définitif du serveur : le même envoi échouera toujours. Ni nouvelle
+ * tentative automatique, ni « Réessayer » (le bug de la durée > 24 h
+ * relançait trois fois une écriture refusée, puis proposait de recommencer).
+ */
+export function isPermanentError(error: unknown): boolean {
+  const code = errorCode(error);
+  return PERMANENT_CODES.some((c) => code.endsWith(c));
+}
+
+/**
+ * Raison lisible d'un refus, à ajouter au message d'échec. Les messages
+ * `invalid-argument` du serveur sont déjà en français (validation.js).
+ */
+export function failureReason(error: unknown): string | undefined {
+  const code = errorCode(error);
+  if (code.endsWith("invalid-argument") || code.endsWith("failed-precondition") || code.endsWith("out-of-range")) {
+    const msg = errorMessage(error).trim();
+    if (!msg || msg.length > 160) return undefined;
+    return /[.!?…]$/.test(msg) ? msg : `${msg}.`;
+  }
+  if (code.endsWith("permission-denied")) return "Vous n'avez pas le droit de modifier cet enfant.";
+  if (code.endsWith("not-found")) return "Cet événement a été supprimé entre-temps.";
+  if (code.endsWith("aborted")) return "Il a été modifié entre-temps sur un autre appareil.";
+  if (code.endsWith("unauthenticated")) return "Votre session a expiré, reconnectez-vous.";
+  return undefined;
+}
+
 function errorMessage(error: unknown): string {
   const message = (error as { message?: unknown } | null)?.message;
   return typeof message === "string" ? message : String(error);
@@ -31,7 +70,9 @@ function errorMessage(error: unknown): string {
  * file hors ligne (isTransientError) et les écritures optimistes s'y réfèrent.
  */
 export function isNetworkError(error: unknown): boolean {
-  if (isConflictError(error)) return false;
+  // Un refus définitif dont le texte contient « internal », « fetch »… n'est
+  // pas une panne réseau : il ne doit pas partir en file pour être rejoué.
+  if (isPermanentError(error)) return false;
   const msg = `${errorCode(error)} ${errorMessage(error)}`.toLowerCase();
   return (
     msg.includes("network") ||

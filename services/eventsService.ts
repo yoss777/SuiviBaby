@@ -18,7 +18,7 @@ import { AppState } from "react-native";
 import { auth, db, functions } from "../config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
-import { isConflictError, isNetworkError, isNotFoundError } from "@/utils/networkError";
+import { failureReason, isConflictError, isNetworkError, isNotFoundError, isPermanentError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline } from "./offlineQueueService";
 import {
@@ -27,8 +27,10 @@ import {
   confirmOptimistic,
   failOptimistic,
   generateTempId,
+  alreadyRunningNotice,
   markOptimisticQueued,
   notifyOptimisticFailure,
+  notifyOptimisticNotice,
   removeOptimistic,
   setOptimisticInFlight,
   updateOptimisticCreate,
@@ -858,6 +860,9 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (e) {
     lastError = e;
+    // Refus définitif : inutile d'insister (et l'arrêt optimiste ne reste pas
+    // affiché 4 s pour rien avant de revenir en arrière).
+    if (isPermanentError(e)) throw e;
   }
   // Retries
   for (const delay of RETRY_DELAYS) {
@@ -866,6 +871,7 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (e) {
       lastError = e;
+      if (isPermanentError(e)) throw e;
     }
   }
   throw lastError;
@@ -917,8 +923,11 @@ function failWrite(
     operation: operation === "create" ? "ajouterEvenementOptimistic" : "modifierEvenementOptimistic",
     extra: { eventType: typeof eventType === "string" ? eventType : null },
   });
-  const canRetry = retryable && options?.retryable !== false;
-  const failure = failOptimistic(operationId, { retryable: canRetry });
+  // Refus définitif (donnée invalide, droits, supprimé…) : « Réessayer »
+  // renverrait la même écriture, refusée de la même façon.
+  const canRetry = retryable && options?.retryable !== false && !isPermanentError(error);
+  const reason = failureReason(error);
+  const failure = failOptimistic(operationId, { retryable: canRetry, reason });
   if (!failure) {
     // Entrée déjà retirée (purge, réconciliation) : l'utilisateur doit quand
     // même savoir que l'écriture a échoué, avec de quoi la refaire.
@@ -931,6 +940,7 @@ function failWrite(
       previousEvent: fallback.previousEvent,
       event: operation === "update" ? fallback.previousEvent : fallback.retryData,
       retryable: canRetry,
+      reason,
     });
   }
   runCallback(() => options?.onFailed?.(error), "onFailed");
@@ -987,6 +997,9 @@ export function ajouterEvenementOptimistic(
         if (options?.onAlreadyRunning) {
           const existingId = realId;
           runCallback(() => options.onAlreadyRunning?.(existingId), "onAlreadyRunning");
+        } else {
+          // Jamais silencieux : la saisie affichée vient de disparaître.
+          notifyOptimisticNotice(alreadyRunningNotice(data?.type));
         }
         return;
       }
@@ -1171,6 +1184,34 @@ export function ecouterEvenementsDuJour(
   return ecouterEvenements(childId, callback, {
     type: types, depuis: startOfYesterday, jusqu: endOfDayInclusive, waitForServer: options?.waitForServer,
   }, onError);
+}
+
+/**
+ * Fenêtre des sessions « en cours » : la même que le serveur
+ * (functions/src/events/callables.js, RUNNING_SESSION_WINDOW_MS). Une sieste
+ * ou une balade ouverte avant hier n'était pas chargée par l'Accueil
+ * (événements depuis hier 0 h) mais bloquait tout nouveau démarrage.
+ */
+export const RUNNING_SESSION_WINDOW_MS = 24 * 3600 * 1000;
+
+/** Sessions ouvertes (sommeil, balade) des 24 dernières heures, en temps réel. */
+export function ecouterSessionsOuvertes(
+  childId: string,
+  callback: (events: any[]) => void,
+  onError?: (error: Error) => void,
+): () => void {
+  return ecouterEvenements(
+    childId,
+    (events) =>
+      callback(
+        events.filter(
+          (e: any) =>
+            e.heureDebut && !e.heureFin && (e.type === "sommeil" || (e.type === "activite" && e.typeActivite === "promenade")),
+        ),
+      ),
+    { type: ["sommeil", "activite"] as EventType[], depuis: new Date(Date.now() - RUNNING_SESSION_WINDOW_MS) },
+    onError,
+  );
 }
 
 /** Check if there are events before a given date. */

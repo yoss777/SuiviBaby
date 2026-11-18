@@ -244,7 +244,8 @@ describe("menu d'appui long sur les listes secondaires", () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
 
     const original = Platform.OS;
-    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    // Android : fenêtre de l'app (même style que les autres dialogues).
+    const alert = jest.spyOn(require("@/contexts/ModalContext"), "showAppAlert").mockImplementation(() => {});
     Object.defineProperty(Platform, "OS", { value: "android", configurable: true });
     props.onLongPress?.();
     expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);

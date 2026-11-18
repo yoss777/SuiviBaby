@@ -21,14 +21,21 @@ export const WIDGET_ACTION_CONFIRM: Partial<Record<WidgetDeepLinkAction, (o?: Ru
 };
 
 export const WIDGET_ACTION_CONFIRM_MESSAGE = "Ce lien ne vient pas de votre widget SuiviBaby.";
+/** Petit widget iPhone : un seul lien pour tout le widget, l'arrêt est confirmé. */
+export const WIDGET_SMALL_CONFIRM_MESSAGE = "Depuis le petit widget, l'arrêt est confirmé ici.";
 
 export function useWidgetActionGate(opts: {
   /** Action réelle (Accueil). Lue au moment de l'exécution (dernière version). */
   run: (action: WidgetDeepLinkAction, o?: RunOpts) => void;
   canManageContent: boolean;
   activeChildId: string | undefined;
-  confirm: (title: string, message: string, onConfirm: () => void) => void;
-}): (action: WidgetDeepLinkAction, o?: RunOpts & { linkKey?: string }) => void {
+  confirm: (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    opts?: { confirmText?: string; destructive?: boolean },
+  ) => void;
+}): (action: WidgetDeepLinkAction, o?: RunOpts & { linkKey?: string; fromSmall?: boolean }) => void {
   const runRef = useRef(opts.run);
   runRef.current = opts.run;
   const childRef = useRef(opts.activeChildId);
@@ -55,10 +62,17 @@ export function useWidgetActionGate(opts: {
         run();
         return;
       }
+      // « Démarrer » / « Arrêter » en couleur normale (pas « Supprimer » rouge).
+      const confirmText = action.endsWith("-start") ? "Démarrer" : "Arrêter";
+      // Petit widget iPhone : arrêt toujours confirmé (un appui sert aussi à ouvrir l'app).
+      if (o?.fromSmall) {
+        confirm(title, WIDGET_SMALL_CONFIRM_MESSAGE, run, { confirmText, destructive: false });
+        return;
+      }
       void isWidgetLinkKeyValid(o?.linkKey).then((ok) => {
         if (!mountedRef.current || childRef.current !== childId) return;
         if (ok) run();
-        else confirm(title, WIDGET_ACTION_CONFIRM_MESSAGE, run);
+        else confirm(title, WIDGET_ACTION_CONFIRM_MESSAGE, run, { confirmText, destructive: false });
       });
     },
     [canManageContent, confirm],

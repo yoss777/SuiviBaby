@@ -23,6 +23,7 @@ import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
 import { rowActionProps } from "@/utils/rowActions";
+import { suggestForgottenEnd } from "@/utils/forgottenSession";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useCalendarDay, useMinuteTick } from "@/hooks/useMinuteTick";
@@ -1154,7 +1155,9 @@ export default function RoutinesScreen() {
   // ============================================
   // STOP ONGOING SLEEP
   // ============================================
+  const editRef = useRef<(suggestedEnd?: Date) => void>(() => {});
   const stopTimedSleepWithUndo = useStopTimedEventWithUndo<SommeilEvent & { id: string }>({
+    onTooLong: (_event, suggestedEnd) => editRef.current(suggestedEnd),
     childId: activeChild?.id,
     getSuccessLabel: (event, { isUnderOneMinute }) =>
       `${event.isNap ? "Sieste terminée" : "Nuit terminée"}${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
@@ -1164,13 +1167,19 @@ export default function RoutinesScreen() {
     stopTimedSleepWithUndo(sommeilEnCours);
   }, [sommeilEnCours, stopTimedSleepWithUndo]);
 
-  const handleEditSleepInSheet = useCallback(() => {
+  // Même logique que l'Accueil : fin proposée par l'arrêt (sieste passée
+  // minuit) ou fin plausible d'une session oubliée.
+  const handleEditSleepInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !sommeilEnCours?.id) return;
     if (sommeilEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
       return;
     }
     const start = toDate(sommeilEnCours.heureDebut);
+    const proposedEnd =
+      suggestedEnd instanceof Date
+        ? suggestedEnd
+        : suggestForgottenEnd(start, sommeilEnCours.isNap === false ? "night" : "nap");
 
     openSheet({
       ownerId: sheetOwnerId,
@@ -1182,6 +1191,7 @@ export default function RoutinesScreen() {
         type: "sommeil",
         date: start,
         heureDebut: start,
+        ...(proposedEnd ? { heureFin: proposedEnd } : {}),
         isNap: sommeilEnCours.isNap,
         location: sommeilEnCours.location,
         quality: sommeilEnCours.quality,
@@ -1190,6 +1200,7 @@ export default function RoutinesScreen() {
       sommeilEnCours: { id: sommeilEnCours.id },
     });
   }, [activeChild?.id, sommeilEnCours, openSheet, showToast]);
+  editRef.current = handleEditSleepInSheet;
 
   // ============================================
   // RENDER HELPERS

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Dimensions,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,11 +9,11 @@ import {
 
 import { getNeutralColors } from '@/constants/dashboardColors';
 import { Colors, getReadableTextColor } from '@/constants/theme';
-import { elevation, radius, space } from "@/constants/tokens";
+import { elevation, space } from "@/constants/tokens";
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DESTRUCTIVE_COLOR } from './ConfirmModal';
-import { RIPPLE_CLIP } from "@/components/ui/pressFeedback";
-import { pressedOpacity, usePressRipple } from './pressFeedback';
+import { DialogButton, dialogStyles } from './DialogParts';
+import { pressedOpacity } from './pressFeedback';
 
 interface InfoModalProps {
   visible: boolean;
@@ -59,7 +58,6 @@ export function InfoModal({
   const colorScheme = useColorScheme() ?? 'light';
   const nc = getNeutralColors(colorScheme);
   const theme = Colors[colorScheme];
-  const ripple = usePressRipple();
   const surface = backgroundColor ?? nc.backgroundCard;
   const ink = textColor ?? nc.textStrong;
   const isErrorTitle = /erreur|error|echec|failed|❌/i.test(title);
@@ -73,7 +71,7 @@ export function InfoModal({
   const renderMessage = () => {
     if (typeof message === 'string') {
       return (
-        <Text style={[styles.modalMessage, { color: ink }]}>
+        <Text style={[dialogStyles.message, { color: textColor ?? nc.textNormal }]}>
           {message}
         </Text>
       );
@@ -89,14 +87,14 @@ export function InfoModal({
     if (isTextElement) {
       return React.cloneElement(message as React.ReactElement<any>, {
         style: [
-          styles.modalMessage,
-          { color: ink },
+          dialogStyles.message,
+          { color: textColor ?? nc.textNormal },
           (message.props as { style?: any }).style,
         ],
       });
     }
 
-    return <View style={styles.modalMessageContainer}>{message}</View>;
+    return <View style={dialogStyles.messageContainer}>{message}</View>;
   };
   const handleConfirm = () => {
     if (onConfirm) onConfirm();
@@ -110,38 +108,30 @@ export function InfoModal({
       animationType="fade"
       onRequestClose={dismissOnBack ? onClose : NOOP}
     >
-      <Pressable style={styles.modalOverlay} onPress={allowBackdropDismiss ? onClose : undefined}>
+      <Pressable style={dialogStyles.overlay} onPress={allowBackdropDismiss ? onClose : undefined}>
         <Pressable
           style={[
-            styles.modalContent,
+            dialogStyles.card,
             elevation.raised(colorScheme),
             { backgroundColor: surface },
           ]}
           onPress={(event) => event.stopPropagation()}
+          accessibilityViewIsModal={true}
         >
-          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
+          <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
+            {title}
+          </Text>
           {renderMessage()}
           {showConfirmButton && (
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  { backgroundColor: resolvedConfirmButtonColor },
-                  pressedOpacity(pressed),
-                ]}
-                android_ripple={ripple}
+            <View style={dialogStyles.buttonsRow}>
+              <DialogButton
+                text={confirmText}
+                variant={resolvedConfirmButtonColor === DESTRUCTIVE_COLOR ? "destructive" : "primary"}
+                layout="row"
+                color={resolvedConfirmButtonColor}
+                textColor={resolvedConfirmTextColor}
                 onPress={handleConfirm}
-                accessibilityRole="button"
-              >
-                <Text
-                  style={[
-                    styles.confirmButtonText,
-                    { color: resolvedConfirmTextColor },
-                  ]}
-                >
-                  {confirmText}
-                </Text>
-              </Pressable>
+              />
             </View>
           )}
           {!!dismissText && (
@@ -159,54 +149,7 @@ export function InfoModal({
   );
 }
 
-const { width } = Dimensions.get('window');
-
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    width: width * 0.85,
-    borderRadius: radius.xl,
-    padding: space.xl,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: space.xs,
-    textAlign: 'center',
-  },
-  modalMessage: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: space.md,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  modalMessageContainer: {
-    marginBottom: space.md,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: space.sm,
-  },
-  modalButton: {
-    ...RIPPLE_CLIP,
-    flex: 1,
-    minHeight: 44,
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden', // borne le ripple Android au bouton
-  },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   dismissLink: {
     marginTop: space.xs,
     minHeight: 44,

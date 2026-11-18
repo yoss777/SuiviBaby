@@ -8,6 +8,7 @@ import { AppState, Platform } from "react-native";
 
 import { clearWidgetPush, noteAppSnapshot } from "@/modules/widget-push";
 import { captureServiceError } from "@/utils/errorReporting";
+import { isWidgetUserActionRecent } from "@/services/widgetUserAction";
 import {
   EMPTY_NOW_WIDGET,
   EMPTY_NOW_WIDGET_NATIVE,
@@ -54,7 +55,7 @@ export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { d
 
 /**
  * Entrées exactes (hors comptage), dans les 24 h : une toutes les `stepMs`
- * après `fromMs`, rappel qui passe au rouge, minuit, bascule Sieste/Nuit,
+ * après `fromMs`, rappel qui passe au rouge, session « oubliée ? », minuit, bascule Sieste/Nuit,
  * expiration à 24 h.
  */
 function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number, fromMs: number, stepMs: number | null): void {
@@ -66,6 +67,8 @@ function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number,
   // Rappel qui passe au rouge.
   exact(props.alerts?.mealAtMs);
   exact(props.alerts?.diaperAtMs);
+  // Session oubliée ? : la tuile passe à l'ambre à l'instant dit.
+  for (const l of props.lives ?? (props.live ? [props.live] : [])) exact(l.staleAtMs);
   // Minuit local (compteurs du jour masqués) et bascule Sieste/Nuit.
   const d = new Date(now);
   for (const [plusDay, h] of [[1, 0], [0, 8], [0, 19], [1, 8]] as const) {
@@ -321,16 +324,20 @@ export function pushNowWidget(props: NowWidgetProps): void {
     return;
   }
   const livesChanged = lastLivesSig != null && livesSignature(props) !== lastLivesSig;
+  // Saisie de l'utilisateur à l'instant (repas, change…) : écrite tout de suite,
+  // en timeline courte sur iPhone, comme un démarrage ou un arrêt de session.
+  const userAction = isWidgetUserActionRecent();
   const immediate =
     props.childId !== lastChildId ||
     lastKey.includes('"loading":true') ||
     Date.now() - childSwitchedAt < WIDGET_CHILD_SWITCH_WINDOW_MS ||
     AppState.currentState !== "active" ||
-    livesChanged;
+    livesChanged ||
+    userAction;
   if (immediate) {
     // Démarrage / arrêt dans l'app au premier plan : timeline courte d'abord
     // (affichage rapide sur iPhone), la complète ensuite.
-    write(props, key, { quick: livesChanged && AppState.currentState === "active" });
+    write(props, key, { quick: (livesChanged || userAction) && AppState.currentState === "active" });
     return;
   }
   pendingRun = () => write(props, key);

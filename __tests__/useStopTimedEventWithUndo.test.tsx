@@ -4,8 +4,9 @@
 // écritures optimistes, en attendant la fin de l'envoi serveur.
 
 const mockShowUndoToast = jest.fn();
+const mockShowToast = jest.fn();
 jest.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showUndoToast: mockShowUndoToast }),
+  useToast: () => ({ showUndoToast: mockShowUndoToast, showToast: mockShowToast }),
 }));
 jest.mock("@/utils/errorReporting", () => ({
   addBreadcrumb: jest.fn(),
@@ -29,6 +30,24 @@ import {
   getOptimisticEntries,
   resetOptimisticStoreForTests,
 } from "@/services/optimisticEventsStore";
+
+// Fenêtres de l'app : relayées vers Alert.alert pour garder les assertions
+// sur les boutons (le rendu réel est couvert par ModalContextChoice.test).
+jest.mock("@/contexts/ModalContext", () => {
+  const { Alert } = require("react-native");
+  // Sans l'argument d'options (propre à la fenêtre de l'app).
+  const showAlert = (...args: unknown[]) =>
+    (Alert.alert as (...a: unknown[]) => void)(...args.slice(0, 3));
+  const api = {
+    showAlert,
+    showConfirm: jest.fn(),
+    hide: jest.fn(),
+    hasOpenModal: () => false,
+    subscribeProtectedModal: () => () => {},
+  };
+  return { useModal: () => api, useModalActions: () => api, showAppAlert: showAlert };
+});
+
 
 const NOW = new Date("2026-04-12T10:30:00.000Z");
 const getSuccessLabel = jest.fn(() => "Sommeil terminé");
@@ -78,6 +97,72 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     expect(modifier).toHaveBeenLastCalledWith("c1", "ev1", { heureFin: null, duree: null, endSource: null }, expect.anything());
   });
 
+  it("session de plus de 24 h : pas d'écriture (refusée par le serveur), formulaire pour l'heure de fin réelle", () => {
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong }));
+    const old = sleep({ heureDebut: new Date(NOW.getTime() - 27 * 3600_000) });
+    result.current(old);
+    expect(spy).not.toHaveBeenCalled();
+    expect(onTooLong).toHaveBeenCalledWith(old);
+    expect(mockShowToast).toHaveBeenCalledWith("Plus de 24 h : indiquez l'heure de fin réelle");
+    spy.mockRestore();
+  });
+
+  it("sieste arrêtée après minuit : question ; « Enregistrer comme nuit » écrit isNap false, « Annuler » remet la sieste", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    const nap = sleep({ isNap: true, heureDebut: new Date(NOW.getTime() - 12 * 3600_000 + 0) });
+    // Début la veille (NOW à 10:30 UTC, début 12 h avant, autre jour local).
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    result.current(nap as any);
+    expect(spy).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith("Cette sieste passe minuit", "On l'enregistre comme une nuit, avec les mêmes heures ?", expect.any(Array));
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Enregistrer comme nuit")!.onPress!();
+    expect(spy).toHaveBeenCalledWith("c1", "ev1", expect.objectContaining({ isNap: false, heureFin: NOW }), nap);
+    const undo = mockShowUndoToast.mock.calls.at(-1)![1] as () => void;
+    undo();
+    expect(spy.mock.calls.at(-1)![2]).toMatchObject({ heureFin: null, duree: null, isNap: true });
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("sieste passée minuit, « Corriger l'heure de fin » : formulaire avec 23:59 du jour du début proposé", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong }));
+    const nap = sleep({ isNap: true });
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    result.current(nap as any);
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Corriger l'heure de fin")!.onPress!();
+    const expected = new Date(nap.heureDebut);
+    expected.setHours(23, 59, 0, 0);
+    expect(onTooLong).toHaveBeenCalledWith(nap, expected);
+    expect(spy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("nuit arrêtée après minuit : arrêt direct (pas de question)", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    const night = sleep({ isNap: false, heureDebut: new Date(new Date(NOW).setDate(NOW.getDate() - 1)) });
+    // Nuit de plus de 24 h refusée ailleurs : début la veille, mais moins de 24 h.
+    night.heureDebut = new Date(NOW.getTime() - 10 * 3600_000);
+    result.current(night as any);
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
   it("never records a duration below one minute", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
@@ -114,6 +199,18 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
       { heureFin: null, duree: null },
       { ...event, heureFin: NOW, duree: 90 },
     );
+  });
+
+  it("opts.onUndo est appelé quand l'utilisateur annule (et pas avant)", () => {
+    jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+    const onUndo = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    result.current(sleep(), undefined, { onUndo });
+    expect(onUndo).not.toHaveBeenCalled();
+
+    (mockShowUndoToast.mock.calls[0][1] as () => void)();
+
+    expect(onUndo).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing without a child or an event id", () => {

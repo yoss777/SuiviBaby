@@ -16,7 +16,9 @@ export type WidgetDeepLinkAction =
   | "sleep-start"
   | "sleep-stop"
   | "walk-start"
-  | "walk-stop";
+  | "walk-stop"
+  // Petit widget iPhone, plusieurs sessions : l'app demande laquelle arrêter.
+  | "stop-pick";
 
 const ACTIONS = new Set<string>([
   "meal",
@@ -28,6 +30,7 @@ const ACTIONS = new Set<string>([
   "sleep-stop",
   "walk-start",
   "walk-stop",
+  "stop-pick",
 ]);
 
 /** Lien d'une zone du widget (construit aussi dans le widget, runtime isolé). */
@@ -40,9 +43,10 @@ export function useWidgetDeepLink(opts: {
   ready: boolean;
   /** `nap` : sieste (true) ou nuit (false) pour « sleep-start », tel qu'affiché par le widget. */
   /** `linkKey` : clé portée par le lien (&k=), vérifiée par l'appelant pour les actions. */
-  open: (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string }) => void;
+  /** `fromSmall` : petit widget iPhone (un seul lien), l'arrêt demande toujours confirmation. */
+  open: (action: WidgetDeepLinkAction, opts?: { nap?: boolean; linkKey?: string; fromSmall?: boolean }) => void;
 }): void {
-  const { widget, child, nap, k } = useLocalSearchParams<{ widget?: string; child?: string; nap?: string; k?: string }>();
+  const { widget, child, nap, k, ask } = useLocalSearchParams<{ widget?: string; child?: string; nap?: string; k?: string; ask?: string }>();
   const { activeChild, children, childrenLoaded, setActiveChild } = useBaby();
   const { ready, open } = opts;
   // Un lien n'est traité qu'une fois. router.setParams() n'efface les
@@ -56,9 +60,9 @@ export function useWidgetDeepLink(opts: {
       handledRef.current = null;
       return;
     }
-    const key = `${widget}|${child ?? ""}|${nap ?? ""}`;
+    const key = `${widget}|${child ?? ""}|${nap ?? ""}|${ask ?? ""}`;
     if (handledRef.current === key) return;
-    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined });
+    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined, ask: undefined });
     if (!ACTIONS.has(widget)) {
       clear();
       return;
@@ -76,8 +80,9 @@ export function useWidgetDeepLink(opts: {
     const linkOpts = {
       ...(nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : {}),
       ...(k ? { linkKey: k } : {}),
+      ...(ask === "1" ? { fromSmall: true } : {}),
     };
     open(widget as WidgetDeepLinkAction, Object.keys(linkOpts).length ? linkOpts : undefined);
     clear();
-  }, [widget, child, nap, k, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
+  }, [widget, child, nap, k, ask, activeChild?.id, children, childrenLoaded, setActiveChild, ready, open]);
 }

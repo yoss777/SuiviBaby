@@ -1,3 +1,4 @@
+import { useModal } from "@/contexts/ModalContext";
 import { radius, space } from "@/constants/tokens";
 import PompagesChart from "@/components/suivibaby/PompagesChart";
 import { APP_NAME } from "@/constants/app";
@@ -54,7 +55,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   Animated,
   ActivityIndicator,
-  Alert,
   BackHandler,
   RefreshControl,
   ScrollView,
@@ -146,6 +146,7 @@ function countsReducer(state: SourceCounts, action: CountsAction): SourceCounts 
 
 
 export default function StatsScreen() {
+  const { showAlert } = useModal();
   countStatsRender("StatsScreen");
   const mountMarkedRef = useRef(false);
   if (!mountMarkedRef.current) {
@@ -783,14 +784,13 @@ export default function StatsScreen() {
         // off as complete. Ask, and say it in the document if accepted.
         const loadedFrom = new Date(Math.min(historyFromRef.current, liveSinceRef.current));
         const proceed = await new Promise<boolean>((resolve) =>
-          Alert.alert(
+          showAlert(
             "Rapport incomplet",
             `Hors connexion, le rapport ne couvrira que les données depuis le ${loadedFrom.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.`,
             [
               { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
               { text: "Continuer", onPress: () => resolve(true) },
             ],
-            { cancelable: true, onDismiss: () => resolve(false) },
           ),
         );
         if (!proceed) return false;
@@ -913,7 +913,7 @@ export default function StatsScreen() {
       ({ uri } = await Print.printToFileAsync({ html, base64: false }));
     } catch (e) {
       captureServiceError(e, { service: "stats", operation: "exportPDF.print" });
-      Alert.alert("Export impossible", "Le PDF n'a pas pu être généré. Réessayez.");
+      showAlert("Export impossible", "Le PDF n'a pas pu être généré. Réessayez.");
       return false;
     }
     try {
@@ -926,7 +926,7 @@ export default function StatsScreen() {
       });
       if (!shared) {
         await deleteTempFile(uri);
-        Alert.alert("Partage indisponible", "Le partage n'est pas disponible sur cet appareil.");
+        showAlert("Partage indisponible", "Le partage n'est pas disponible sur cet appareil.");
         return false;
       }
     } catch (e) {
@@ -935,7 +935,7 @@ export default function StatsScreen() {
       return false;
     }
     return true;
-  }, [activeChild?.id, activeChild?.name, activeChild?.allergies, tetees, pompages, sommeils]);
+  }, [activeChild?.id, activeChild?.name, activeChild?.allergies, tetees, pompages, sommeils, showAlert]);
 
   const handleExportPDF = useCallback(async () => {
     if (isExporting) return;
@@ -954,7 +954,7 @@ export default function StatsScreen() {
       }
       const decision = decidePdfExportAccess(hasAccess, quota);
       if (decision === "error") {
-        Alert.alert(
+        showAlert(
           "Vérification impossible",
           "Impossible de vérifier votre accès à l'export PDF. Vérifiez votre connexion et réessayez.",
         );
@@ -974,11 +974,11 @@ export default function StatsScreen() {
       }
     } catch (e) {
       captureServiceError(e, { service: "stats", operation: "exportPDF" });
-      Alert.alert("Export impossible", "Le rapport n'a pas pu être préparé. Réessayez.");
+      showAlert("Export impossible", "Le rapport n'a pas pu être préparé. Réessayez.");
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, exportReport, checkFeatureAccess, activeChild?.id]);
+  }, [isExporting, exportReport, checkFeatureAccess, activeChild?.id, showAlert]);
 
   // Refresh tint color: use chart accent per tab
   const refreshTintColor =

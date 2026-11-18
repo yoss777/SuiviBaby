@@ -6,7 +6,7 @@ import { Colors } from "@/constants/theme";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BabyProvider } from "@/contexts/BabyContext";
-import { ModalProvider } from "@/contexts/ModalContext";
+import { ModalHost, ModalProvider, showAppAlert } from "@/contexts/ModalContext";
 import { MomentsNotificationProvider } from "@/contexts/MomentsNotificationContext";
 import { ThemeProvider as AppThemeProvider } from "@/contexts/ThemeContext";
 import { PremiumProvider } from "@/contexts/PremiumContext";
@@ -41,7 +41,6 @@ import "@/services/widgetPushIos";
 import { setOnFailure as setOptimisticOnFailure } from "@/services/optimisticEventsStore";
 import { auth, ensureFirebaseAppCheck } from "@/config/firebase";
 import { applyActionCode } from "firebase/auth";
-import { Alert } from "react-native";
 import { getSentryEnvironment } from "@/config/firebaseEnv";
 import {
   filterBreadcrumb,
@@ -110,13 +109,19 @@ function GestureWrapper({ children }: { children: ReactNode }) {
  *   MomentsNotification dépend de Auth + Baby
  *   Migration dépend de Auth + Modal
  */
+// Fenêtres affichées par <ModalHost /> dans RootLayout, sous le thème de l'app
+// (le provider reste au-dessus : l'authentification en a besoin).
+const ModalProviderThemedHost = ({ children }: { children: React.ReactNode }) => (
+  <ModalProvider renderHost={false}>{children}</ModalProvider>
+);
+
 const AppProviders = composeProviders([
   ErrorBoundary,
   GestureWrapper,
   SafeAreaProvider,
   PortalProvider,
   ToastProvider,
-  ModalProvider,
+  ModalProviderThemedHost,
   AuthProvider,
   AppThemeProvider,
   PremiumProvider,
@@ -135,6 +140,7 @@ function RootLayout() {
       <InvitationListener />
       <WidgetOrphanGuard />
       <AppUpdateManager />
+      <ModalHost />
     </AppProviders>
   );
 }
@@ -205,10 +211,10 @@ function AppNavigation() {
           currentUser: () => auth.currentUser,
         }).then((result) => {
           if (result === "verified") {
-            Alert.alert("Adresse e-mail vérifiée", "Merci, votre adresse est confirmée.");
+            showAppAlert("Adresse e-mail vérifiée", "Merci, votre adresse est confirmée.");
             if (auth.currentUser) router.replace("/boot");
           } else {
-            Alert.alert(
+            showAppAlert(
               "Lien expiré",
               "Ce lien de vérification n'est plus valide. Demandez un nouvel e-mail depuis l'application.",
             );

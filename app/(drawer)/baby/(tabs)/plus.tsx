@@ -1,3 +1,4 @@
+import { useModal } from "@/contexts/ModalContext";
 import { radius, space } from "@/constants/tokens";
 import { ThemedView } from "@/components/themed-view";
 import { SkeletonList } from "@/components/ui/Skeleton";
@@ -23,7 +24,6 @@ import { useGuardedNavigation } from "@/hooks/useGuardedNavigation";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -159,6 +159,7 @@ const SECTIONS: Section[] = [
 ];
 
 export default function PlusScreen() {
+  const { showAlert } = useModal();
   const { push: guardedPush } = useGuardedNavigation();
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
@@ -208,27 +209,26 @@ export default function PlusScreen() {
           // Saisies hors ligne en attente : elles ne figureront pas dans le fichier.
           confirmPending: () =>
             new Promise<boolean>((resolve) => {
-              Alert.alert(
+              showAlert(
                 "Export incomplet",
                 PENDING_QUEUE_WARNING,
                 [
                   { text: "Annuler", style: "cancel", onPress: () => resolve(false) },
                   { text: "Exporter quand même", onPress: () => resolve(true) },
                 ],
-                { cancelable: true, onDismiss: () => resolve(false) },
-              );
+                  );
             }),
         },
       );
     } catch (e: any) {
-      Alert.alert(
+      showAlert(
         "Erreur d'export",
         e?.message || "Impossible d'exporter les données.",
       );
     } finally {
       setExporting(false);
     }
-  }, [activeChild?.id, activeChild?.name, exporting, firebaseUser?.uid]);
+  }, [activeChild?.id, activeChild?.name, exporting, firebaseUser?.uid, showAlert]);
 
   const isDark = colorScheme === "dark";
 

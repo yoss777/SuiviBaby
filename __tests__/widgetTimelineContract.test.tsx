@@ -29,7 +29,7 @@ it("timeline écrite par l'app : rendue par le widget (prénom, session, clé), 
 
   const first = dumpWidget(render(entries[0].props, { colorScheme: "light", widgetFamily: "systemMedium", date: entries[0].date }));
   expect(allText(first)).toContain("Léa");
-  expect(first.texts).toContain("■ Arrêter");
+  expect(first.texts).toContain("■");
   expect(first.links.find((l) => l.includes("widget=sleep-stop"))).toContain(`&k=${KEY}`);
   // Les données natives n'ont aucun null (pont Android d'expo-widgets).
   expect(JSON.stringify(entries[0].props)).not.toContain("null");

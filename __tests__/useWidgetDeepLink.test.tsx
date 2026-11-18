@@ -2,7 +2,7 @@
 import { renderHook } from "@testing-library/react-native";
 
 const mockSetParams = jest.fn();
-let mockParams: { widget?: string; child?: string; nap?: string; k?: string } = {};
+let mockParams: { widget?: string; child?: string; nap?: string; k?: string; ask?: string } = {};
 jest.mock("expo-router", () => ({
   router: { setParams: (p: unknown) => mockSetParams(p) },
   useLocalSearchParams: () => mockParams,
@@ -121,4 +121,15 @@ it("clé des liens (&k=) transmise avec l'action, puis effacée de l'adresse", (
   const open = jest.fn();
   renderHook(() => useWidgetDeepLink({ ready: true, open }));
   expect(open).toHaveBeenCalledWith("sleep-start", { nap: true, linkKey: "0123456789abcdef0123456789abcdef" });
+});
+
+it("petit widget iPhone : ask=1 transmis (fromSmall), stop-pick accepté", () => {
+  mockParams = { widget: "sleep-stop", ask: "1" };
+  const open = jest.fn();
+  renderHook(() => useWidgetDeepLink({ ready: true, open }));
+  expect(open).toHaveBeenCalledWith("sleep-stop", { fromSmall: true });
+  mockParams = { widget: "stop-pick", ask: "1" };
+  const open2 = jest.fn();
+  renderHook(() => useWidgetDeepLink({ ready: true, open: open2 }));
+  expect(open2).toHaveBeenCalledWith("stop-pick", { fromSmall: true });
 });

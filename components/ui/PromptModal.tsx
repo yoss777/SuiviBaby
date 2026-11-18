@@ -10,9 +10,9 @@ import {
 
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
-import { radius, space } from "@/constants/tokens";
+import { elevation, radius, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { pressedOpacity, usePressRipple } from "./pressFeedback";
+import { DialogButton, dialogStyles } from "./DialogParts";
 
 interface PromptModalProps {
   visible: boolean;
@@ -63,7 +63,6 @@ export function PromptModal({
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const theme = Colors[colorScheme];
-  const ripple = usePressRipple();
   const surface = backgroundColor ?? nc.backgroundCard;
   const ink = textColor ?? nc.textStrong;
   const confirmBg = confirmButtonColor ?? theme.tint;
@@ -78,17 +77,20 @@ export function PromptModal({
       // Bouton retour Android = Annuler
       onRequestClose={onCancel}
     >
-      <Pressable style={styles.modalOverlay}>
+      <Pressable style={dialogStyles.overlay}>
         <Pressable
-          style={[styles.modalContent, { backgroundColor: surface }]}
+          style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}
+          accessibilityViewIsModal={true}
         >
-          <Text style={[styles.modalTitle, { color: ink }]}>{title}</Text>
+          <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
+            {title}
+          </Text>
           {subtitle ? (
             <Text style={[styles.modalSubtitle, { color: ink }]}>{subtitle}</Text>
           ) : null}
           {message ? (
-            <Text style={[styles.modalMessage, { color: ink }]}>
+            <Text style={[dialogStyles.message, { color: nc.textNormal }]}>
               {message}
             </Text>
           ) : null}
@@ -103,43 +105,17 @@ export function PromptModal({
             multiline={multiline}
             secureTextEntry={secureTextEntry}
           />
-          <View style={styles.modalButtons}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalButton,
-                { backgroundColor: nc.backgroundPressed },
-                pressedOpacity(pressed),
-              ]}
-              android_ripple={ripple}
-              onPress={onCancel}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.cancelButtonText, { color: nc.textStrong }]}>
-                {cancelText}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalButton,
-                { backgroundColor: confirmBg },
-                confirmDisabled && styles.confirmButtonDisabled,
-                pressedOpacity(pressed),
-              ]}
-              android_ripple={ripple}
+          <View style={dialogStyles.buttonsRow}>
+            <DialogButton text={cancelText} variant="secondary" layout="row" onPress={onCancel} />
+            <DialogButton
+              text={confirmText}
+              variant="primary"
+              layout="row"
+              color={confirmBg}
+              textColor={resolvedConfirmTextColor}
               onPress={onConfirm}
               disabled={confirmDisabled}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: confirmDisabled }}
-            >
-              <Text
-                style={[
-                  styles.confirmButtonText,
-                  { color: resolvedConfirmTextColor },
-                ]}
-              >
-                {confirmText}
-              </Text>
-            </Pressable>
+            />
           </View>
         </Pressable>
       </Pressable>
@@ -181,12 +157,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    fontSize: 14,
-    marginBottom: space.md,
-    minHeight: 44,
+    fontSize: 16,
+    marginBottom: space.lg,
+    minHeight: 48,
   },
   modalButtons: {
     flexDirection: "row",

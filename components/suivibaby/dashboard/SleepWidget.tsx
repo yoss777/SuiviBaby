@@ -23,6 +23,8 @@ import {
 import { startLoop } from "@/utils/motion";
 import { isNightHour } from "@/utils/decorativeMotion";
 import { pressedOpacity, RIPPLE_CLIP, usePressRipple } from "@/components/ui/pressFeedback";
+import { STALE_NAP_MS, STALE_NIGHT_MS } from "@/utils/widgetSnapshot";
+import { StaleSessionNotice } from "./StaleSessionNotice";
 
 export interface SleepWidgetProps {
   isActive: boolean;
@@ -69,6 +71,11 @@ export const SleepWidget = memo(function SleepWidget({
     startTimestamp !== undefined
       ? clockMinutesBetween(startTimestamp, currentTime.getTime())
       : elapsedMinutesProp;
+  // Sieste > 6 h, nuit > 15 h : probablement oubliée (jamais arrêtée seule).
+  const isStale =
+    isActive &&
+    startTimestamp !== undefined &&
+    currentTime.getTime() - startTimestamp >= (isNap === false ? STALE_NIGHT_MS : STALE_NAP_MS);
   useAnnounceActiveChange(
     isActive,
     isNap ? "Sieste démarrée" : "Nuit démarrée",
@@ -182,7 +189,7 @@ export const SleepWidget = memo(function SleepWidget({
       accessibilityRole={isActive ? "timer" : undefined}
       accessibilityLabel={
         isActive
-          ? `${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}`
+          ? `${isNap ? "Sieste" : "Nuit"} en cours depuis ${formatDuration(elapsedMinutes)}${isStale ? ", oubliée ? à vérifier" : ""}`
           : "Démarrer un sommeil"
       }
     >
@@ -213,6 +220,13 @@ export const SleepWidget = memo(function SleepWidget({
           <Text style={[styles.subtitle, { color: sleepColors.textMuted }]}>
             Début {startTime}
           </Text>
+          {isStale && (
+            <StaleSessionNotice
+              colorScheme={colorScheme}
+              onFix={showStopButton && onEditSleep ? handleEdit : undefined}
+              fixAccessibilityLabel={`Corriger l'heure de fin ${isNap ? "de la sieste" : "de la nuit"}`}
+            />
+          )}
         </>
       ) : (
         <Text style={[styles.subtitle, { color: sleepColors.textMuted, marginTop: 4 }]}>

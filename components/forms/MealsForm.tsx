@@ -449,6 +449,18 @@ export function MealsForm({
 
     const dateToSave = !isEditing || dateHeureDirty ? effectiveDate : undefined;
 
+    if (mealType === "tetee" && !isEditing && timer.runningSide) {
+      // Un côté tourne : la tétée est EN COURS, pas terminée. On garde le chrono
+      // (bandeau « Tétée en cours » sur l'Accueil et le widget) ; elle sera
+      // enregistrée à l'arrêt. Pour enregistrer tout de suite : mettre en pause.
+      saveNursingTimer(activeChild.id, timerRef.current);
+      submittedRef.current = true;
+      showSuccess("meal", "Tétée en cours");
+      setIsSubmitting(false);
+      onSuccess();
+      return;
+    }
+
     if (mealType === "tetee") {
       // Temps figé à l'instant de l'envoi (le côté en cours compris).
       const at = Date.now();
@@ -1060,7 +1072,7 @@ export function MealsForm({
           </View>
           {!isEditing && runningSide && (
             <Text style={[styles.chronoHint, { color: nc.textLight }]}>
-              Le chrono continue même si vous fermez cette fenêtre.
+              Le chrono continue même si vous fermez cette fenêtre. « Ajouter » garde la tétée en cours ; mettez en pause pour l&apos;enregistrer terminée.
             </Text>
           )}
           {/* Tétée lancée par erreur : on peut l'abandonner (confirmé). */}

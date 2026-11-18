@@ -5,12 +5,12 @@
 // suppression demande confirmation puis ne vise que les lignes AFFICHÉES.
 
 import { useCallback, useState } from "react";
-import { Alert } from "react-native";
 import {
   deleteExhaustedEventsByIds,
   getExhaustedEvents,
   retryExhaustedEvents,
 } from "@/services/offlineQueueService";
+import { useModal } from "@/contexts/ModalContext";
 import { captureServiceError } from "@/utils/errorReporting";
 import { describeQueuedWrite } from "@/utils/queuedWriteLabel";
 
@@ -23,6 +23,7 @@ export type FailedWritesState =
   | { status: "ready"; rows: FailedWriteRow[] };
 
 export function useFailedWrites() {
+  const { showAlert } = useModal();
   const [state, setState] = useState<FailedWritesState>({ status: "closed" });
 
   const open = useCallback(async () => {
@@ -57,7 +58,7 @@ export function useFailedWrites() {
   const deleteShown = useCallback(() => {
     if (state.status !== "ready" || state.rows.length === 0) return;
     const ids = state.rows.map((row) => row.id);
-    Alert.alert(
+    showAlert(
       "Supprimer ces saisies ?",
       "Ces saisies ne seront jamais envoyées et ne pourront pas être récupérées.",
       [
@@ -71,13 +72,13 @@ export function useFailedWrites() {
               setState({ status: "closed" });
             } catch (error) {
               captureServiceError(error, { service: "offlineQueue", operation: "deleteFailedWrites" });
-              Alert.alert("Erreur", "Impossible de supprimer ces saisies. Réessayez.");
+              showAlert("Erreur", "Impossible de supprimer ces saisies. Réessayez.");
             }
           },
         },
       ],
     );
-  }, [state]);
+  }, [state, showAlert]);
 
   return { state, open, close, retry, deleteShown };
 }

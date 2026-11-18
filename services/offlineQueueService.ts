@@ -12,7 +12,11 @@ import {
   isNetworkError,
   isNotFoundError,
 } from "@/utils/networkError";
-import { purgeQueuedOptimistic } from "@/services/optimisticEventsStore";
+import {
+  alreadyRunningNotice,
+  notifyOptimisticNotice,
+  purgeQueuedOptimistic,
+} from "@/services/optimisticEventsStore";
 
 // ============================================
 // TYPES
@@ -485,6 +489,8 @@ export async function processQueue(): Promise<number> {
             // hors ligne) : rien de créé, l'entrée affichée en attente est retirée.
             if (created?.data?.alreadyRunning) {
               purgeQueuedOptimistic({ action: "create", idempotencyKey: payload.idempotencyKey as string });
+              // Jamais silencieux : la saisie faite hors ligne n'a pas été ajoutée.
+              notifyOptimisticNotice(alreadyRunningNotice(payload.type));
             }
             break;
           }

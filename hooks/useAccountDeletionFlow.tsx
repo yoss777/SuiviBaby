@@ -4,8 +4,9 @@
 // Google/Apple confirm) -> requestAccountDeletion -> sign out -> login.
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Alert, Modal, StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
 
+import { useModal } from "@/contexts/ModalContext";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
 import { InfoModal } from "@/components/ui/InfoModal";
@@ -34,6 +35,7 @@ export interface AccountDeletionColors {
 }
 
 export function useAccountDeletionFlow(colors: AccountDeletionColors) {
+  const { showAlert } = useModal();
   const router = useRouter();
   const { firebaseUser, signOut, refreshUser } = useAuth();
   const method = getDeletionAuthMethod(firebaseUser);
@@ -104,7 +106,7 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
         // The confirmation e-mail is sent by the server. If it could not be
         // sent, say so (native alert: it outlives the redirect to the login).
         const notice = deletionEmailNotice(deletion);
-        if (notice) Alert.alert(notice.title, notice.message);
+        if (notice) showAlert(notice.title, notice.message);
         await refreshUser();
         setShowPasswordModal(false);
         setShowSocialModal(false);
@@ -122,7 +124,7 @@ export function useAccountDeletionFlow(colors: AccountDeletionColors) {
         setIsDeleting(false);
       }
     },
-    [isDeleting, blockers, choices, refreshUser, signOut, router, showError],
+    [isDeleting, blockers, choices, refreshUser, signOut, router, showError, showAlert],
   );
 
   const loader = (

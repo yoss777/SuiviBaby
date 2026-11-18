@@ -23,6 +23,7 @@ import { batchDeleteRun } from "@/utils/deleteWithRetry";
 import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { softDeleteNow } from "@/utils/softDeleteNow";
 import { rowActionProps } from "@/utils/rowActions";
+import { suggestForgottenEnd } from "@/utils/forgottenSession";
 import { useBatchSelect } from "@/hooks/useBatchSelect";
 import { useMinuteTick } from "@/hooks/useMinuteTick";
 import { useForegroundServerRefresh } from "@/hooks/useForegroundServerRefresh";
@@ -1121,7 +1122,9 @@ export default function ActivitiesScreen() {
     setBatchDeleteConfirm({ visible: false, ids: [] });
   }, []);
 
+  const editRef = useRef<(suggestedEnd?: Date) => void>(() => {});
   const stopTimedPromenadeWithUndo = useStopTimedEventWithUndo<ActivityEventWithId>({
+    onTooLong: (_event, suggestedEnd) => editRef.current(suggestedEnd),
     childId: activeChild?.id,
     getSuccessLabel: (_event, { isUnderOneMinute }) =>
       `Balade terminée${isUnderOneMinute ? " (moins d'1 min)" : ""}`,
@@ -1131,13 +1134,15 @@ export default function ActivitiesScreen() {
     stopTimedPromenadeWithUndo(promenadeEnCours);
   }, [promenadeEnCours, stopTimedPromenadeWithUndo]);
 
-  const handleEditPromenadeInSheet = useCallback(() => {
+  // Même logique que l'Accueil : fin plausible d'une balade oubliée.
+  const handleEditPromenadeInSheet = useCallback((suggestedEnd?: unknown) => {
     if (!activeChild?.id || !promenadeEnCours) return;
     if (promenadeEnCours.id.startsWith('__optimistic_')) {
       showToast('Enregistrement en cours...');
       return;
     }
     const start = toDate(promenadeEnCours.heureDebut);
+    const proposedEnd = suggestedEnd instanceof Date ? suggestedEnd : suggestForgottenEnd(start, "walk");
 
     openSheet({
       ownerId: sheetOwnerId,
@@ -1148,11 +1153,13 @@ export default function ActivitiesScreen() {
         typeActivite: "promenade",
         date: start,
         heureDebut: start,
+        ...(proposedEnd ? { heureFin: proposedEnd } : {}),
         description: (promenadeEnCours as any).description ?? (promenadeEnCours as any).note,
       },
       promenadeEnCours: { id: promenadeEnCours.id },
     });
   }, [activeChild?.id, promenadeEnCours, openSheet, showToast]);
+  editRef.current = handleEditPromenadeInSheet;
 
 
   const renderEventItem = (event: ActivityEventWithId, isLast = false, isFirstInList = false) => {

@@ -20,14 +20,14 @@ it("au repos : derniers repas et change, liens vers leurs formulaires, fond vers
   expect(d.links.some((l) => l.includes("widget=sleep&child=c1"))).toBe(true);
 });
 
-it("rappel dépassé : « rappel / dépassé » et « rappel · dernier hier à 23:10 »", () => {
+it("rappel dépassé : « rappel / dépassé » et « rappel · hier 23:10 » (court, colonne étroite)", () => {
   const d = show({
     lastMealMs: at(-1, 23, 10),
     alerts: { mealAtMs: at(0, 2, 10) },
     day: { mealsCount: 0, bottleMl: 0, lastMealMs: at(-1, 23, 10), diapersCount: 2, lastDiaperMs: NOW - 3 * H, sleepMinutes: 0 },
   });
   expect(d.texts).toContain("dépassé");
-  expect(allText(d)).toContain("rappel · dernier hier à 23:10");
+  expect(allText(d)).toContain("rappel · hier 23:10");
 });
 
 it("dernier change il y a plusieurs jours : « dernier le JJ/MM »", () => {
@@ -35,9 +35,10 @@ it("dernier change il y a plusieurs jours : « dernier le JJ/MM »", () => {
   expect(allText(d)).toContain("dernier le 13/11");
 });
 
-it("sieste en cours : « ■ Arrêter », boutons ▶ ; liens démarrer/arrêter avec la clé de l'appareil", () => {
+it("sieste en cours : « ■ » (icône seule, le chrono reste lisible), boutons ▶ ; liens démarrer/arrêter avec la clé de l'appareil", () => {
   const d = show({ lives: [napLive(NOW - H)] });
-  expect(d.texts).toContain("■ Arrêter");
+  expect(d.texts).toContain("■");
+  expect(d.texts).toContain("Sieste · 14:00");
   const stop = d.links.find((l) => l.includes("widget=sleep-stop"));
   const walk = d.links.find((l) => l.includes("widget=walk-start"));
   expect(stop).toContain(`&k=${KEY}`);
@@ -74,12 +75,41 @@ it("données de plus de 24 h : ni prénom ni données, invitation à ouvrir l'ap
 it("petit format : un seul lien (repas au repos), bande du jour", () => {
   const d = show({}, "systemSmall");
   expect(d.links.filter((l) => l.startsWith("suivibaby")).some((l) => l.includes("widget=meal"))).toBe(true);
-  expect(allText(d)).toContain("3 rep.");
-  expect(allText(d)).toContain("2 ch.");
+  // Icônes (couverts, goutte, lune) + chiffres : plus d'abréviations tronquées.
+  expect(d.texts).toEqual(expect.arrayContaining(["3", "2", "1h35"]));
+  expect(allText(d)).not.toMatch(/rep\.|ch\.|dodo/);
 });
 
 it("canari : le plugin expo-widgets fournit bien le code source du widget, et il rend un arbre", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   expect(typeof require("@/widgets/BebeMaintenant.ios").default).toBe("string");
   expect(show().texts.length).toBeGreaterThan(3);
+});
+
+describe("session oubliée ? (staleAtMs)", () => {
+  const raw = (live: Record<string, unknown>, nowMs: number, scheme = "light") =>
+    JSON.stringify(render(widgetProps({ lives: [live] }), { colorScheme: scheme, widgetFamily: "systemMedium", date: new Date(nowMs) }));
+  const stale = (startMs: number, staleAtMs: number) => ({ ...napLive(startMs), staleAtMs });
+
+  it("avant le seuil : titre normal, chrono non ambre, rien de plus dans la phrase parlée", () => {
+    const l = stale(NOW - 5 * H, NOW + H);
+    const d = show({ lives: [l] });
+    expect(allText(d)).not.toContain("oubliée");
+    expect(d.a11y.join(" ")).not.toContain("oubliée");
+    expect(raw(l, NOW)).not.toContain("#8A4B00");
+  });
+
+  it("au seuil : « Sieste · oubliée ? », chrono ambre (clair et sombre), phrase parlée complétée", () => {
+    const l = stale(NOW - 6 * H, NOW);
+    const d = show({ lives: [l] });
+    expect(d.texts).toContain("Sieste · oubliée ?");
+    expect(d.a11y.join(" ")).toContain(", oubliée ? à vérifier");
+    expect(raw(l, NOW)).toContain("#8A4B00");
+    expect(raw(l, NOW, "dark")).toContain("#FBBF24");
+  });
+
+  it("la tétée n'est jamais concernée", () => {
+    const nursing = { ...napLive(NOW - 20 * H), kind: "nursing", nap: null, side: "G", staleAtMs: NOW - H };
+    expect(allText(show({ lives: [nursing] }))).not.toContain("oubliée");
+  });
 });
