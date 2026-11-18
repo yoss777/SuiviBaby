@@ -18,6 +18,8 @@ import {
   WIDGET_SYNC_DEBOUNCE_MS,
   WIDGET_UNLOADED_GRACE_MS,
   WIDGET_IOS_FULL_TIMELINE_DELAY_MS,
+  WIDGET_IOS_FRESH_TIMELINE_MS,
+  minutePrecisionUntil,
   widgetQuickTimelinePlan,
   writeServerWidgetProps,
   looksUnloaded,
@@ -252,12 +254,16 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(dates).toContain(nextMinute);
     expect(dates).toContain(nextMinute + 59 * 60_000);
     expect(dates).not.toContain(start + 60_000);
-    expect(dates).toContain(now + 65 * 60_000);
-    expect(dates).toContain(now + 4 * 3600_000);
+    // Puis toutes les 5 min de la pendule (hh:00, hh:05…) jusqu'à 4 h.
+    const lastFive = Math.floor((now + 4 * 3600_000) / 300_000) * 300_000;
+    expect(dates).toContain(nextMinute + 60 * 60_000 - ((nextMinute + 60 * 60_000) % 300_000) + 300_000);
+    expect(dates).toContain(lastFive);
+    // Hors grille : seulement les entrées exactes (« màj » à 2 h, minuit…).
+    expect(dates.filter((t) => t > nextMinute + 59 * 60_000 && t <= lastFive && t % 300_000 !== 0).length).toBeLessThanOrEqual(3);
     expect(new Set(dates).size).toBe(dates.length);
     expect(dates.length).toBeLessThan(130); // ~60 + 36 + ~20 horaires + exactes
     // Fin du comptage : 4 h, jamais l'entrée d'expiration (sinon chrono figé).
-    expect(countingEndMs).toBe(now + 4 * 3600_000);
+    expect(countingEndMs).toBe(lastFive);
   });
 
   it("une seule grille, même avec deux sessions en cours", () => {
@@ -324,6 +330,155 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     calls.length = 0;
   };
   const lastEntries = () => tl.mock.calls[tl.mock.calls.length - 1][0] as { date: Date; props: NowWidgetProps }[];
+
+  it("retour dans l'app : jamais de saut après minuit, avec une complète due, ni sur Android", () => {
+    // Minuit passé depuis l'écriture, moins de 30 min après : seule la règle
+    // du jour peut réécrire.
+    const evening = new Date(Date.now());
+    evening.setHours(23, 50, 0, 0);
+    jest.setSystemTime(evening);
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(1);
+    const afterMidnight = new Date(evening.getTime());
+    afterMidnight.setHours(24, 5, 0, 0);
+    jest.setSystemTime(afterMidnight);
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(2);
+
+    // Timeline courte encore due (complète pas écrite) : pas de saut.
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS * 2);
+    expect(calls.some((n) => n > 80)).toBe(true);
+
+    // Android : jamais de saut (le récepteur natif a pu réécrire le widget).
+    const { Platform } = require("react-native");
+    const original = Platform.OS;
+    Object.defineProperty(Platform, "OS", { value: "android", configurable: true });
+    try {
+      const snap = jest.fn();
+      __resetWidgetSyncForTests({ updateSnapshot: snap } as any);
+      pushNowWidget(props({ childName: "stable" }));
+      jest.advanceTimersByTime(WIDGET_CHILD_SWITCH_WINDOW_MS);
+      const before = snap.mock.calls.length;
+      invalidateWidgetKey();
+      pushNowWidget(props({ childName: "stable" }));
+      jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+      expect(snap.mock.calls.length).toBe(before + 1);
+    } finally {
+      Object.defineProperty(Platform, "OS", { value: original, configurable: true });
+    }
+  });
+
+  it("retour dans l'app après une déconnexion ou un chargement : réécrite", () => {
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(1);
+    // Chargement (instantané, pas de timeline) puis retour au même contenu.
+    pushNowWidgetLoading("autre", "Autre");
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    const afterLoading = calls.length;
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls.length).toBeGreaterThanOrEqual(afterLoading);
+
+    // Déconnexion (widget vidé) puis reconnexion au même contenu : réécrite.
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    // Retour au premier plan, puis déconnexion, puis reconnexion au même contenu.
+    invalidateWidgetKey();
+    clearNowWidget();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_CHILD_SWITCH_WINDOW_MS);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("retour dans l'app après un recul de l'horloge du téléphone : réécrite", () => {
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(1);
+    jest.setSystemTime(Date.now() - 10 * 60_000);
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("option D : un change de moins d'1 h donne aussi la minute jusqu'à ce qu'il atteigne 1 h", () => {
+    const now = new Date(2026, 10, 16, 15, 0, 30).getTime();
+    const diaper = new Date(2026, 10, 16, 14, 25).getTime();
+    expect(
+      minutePrecisionUntil(props({ lives: [], live: null, lastMealMs: now - 3 * 3600_000, day: { ...props().day, lastDiaperMs: diaper } as any }), now),
+    ).toBe(new Date(2026, 10, 16, 15, 25).getTime());
+  });
+
+  it("une saisie : hors de la fenêtre de 3 s, plus d'écriture immédiate", () => {
+    __resetWidgetUserActionForTests();
+    const { takeWidgetUserAction } = require("@/services/widgetUserAction");
+    markWidgetUserAction(1000);
+    expect(takeWidgetUserAction(5000)).toBe(false);
+  });
+
+  it("une saisie : une seule écriture immédiate ; la confirmation qui suit passe par l'anti-rebond", () => {
+    setup();
+    markWidgetUserAction();
+    pushNowWidget(props({ childName: "optimiste" }));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBeLessThanOrEqual(16);
+    pushNowWidget(props({ childName: "confirmé" }));
+    // Pas une deuxième timeline courte tout de suite…
+    expect(calls).toHaveLength(1);
+    // …mais l'anti-rebond (2 s), qui annule la complète en attente.
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBeGreaterThan(40);
+  });
+
+  it("retour dans l'app sans changement, timeline de moins de 30 min : pas de réécriture", () => {
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(1);
+    jest.advanceTimersByTime(10 * 60_000);
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS * 2);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("retour dans l'app : réécrite au-delà de 30 min, si le contenu change, ou après un envoi serveur", () => {
+    setup();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    jest.advanceTimersByTime(WIDGET_IOS_FRESH_TIMELINE_MS + 60_000);
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "stable" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(2);
+
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "changé" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(3);
+
+    writeServerWidgetProps(props({ childName: "serveur" }));
+    expect(calls).toHaveLength(4);
+    invalidateWidgetKey();
+    pushNowWidget(props({ childName: "changé" }));
+    jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
+    expect(calls).toHaveLength(5);
+  });
 
   it("démarrage : timeline courte tout de suite (~15 entrées), la complète 4 s après", () => {
     setup();
@@ -417,10 +572,53 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     pushNowWidget(props({ childName: "autre" }));
     jest.advanceTimersByTime(WIDGET_SYNC_DEBOUNCE_MS);
     expect(calls).toEqual([expect.any(Number)]);
-    expect(calls[0]).toBeGreaterThan(80);
+    // Complète (option D : ~70 entrées sans session) ; la courte en a ≤ 16.
+    expect(calls[0]).toBeGreaterThan(40);
     setAppState("background");
     pushNowWidget(props({ childName: "autre", lives: [sleep] }));
     expect(calls[1]).toBeGreaterThan(80);
+  });
+
+  it("option D : à la minute pendant 1 h avec une session en cours, sinon toutes les 5 min (~70 entrées)", () => {
+    const now = new Date(2026, 10, 16, 15, 0, 30).getTime();
+    const minuteGrid = (dates: number[]) =>
+      dates.filter((t) => t > now && t <= now + 60 * 60_000 && t % 300_000 !== 0).length;
+    const running = widgetTimelinePlan(props({ generatedAtMs: now, lives: [sleep] }), now).dates;
+    expect(minuteGrid(running)).toBeGreaterThanOrEqual(45);
+    const idle = widgetTimelinePlan(props({ generatedAtMs: now, lives: [], live: null, lastMealMs: now - 3 * 3600_000 }), now).dates;
+    expect(minuteGrid(idle)).toBe(0);
+    expect(idle.length).toBeLessThanOrEqual(75);
+    expect(idle.length).toBeGreaterThanOrEqual(60);
+    expect(running.length).toBeGreaterThan(idle.length + 40);
+  });
+
+  it("option D : une tétée en pause ne force pas la minute ; une session « oubliée ? » si", () => {
+    const now = new Date(2026, 10, 16, 15, 0, 30).getTime();
+    const paused = { kind: "nursing", timerStartMs: now - 600_000, sinceMs: now - 600_000, sinceLabel: "", pausedAtMs: now - 60_000 } as any;
+    const stale = { kind: "sleep", timerStartMs: now - 8 * 3600_000, sinceMs: now - 8 * 3600_000, sinceLabel: "", staleAtMs: now - 3600_000 } as any;
+    expect(minutePrecisionUntil(props({ lives: [paused] }), now)).toBe(now);
+    // Session « oubliée ? » : son chrono avance toujours, à la minute.
+    expect(minutePrecisionUntil(props({ lives: [stale] }), now)).toBe(now + 3600_000);
+    expect(minutePrecisionUntil(props({ lives: [paused, sleep] }), now)).toBe(now + 3600_000);
+  });
+
+  it("une saisie par marque : deux marques à la même milliseconde donnent deux écritures immédiates", () => {
+    __resetWidgetUserActionForTests();
+    const { takeWidgetUserAction } = require("@/services/widgetUserAction");
+    markWidgetUserAction(1000);
+    expect(takeWidgetUserAction(1500)).toBe(true);
+    expect(takeWidgetUserAction(1600)).toBe(false);
+    markWidgetUserAction(1000);
+    expect(takeWidgetUserAction(1700)).toBe(true);
+    expect(takeWidgetUserAction(5000)).toBe(false);
+  });
+
+  it("option D : repas d'il y a 40 min → à la minute jusqu'à ce qu'il atteigne 1 h, pas au-delà", () => {
+    const now = new Date(2026, 10, 16, 15, 0, 30).getTime();
+    const meal = new Date(2026, 10, 16, 14, 20).getTime();
+    expect(minutePrecisionUntil(props({ lives: [], live: null, lastMealMs: meal }), now)).toBe(new Date(2026, 10, 16, 15, 20).getTime());
+    expect(minutePrecisionUntil(props({ lives: [], live: null, lastMealMs: now - 2 * 3600_000 }), now)).toBe(now);
+    expect(minutePrecisionUntil(props({ lives: [sleep] }), now)).toBe(now + 3600_000);
   });
 
   it("timeline courte : 8 minutes de la pendule, puis rappel au rouge, minuit et expiration à 24 h", () => {

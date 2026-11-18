@@ -82,6 +82,55 @@ describe("phrases parlées", () => {
     expect(allText(d)).toContain("rappel · hier 23:10");
   });
 
+  it("option D : au-delà d'1 h, « il y a » compté jusqu'au dernier multiple de 5 min de la pendule", () => {
+    const grid = Math.floor(NOW / 300000) * 300000;
+    const meal = grid - 62 * 60000;
+    // 3 min après l'entrée de grille : toujours la valeur de l'entrée (1h02), pas 1h05.
+    const d = show({ lastMealMs: meal }, "systemMedium", grid + 3 * 60000);
+    expect(allText(d)).toContain("1h02");
+    expect(d.a11y.some((l) => l.includes("Dernier repas il y a 1 heure et 2 minutes"))).toBe(true);
+    // Pile à 1 h (entrée à la minute) : « 1h00 », jamais « 57 min ».
+    const atHour = show({ lastMealMs: grid - 60 * 60000 + 2 * 60000 }, "systemMedium", grid + 2 * 60000);
+    expect(allText(atHour)).toContain("1h00");
+    // Moins d'1 h : à la minute.
+    const recent = show({ lastMealMs: grid - 47 * 60000 }, "systemMedium", grid + 3 * 60000);
+    expect(allText(recent)).toContain("50 min");
+  });
+
+  it("option D, propriété : sur toute la timeline, « il y a » suit l'Accueil à 0-4 min, jamais figé plus de 5 min", () => {
+    const { widgetTimelinePlan } = require("@/services/widgetSync");
+    // Minutes parlées : « 1 heure et 7 minutes », « 45 minutes », « 2 heures ».
+    const spoken = (d: { a11y: string[] }) => {
+      const line = d.a11y.find((l) => l.startsWith("Dernier repas il y a")) ?? "";
+      const h = /(\d+) heures?/.exec(line);
+      const m = /(\d+) minutes?/.exec(line);
+      return (h ? Number(h[1]) * 60 : 0) + (m ? Number(m[1]) : 0);
+    };
+    for (const secondsOffset of [0, 17, 43]) {
+      const start = NOW + 2 * 60_000 + secondsOffset * 1000;
+      const meal = start - 20 * 60_000 - 11_000;
+      const { dates } = widgetTimelinePlan(widgetProps({ lastMealMs: meal, lives: [], live: null }), start);
+      const window = dates.filter((t: number) => t <= start + 3 * H);
+      let previous = -1;
+      let previousAt = start;
+      for (const t of window) {
+        const shown = spoken(show({ lastMealMs: meal, lives: [], live: null }, "systemMedium", t));
+        const exact = Math.floor(t / 60000) - Math.floor(meal / 60000);
+        expect(shown).toBeGreaterThanOrEqual(previous);
+        if (exact >= 60) {
+          expect(shown).toBeGreaterThanOrEqual(60);
+          expect(exact - shown).toBeLessThanOrEqual(4);
+        } else {
+          expect(shown).toBe(exact);
+        }
+        // Jamais plus de 5 min entre deux entrées de la fenêtre.
+        expect(t - previousAt).toBeLessThanOrEqual(5 * 60_000);
+        previous = shown;
+        previousAt = t;
+      }
+    }
+  });
+
   it("jours : « il y a 2 jours » parlé, « 2 j » affiché", () => {
     const d = show({ lastMealMs: at(-2, 12, 0) });
     expect(d.a11y.some((l) => l.includes("Dernier repas il y a 2 jours"))).toBe(true);

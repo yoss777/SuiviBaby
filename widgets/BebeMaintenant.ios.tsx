@@ -159,9 +159,23 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
   };
   const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
   const isDaysAgo = (ms: number) => now - ms >= (23 * 60 + 50) * 60000;
-  const agoText = (ms: number) => (isDaysAgo(ms) ? `${Math.max(1, Math.round((now - ms) / 86400000))} j` : minutesText(ms));
+  // « il y a » : à la minute pendant la première heure. Au-delà, la timeline
+  // n'a qu'une entrée toutes les 5 min de la pendule (option D,
+  // services/widgetSync.ts) : le temps est compté jusqu'au dernier multiple de
+  // 5 min de la pendule, pour que le libellé change pile à chaque entrée (0 à
+  // 4 min de retard sur l'Accueil, jamais figé 7 min). Au moins 1h00.
+  const agoMinutes = (ms: number) => {
+    const m = minutesBetween(ms, now);
+    if (m < 60) return m;
+    return Math.max(60, minutesBetween(ms, Math.floor(now / 300000) * 300000));
+  };
+  const agoText = (ms: number) => {
+    if (isDaysAgo(ms)) return `${Math.max(1, Math.round((now - ms) / 86400000))} j`;
+    const m = agoMinutes(ms);
+    return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+  };
   const agoSay = (ms: number) => {
-    if (!isDaysAgo(ms)) return minutesSay(minutesBetween(ms, now));
+    if (!isDaysAgo(ms)) return minutesSay(agoMinutes(ms));
     const n = Math.max(1, Math.round((now - ms) / 86400000));
     return `${n} jour${n > 1 ? "s" : ""}`;
   };
@@ -524,7 +538,9 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
         <Text modifiers={[F(12), monospacedDigit(), foregroundStyle(late ? C.alert : C.soft), ...fit1]}>{late ? "dépassé" : clock(atMs)}</Text>
       </VStack>
     ) : null;
-  const underHour = (ms: number) => now - ms < 3600000;
+  // Même règle que le libellé (minutes de la pendule) : « 1h00 » prend la
+  // police et la largeur du format horaire.
+  const underHour = (ms: number) => minutesBetween(ms, now) < 60;
   const restSay = (label: string, ms: number | null | undefined, late: boolean) =>
     ms ? `${label} il y a ${agoSay(ms)}${late ? ", rappel dépassé" : ""}` : `${label} : pas encore`;
   const restBlock = (label: string, cat: { dot: string; text: string }, ms: number | null | undefined, late: boolean, atMs: number | null | undefined, sp: number) => (

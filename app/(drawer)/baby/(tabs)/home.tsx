@@ -781,6 +781,11 @@ export default function HomeDashboard() {
     };
     return { repas: ms(childLastEventAt.repas), changes: ms(childLastEventAt.changes) };
   }, [childLastEventAt]);
+  // Valeurs simples (pas les objets session) : un nouvel objet à contenu égal
+  // ne relance pas le calcul du widget (jalon 4).
+  const sleepIsNap = sommeilEnCours?.isNap;
+  const sleepChildId = (sommeilEnCours as { childId?: string } | undefined)?.childId;
+  const walkChildId = (promenadeEnCours as { childId?: string } | undefined)?.childId;
   const widgetParams = useMemo(
     () => ({
       childId: activeChild?.id,
@@ -794,9 +799,9 @@ export default function HomeDashboard() {
       selles: data.selles,
       others: widgetOthers,
       sleepStartMs: sleepStartTs,
-      sleepIsNap: sommeilEnCours?.isNap,
-      sleepChildId: (sommeilEnCours as { childId?: string } | undefined)?.childId,
-      walkChildId: (promenadeEnCours as { childId?: string } | undefined)?.childId,
+      sleepIsNap,
+      sleepChildId,
+      walkChildId,
       walkStartMs: promenadeStartTs,
       sleepTotalMinutes: todayStats.sommeil.finishedMinutes,
       lastAbsoluteMealMs: todayStats.meals.lastAbsoluteTimestamp,
@@ -817,8 +822,9 @@ export default function HomeDashboard() {
       data.selles,
       widgetOthers,
       sleepStartTs,
-      sommeilEnCours,
-      promenadeEnCours,
+      sleepIsNap,
+      sleepChildId,
+      walkChildId,
       promenadeStartTs,
       todayStats.sommeil.finishedMinutes,
       todayStats.meals.lastAbsoluteTimestamp,

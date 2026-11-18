@@ -621,6 +621,12 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "widget_fanout",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "revenuecat_webhook_events",
       "fieldPath": "expireAt",
       "ttl": true,

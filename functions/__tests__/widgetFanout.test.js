@@ -14,6 +14,10 @@ Expo.mockImplementation(() => expoClient);
 Expo.isExpoPushToken = jest.fn((t) => typeof t === "string" && t.startsWith("ExponentPushToken["));
 
 const fanout = require("../src/widget/fanout");
+// Regroupement actif mais court dans les tests (20 ms au lieu de 2 s) : les
+// chemins du marqueur sont réellement parcourus par toute la suite.
+const SUITE_COALESCE_MS = 20;
+fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse("2026-11-13T16:00:00Z"); // 17:00 à Paris
@@ -301,7 +305,408 @@ describe("triggers", () => {
     await fanout.onWidgetEventWrite(event(null, { type: "selle", childId: "c1", date: ts(NOW) }));
     expect(pushed()).toHaveLength(2);
     jest.clearAllMocks();
-    await fanout.onWidgetLiveWrite({ params: { childId: "c1" } });
+    // Début d'une tétée (état vide → côté en cours) : urgent.
+    const tomb = { leftSeconds: 0, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: null, updatedAt: 0 };
+    const left = { ...tomb, runningSide: "left", runningSince: NOW - 1000, startedAt: NOW - 1000, updatedAt: NOW };
+    await fanout.onWidgetLiveWrite({ params: { childId: "c1", sessionId: "nursing" }, ...event(tomb, left) });
+    expect(pushed().length).toBeGreaterThan(0);
     expect(pushed().every((m) => m.priority === "high")).toBe(true);
+  });
+});
+
+describe("jalon 4 : urgence de la tétée, lectures groupées, regroupement", () => {
+  const db = () => require("firebase-admin").firestore();
+
+  it("tétée partagée : tout changement visible est urgent ; un état vide réécrit ne l'est pas", () => {
+    // Fin de tétée = état vide écrit (EMPTY_NURSING_TIMER), pas une suppression.
+    const tomb = { leftSeconds: 0, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: null, updatedAt: 0 };
+    const left = { leftSeconds: 0, rightSeconds: 0, runningSide: "left", runningSince: NOW - 60_000, startedAt: NOW - 60_000, updatedAt: NOW - 1000 };
+    const right = { ...left, leftSeconds: 60, runningSide: "right", runningSince: NOW - 5000, updatedAt: NOW - 500 };
+    const paused = { ...left, leftSeconds: 60, runningSide: null, runningSince: null, updatedAt: NOW - 500 };
+    const expired = { ...paused, updatedAt: NOW - 30 * HOUR };
+    expect(fanout.liveChange(tomb, left, NOW)).toEqual({ urgent: true }); // début
+    expect(fanout.liveChange(left, tomb, NOW)).toEqual({ urgent: true }); // fin
+    // Décision du 18/11 : les autres téléphones suivent en direct.
+    expect(fanout.liveChange(left, right, NOW)).toEqual({ urgent: true }); // bascule de côté
+    expect(fanout.liveChange(left, paused, NOW)).toEqual({ urgent: true }); // pause
+    expect(fanout.liveChange(paused, left, NOW)).toEqual({ urgent: true }); // reprise
+    expect(fanout.liveChange(expired, left, NOW)).toEqual({ urgent: true }); // nouveau départ
+    expect(fanout.liveChange(null, tomb, NOW)).toEqual({ urgent: false });
+    expect(fanout.liveChange(null, left, NOW)).toEqual({ urgent: true });
+  });
+
+  it("regroupement : widget désactivé → ni marqueur ni envoi", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: false } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+    expect(pushed()).toHaveLength(0);
+  });
+
+  it("regroupement : coalesceMs 0 dans la config → envoi direct, sans marqueur (regroupement actif par défaut)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, coalesceMs: 0 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+    expect(pushed()).toHaveLength(2);
+    // Contre-épreuve : sans le réglage, le marqueur est posé.
+    memoryStore(seed());
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(true);
+  });
+
+  it("urgent : part sans attendre le délai de regroupement", async () => {
+    memoryStore(seed());
+    fanout._setCoalesceMsForTests(1500);
+    try {
+      const t0 = performance.now();
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+      expect(performance.now() - t0).toBeLessThan(1000);
+      expect(pushed()).toHaveLength(2);
+    } finally {
+      fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
+    }
+  });
+
+  it("appareils lus en une seule requête, préférences et abonnements en un aller-retour", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    await fanout.fanOutWidget(firestore, "c1", { urgent: true });
+    const deviceQueries = firestore.collection.mock.calls.filter(([name]) => name === "device_tokens");
+    expect(deviceQueries).toHaveLength(1);
+    const prefRefs = firestore.getAll.mock.calls.flat().map((r) => r.path);
+    expect(prefRefs).toEqual(expect.arrayContaining(["user_preferences/mum", "subscriptions/mum", "user_preferences/dad", "subscriptions/dad"]));
+    expect(pushed()).toHaveLength(2);
+  });
+
+  it("un appareil d'un ancien membre (plus dans access) ne reçoit rien", async () => {
+    memoryStore(seed({
+      "device_tokens/x1": { userId: "ex", token: "ExponentPushToken[x1]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris" },
+    }));
+    await fanout.fanOutWidget(db(), "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).not.toContain("ExponentPushToken[x1]");
+  });
+
+  it("deux saisies rapprochées non urgentes : un seul envoi (le dernier)", async () => {
+    memoryStore(seed());
+    fanout._setCoalesceMsForTests(30);
+    try {
+      await Promise.all([
+        fanout.coalescedFanOut(db(), "c1", { urgent: false }),
+        fanout.coalescedFanOut(db(), "c1", { urgent: false }),
+      ]);
+    } finally {
+      fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
+    }
+    // 2 appareils, un seul envoi chacun.
+    expect(pushed()).toHaveLength(2);
+  });
+
+  it("un envoi urgent part tout de suite et rend caduc l'envoi non urgent en attente", async () => {
+    memoryStore(seed());
+    fanout._setCoalesceMsForTests(30);
+    try {
+      const pending = fanout.coalescedFanOut(db(), "c1", { urgent: false });
+      // Ordre fixé : le jeton du non urgent est posé avant l'urgent.
+      for (let i = 0; i < 100 && !(await db().doc("widget_fanout/c1").get()).exists; i++) {
+        await new Promise((r) => setImmediate(r));
+      }
+      expect((await db().doc("widget_fanout/c1").get()).exists).toBe(true);
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+      expect(pushed()).toHaveLength(2);
+      expect(pushed().every((m) => m.priority === "high")).toBe(true);
+      await pending;
+    } finally {
+      fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
+    }
+    expect(pushed()).toHaveLength(2);
+  });
+});
+
+describe("jalon 4 : replis et filtres (revue ECC)", () => {
+  const db = () => require("firebase-admin").firestore();
+  // Regroupement actif (court) pour ces tests : sinon le marqueur n'est jamais touché.
+  const withCoalesce = async (fn) => {
+    fanout._setCoalesceMsForTests(10);
+    try {
+      await fn();
+    } finally {
+      fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
+    }
+  };
+  const failingMarker = (firestore, method) => {
+    const realDoc = firestore.doc.getMockImplementation();
+    const calls = { n: 0 };
+    firestore.doc.mockImplementation((p) => {
+      const r = realDoc(p);
+      if (p.startsWith("widget_fanout/")) {
+        r[method] = async () => {
+          calls.n += 1;
+          throw Object.assign(new Error(`boom on widget_fanout/c1`), { code: "unavailable" });
+        };
+      }
+      return r;
+    });
+    return calls;
+  };
+
+  it("marqueur impossible à écrire : l'écriture est tentée, journalisée sans identifiant, et l'envoi part", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const calls = failingMarker(firestore, "set");
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await withCoalesce(() => fanout.coalescedFanOut(firestore, "c1", { urgent: false }));
+    expect(calls.n).toBe(1);
+    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker failed", { code: "unavailable" });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("c1");
+    expect(pushed()).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  it("marqueur illisible après l'attente : la lecture est tentée et l'envoi part", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const calls = failingMarker(firestore, "get");
+    await withCoalesce(() => fanout.coalescedFanOut(firestore, "c1", { urgent: false }));
+    expect(calls.n).toBe(1);
+    expect(pushed()).toHaveLength(2);
+  });
+
+  it("marqueur avec date d'expiration (politique TTL)", async () => {
+    memoryStore(seed());
+    await withCoalesce(() => fanout.coalescedFanOut(db(), "c1", { urgent: true }));
+    const marker = (await db().doc("widget_fanout/c1").get()).data();
+    expect(marker.expireAt.toMillis()).toBeGreaterThanOrEqual(Date.now() + 23 * HOUR);
+    expect(marker.expireAt.toMillis()).toBeLessThanOrEqual(Date.now() + 25 * HOUR);
+  });
+
+  it("urgent puis non urgent, regroupement actif : le non urgent envoie aussi (jamais de perte)", async () => {
+    memoryStore(seed());
+    await withCoalesce(async () => {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+      await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    });
+    expect(pushed()).toHaveLength(4);
+  });
+
+  it("aucun appareil n'affiche l'enfant : ni marqueur ni attente", async () => {
+    memoryStore(seed({ "device_tokens/m1": { userId: "mum", widgetChildId: "c2" }, "device_tokens/d1": { userId: "dad", widgetChildId: "c2" } }));
+    await withCoalesce(() => fanout.coalescedFanOut(db(), "c1", { urgent: false }));
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+    expect(pushed()).toHaveLength(0);
+  });
+
+  it("coalesceMs invalide (null) : réglage par défaut, le regroupement reste actif", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, coalesceMs: null } }));
+    await withCoalesce(() => fanout.coalescedFanOut(db(), "c1", { urgent: false }));
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(true);
+  });
+
+  it("marqueur illisible : deux non urgents rapprochés envoient tous les deux (au lieu d'un seul)", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const realDoc = firestore.doc.getMockImplementation();
+    firestore.doc.mockImplementation((p) => {
+      const r = realDoc(p);
+      if (p.startsWith("widget_fanout/")) r.get = async () => { throw Object.assign(new Error("x"), { code: "unavailable" }); };
+      return r;
+    });
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await Promise.all([
+      fanout.coalescedFanOut(firestore, "c1", { urgent: false }),
+      fanout.coalescedFanOut(firestore, "c1", { urgent: false }),
+    ]);
+    expect(pushed()).toHaveLength(4);
+    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker unreadable", { code: "unavailable" });
+    warn.mockRestore();
+  });
+
+  it("préférences illisibles : le membre est écarté, l'autre reçoit", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const realGetAll = firestore.getAll.getMockImplementation();
+    firestore.getAll.mockImplementation(async (...refs) => {
+      if (refs.some((r) => r.path.startsWith("user_preferences/"))) throw new Error("deadline");
+      return realGetAll(...refs);
+    });
+    const realDoc = firestore.doc.getMockImplementation();
+    firestore.doc.mockImplementation((p) => {
+      const r = realDoc(p);
+      if (p === "user_preferences/mum") r.get = async () => { throw new Error("denied"); };
+      return r;
+    });
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.fanOutWidget(firestore, "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[d1]"]);
+    console.warn.mockRestore();
+  });
+
+  it("abonnement illisible : le membre est écarté (jamais rétrogradé en version gratuite)", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const realGetAll = firestore.getAll.getMockImplementation();
+    firestore.getAll.mockImplementation(async (...refs) => {
+      if (refs.some((r) => r.path.startsWith("user_preferences/"))) throw new Error("deadline");
+      return realGetAll(...refs);
+    });
+    const realDoc = firestore.doc.getMockImplementation();
+    firestore.doc.mockImplementation((p) => {
+      const r = realDoc(p);
+      if (p === "subscriptions/dad") r.get = async () => { throw new Error("denied"); };
+      return r;
+    });
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.fanOutWidget(firestore, "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
+    console.warn.mockRestore();
+  });
+
+  it("dernier repas illisible : l'envoi part, repas « inconnu », erreur journalisée", async () => {
+    memoryStore(seed());
+    const reminderLib = require("../lib/reminders");
+    const spy = jest.spyOn(reminderLib, "getLastEventMillis").mockRejectedValueOnce(Object.assign(new Error("x"), { code: "unavailable" }));
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.fanOutWidget(db(), "c1", { urgent: true });
+    expect(pushed()).toHaveLength(2);
+    expect(warn).toHaveBeenCalledWith("widgetFanout: last event unreadable", { code: "unavailable" });
+    spy.mockRestore();
+    warn.mockRestore();
+  });
+
+  it("envoi gagnant en échec passager : réessayé une fois", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const realDoc = firestore.doc.getMockImplementation();
+    let failed = false;
+    firestore.doc.mockImplementation((p) => {
+      const r = realDoc(p);
+      if (p === "children/c1" && !failed) {
+        r.get = async () => {
+          failed = true;
+          throw Object.assign(new Error("x"), { code: "unavailable" });
+        };
+      }
+      return r;
+    });
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.coalescedFanOut(firestore, "c1", { urgent: true });
+    expect(failed).toBe(true);
+    expect(pushed()).toHaveLength(2);
+    console.warn.mockRestore();
+  });
+
+  it("déclencheur de la tétée : bascule de côté urgente ; état vide réécrit en priorité normale", async () => {
+    memoryStore(seed());
+    const event = (before, after) => ({
+      data: { before: { exists: !!before, data: () => before }, after: { exists: !!after, data: () => after } },
+    });
+    const left = { leftSeconds: 0, rightSeconds: 0, runningSide: "left", runningSince: NOW - 60_000, startedAt: NOW - 60_000, updatedAt: NOW - 1000 };
+    const right = { ...left, leftSeconds: 60, runningSide: "right", runningSince: NOW - 5000, updatedAt: NOW };
+    await fanout.onWidgetLiveWrite({ params: { childId: "c1", sessionId: "nursing" }, ...event(left, right) });
+    expect(pushed().length).toBeGreaterThan(0);
+    expect(pushed().every((m) => m.priority === "high")).toBe(true);
+    jest.clearAllMocks();
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+    const tomb = { leftSeconds: 0, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: null, updatedAt: 0 };
+    await fanout.onWidgetLiveWrite({ params: { childId: "c1", sessionId: "nursing" }, ...event(tomb, tomb) });
+    expect(pushed().length).toBeGreaterThan(0);
+    expect(pushed().every((m) => m.priority === "normal")).toBe(true);
+    jest.clearAllMocks();
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+    // Autre session partagée (pas une tétée) : urgente par défaut.
+    await fanout.onWidgetLiveWrite({ params: { childId: "c1", sessionId: "autre" }, ...event(tomb, tomb) });
+    expect(pushed().every((m) => m.priority === "high")).toBe(true);
+  });
+
+  it("rattrapage iPhone : un envoi urgent bloqué par l'écart de 2 min part dès la fin de l'écart, iPhone seul", async () => {
+    const docs = memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 60_000 },
+    }));
+    const waits = [];
+    fanout._setCatchUpSleepForTests(async (ms) => {
+      waits.push(ms);
+      jest.setSystemTime(Date.now() + ms);
+    });
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    const toIos = pushed().filter((m) => m.to === "ExponentPushToken[i1]");
+    const toAndroid = pushed().filter((m) => m.to === "ExponentPushToken[m1]");
+    // Bloqué au premier passage, envoyé au rattrapage, après ~1 min (fin de l'écart).
+    expect(toIos).toHaveLength(1);
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toBeGreaterThan(55_000);
+    expect(waits[0]).toBeLessThanOrEqual(61_000);
+    // Le Samsung n'est pas servi deux fois.
+    expect(toAndroid).toHaveLength(1);
+    expect(docs.get("device_tokens/i1").lastIosPushAt).toBeGreaterThan(NOW);
+  });
+
+  it("rattrapage iPhone : jamais pour un envoi non urgent (plafond de 20 min)", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 60_000 },
+    }));
+    const waits = [];
+    fanout._setCatchUpSleepForTests(async (ms) => { waits.push(ms); });
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    expect(waits).toHaveLength(0);
+    expect(pushed().filter((m) => m.to === "ExponentPushToken[i1]")).toHaveLength(0);
+  });
+
+  it("coalesceMs invalide (\"\", négatif) : réglage par défaut, marqueur posé", async () => {
+    for (const bad of ["", -5, "100"]) {
+      memoryStore(seed({ "app_config/widgetPush": { enabled: true, coalesceMs: bad } }));
+      await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+      expect((await db().doc("widget_fanout/c1").get()).exists).toBe(true);
+    }
+  });
+
+  it("appareils qui affichent l'enfant sans widget posé (widgetPush faux) : ni marqueur ni attente", async () => {
+    memoryStore(seed({
+      "device_tokens/m1": { userId: "mum", token: "ExponentPushToken[m1]", platform: "android", widgetPush: false, widgetCap: 3, widgetChildId: "c1" },
+      "device_tokens/d1": { userId: "dad", token: "ExponentPushToken[d1]", platform: "android", widgetPush: false, widgetCap: 3, widgetChildId: "c1" },
+    }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+    expect(pushed()).toHaveLength(0);
+  });
+
+  it("suppression de l'enfant : le marqueur de regroupement est effacé", async () => {
+    memoryStore(seed({ "widget_fanout/c1": { token: "t", at: NOW } }));
+    const { deleteChildDataBatched } = require("../src/deletion/childData");
+    await deleteChildDataBatched(db(), "c1");
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+  });
+
+  it("lecture groupée en échec : repli sur des lectures une à une, l'envoi part", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    // Seule la lecture groupée des préférences échoue (celle des comptes en
+    // suppression, indispensable, passe).
+    const realGetAll = firestore.getAll.getMockImplementation();
+    firestore.getAll.mockImplementation(async (...refs) => {
+      if (refs.some((r) => r.path.startsWith("user_preferences/"))) throw new Error("deadline");
+      return realGetAll(...refs);
+    });
+    await fanout.fanOutWidget(firestore, "c1", { urgent: true });
+    expect(pushed()).toHaveLength(2);
+  });
+
+  it("nouvelle tétée qui remplace une tétée en pause encore utilisable : urgente", () => {
+    const paused = { leftSeconds: 60, rightSeconds: 0, runningSide: null, runningSince: null, startedAt: NOW - 20 * 60_000, updatedAt: NOW - 600_000 };
+    const fresh = { leftSeconds: 0, rightSeconds: 0, runningSide: "left", runningSince: NOW - 1000, startedAt: NOW - 1000, updatedAt: NOW };
+    expect(fanout.liveChange(paused, fresh, NOW)).toEqual({ urgent: true });
+  });
+
+  it("compte en suppression isolé : l'autre parent reçoit, lui non", async () => {
+    memoryStore(seed({ "users/dad": { pendingDeletion: true } }));
+    await fanout.fanOutWidget(db(), "c1", { urgent: true });
+    expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
   });
 });

@@ -136,6 +136,20 @@ Même format à chaque fois, pour comparer les notes d'une revue à l'autre :
 **Livrable** : `docs/strategie/ux/REVUE_ECC_Sxx.md`, avec une note sur 20 et des constats P0, P1 et P2.
 - Les **P0 sont corrigés avant le sprint suivant**.
 - Les P1 sont planifiés dans le sprint suivant.
+## Lot 5 (avant la MEP)
+
+- Jalon 4, performance du widget : plan détaillé et avancement dans [LOT5_JALON4_PERF.md](LOT5_JALON4_PERF.md).
+
+## Prochain chantier : temps réel entre appareils (après le jalon 4, validé par Yoss le 18/11)
+
+Besoin : une session (tétée, sieste, balade) doit se suivre **en direct** sur tous les téléphones du foyer. Aujourd'hui, un autre iPhone peut avoir jusqu'à 2 min de retard (plafond Apple des notifications silencieuses, voir LOT5_JALON4_PERF.md).
+
+À cadrer :
+
+1. **Live Activity** (écran verrouillé, Dynamic Island) mise à jour à distance par APNs : la voie prévue par Apple pour un minuteur en cours.
+2. **À vérifier : les notifications de mise à jour propres aux widgets.** Apple les aurait ajoutées avec iOS 26, elles aussi soumises à un budget. Ce n'est pas encore vérifié. Si elles existent, elles peuvent améliorer le widget lui-même, au-delà des sessions.
+3. **Écarté :** passer par des notifications visibles pour réveiller le widget (une notification à chaque changement, budget du widget inchangé, risque à la validation Apple).
+
 ## Décisions en attente (Yoss)
 
 1. Widget complet pour les comptes inscrits avant le Premium (proposition : oui, c'est un ajout).
