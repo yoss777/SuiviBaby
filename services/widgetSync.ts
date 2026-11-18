@@ -8,7 +8,7 @@ import { AppState, Platform } from "react-native";
 
 import { clearWidgetPush, noteAppSnapshot } from "@/modules/widget-push";
 import { captureServiceError } from "@/utils/errorReporting";
-import { isWidgetUserActionRecent } from "@/services/widgetUserAction";
+import { takeWidgetUserAction } from "@/services/widgetUserAction";
 import {
   EMPTY_NOW_WIDGET,
   EMPTY_NOW_WIDGET_NATIVE,
@@ -37,12 +37,27 @@ type WidgetHandle = {
  */
 export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { dates: number[]; countingEndMs: number } {
   const dates = new Set<number>([now]);
+  // Option D (jalon 4) : une entrée par minute seulement tant que c'est utile
+  // (session en cours, repas ou change de moins d'une heure : « 45 min »
+  // doit avancer à la minute, aligné sur l'Accueil). Le reste du temps, tout
+  // affichage est au-delà d'une heure et « il y a » est arrondi à 5 min
+  // (BebeMaintenant.ios.tsx) : une entrée toutes les 5 min suffit. ~70
+  // entrées au lieu de ~123 quand rien ne bouge (préparation et batterie).
+  const minuteUntil = minutePrecisionUntil(props, now);
   // Grille à la minute de la pendule (hh:mm:00) : les durées sont comptées « à
   // la pendule » (secondes du début ignorées), comme Android et l'Accueil ; une
   // seule grille, quel que soit le nombre de sessions en cours.
   const firstMinute = Math.floor(now / 60_000) * 60_000 + 60_000;
-  for (let k = 0; k < 60; k++) dates.add(firstMinute + k * 60_000);
-  for (let k = 13; k <= 48; k++) dates.add(now + k * 5 * 60_000);
+  for (let k = 0; k < 60; k++) {
+    const t = firstMinute + k * 60_000;
+    if (t <= minuteUntil) dates.add(t);
+  }
+  // Ensuite (et la première heure sans besoin de la minute) : toutes les
+  // 5 min de la pendule (hh:00, hh:05…) jusqu'à 4 h.
+  const firstFive = Math.floor(now / 300_000) * 300_000 + 300_000;
+  for (let t = firstFive; t <= now + 4 * 3600_000; t += 300_000) {
+    if (t > minuteUntil) dates.add(t);
+  }
   const countingEndMs = Math.max(...dates);
 
   // Au-delà du comptage : une entrée par heure jusqu'à 24 h, sinon « il y a
@@ -51,6 +66,31 @@ export function widgetTimelinePlan(props: NowWidgetProps, now = Date.now()): { d
   // passent au compteur natif.
   addExactEntries(dates, props, now, countingEndMs, 3600_000);
   return { dates: [...dates].sort((a, b) => a - b), countingEndMs };
+}
+
+/**
+ * Jusqu'à quand une entrée par minute est utile (au plus 1 h) : session en
+ * cours (chrono), ou repas / change de moins d'une heure (« il y a 45 min »).
+ * Sinon `now` : aucune entrée à la minute.
+ */
+export function minutePrecisionUntil(props: NowWidgetProps, now: number): number {
+  const cap = now + 60 * 60_000;
+  const lives = props.lives ?? (props.live ? [props.live] : []);
+  // Seules les sessions qui avancent : pas une tétée en pause (chrono figé).
+  // Une session « oubliée ? » avance toujours (chrono et total de sommeil) :
+  // seul son style change, elle reste comptée à la minute.
+  const ticking = lives.some(
+    (l) => l.pausedAtMs == null && !(typeof l.expiresAtMs === "number" && l.expiresAtMs <= now),
+  );
+  if (ticking) return cap;
+  let until = now;
+  for (const ms of [props.lastMealMs, props.day?.lastDiaperMs]) {
+    if (typeof ms === "number" && Number.isFinite(ms) && now - ms < 3600_000) {
+      // Minute de la pendule où « il y a » atteint 1 h (puis arrondi à 5 min).
+      until = Math.max(until, Math.floor(ms / 60_000) * 60_000 + 3600_000);
+    }
+  }
+  return Math.min(until, cap);
 }
 
 /**
@@ -164,6 +204,17 @@ let pendingRun: (() => void) | null = null;
 /** L'envoi en attente est un contenu « pas encore chargé » : jamais forcé. */
 let pendingUnloaded = false;
 
+/**
+ * iPhone, retour dans l'app (jalon 4) : la timeline complète n'est pas
+ * réécrite si le contenu n'a pas changé et qu'elle date de moins de 30 min
+ * (ses entrées couvrent encore la première heure). Avant : 15 à 30
+ * réécritures lourdes par jour pour rien.
+ */
+export const WIDGET_IOS_FRESH_TIMELINE_MS = 30 * 60_000;
+let lastFullTimelineAt = 0;
+/** Contenu écrit par l'app avant le retour au premier plan (iPhone). */
+let keyBeforeInvalidate = "";
+
 /** Délai avant la timeline complète, après une timeline courte (iPhone). */
 export const WIDGET_IOS_FULL_TIMELINE_DELAY_MS = 4000;
 let fullTimelineTimer: ReturnType<typeof setTimeout> | null = null;
@@ -209,6 +260,7 @@ function writeIosTimeline(widget: WidgetHandle, props: NowWidgetProps, quick = f
   // l'expiration (24 h) ou une marge, le chrono restait figé (« 4h00 »).
   const timelineProps = toNativeWidgetProps({ ...props, timelineEndMs: countingEndMs });
   widget.updateTimeline!(dates.map((ms) => ({ date: new Date(ms), props: timelineProps })));
+  lastFullTimelineAt = quick ? 0 : Date.now();
 }
 
 /**
@@ -226,6 +278,9 @@ export function writeServerWidgetProps(props: NowWidgetProps): boolean {
     cancelFullTimeline();
     writeIosTimeline(widget, props);
     lastKey = "";
+    // Le widget montre maintenant le contenu du serveur : le retour dans l'app
+    // doit le réécrire avec celui de l'app.
+    keyBeforeInvalidate = "";
     // Sessions affichées par l'envoi serveur : un démarrage ou un arrêt qui suit
     // reste écrit tout de suite.
     lastLivesSig = livesSignature(props);
@@ -254,8 +309,11 @@ function write(props: NowWidgetProps, key: string, opts: { quick?: boolean } = {
       }
     } else {
       widget.updateSnapshot(toNativeWidgetProps(props));
+      // Plus de timeline complète affichée (chargement…) : pas de saut au retour.
+      lastFullTimelineAt = 0;
     }
     lastKey = key;
+    keyBeforeInvalidate = "";
     lastLivesSig = props.loading ? null : livesSignature(props);
     lastWrittenDay = dayOf(Date.now());
     if (props.childId !== lastChildId) childSwitchedAt = Date.now();
@@ -301,6 +359,23 @@ export function pushNowWidget(props: NowWidgetProps): void {
     return;
   }
   cancelPendingWidgetPush();
+  // iPhone, retour dans l'app sans changement : la timeline complète écrite il
+  // y a moins de 30 min reste juste, on ne la réécrit pas. (Chargement puis
+  // contenu identique : couvert par l'égalité des clés, le widget l'affiche déjà.)
+  if (
+    keyBeforeInvalidate !== "" &&
+    key === keyBeforeInvalidate &&
+    !pendingFull &&
+    lastFullTimelineAt > 0 &&
+    // Horloge du téléphone reculée (fuseau, réglage manuel) : on réécrit.
+    Date.now() >= lastFullTimelineAt &&
+    Date.now() - lastFullTimelineAt < WIDGET_IOS_FRESH_TIMELINE_MS &&
+    lastWrittenDay === dayOf(Date.now())
+  ) {
+    lastKey = key;
+    keyBeforeInvalidate = "";
+    return;
+  }
   if (looksUnloaded(props)) {
     // Hors premier plan, la réponse du serveur ne peut plus arriver (réseau
     // suspendu) : le délai expirait et écrivait « 0 repas » au passage en
@@ -326,7 +401,8 @@ export function pushNowWidget(props: NowWidgetProps): void {
   const livesChanged = lastLivesSig != null && livesSignature(props) !== lastLivesSig;
   // Saisie de l'utilisateur à l'instant (repas, change…) : écrite tout de suite,
   // en timeline courte sur iPhone, comme un démarrage ou un arrêt de session.
-  const userAction = isWidgetUserActionRecent();
+  // Une seule écriture immédiate par saisie (voir takeWidgetUserAction).
+  const userAction = takeWidgetUserAction();
   const immediate =
     props.childId !== lastChildId ||
     lastKey.includes('"loading":true') ||
@@ -381,6 +457,8 @@ export function invalidateWidgetKey(): void {
   // retour l'écrit (et l'annule) ; sinon (écran pas prêt) elle part après
   // l'anti-rebond. Jamais deux timelines lourdes coup sur coup.
   if (pendingFull) scheduleFullTimeline(WIDGET_SYNC_DEBOUNCE_MS + 1000);
+  // iPhone : contenu de l'app encore affiché (aucun envoi serveur depuis).
+  if (Platform.OS === "ios" && lastKey !== "") keyBeforeInvalidate = lastKey;
   // Seule la clé de contenu : la signature des sessions garde l'écriture
   // immédiate d'un démarrage ou d'un arrêt au retour au premier plan.
   lastKey = "";
@@ -404,6 +482,8 @@ export function clearNowWidget(opts: { suspend?: boolean } = {}): boolean {
   cancelPendingWidgetPush();
   cancelFullTimeline();
   lastKey = "";
+  keyBeforeInvalidate = "";
+  lastFullTimelineAt = 0;
   lastLivesSig = null;
   lastChildId = undefined;
   clearWidgetPush();
@@ -423,6 +503,8 @@ export function clearNowWidget(opts: { suspend?: boolean } = {}): boolean {
 export function __resetWidgetSyncForTests(widget?: WidgetHandle | null): void {
   handle = widget === undefined ? undefined : widget;
   lastKey = "";
+  keyBeforeInvalidate = "";
+  lastFullTimelineAt = 0;
   lastLivesSig = null;
   lastChildId = undefined;
   lastWrittenDay = "";
