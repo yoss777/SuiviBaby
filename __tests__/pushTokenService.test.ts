@@ -15,15 +15,16 @@ jest.mock("expo-notifications", () => ({
 
 jest.mock("@/config/firebase", () => ({ db: {} }));
 let mockInstalled: number | null = 1;
+let mockHang = false;
 jest.mock("@/modules/widget-push", () => ({
   ...jest.requireActual("@/modules/widget-push"),
-  installedWidgetCount: () => Promise.resolve(mockInstalled),
+  installedWidgetCount: () => (mockHang ? new Promise(() => {}) : Promise.resolve(mockInstalled)),
 }));
 
 import * as Notifications from "expo-notifications";
 import { deleteDoc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
-import { refreshWidgetPresence, registerPushToken, removePushTokens, setWidgetChild, SIGN_OUT_WAIT_MS } from "@/services/pushTokenService";
+import { refreshWidgetPresence, registerPushToken, removePushTokens, rewriteWidgetChild, setWidgetChild, SIGN_OUT_WAIT_MS } from "@/services/pushTokenService";
 import { getDocs } from "firebase/firestore";
 
 const mocked = <T>(fn: T) => fn as unknown as jest.Mock;
@@ -37,6 +38,47 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockInstalled = 1;
   mocked(Notifications.getExpoPushTokenAsync).mockResolvedValue({ data: "ExponentPushToken[abc]" });
+});
+
+describe("WidgetKit qui ne répond pas (revue en profondeur)", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    mockHang = false;
+    jest.useRealTimers();
+  });
+  it("le jeton est quand même écrit après 3 s, présence du widget inconnue", async () => {
+    mockHang = true;
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(setDoc).mockResolvedValue(undefined);
+    const p = registerPushToken("u7");
+    await jest.advanceTimersByTimeAsync(3000);
+    await p;
+    expect(setDoc).toHaveBeenCalled();
+    await removePushTokens("u7");
+  });
+});
+
+describe("rewriteWidgetChild (après un nouveau consentement)", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  it("réécrit l'enfant voulu même s'il était déjà noté comme écrit", async () => {
+    mocked(updateDoc).mockResolvedValue(undefined);
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    await registerPushToken("u9");
+    setWidgetChild("cX");
+    jest.advanceTimersByTime(3000);
+    await Promise.resolve();
+    mocked(updateDoc).mockClear();
+    setWidgetChild("cX"); // déjà noté : rien
+    jest.advanceTimersByTime(3000);
+    expect(updateDoc).not.toHaveBeenCalled();
+    rewriteWidgetChild();
+    jest.advanceTimersByTime(0);
+    expect(mocked(updateDoc).mock.calls.at(-1)?.[1]).toEqual({ widgetChildId: "cX" });
+    await removePushTokens("u9");
+  });
 });
 
 describe("registerPushToken", () => {

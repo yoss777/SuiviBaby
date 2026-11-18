@@ -25,6 +25,7 @@ jest.mock("@/services/localNotificationService", () => ({
 jest.mock("@/services/pushTokenService", () => ({
   registerPushToken: jest.fn(() => Promise.resolve()),
   removePushTokens: jest.fn(() => Promise.resolve()),
+  resetPushSession: jest.fn(),
 }));
 
 jest.mock("@/services/offlineQueueService", () => ({
@@ -326,6 +327,8 @@ describe("AuthContext", () => {
       expect(clearTodayEventsCache).toHaveBeenCalled();
       expect(clearWeeklyEventsCache).toHaveBeenCalled();
       expect(resetChildPermissionsStore).toHaveBeenCalled();
+      // Plus aucun essai de jeton ou d'enfant du widget pour l'ancien compte.
+      expect(require("@/services/pushTokenService").resetPushSession).toHaveBeenCalled();
     });
 
     it("still signs out when the export cleanup fails", async () => {

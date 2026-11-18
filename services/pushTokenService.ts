@@ -127,6 +127,23 @@ async function getExpoPushToken(): Promise<string | null> {
 }
 
 /** Un widget SuiviBaby est-il posé ? null : inconnu (module absent, erreur). */
+const WIDGET_PROBE_TIMEOUT_MS = 3000;
+/** Valeur de repli si `p` ne répond pas à temps (signalé une fois par cas). */
+async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T, operation: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = Symbol("late");
+  try {
+    const r = await Promise.race([p, new Promise<typeof late>((resolve) => { timer = setTimeout(() => resolve(late), ms); })]);
+    if (r === late) {
+      captureServiceError(new Error(`${operation}: no answer in ${ms} ms`), { service: "pushToken", operation });
+      return fallback;
+    }
+    return r as T;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function widgetInstalled(): Promise<boolean | null> {
   const n = await installedWidgetCount();
   return n == null ? null : n > 0;
@@ -138,18 +155,19 @@ let lastWidgetPush: boolean | null = null;
  * Retour au premier plan : widget ajouté ou retiré depuis ? Met à jour le
  * jeton de l'appareil (le serveur n'envoie qu'aux appareils qui en ont un).
  */
-export async function refreshWidgetPresence(): Promise<void> {
+export async function refreshWidgetPresence(): Promise<boolean | null> {
   const docId = getTokenDocId();
-  if (!docId || !registeredUserId) return;
+  if (!docId || !registeredUserId) return null;
   const installed = await widgetInstalled();
   // Inconnu : on n'écrase pas la valeur enregistrée.
-  if (installed == null || installed === lastWidgetPush) return;
+  if (installed == null || installed === lastWidgetPush) return installed;
   try {
     await updateDoc(doc(db, COLLECTION, docId), { widgetPush: installed });
     lastWidgetPush = installed;
   } catch (error) {
     if (!isConnectivityError(error)) captureServiceError(error, { service: "pushToken", operation: "widgetPresence" });
   }
+  return installed;
 }
 
 async function linkKeyField(): Promise<{ widgetLinkKey?: string }> {
@@ -196,8 +214,10 @@ async function registerOnce(userId: string, gen: number): Promise<void> {
       if (ownExisting) captureServiceError(error, { service: "pushToken", operation: "readTokenDoc" });
     }
 
-    const installed = await widgetInstalled();
-    const cap = await widgetCap();
+    // Bornées : si WidgetKit ou l'enregistrement de la tâche iPhone ne
+    // répondent pas, le jeton (et donc les rappels) restait sans être écrit.
+    const installed = await withTimeout(widgetInstalled(), WIDGET_PROBE_TIMEOUT_MS, null, "widgetInstalled");
+    const cap = await withTimeout(widgetCap(), WIDGET_PROBE_TIMEOUT_MS, 0, "widgetCap");
     const linkKey = await linkKeyField();
     // Déconnexion pendant les lectures : rien n'est écrit.
     if (gen !== sessionGen) return;
@@ -260,10 +280,13 @@ async function registerOnce(userId: string, gen: number): Promise<void> {
  * Supprime tous les push tokens d'un utilisateur.
  * À appeler au signOut.
  */
-export async function removePushTokens(userId: string): Promise<void> {
-  // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
-  // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
-  // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
+/**
+ * Fin de session locale : plus aucun nouvel essai (enfant du widget,
+ * réenregistrement) ne part pour l'ancien compte. Aussi appelée seule à une
+ * déconnexion forcée (session révoquée), où les jetons ne peuvent plus être
+ * supprimés faute d'authentification.
+ */
+export function resetPushSession(): void {
   sessionGen++;
   if (widgetChildTimer) clearTimeout(widgetChildTimer);
   widgetChildTimer = null;
@@ -271,6 +294,13 @@ export async function removePushTokens(userId: string): Promise<void> {
   desiredWidgetChildId = null;
   registeredUserId = null;
   lastWidgetPush = null;
+}
+
+export async function removePushTokens(userId: string): Promise<void> {
+  // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
+  // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
+  // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
+  resetPushSession();
   // Enregistrement en cours : il voit la nouvelle génération et n'écrit rien,
   // ou supprime ce qu'il a recréé. On l'attend pour que cela se fasse avant la
   // déconnexion Firebase (sinon refusé faute d'authentification).
@@ -383,6 +413,16 @@ export async function isDevicePushEnabled(): Promise<boolean> {
  * l'appareil que les données de cet enfant. Anti-rebond de 3 s (changement
  * de bébé rapide), sans effet tant que le jeton n'est pas connu.
  */
+/**
+ * Le serveur a pu retirer l'enfant du jeton (effacement à distance, p. ex.
+ * consentement d'une version trop ancienne) sans que l'app le sache : après un
+ * nouveau consentement, l'enfant voulu est réécrit même s'il était déjà noté.
+ */
+export function rewriteWidgetChild(): void {
+  lastWidgetChildId = null;
+  if (desiredWidgetChildId) scheduleWidgetChildWrite(desiredWidgetChildId, 0, 0);
+}
+
 export function setWidgetChild(childId: string): void {
   desiredWidgetChildId = childId;
   if (childId === lastWidgetChildId) return;

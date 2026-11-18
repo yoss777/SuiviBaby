@@ -10,7 +10,11 @@ import {
   type NursingTimerState,
   subscribeNursingTimer,
 } from "@/components/forms/nursingTimer";
+import { showAppAlert } from "@/contexts/ModalContext";
+import { installedWidgetCount } from "@/modules/widget-push";
 import { refreshWidgetPresence, setWidgetChild } from "@/services/pushTokenService";
+import { maybeShowWidgetInfo } from "@/services/widgetInfoNotice";
+import { captureServiceError } from "@/utils/errorReporting";
 import { getWidgetLinkKey } from "@/services/widgetLinkKey";
 import {
   cancelPendingWidgetPush,
@@ -25,6 +29,40 @@ import {
   localEnv,
   type OtherDayEvent,
 } from "@/utils/widgetSnapshot";
+
+/**
+ * Premier widget posé sur cet appareil : information une fois (ce qu'il
+ * montre, qui peut le voir, par où passent les mises à jour). Détection
+ * locale, indépendante du jeton de notification.
+ */
+export async function showWidgetInfoIfPlaced(): Promise<void> {
+  try {
+    const count = await installedWidgetCount();
+    if (!count || count <= 0) return;
+    await maybeShowWidgetInfo((title, message, onRead) =>
+      showAppAlert(
+        title,
+        message,
+        [
+          {
+            text: "En savoir plus",
+            // Chargé à l'appui seulement (le hook reste testable sans le routeur).
+            onPress: () => {
+              onRead();
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              (require("expo-router") as typeof import("expo-router")).router.push("/settings/privacy");
+            },
+          },
+          // « cancel » : appelé aussi à la fermeture par le bouton retour.
+          { text: "J'ai compris", style: "cancel", onPress: onRead },
+        ],
+        { key: "widget-info" },
+      ),
+    );
+  } catch (error) {
+    captureServiceError(error, { service: "widgetInfo", operation: "show" });
+  }
+}
 
 // childId : chaque événement porte son enfant (garde contre les données d'un autre bébé).
 type Dated = { date: unknown; childId?: string };
@@ -103,6 +141,7 @@ export function useNowWidgetSync(p: Params): void {
   // Un widget est-il posé ? (le serveur n'envoie qu'aux appareils qui en ont un)
   useEffect(() => {
     void refreshWidgetPresence();
+    void showWidgetInfoIfPlaced();
   }, []);
 
   // Retour au premier plan : nouvel envoi (minuit passé, brouillon expiré…).
@@ -113,6 +152,7 @@ export function useNowWidgetSync(p: Params): void {
         setTick((t) => t + 1);
         // Widget ajouté ou retiré pendant que l'app était fermée.
         void refreshWidgetPresence();
+        void showWidgetInfoIfPlaced();
       } else {
         // Retour rapide à l'écran d'accueil : rien ne reste en attente, et on
         // recalcule (la tétée du nouvel enfant n'est plus attendue, voir plus bas).

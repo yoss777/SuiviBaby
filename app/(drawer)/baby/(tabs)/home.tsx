@@ -1252,8 +1252,13 @@ export default function HomeDashboard() {
   // Session de plus de 24 h : formulaire pour l'heure de fin réelle (déclarés plus bas).
   const editSleepRef = useRef<(suggestedEnd?: Date) => void>(() => {});
   const editWalkRef = useRef<(suggestedEnd?: Date) => void>(() => {});
+  // Sessions en cours lues au moment d'une réponse (sieste passée minuit).
+  const runningIdsRef = useRef<(string | undefined)[]>([]);
+  runningIdsRef.current = [sommeilEnCours?.id, promenadeEnCours?.id];
+  const isStillRunning = useCallback((id: string) => runningIdsRef.current.includes(id), []);
   const stopTimedEventWithUndo = useStopTimedEventWithUndo<any>({
     childId: activeChild?.id,
+    isStillRunning,
     onTooLong: (event, suggestedEnd) =>
       event.type === "sommeil" ? editSleepRef.current(suggestedEnd) : editWalkRef.current(suggestedEnd),
     getSuccessLabel: (event, { isUnderOneMinute }) => {

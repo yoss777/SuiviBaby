@@ -18,6 +18,10 @@ jest.mock("@/services/widgetSync", () => ({
   invalidateWidgetKey: jest.fn(),
 }));
 jest.mock("@/services/pushTokenService", () => ({ setWidgetChild: jest.fn(), refreshWidgetPresence: jest.fn(() => Promise.resolve()) }));
+const mockInfo = jest.fn(() => Promise.resolve(false));
+jest.mock("@/services/widgetInfoNotice", () => ({ maybeShowWidgetInfo: (...a: unknown[]) => mockInfo(...(a as [])) }));
+let mockWidgets: number | null = 0;
+jest.mock("@/modules/widget-push", () => ({ installedWidgetCount: () => Promise.resolve(mockWidgets) }));
 jest.mock("@/services/widgetLinkKey", () => ({
   getWidgetLinkKey: () => Promise.resolve("0123456789abcdef0123456789abcdef"),
 }));
@@ -106,4 +110,16 @@ it("clé des liens lue avant le premier envoi : une seule écriture, avec la cl�
   await act(async () => {});
   expect(mockPush).toHaveBeenCalledTimes(1);
   expect(mockPush).toHaveBeenLastCalledWith(expect.objectContaining({ linkKey: "0123456789abcdef0123456789abcdef" }));
+});
+
+describe("information à la pose du widget", () => {
+  it("aucun widget posé : pas d'information ; widget posé : proposée", async () => {
+    const { showWidgetInfoIfPlaced } = require("@/hooks/useNowWidgetSync");
+    mockWidgets = 0;
+    await showWidgetInfoIfPlaced();
+    expect(mockInfo).not.toHaveBeenCalled();
+    mockWidgets = 1;
+    await showWidgetInfoIfPlaced();
+    expect(mockInfo).toHaveBeenCalledTimes(1);
+  });
 });

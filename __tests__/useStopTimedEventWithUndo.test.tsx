@@ -175,6 +175,43 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     spy.mockRestore();
   });
 
+  it("sieste passée minuit, arrêtée ailleurs pendant la question : la réponse n'écrit rien", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    let running = true;
+    const { result } = renderHook(() =>
+      useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong, isStillRunning: () => running }),
+    );
+    const nap = sleep({ isNap: true });
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    result.current(nap as any);
+    running = false; // l'autre parent l'a arrêtée
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Enregistrer comme nuit")!.onPress!();
+    buttons.find((b) => b.text === "Corriger l'heure de fin")!.onPress!();
+    expect(spy).not.toHaveBeenCalled();
+    expect(onTooLong).not.toHaveBeenCalled();
+    expect(mockShowToast).toHaveBeenCalledWith("Session déjà terminée");
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("sieste commencée à 23:59:30 : « Corriger » ne propose pas 23:59 (avant le début)", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const onTooLong = jest.fn();
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong }));
+    const start = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    start.setHours(23, 59, 30, 0);
+    result.current(sleep({ isNap: true, heureDebut: start }) as any);
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Corriger l'heure de fin")!.onPress!();
+    expect(onTooLong).toHaveBeenCalledWith(expect.anything(), undefined);
+    alertSpy.mockRestore();
+  });
+
   it("valeur rendue : vrai seulement si l'arrêt est écrit (retour auto du widget)", () => {
     jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong: jest.fn() }));

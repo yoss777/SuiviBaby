@@ -694,6 +694,30 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     expect(pushed().filter((m) => m.to === "ExponentPushToken[i1]")).toHaveLength(1);
   });
 
+  it("rattrapage iPhone : deux iPhone écartés à des heures différentes → tous deux servis au rattrapage", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 60_000 },
+      "device_tokens/i2": { userId: "mum", token: "ExponentPushToken[i2]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 10_000 },
+    }));
+    const waits = [];
+    fanout._setCatchUpSleepForTests(async (ms) => {
+      waits.push(ms);
+      jest.setSystemTime(Date.now() + ms);
+    });
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    // Attente jusqu'à la libération du second (~110 s), un seul rattrapage.
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toBeGreaterThan(105_000);
+    const to = pushed().map((m) => m.to);
+    expect(to.filter((t) => t === "ExponentPushToken[i1]")).toHaveLength(1);
+    expect(to.filter((t) => t === "ExponentPushToken[i2]")).toHaveLength(1);
+  });
+
   it("rattrapage iPhone : jamais pour un envoi non urgent (plafond de 20 min)", async () => {
     memoryStore(seed({
       "app_config/widgetPush": { enabled: true, ios: true },

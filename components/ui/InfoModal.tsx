@@ -116,6 +116,8 @@ export function InfoModal({
             { backgroundColor: surface },
           ]}
           onPress={(event) => event.stopPropagation()}
+          // Pas un seul élément pour VoiceOver : titre, texte et boutons restent atteignables.
+          accessible={false}
           accessibilityViewIsModal={true}
         >
           <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">

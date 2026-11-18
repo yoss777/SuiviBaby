@@ -28,6 +28,12 @@ type StopTimedEventParams<TEvent extends TimedEvent> = {
    * propose lui-même une fin plausible pour une session oubliée.
    */
   onTooLong?: (event: TEvent, suggestedEnd?: Date) => void;
+  /**
+   * Session encore en cours au moment de la réponse à une question (sieste
+   * passée minuit) ? Un autre aidant a pu l'arrêter ou la supprimer : la
+   * réponse ne réécrit jamais une session close.
+   */
+  isStillRunning?: (eventId: string) => boolean;
   getSuccessLabel: (
     event: TEvent,
     timing: { elapsedMinutes: number; isUnderOneMinute: boolean },
@@ -38,6 +44,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
   childId,
   getSuccessLabel,
   onTooLong,
+  isStillRunning,
 }: StopTimedEventParams<TEvent>) {
   const { showUndoToast, showToast } = useToast();
   const { showAlert } = useModal();
@@ -95,15 +102,25 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
                   showToast("Bébé changé : rien n'a été modifié");
                   return;
                 }
+                if (stillRunningRef.current && !stillRunningRef.current(event.id!)) {
+                  showToast("Session déjà terminée");
+                  return;
+                }
                 const endOfStartDay = new Date(start);
                 endOfStartDay.setHours(23, 59, 0, 0);
-                onTooLong?.(event, endOfStartDay);
+                // Début à 23:59:xx : 23:59 serait avant lui ; le formulaire
+                // propose alors lui-même une fin plausible.
+                onTooLong?.(event, endOfStartDay > start ? endOfStartDay : undefined);
               },
             },
             {
               text: "Enregistrer comme nuit",
               // Bébé figé : la session appartient à celui de la question.
               onPress: () => {
+                if (stillRunningRef.current && !stillRunningRef.current(event.id!)) {
+                  showToast("Session déjà terminée");
+                  return;
+                }
                 stopRef.current(
                   event,
                   { ...(extra ?? {}), isNap: false },
@@ -157,9 +174,11 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
   );
   const childIdRef = useRef(childId);
   const stopRef = useRef(stop);
+  const stillRunningRef = useRef(isStillRunning);
   useEffect(() => {
     childIdRef.current = childId;
     stopRef.current = stop;
-  }, [childId, stop]);
+    stillRunningRef.current = isStillRunning;
+  }, [childId, stop, isStillRunning]);
   return stop;
 }
