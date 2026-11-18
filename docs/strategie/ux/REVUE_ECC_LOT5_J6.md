@@ -57,7 +57,7 @@ Accessibilité, rôle « bouton » sur Android : impossible avec Glance, dont `s
 - ~~Arbitrer : le parent peut-il couper le widget d'un invité ?~~ **Décidé par Yoss le 18/11 : non.** Le widget d'un invité dépend de son seul consentement, et le parent garde le retrait de l'accès, qui efface son widget à distance. À consigner dans l'AIPD.
 
 **Code, suivi P2 :**
-- Message d'information à la pose du widget : absent.
+- ~~Message d'information à la pose du widget : absent.~~ Fait le 18/11 (`services/widgetInfoNotice.ts`). Rendu à vérifier sur téléphone avec la 1.0.22 (test 16 de [TESTS_APPAREIL.md](../widget/TESTS_APPAREIL.md), avec les tests 17 à 21 des corrections du jalon 6).
 - `live/nursing` : pas de débit limité, chaque écriture part en urgent vers tout le foyer.
 - Reprise d'un jeton d'appareil par un autre compte : risque accepté, car le serveur revérifie l'accès avant tout envoi.
 - Jetons restés en place après une déconnexion hors ligne : le serveur continue d'envoyer, le téléphone ignore les messages.

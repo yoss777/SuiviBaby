@@ -29,6 +29,17 @@ problème) · ⏳ en cours · — pas encore testé.
 | 14 | iPhone : démarrer / arrêter une balade dans l'app, retour immédiat à l'écran d'accueil → widget à jour en 1-2 s | ✅ 16/11 (version dev) | Timeline courte (~15 entrées) puis complète 4 s après ; > 5 s avec ~120 entrées, lent avec 29 |
 | 15 | iPhone : sieste lancée, app quittée tout de suite ; 20 min plus tard, rouvrir l'app → chrono en minutes (pas de secondes), « il y a » à jour | — | Timeline complète écrite au retour dans l'app |
 
+## Version 1.0.22 (à venir : lot 5, jalon 6 et information à la pose)
+
+| # | Test | Statut | Notes |
+|---|------|--------|-------|
+| 16 | **Information à la pose du widget** : poser un premier widget, rouvrir l'app → fenêtre « Votre widget SuiviBaby » une seule fois. Vérifier le rendu du texte (4 paragraphes, lisible sans mise en forme, défilement si grande police), le texte propre à l'iPhone ou à Android, « En savoir plus » → politique, « J'ai compris » → fermée ; ne revient pas à l'ouverture suivante, ni après une fermeture forcée | — | `services/widgetInfoNotice.ts`. Jamais vue sur téléphone avant la 1.0.22. Réafficher pour retester : effacer les données de l'app |
+| 17 | iPhone : saisie, puis app quittée en moins de 4 s → 20 min plus tard, sans rouvrir l'app, le « il y a » du widget a avancé | — | Jalon 6, A : timeline complète écrite au départ |
+| 18 | Sieste démarrée puis arrêtée en mode avion, puis réseau rétabli → la sieste est terminée sur l'autre téléphone et dans le widget | — | Jalon 6, G |
+| 19 | Sieste passée minuit arrêtée depuis le widget Android : la question reste affichée (pas de retour automatique à l'écran d'accueil) | — | Jalon 6, F |
+| 20 | TalkBack et VoiceOver sur le fil du jour : « Température 37,8 degrés », « Sieste 1 heure et 20 minutes » (jamais « Temp. », « min ») | — | Jalon 6, L |
+| 21 | Déconnexion en mode avion : la déconnexion aboutit en 5 s au plus, le widget se vide | — | Jalon 6, I |
+
 ## Après les tests
 
 - Ouvrir le temps réel iPhone (`app_config/widgetPush.ios`) pour les comptes de Yoss, puis tester : une saisie sur un téléphone met à jour le widget de l'autre.

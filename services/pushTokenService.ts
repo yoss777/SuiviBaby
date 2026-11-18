@@ -138,18 +138,19 @@ let lastWidgetPush: boolean | null = null;
  * Retour au premier plan : widget ajouté ou retiré depuis ? Met à jour le
  * jeton de l'appareil (le serveur n'envoie qu'aux appareils qui en ont un).
  */
-export async function refreshWidgetPresence(): Promise<void> {
+export async function refreshWidgetPresence(): Promise<boolean | null> {
   const docId = getTokenDocId();
-  if (!docId || !registeredUserId) return;
+  if (!docId || !registeredUserId) return null;
   const installed = await widgetInstalled();
   // Inconnu : on n'écrase pas la valeur enregistrée.
-  if (installed == null || installed === lastWidgetPush) return;
+  if (installed == null || installed === lastWidgetPush) return installed;
   try {
     await updateDoc(doc(db, COLLECTION, docId), { widgetPush: installed });
     lastWidgetPush = installed;
   } catch (error) {
     if (!isConnectivityError(error)) captureServiceError(error, { service: "pushToken", operation: "widgetPresence" });
   }
+  return installed;
 }
 
 async function linkKeyField(): Promise<{ widgetLinkKey?: string }> {
