@@ -1,11 +1,10 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Text, View } from "react-native";
 
 import { getNeutralColors } from "@/constants/dashboardColors";
-import { radius, space } from "@/constants/tokens";
+import { elevation } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { DESTRUCTIVE_COLOR } from "./ConfirmModal";
-import { pressedOpacity, usePressRipple } from "./pressFeedback";
+import { DialogButton, dialogStyles } from "./DialogParts";
 
 export type ChoiceButtonStyle = "default" | "cancel" | "destructive";
 
@@ -47,7 +46,6 @@ export function ChoiceModal({
 }: ChoiceModalProps) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const ripple = usePressRipple();
   const ordered = [
     ...buttons.filter((b) => b.style !== "cancel"),
     ...buttons.filter((b) => b.style === "cancel"),
@@ -61,58 +59,38 @@ export function ChoiceModal({
       animationType="fade"
       onRequestClose={dismissOnBack ? onCancel : NOOP}
     >
-      <View style={styles.overlay}>
+      <View style={dialogStyles.overlay}>
         <View
-          style={[styles.content, { backgroundColor: nc.backgroundCard }]}
+          style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: nc.backgroundCard }]}
           accessibilityViewIsModal={true}
         >
-          <Text
-            style={[styles.title, { color: nc.textStrong }]}
-            accessibilityRole="header"
-          >
+          <Text style={[dialogStyles.title, { color: nc.textStrong }]} accessibilityRole="header">
             {title}
           </Text>
           {typeof message === "string" ? (
             message ? (
-              <Text style={[styles.message, { color: nc.textStrong }]}>{message}</Text>
+              <Text style={[dialogStyles.message, { color: nc.textNormal }]}>{message}</Text>
             ) : null
           ) : message ? (
-            <View style={styles.messageContainer}>{message}</View>
+            <View style={dialogStyles.messageContainer}>{message}</View>
           ) : null}
 
-          <View style={styles.buttons}>
+          <View style={dialogStyles.buttonsStack}>
             {ordered.map((button, index) => {
               const isPrimary = button === firstDefault;
-              const isDestructive = button.style === "destructive";
-              const bg = isDestructive
-                ? DESTRUCTIVE_COLOR
-                : isPrimary
-                  ? tintColor
-                  : nc.backgroundPressed;
-              const ink = isDestructive ? "#fff" : isPrimary ? onTintColor : nc.textStrong;
+              const variant =
+                button.style === "destructive" ? "destructive" : isPrimary ? "primary" : "secondary";
               return (
-                <Pressable
+                <DialogButton
                   key={`${index}-${button.text}`}
-                  style={({ pressed }) => [
-                    styles.button,
-                    { backgroundColor: bg },
-                    pressedOpacity(pressed),
-                  ]}
-                  android_ripple={ripple}
+                  text={button.text}
+                  variant={variant}
+                  layout="stack"
+                  color={variant === "primary" ? tintColor : undefined}
+                  textColor={variant === "primary" ? onTintColor : undefined}
                   onPress={button.onPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={button.text}
                   testID={`choice-modal-button-${index}`}
-                >
-                  <Text
-                    style={[
-                      isPrimary || isDestructive ? styles.strongText : styles.normalText,
-                      { color: ink },
-                    ]}
-                  >
-                    {button.text}
-                  </Text>
-                </Pressable>
+                />
               );
             })}
           </View>
@@ -121,55 +99,3 @@ export function ChoiceModal({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: space.lg,
-  },
-  content: {
-    width: "100%",
-    maxWidth: 420,
-    borderRadius: radius.lg,
-    padding: space.lg,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: space.xs,
-    textAlign: "center",
-  },
-  message: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: space.md,
-    textAlign: "center",
-  },
-  messageContainer: {
-    marginBottom: space.md,
-  },
-  buttons: {
-    flexDirection: "column",
-    gap: space.sm,
-  },
-  button: {
-    minHeight: 44,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  strongText: {
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  normalText: {
-    fontWeight: "600",
-    textAlign: "center",
-  },
-});
