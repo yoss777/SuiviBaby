@@ -269,7 +269,7 @@ Android n'est pas concerné : le récepteur natif peut avoir réécrit le widget
   - [ ] messages reçus (journal `WidgetPushHandler`), pas de recul de séquence ;
   - [ ] bascule de côté reçue ;
   - [ ] Accueil fluide lors d'une saisie.
-- [ ] Production, 48 h après la fusion : `durationMs` p50/p95, `readMs`, part de `coalesced`, `iosThrottled`, `errors`, coût des fonctions.
+- [ ] **Le 20/11 vers 11 h** — Production, 48 h après la fusion (PR #113 fusionnée le 18/11 vers 11 h ; TTL `widget_fanout` encore « CREATING » au moment de la fusion) : `durationMs` p50/p95, `readMs`, part de `coalesced`, `iosThrottled`, `errors`, coût des fonctions.
 
 ## Retour arrière
 
