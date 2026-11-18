@@ -192,6 +192,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const r = m % 60;
     return `${h} heure${h > 1 ? "s" : ""}${r ? ` et ${r} minute${r > 1 ? "s" : ""}` : ""}`;
   };
+
+  // Libellé du fil dit sans abréviation : « Température 37,8 degrés »,
+  // « Sieste 1 heure et 20 minutes », « Bain 45 minutes », « humeur 😄 ».
+  const feedSay = (e: { icon?: string | null; label: string }) =>
+    e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label)
+      ? `humeur ${e.label}`
+      : e.label
+          .replace(/^Temp\. /, "Température ")
+          .replace(/ °C$/, " degrés")
+          .replace(/\b(\d+)h(\d{2})\b/, (_m, h: string, mm: string) => spokenDur(Number(h) * 60 + Number(mm)))
+          .replace(/\b(\d+) min\b/, (_m, mm: string) => spokenDur(Number(mm)));
   const sideWord = (s: string | null | undefined) => (s === "G" ? "gauche" : s === "D" ? "droit" : "");
   const otherSide = (l: WidgetLive) =>
     l.otherSideLabel ? l.otherSideLabel.replace(/^G /, "gauche ").replace(/^D /, "droit ") : null;
@@ -864,7 +875,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
               modifiers={[
                 size(Rw, ROW_H),
                 semantics({
-                  contentDescription: `${e.ms < dayStart ? "hier " : ""}à ${clock(e.ms)}, ${e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label}`,
+                  contentDescription: `${e.ms < dayStart ? "hier " : ""}à ${clock(e.ms)}, ${feedSay(e)}`,
                 }),
               ]}
             >

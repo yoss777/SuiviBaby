@@ -723,7 +723,9 @@ service cloud.firestore {
     // ============================================
 
     match /app_config/{docId} {
-      allow read: if isSignedIn();
+      // widgetPush : réglages serveur et liste des bêta-testeurs (allowUids),
+      // lus par les fonctions seulement (Admin SDK).
+      allow read: if isSignedIn() && docId != "widgetPush";
       allow write: if false; // Admin-only via Firebase Console
     }
 

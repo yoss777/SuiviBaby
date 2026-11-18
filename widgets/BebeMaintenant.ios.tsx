@@ -157,6 +157,17 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
     const mm = `${r} minute${r > 1 ? "s" : ""}`;
     return h === 0 ? mm : `${h} heure${h > 1 ? "s" : ""}${r ? ` et ${mm}` : ""}`;
   };
+
+  // Libellé du fil dit sans abréviation : « Température 37,8 degrés »,
+  // « Sieste 1 heure et 20 minutes », « Bain 45 minutes », « humeur 😄 ».
+  const feedSay = (e: { icon?: string | null; label: string }) =>
+    e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label)
+      ? `humeur ${e.label}`
+      : e.label
+          .replace(/^Temp\. /, "Température ")
+          .replace(/ °C$/, " degrés")
+          .replace(/\b(\d+)h(\d{2})\b/, (_m, h: string, mm: string) => minutesSay(Number(h) * 60 + Number(mm)))
+          .replace(/\b(\d+) min\b/, (_m, mm: string) => minutesSay(Number(mm)));
   const sleepLabel = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`);
   const isDaysAgo = (ms: number) => now - ms >= (23 * 60 + 50) * 60000;
   // « il y a » : à la minute pendant la première heure. Au-delà, la timeline
@@ -834,7 +845,7 @@ const BebeMaintenant = (props: NowWidgetProps, environment: WidgetEnvironment) =
           <Text modifiers={[F(12, "semibold"), foregroundStyle(C.soft), ...fit1, accessibilityAddTraits(["isHeader"])]}>Évènements récents</Text>
           {events.map((e, i) => {
             const when = `${daysAgo(e.ms) >= 1 ? "hier " : ""}${clock(e.ms)}`;
-            const labelSay = e.icon === "jalon" && /^\p{Extended_Pictographic}/u.test(e.label) ? `humeur ${e.label}` : e.label;
+            const labelSay = feedSay(e);
             return (
               <HStack key={`${e.ms}-${i}`} spacing={6} modifiers={[accessibilityElement("ignore"), accessibilityLabel(`${daysAgo(e.ms) >= 1 ? "hier " : ""}à ${clock(e.ms)}, ${labelSay}`)]}>
                 {dotText((e.icon && TYPE_COLOR[e.icon]) || (e.kind === "meal" ? C.meal : e.kind === "diaper" ? C.diaper : C.soft))}

@@ -288,17 +288,42 @@ export async function removePushTokens(userId: string): Promise<void> {
     ]);
     if (timer) clearTimeout(timer);
   }
+  // Suppression bornée elle aussi : hors ligne, la lecture et les
+  // suppressions ne se terminent qu'au retour du réseau, et la déconnexion
+  // restait figée. Au-delà du délai, on continue et on le signale (le
+  // téléphone, lui, n'applique plus rien : widget vidé, enfant oublié).
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = Symbol("timeout");
   try {
-    const q = query(
-      collection(db, COLLECTION),
-      where("userId", "==", userId),
-    );
-    const snapshot = await getDocs(q);
-
-    await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
+    const removal = (async () => {
+      const q = query(
+        collection(db, COLLECTION),
+        where("userId", "==", userId),
+      );
+      const snapshot = await getDocs(q);
+      await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
+    })();
+    const outcome = await Promise.race([
+      removal.then(() => undefined),
+      new Promise<typeof timedOut>((resolve) => {
+        timer = setTimeout(() => resolve(timedOut), SIGN_OUT_WAIT_MS);
+      }),
+    ]);
+    if (outcome === timedOut) {
+      // La promesse continue en arrière-plan ; son éventuel échec est signalé.
+      removal.catch((error) =>
+        captureServiceError(error, { service: "pushToken", operation: "removePushTokensLate" }),
+      );
+      captureServiceError(new Error("removePushTokens: timed out (offline?)"), {
+        service: "pushToken",
+        operation: "removePushTokensTimeout",
+      });
+    }
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

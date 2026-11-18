@@ -27,6 +27,7 @@ const { hasWidgetHealthConsent, widgetMinConsentVersion } = require("../shared/c
 const { subscriptionStateFrom, isEntitledStatus } = require("../billing/subscription");
 const { usersWithPendingDeletion } = require("../notifications/eligibility");
 const { getExpoClient, getExpoModule } = require("../shared/runtime");
+const { wipeWidgetForUser } = require("./wipe");
 
 const HOUR = 3600 * 1000;
 /** Capacité minimale pour recevoir les données du widget (voir pushTokenService). */
@@ -174,6 +175,9 @@ function propsForDevice({ childId, childName, split, nursing, lastAbsoluteMealMs
   try {
     env = widget.zonedEnv(tz || DEFAULT_TZ);
   } catch {
+    // Fuseau illisible : jour du widget calculé à Paris. Signalé, sans le
+    // fuseau lui-même (donnée de l'appareil).
+    console.warn("widgetFanout: invalid device time zone, using default");
     env = widget.zonedEnv(DEFAULT_TZ);
   }
   const [dayStart, dayEnd] = env.dayBounds(nowMs);
@@ -255,7 +259,9 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
     db.doc(`children/${childId}/live/nursing`).get(),
     // Tous les appareils qui affichent cet enfant, en une requête (avant : une
     // par membre) ; filtrés ensuite sur les membres retenus.
-    db.collection("device_tokens").where("widgetChildId", "==", childId).get(),
+    // widgetPush : un widget est vraiment posé (widgetChildId est inscrit dès
+    // l'ouverture de l'Accueil) ; les autres appareils ne sont plus lus.
+    db.collection("device_tokens").where("widgetChildId", "==", childId).where("widgetPush", "==", true).get(),
   ]);
   if (!childSnap.exists || childSnap.data()?.deletedAt) return log("no-child");
   const child = childSnap.data();
@@ -323,6 +329,7 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
 
   const messages = [];
   const tokenDocs = [];
+  const consentWipeUids = [];
   for (const uid of members) {
     // Un membre en erreur (lecture refusée, réseau) n'arrête pas l'envoi aux
     // autres : compté, journalisé sans identifiant.
@@ -338,6 +345,14 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
       // Consentement santé d'une version qui couvre le widget (shared/consent).
       if (!hasWidgetHealthConsent(prefs, minConsent)) {
         stats.skipped++;
+        // Consentement donné, mais d'une version qui ne couvre plus le widget
+        // (version exigée relevée, p. ex. 2.2 → 2.3) : son widget garde les
+        // données reçues avant. Effacé à distance ; l'enfant est retiré du
+        // jeton, donc une seule fois par appareil tant que l'app ne le
+        // réinscrit pas.
+        if (prefs?.healthDataConsent?.granted === true && (devicesByUid.get(uid) || []).length > 0) {
+          consentWipeUids.push(uid);
+        }
         continue;
       }
       const devices = (devicesByUid.get(uid) || []).filter((d) => {
@@ -419,6 +434,11 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
       // Code seulement : le message peut contenir un chemin (uid, enfant).
       console.error("widgetFanout: member failed", { code: error?.code ?? "unknown" });
     }
+  }
+  if (consentWipeUids.length > 0) {
+    // wipeWidgetForUser ne lève jamais (échecs journalisés par lui).
+    const wiped = await Promise.all(consentWipeUids.map((uid) => wipeWidgetForUser(db, uid, childId)));
+    stats.consentWiped = wiped.reduce((n, r) => n + (r?.sent ?? 0), 0);
   }
   // Aucun message parce que des membres ont échoué : une vraie panne.
   // Raison précise : un widget iPhone périmé par le plafond ne doit pas passer
@@ -504,7 +524,12 @@ async function coalescedFanOut(db, childId, { urgent }) {
     // expireAt : politique TTL Firestore sur widget_fanout (marqueur jamais
     // orphelin, même posé par un déclenchement tardif après la suppression de
     // l'enfant).
-    await ref.set({ token, at: Date.now(), expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * HOUR) });
+    // merge : la réservation du rattrapage iPhone (iosCatchUpFor) survit aux
+    // déclenchements suivants.
+    await ref.set(
+      { token, at: Date.now(), expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * HOUR) },
+      { merge: true },
+    );
   } catch (error) {
     // Marqueur impossible : on envoie sans regrouper plutôt que de perdre l'envoi.
     // Journal sans identifiant (règle du fichier).
@@ -543,10 +568,40 @@ async function iosCatchUp(db, childId, config, result) {
   const waitMs = retryAt - Date.now() + 500;
   // Au-delà de l'écart urgent (+ marge), ce n'est pas un plafond urgent.
   if (waitMs > IOS_MIN_GAP_URGENT_MS + 5000) return result;
+  // Un seul rattrapage par fin d'écart : plusieurs urgents écartés pendant le
+  // même écart (pauses, changements de côté) visent la même heure. Sans
+  // réservation, chacun dormait puis envoyait (plafond d'Apple dépassé,
+  // instances occupées pour rien). Le rattrapage retenu lit l'état au réveil :
+  // il porte aussi les changements des suivants.
+  if (!(await claimIosCatchUp(db, childId, retryAt))) {
+    reminderLib.logJobSummary("widgetFanout", Date.now(), { reason: "ios-catchup-claimed", urgent: true, iosOnly: true });
+    return { ...result, iosCatchUp: "claimed-elsewhere" };
+  }
   await catchUpSleep(Math.max(0, waitMs));
   return fanOutWidget(db, childId, { urgent: true, config, iosOnly: true });
 }
 let catchUpSleep = sleep;
+
+/** Réserve le rattrapage de cette fin d'écart ; faux s'il l'est déjà. */
+async function claimIosCatchUp(db, childId, retryAt) {
+  const ref = db.doc(`widget_fanout/${childId}`);
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data()?.iosCatchUpFor === retryAt) return false;
+      tx.set(
+        ref,
+        { iosCatchUpFor: retryAt, expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * HOUR) },
+        { merge: true },
+      );
+      return true;
+    });
+  } catch (error) {
+    // Réservation impossible : on rattrape quand même (au pire un envoi de plus).
+    console.warn("widgetFanout: iOS catch-up claim failed", { code: error?.code ?? "unknown" });
+    return true;
+  }
+}
 
 /**
  * Envoi du gagnant : les déclenchements qu'il a rendus caducs comptent sur

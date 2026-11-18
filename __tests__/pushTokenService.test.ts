@@ -258,6 +258,17 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     expect(deleteDoc).toHaveBeenCalled();
   });
 
+  it("hors ligne, suppression des jetons qui ne se termine pas : la déconnexion n'attend que 5 s", async () => {
+    mocked(getDocs).mockImplementationOnce(() => new Promise(() => {})); // jamais résolue
+    let signedOut = false;
+    const signOut = removePushTokens("u1").then(() => (signedOut = true));
+    await Promise.resolve();
+    expect(signedOut).toBe(false);
+    jest.advanceTimersByTime(SIGN_OUT_WAIT_MS);
+    await signOut;
+    expect(signedOut).toBe(true);
+  });
+
   it("reconnexion rapide pendant l'écriture : le jeton de la nouvelle session n'est jamais supprimé", async () => {
     const hold = holdSetDoc();
     const first = registerPushToken("u1");

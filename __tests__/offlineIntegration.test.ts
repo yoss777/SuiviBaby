@@ -14,6 +14,7 @@ jest.mock("@/config/firebase", () => ({
 }));
 
 import NetInfo from "@react-native-community/netinfo";
+import { auth } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
 import { httpsCallable } from "firebase/functions";
 import { captureServiceError } from "@/utils/errorReporting";
@@ -37,6 +38,7 @@ import {
 } from "@/services/optimisticEventsStore";
 import {
   ajouterEvenementOptimistic,
+  modifierEvenementOptimistic,
   supprimerEvenement,
 } from "@/services/eventsService";
 
@@ -114,9 +116,11 @@ function makeFakeDb() {
       }
       throw new Error(`fake sqlite: unsupported ${sql}`);
     }),
-    getFirstAsync: jest.fn(async (sql: string, ...args: any[]) => ({
-      count: rows.filter(where(sql, args)).length,
-    })),
+    getFirstAsync: jest.fn(async (sql: string, ...args: any[]) => {
+      if (/COUNT\(\*\)/i.test(sql)) return { count: rows.filter(where(sql, args)).length };
+      const r = rows.find(where(sql, args));
+      return r ? { ...r } : null;
+    }),
     getAllAsync: jest.fn(async (sql: string, ...args: any[]) =>
       rows
         .filter(where(sql, args))
@@ -211,6 +215,76 @@ afterEach(() => {
   stopAutoSync();
   jest.clearAllTimers();
   jest.useRealTimers();
+});
+
+describe("session démarrée puis modifiée hors ligne (revue jalon 6)", () => {
+  const sieste = () => ({ type: "sommeil", isNap: true, heureDebut: new Date("2026-04-01T13:00:00Z") });
+
+  it("démarrer puis arrêter sans réseau : la création part avec l'heure de fin", async () => {
+    setNetwork(false);
+    const tempId = ajouterEvenementOptimistic("c1", sieste() as any);
+    await settle();
+    const fin = new Date("2026-04-01T14:30:00Z");
+    modifierEvenementOptimistic("c1", tempId, { heureFin: fin, duree: 90 } as any, { id: tempId, ...sieste() });
+    await settle();
+
+    expect(fakeDb.rows).toHaveLength(1);
+    setNetwork(true);
+    expect(await cycle()).toBe(1);
+    const created = server.calls.find((c) => c.name === "validateAndCreateEvent")!.payload;
+    expect(created.duree).toBe(90);
+    expect(created.heureFin).toBeDefined();
+    expect(server.calls.filter((c) => c.name === "validateAndCreateEvent")).toHaveLength(1);
+  });
+
+  it("arrêt puis « Annuler » sans réseau : la création part sans heure de fin", async () => {
+    setNetwork(false);
+    const tempId = ajouterEvenementOptimistic("c1", sieste() as any);
+    await settle();
+    modifierEvenementOptimistic("c1", tempId, { heureFin: new Date("2026-04-01T14:30:00Z"), duree: 90 } as any, {});
+    await settle();
+    modifierEvenementOptimistic("c1", tempId, { heureFin: null, duree: null } as any, {});
+    await settle();
+    setNetwork(true);
+    await cycle();
+    const created = server.calls.find((c) => c.name === "validateAndCreateEvent")!.payload;
+    expect(created).not.toHaveProperty("heureFin");
+    expect(created).not.toHaveProperty("duree");
+  });
+
+  it("arrêt avant même la mise en file : fusionné aussi", async () => {
+    setNetwork(false);
+    const tempId = ajouterEvenementOptimistic("c1", sieste() as any);
+    // Pas d'attente : l'enfilement n'est pas encore fait.
+    modifierEvenementOptimistic("c1", tempId, { duree: 45 } as any, {});
+    await settle();
+    setNetwork(true);
+    await cycle();
+    expect(server.calls.find((c) => c.name === "validateAndCreateEvent")!.payload.duree).toBe(45);
+  });
+});
+
+describe("déconnexion pendant le rejeu de la file (revue jalon 6)", () => {
+  afterEach(() => {
+    (auth as any).currentUser = { uid: "test-uid" };
+  });
+
+  it("le cycle s'arrête : rien n'est envoyé sous un autre compte, aucune tentative consommée", async () => {
+    await enqueueEvent("create", queuedCreate(100));
+    await enqueueEvent("create", queuedCreate(110));
+    server.rejectWhen = (name) => {
+      if (name !== "validateAndCreateEvent") return null;
+      // Déconnexion pendant le premier envoi, puis un autre parent se connecte.
+      (auth as any).currentUser = { uid: "autre-parent" };
+      return err("unauthenticated", "functions/unauthenticated");
+    };
+    await cycle();
+    expect(server.calls).toHaveLength(1);
+    expect(fakeDb.rows.map((r) => [r.status, r.retryCount])).toEqual([
+      ["pending", 0],
+      ["pending", 0],
+    ]);
+  });
 });
 
 describe("saisie hors ligne puis reconnexion", () => {

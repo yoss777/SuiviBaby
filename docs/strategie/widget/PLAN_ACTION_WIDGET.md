@@ -139,6 +139,7 @@ Même format à chaque fois, pour comparer les notes d'une revue à l'autre :
 ## Lot 5 (avant la MEP)
 
 - Jalon 4, performance du widget : plan détaillé et avancement dans [LOT5_JALON4_PERF.md](LOT5_JALON4_PERF.md).
+- Jalon 6, revue ECC de fin de lot (18/11, 11 agents, 15,3/20, aucun P0, P1 corrigés) : [REVUE_ECC_LOT5_J6.md](../ux/REVUE_ECC_LOT5_J6.md). Restent les tests sur téléphone et l'activation progressive.
 
 ## Prochain chantier : temps réel entre appareils (après le jalon 4, validé par Yoss le 18/11)
 

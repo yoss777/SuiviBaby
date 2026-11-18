@@ -16,23 +16,33 @@ class WidgetPushModule : Module() {
     Name("WidgetPush")
 
     // Appelé à chaque écriture du widget par l'app : enfant affiché et heure.
+    // Même verrou que le récepteur (WidgetPushHandler.handle) : un message en
+    // cours de traitement décide et écrit avant ou après, jamais entre les deux.
     Function("noteAppSnapshot") { childId: String ->
-      prefs.edit()
-        .putString(WidgetPushHandler.CHILD_KEY, childId)
-        .putLong(WidgetPushHandler.APP_AT_KEY, System.currentTimeMillis())
-        // commit (synchrone, comme le récepteur) : un message serveur arrivé
-        // juste après ne voit jamais un état à moitié écrit.
-        .commit()
+      synchronized(WidgetPushHandler) {
+        prefs.edit()
+          .putString(WidgetPushHandler.CHILD_KEY, childId)
+          .putLong(WidgetPushHandler.APP_AT_KEY, System.currentTimeMillis())
+          // commit (synchrone, comme le récepteur) : un message serveur arrivé
+          // juste après ne voit jamais un état à moitié écrit.
+          .commit()
+      }
     }
 
     // Déconnexion : le récepteur oublie l'enfant, la séquence et l'heure de
     // l'app ; il n'appliquera plus rien avant la prochaine écriture de l'app.
+    // Sous le verrou du récepteur : un message déjà en cours termine son
+    // écriture AVANT cet oubli, puis l'app écrit le widget vide par-dessus.
+    // Sans verrou, il pouvait réécrire le prénom et les données après la
+    // déconnexion (fenêtre de quelques ms).
     Function("clear") {
-      prefs.edit()
-        .remove(WidgetPushHandler.CHILD_KEY)
-        .remove(WidgetPushHandler.SEQ_KEY)
-        .remove(WidgetPushHandler.APP_AT_KEY)
-        .commit()
+      synchronized(WidgetPushHandler) {
+        prefs.edit()
+          .remove(WidgetPushHandler.CHILD_KEY)
+          .remove(WidgetPushHandler.SEQ_KEY)
+          .remove(WidgetPushHandler.APP_AT_KEY)
+          .commit()
+      }
     }
 
     // Après une action lancée depuis un bouton du widget : l'app repasse en

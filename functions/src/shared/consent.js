@@ -18,11 +18,23 @@ function hasValidHealthConsent(prefs) {
  * toute version (ci-dessus).
  */
 const WIDGET_MIN_CONSENT_VERSION = "2.2";
+/** Première politique qui décrit le widget : repli si le réglage est mal saisi. */
+const WIDGET_POLICY_VERSION = "2.3";
+const VERSION_RE = /^\d{1,3}(\.\d{1,3}){0,2}$/;
 
-/** Version exigée pour le widget : réglage valide (« 2.3 ») sinon la valeur par défaut. */
+/**
+ * Version exigée pour le widget. Réglage absent : valeur par défaut. Réglage
+ * présent mais mal saisi (nombre 2.3, espaces…) : jamais un repli plus
+ * permissif. Un nombre ou des espaces sont compris ; le reste retombe sur la
+ * version de la politique du widget (2.3), avec un avertissement.
+ */
 function widgetMinConsentVersion(config) {
-  const v = config?.minConsentVersion;
-  return typeof v === "string" && /^\d{1,3}(\.\d{1,3}){0,2}$/.test(v) ? v : WIDGET_MIN_CONSENT_VERSION;
+  const raw = config?.minConsentVersion;
+  if (raw === undefined || raw === null) return WIDGET_MIN_CONSENT_VERSION;
+  const v = typeof raw === "number" && Number.isFinite(raw) ? String(raw) : typeof raw === "string" ? raw.trim() : "";
+  if (VERSION_RE.test(v)) return versionAtLeast(v, WIDGET_MIN_CONSENT_VERSION) ? v : WIDGET_MIN_CONSENT_VERSION;
+  console.warn("widget: invalid minConsentVersion, using policy version", { type: typeof raw });
+  return WIDGET_POLICY_VERSION;
 }
 
 function versionAtLeast(version, min) {

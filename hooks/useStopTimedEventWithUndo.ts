@@ -46,12 +46,17 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
     // `extra` : champs ajoutés à l'arrêt (ex. endSource: "widget", mesure de l'usage).
     // `opts.onUndo` : appelé quand l'utilisateur touche « Annuler » (ex. annuler le retour auto du widget).
     // `opts.allowPastMidnight` : sieste convertie en nuit (déjà confirmée).
+    // `opts.forChildId` : bébé de la session, figé quand la question a été
+    // posée (l'Accueil a pu changer de bébé entre-temps).
+    // Renvoie vrai si l'arrêt est écrit ; faux s'il attend une réponse
+    // (question, formulaire) ou n'a pas eu lieu.
     (
       event: TEvent | null | undefined,
       extra?: Record<string, unknown>,
-      opts?: { onUndo?: () => void; allowPastMidnight?: boolean },
-    ) => {
-      if (!childId || !event?.id) return;
+      opts?: { onUndo?: () => void; allowPastMidnight?: boolean; forChildId?: string },
+    ): boolean => {
+      const targetChildId = opts?.forChildId ?? childId;
+      if (!targetChildId || !event?.id) return false;
       const start = toDate(event.heureDebut);
       const heureFin = new Date();
       // Début absent ou invalide : on arrête quand même le chrono, sans durée
@@ -64,7 +69,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       if (duree !== undefined && duree > MAX_TIMED_EVENT_MINUTES) {
         showToast("Plus de 24 h : indiquez l'heure de fin réelle");
         onTooLong?.(event);
-        return;
+        return false;
       }
       // Sieste arrêtée après minuit : une sieste ne finit pas le lendemain.
       // On propose de l'enregistrer comme une nuit (mêmes heures), ou de
@@ -84,6 +89,12 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
               text: "Corriger l'heure de fin",
               style: "cancel",
               onPress: () => {
+                // Bébé changé pendant la question : le formulaire s'ouvrirait
+                // sur l'autre bébé.
+                if (childIdRef.current !== targetChildId) {
+                  showToast("Bébé changé : rien n'a été modifié");
+                  return;
+                }
                 const endOfStartDay = new Date(start);
                 endOfStartDay.setHours(23, 59, 0, 0);
                 onTooLong?.(event, endOfStartDay);
@@ -91,18 +102,25 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
             },
             {
               text: "Enregistrer comme nuit",
-              onPress: () => stopRef.current(event, { ...(extra ?? {}), isNap: false }, { ...opts, allowPastMidnight: true }),
+              // Bébé figé : la session appartient à celui de la question.
+              onPress: () => {
+                stopRef.current(
+                  event,
+                  { ...(extra ?? {}), isNap: false },
+                  { ...opts, allowPastMidnight: true, forChildId: targetChildId },
+                );
+              },
             },
           ],
           // Une seule question par session, même après plusieurs appuis.
           { key: `nap-past-midnight:${event.id}` },
         );
-        return;
+        return false;
       }
       const snapshot = event;
 
       modifierEvenementOptimistic(
-        childId,
+        targetChildId,
         event.id,
         { ...(duree === undefined ? { heureFin } : { heureFin, duree }), ...(extra ?? {}) },
         snapshot,
@@ -117,7 +135,7 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       showUndoToast(successLabel, () => {
         opts?.onUndo?.();
         modifierEvenementOptimistic(
-          childId,
+          targetChildId,
           event.id!,
           // Les champs ajoutés à l'arrêt (endSource…) sont retirés aussi :
           // sinon la mesure compterait un arrêt annulé.
@@ -133,12 +151,15 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
           duree === undefined ? { ...snapshot, heureFin } : { ...snapshot, heureFin, duree },
         );
       }, undefined, 5000);
+      return true;
     },
     [childId, getSuccessLabel, showUndoToast, showToast, showAlert, onTooLong],
   );
+  const childIdRef = useRef(childId);
   const stopRef = useRef(stop);
   useEffect(() => {
+    childIdRef.current = childId;
     stopRef.current = stop;
-  }, [stop]);
+  }, [childId, stop]);
   return stop;
 }

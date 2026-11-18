@@ -319,6 +319,40 @@ export async function enqueueEvent(
 }
 
 /**
+ * Modification d'un événement créé hors ligne et encore en file (sieste
+ * démarrée puis arrêtée sans réseau) : fusionnée dans la création, qui part
+ * alors complète. Une valeur `null` retire le champ (annulation d'un arrêt).
+ * Faux si la création n'est plus en attente (déjà en cours d'envoi ou
+ * partie) : l'appelant doit le signaler.
+ */
+export async function mergeIntoQueuedCreate(
+  queueId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return false;
+  const database = await getDb();
+  const row = await database.getFirstAsync<{ payload: string }>(
+    `SELECT payload FROM pending_events WHERE id = ? AND uid = ? AND action = 'create' AND status IN ('pending', 'failed')`,
+    queueId,
+    uid,
+  );
+  if (!row) return false;
+  const merged: Record<string, unknown> = { ...JSON.parse(row.payload) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete merged[k];
+    else merged[k] = v;
+  }
+  const result = await database.runAsync(
+    `UPDATE pending_events SET payload = ? WHERE id = ? AND uid = ? AND status IN ('pending', 'failed')`,
+    JSON.stringify(merged),
+    queueId,
+    uid,
+  );
+  return (result?.changes ?? 0) > 0;
+}
+
+/**
  * Nombre d'événements en attente pour l'utilisateur courant (strict, pas de legacy uid='')
  */
 export async function getQueueSize(): Promise<number> {
@@ -422,11 +456,22 @@ export async function processQueue(): Promise<number> {
     rerunRequested = true;
     return 0;
   }
-
-  const networkState = await NetInfo.fetch();
-  if (!networkState.isConnected) return 0;
-
+  // Pris AVANT l'attente réseau : au démarrage, NetInfo, la connexion et le
+  // retour au premier plan lançaient deux cycles sur la même liste (une
+  // modification rejouée deux fois sortait en faux conflit).
   isProcessing = true;
+
+  let networkState;
+  try {
+    networkState = await NetInfo.fetch();
+  } catch {
+    networkState = { isConnected: false };
+  }
+  if (!networkState.isConnected) {
+    isProcessing = false;
+    return 0;
+  }
+
   let synced = 0;
   let hitTransient = false;
 
@@ -448,6 +493,11 @@ export async function processQueue(): Promise<number> {
       }
       isFirst = false;
 
+      // Compte changé pendant le cycle (déconnexion, autre parent connecté) :
+      // on s'arrête. Rien n'est envoyé sous l'identité d'un autre, et rien
+      // n'est compté comme échec ; la file reprendra au retour de ce compte.
+      if (auth.currentUser?.uid !== event.uid) break;
+
       // Marquer comme en cours de sync. Si même cette écriture en base échoue,
       // rien n'est parti : la ligne reste 'pending', on rend la main.
       try {
@@ -463,7 +513,13 @@ export async function processQueue(): Promise<number> {
 
       let sendError: any = null;
       try {
-        const payload = JSON.parse(event.payload);
+        // Relu après le passage en « syncing » : une modification fusionnée
+        // entre la lecture de la liste et ici (mergeIntoQueuedCreate) part aussi.
+        const current = await database.getFirstAsync<{ payload: string }>(
+          `SELECT payload FROM pending_events WHERE id = ?`,
+          event.id,
+        );
+        const payload = JSON.parse(current?.payload ?? event.payload);
 
         // Appeler la Cloud Function appropriée
         switch (event.action) {
@@ -528,6 +584,13 @@ export async function processQueue(): Promise<number> {
           await restorePending(database, event.id);
         }
         continue;
+      }
+
+      // Refus « non authentifié » parce que le compte a changé pendant l'envoi :
+      // pas un échec de cette écriture (ni tentative consommée, ni bannière).
+      if (auth.currentUser?.uid !== event.uid) {
+        await restorePending(database, event.id);
+        break;
       }
 
       {
@@ -682,7 +745,8 @@ export async function cleanupFailedEvents(): Promise<number> {
   if (!uid) return 0;
   const database = await getDb();
   const result = await database.runAsync(
-    `DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?`,
+    `DELETE FROM pending_events WHERE retryCount >= ? AND uid = ?`,
+    MAX_RETRIES,
     uid,
   );
   if (result.changes > 0) await emitState();

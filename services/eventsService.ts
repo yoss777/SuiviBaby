@@ -20,7 +20,7 @@ import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
 import { failureReason, isConflictError, isNetworkError, isNotFoundError, isPermanentError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
-import { enqueueEvent, isOnline } from "./offlineQueueService";
+import { enqueueEvent, isOnline, mergeIntoQueuedCreate } from "./offlineQueueService";
 import {
   addOptimisticCreate,
   addOptimisticUpdate,
@@ -43,10 +43,41 @@ const getUserId = () => {
   return user.uid;
 };
 
+/** Créations optimistes mises en file hors ligne : id provisoire → id dans la file. */
+const queuedOptimisticCreates = new Map<string, string>();
+
+/**
+ * Modification d'une création restée en file : fusionnée dans celle-ci.
+ * Jamais perdue en silence : si la création est déjà partie, on le dit.
+ */
+function mergeQueuedCreateUpdate(tempId: string, queueId: string, data: Partial<Event>): void {
+  const patch = convertDateFields(stripUndefinedFields(data as Record<string, unknown>)) as Record<string, unknown>;
+  void mergeIntoQueuedCreate(queueId, patch)
+    .then((merged) => {
+      if (merged) return;
+      queuedOptimisticCreates.delete(tempId);
+      notifyOptimisticNotice("Modification hors ligne non enregistrée : vérifiez la saisie une fois reconnecté.");
+    })
+    .catch((error) => {
+      captureServiceError(error, { service: "eventsService", operation: "mergeQueuedCreate" });
+      notifyOptimisticNotice("Modification hors ligne non enregistrée : vérifiez la saisie une fois reconnecté.");
+    });
+}
+
 const pendingOptimisticCreateUpdates = new Map<
   string,
   { childId: string; data: Partial<Event>; previousEvent: any }
 >();
+
+/** Création optimiste mise en file : les modifications arrivées avant partent avec elle. */
+function onCreateQueued(tempId: string, queueId: string): void {
+  queuedOptimisticCreates.set(tempId, queueId);
+  const early = pendingOptimisticCreateUpdates.get(tempId);
+  if (early) {
+    pendingOptimisticCreateUpdates.delete(tempId);
+    mergeQueuedCreateUpdate(tempId, queueId, early.data);
+  }
+}
 
 function stripUndefinedFields<T extends Record<string, unknown>>(data: T): T {
   return Object.fromEntries(
@@ -983,8 +1014,9 @@ export function ajouterEvenementOptimistic(
   void (async () => {
     try {
       if (!(await isOnline())) {
-        await enqueueEvent('create', payload);
+        const queueId = await enqueueEvent('create', payload);
         markOptimisticQueued(tempId);
+        onCreateQueued(tempId, queueId);
         return;
       }
 
@@ -1018,8 +1050,9 @@ export function ajouterEvenementOptimistic(
     } catch (error) {
       if (isNetworkError(error)) {
         try {
-          await enqueueEvent('create', payload);
+          const queueId = await enqueueEvent('create', payload);
           markOptimisticQueued(tempId);
+          onCreateQueued(tempId, queueId);
         } catch (enqueueError) {
           // Ni envoyée ni mise en file : ne surtout pas la laisser affichée
           // comme enregistrée.
@@ -1061,11 +1094,20 @@ export function modifierEvenementOptimistic(
 
   if (eventId.startsWith("__optimistic_")) {
     const updated = updateOptimisticCreate(eventId, updatedEvent);
+    const queueId = queuedOptimisticCreates.get(eventId);
+    if (updated && queueId) {
+      // Création hors ligne encore en file : la modification part avec elle.
+      mergeQueuedCreateUpdate(eventId, queueId, cleanData);
+      return eventId;
+    }
     if (updated) {
+      // Plusieurs modifications avant la confirmation (arrêt puis
+      // « Annuler ») : cumulées, la dernière valeur de chaque champ gagne.
+      const prev = pendingOptimisticCreateUpdates.get(eventId);
       pendingOptimisticCreateUpdates.set(eventId, {
         childId,
-        data: cleanData,
-        previousEvent,
+        data: { ...(prev?.data ?? {}), ...cleanData } as Partial<Event>,
+        previousEvent: prev?.previousEvent ?? previousEvent,
       });
     }
     return eventId;

@@ -244,6 +244,22 @@ describe("lot 2 : phrases parlées", () => {
     expect(d.a11y).toContain("à 14:00, humeur 😊");
   });
 
+  it("fil du jour dit sans abréviation : température, durées (revue jalon 6)", () => {
+    const d = show(
+      {
+        recent: [
+          { ms: at(0, 14, 0), label: "Temp. 37,8 °C", kind: "other", icon: "temperature" },
+          { ms: at(0, 13, 0), label: "Sieste 1h20", kind: "other", icon: "sommeil" },
+          { ms: at(0, 12, 0), label: "Bain 45 min", kind: "other", icon: "bain" },
+        ],
+      },
+      "systemLarge",
+    );
+    expect(d.a11y).toContain("à 14:00, Température 37,8 degrés");
+    expect(d.a11y).toContain("à 13:00, Sieste 1 heure et 20 minutes");
+    expect(d.a11y).toContain("à 12:00, Bain 45 minutes");
+  });
+
   it("police 30 : style « title » (28 pt), plus de largeTitle", () => {
     expect(source).not.toMatch(/"largeTitle"/);
     expect(source).toMatch(/size>=26\?"title"/);
