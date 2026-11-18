@@ -4,6 +4,21 @@
 // disque : la tâche d'arrière-plan peut démarrer dans un JS tout neuf.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { captureServiceError } from "@/utils/errorReporting";
+
+// Échecs du disque signalés une fois par lancement (la tâche d'arrière-plan
+// peut tourner souvent) : jamais en silence, jamais en rafale.
+const reported = new Set<string>();
+function reportOnce(error: unknown, operation: string): void {
+  if (reported.has(operation)) return;
+  reported.add(operation);
+  captureServiceError(error, { service: "widgetPushIos", operation });
+}
+/** Tests uniquement. */
+export function __resetWidgetPushIosReportsForTests(): void {
+  reported.clear();
+}
+
 // Une clé par champ : deux écritures simultanées (l'app et la tâche
 // d'arrière-plan) ne s'écrasent jamais l'une l'autre.
 const K = {
@@ -52,6 +67,8 @@ export type WidgetPushIosState = {
   appWriteAtMs: number;
   /** Échantillons d'horloge, les plus récents à la fin. */
   offsetSamples: OffsetSample[];
+  /** Disque illisible : état inconnu, aucun message appliqué (raison « state »). */
+  unreadable?: boolean;
 };
 
 export async function readWidgetPushIosState(): Promise<WidgetPushIosState> {
@@ -70,20 +87,26 @@ export async function readWidgetPushIosState(): Promise<WidgetPushIosState> {
           (e): e is OffsetSample => Array.isArray(e) && e.length === 2 && e.every((v) => typeof v === "number" && Number.isFinite(v)),
         );
       }
-    } catch {
+    } catch (error) {
+      // Échantillons corrompus : la garde repart sans écart estimé (tolérance fixe).
+      reportOnce(error, "stateOffsetsCorrupt");
       offsetSamples = [];
     }
     return { shownChildId: shown || null, lastSeq: Number(seq) || 0, appWriteAtMs: Number(appAt) || 0, offsetSamples };
-  } catch {
-    return { shownChildId: null, lastSeq: 0, appWriteAtMs: 0, offsetSamples: [] };
+  } catch (error) {
+    reportOnce(error, "stateRead");
+    return { shownChildId: null, lastSeq: 0, appWriteAtMs: 0, offsetSamples: [], unreadable: true };
   }
 }
 
-async function set(key: string, value: string): Promise<void> {
+/** Vrai si l'écriture a réussi ; un échec est signalé (une fois par lancement). */
+async function set(key: string, value: string): Promise<boolean> {
   try {
     await AsyncStorage.setItem(key, value);
-  } catch {
-    // Disque indisponible : le message suivant sera refusé (enfant inconnu), sans dégât.
+    return true;
+  } catch (error) {
+    reportOnce(error, "stateWrite");
+    return false;
   }
 }
 
@@ -96,14 +119,14 @@ export async function noteIosAppSnapshot(childId: string, nowMs = Date.now()): P
   await set(K.shown, childId);
 }
 
-/** Message serveur appliqué. */
-export function noteIosAppliedSeq(seq: number): Promise<void> {
+/** Message serveur appliqué ; faux si la séquence n'a pas pu être notée. */
+export function noteIosAppliedSeq(seq: number): Promise<boolean> {
   return set(K.seq, String(seq));
 }
 
 /** Échantillon d'écart d'horloge d'un message reçu (appliqué ou non). */
-export function noteIosOffsetSamples(samples: OffsetSample[]): Promise<void> {
-  return set(K.offsets, JSON.stringify(samples));
+export async function noteIosOffsetSamples(samples: OffsetSample[]): Promise<void> {
+  await set(K.offsets, JSON.stringify(samples));
 }
 
 /** Déconnexion : plus rien n'est appliqué avant la prochaine écriture de l'app. */
@@ -115,7 +138,7 @@ export async function clearIosWidgetPush(): Promise<void> {
   }
 }
 
-export type WidgetPushDecision = "ok" | "fg" | "child" | "seq" | "app" | "invalid";
+export type WidgetPushDecision = "ok" | "fg" | "child" | "seq" | "app" | "invalid" | "state";
 
 /** Même décision que WidgetPushGuards.decide (Android). */
 export function decideWidgetPush(a: {
@@ -134,6 +157,9 @@ export function decideWidgetPush(a: {
   const offset = a.clockOffsetMs ?? 0;
   if (!a.childId || !(a.seq > 0) || a.seq > MAX_SEQ || a.propsVersion !== 1) return "invalid";
   if (a.foreground) return "fg";
+  // Disque illisible : rien n'est appliqué, mais la raison est distincte
+  // (« enfant inconnu » masquait la panne).
+  if (a.state.unreadable) return "state";
   if (!a.state.shownChildId || a.state.shownChildId !== a.childId) return "child";
   if (a.seq <= a.state.lastSeq) return "seq";
   // Lecture serveur antérieure à ce que l'app a déjà écrit : ne pas revenir en
@@ -141,8 +167,11 @@ export function decideWidgetPush(a: {
   // un téléphone en avance ne refuse plus les messages frais.
   // Seulement dans les 10 min qui suivent l'écriture de l'app (la course à
   // couvrir) : une estimation faussée par un changement d'heure ne bloque
-  // jamais le widget durablement.
-  const recentAppWrite = a.receivedAtMs == null || a.receivedAtMs - a.state.appWriteAtMs <= APP_GUARD_WINDOW_MS;
+  // jamais le widget durablement. Une écriture « dans le futur » (heure du
+  // téléphone reculée depuis) n'est pas récente non plus : sans cela, tous
+  // les messages étaient refusés jusqu'à ce que l'horloge la rattrape.
+  const sinceAppWrite = a.receivedAtMs == null ? 0 : a.receivedAtMs - a.state.appWriteAtMs;
+  const recentAppWrite = sinceAppWrite >= -skew && sinceAppWrite <= APP_GUARD_WINDOW_MS;
   if (a.state.appWriteAtMs > 0 && recentAppWrite && a.seq + offset + skew < a.state.appWriteAtMs) return "app";
   return "ok";
 }

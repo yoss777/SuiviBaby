@@ -60,8 +60,11 @@ object WidgetPushGuards {
     // un téléphone en avance ne refuse plus les messages frais.
     // Seulement dans les 10 min qui suivent l'écriture de l'app (la course à
     // couvrir) : une estimation faussée par un changement d'heure ne bloque
-    // jamais le widget durablement.
-    val recentAppWrite = receivedAtMs == null || receivedAtMs - appWriteAtMs <= APP_GUARD_WINDOW_MS
+    // jamais le widget durablement. Une écriture « dans le futur » (heure du
+    // téléphone reculée depuis) n'est pas récente non plus : sans cela, tous
+    // les messages étaient refusés jusqu'à ce que l'horloge la rattrape.
+    val sinceAppWrite = if (receivedAtMs == null) 0L else receivedAtMs - appWriteAtMs
+    val recentAppWrite = sinceAppWrite >= -skewMs && sinceAppWrite <= APP_GUARD_WINDOW_MS
     if (appWriteAtMs > 0L && recentAppWrite && seq + clockOffsetMs + skewMs < appWriteAtMs) return WidgetPushOutcome.OLDER_THAN_APP
     return WidgetPushOutcome.APPLIED
   }

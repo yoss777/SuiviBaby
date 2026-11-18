@@ -63,8 +63,11 @@ object WidgetPushHandler {
       // s'applique pour lui avant la prochaine écriture de l'app).
       var outcome = WidgetPushGuards.decideWipe(childId, prefs.getString(CHILD_KEY, null))
       if (outcome == WidgetPushOutcome.WIPED) {
+        // Données jointes seulement si bien formées et pour cet enfant (ou
+        // vides) : le widget lit `alerts`, `lives`… sans garde.
+        val wipeProps = p?.takeIf { it.optInt("v", 0) == 1 && it.optString("childId").let { c -> c.isEmpty() || c == childId } && it.has("lives") && it.has("alerts") }
         val written = prefs.edit()
-          .putString(PROPS_KEY, (p ?: emptyProps(receivedAtMs)).toString())
+          .putString(PROPS_KEY, (wipeProps ?: emptyProps(receivedAtMs)).toString())
           .remove(CHILD_KEY)
           .remove(SEQ_KEY)
           .commit()
@@ -137,6 +140,7 @@ object WidgetPushHandler {
   }
 
   /** Échec de traitement d'un message du widget : visible dans le journal de réception. */
+  @Synchronized
   fun logError(context: Context, receivedAtMs: Long) {
     val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     appendLog(prefs, receivedAtMs, 0L, WidgetPushOutcome.ERROR)
@@ -160,7 +164,11 @@ object WidgetPushHandler {
     .put("generatedAtMs", nowMs)
 
   private fun appendLog(prefs: android.content.SharedPreferences, receivedAtMs: Long, seq: Long, outcome: WidgetPushOutcome) {
-    val log = runCatching { JSONArray(prefs.getString(LOG_KEY, "[]")) }.getOrDefault(JSONArray())
+    val log = runCatching { JSONArray(prefs.getString(LOG_KEY, "[]")) }.getOrElse {
+      // Journal illisible : on repart de zéro, mais pas sans trace.
+      Log.w(TAG, "receive log unreadable, reset (${it.javaClass.simpleName})")
+      JSONArray()
+    }
     log.put(JSONObject().put("r", receivedAtMs).put("s", seq).put("o", outcome.code))
     while (log.length() > LOG_MAX) log.remove(0)
     prefs.edit().putString(LOG_KEY, log.toString()).apply()

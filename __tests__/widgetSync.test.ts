@@ -305,6 +305,15 @@ describe("timeline iPhone (durées à la minute)", () => {
     expect(widgetQuickTimelinePlan(p, now).dates).toContain(staleAt);
   });
 
+  it("tétée en pause expirée : une entrée exacte à expiresAtMs, aussi dans la timeline courte", () => {
+    const now = new Date(2026, 10, 16, 15, 0).getTime();
+    const expiresAt = now + 47 * 60_000 + 7_000;
+    const live = { kind: "nursing", timerStartMs: now - 600_000, pausedAtMs: now - 60_000, expiresAtMs: expiresAt } as any;
+    const p = props({ generatedAtMs: now, live, lives: [live] });
+    expect(widgetTimelinePlan(p, now).dates).toContain(expiresAt);
+    expect(widgetQuickTimelinePlan(p, now).dates).toContain(expiresAt);
+  });
+
   it("écriture iPhone : fin de comptage à 4 h 05 dans les données, même avec l'entrée d'expiration", () => {
     const entries: { date: Date; props: NowWidgetProps }[] = [];
     __resetWidgetSyncForTests({ updateSnapshot: jest.fn(), updateTimeline: (e: typeof entries) => entries.push(...e) } as any);
@@ -511,6 +520,30 @@ describe("iPhone : timeline courte au démarrage / à l'arrêt, complète ensuit
     expect(calls).toHaveLength(2);
     expect(calls[1]).toBeGreaterThan(80);
     expect(lastEntries()[0].props.childName).toBe("frais");
+  });
+
+  it("app mise en arrière-plan avant 4 s : la complète part au départ (minuteur suspendu ensuite)", () => {
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    expect(calls).toHaveLength(1);
+    flushPendingWidgetPush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBeGreaterThan(80);
+    // Plus rien de dû : pas de seconde complète au minuteur.
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS * 2);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("arrière-plan avec un envoi en attente qui écrit une courte : la complète suit aussitôt", () => {
+    setup();
+    pushNowWidget(props({ childName: "init", lives: [] }));
+    jest.advanceTimersByTime(WIDGET_IOS_FULL_TIMELINE_DELAY_MS);
+    const before = calls.length;
+    pushNowWidget(props({ childName: "init", lives: [sleep] }));
+    flushPendingWidgetPush();
+    expect(calls.length).toBeGreaterThanOrEqual(before + 1);
+    expect(calls[calls.length - 1]).toBeGreaterThan(80);
+    expect(lastEntries()[0].props.lives).toHaveLength(1);
   });
 
   it("app quittée avant 4 s, retour sans envoi (écran pas prêt) : la complète due part quand même", () => {

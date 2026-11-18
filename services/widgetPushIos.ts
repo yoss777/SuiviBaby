@@ -103,7 +103,9 @@ async function handleOne(data: unknown, nowMs: number): Promise<WidgetPushDecisi
   // Écriture ratée : la séquence n'avance pas (le message suivant pourra
   // s'appliquer) et iOS reçoit « échec », pas « nouvelles données ».
   if (!writeServerWidgetProps(msg.p)) return "write";
-  await noteIosAppliedSeq(Number(msg.s));
+  // Séquence non notée (disque plein…) : le widget est à jour, mais iOS
+  // reçoit « échec » plutôt que « nouvelles données » (signalé par l'état).
+  if (!(await noteIosAppliedSeq(Number(msg.s)))) return "write";
   return "ok";
 }
 

@@ -108,7 +108,11 @@ function addExactEntries(dates: Set<number>, props: NowWidgetProps, now: number,
   exact(props.alerts?.mealAtMs);
   exact(props.alerts?.diaperAtMs);
   // Session oubliée ? : la tuile passe à l'ambre à l'instant dit.
-  for (const l of props.lives ?? (props.live ? [props.live] : [])) exact(l.staleAtMs);
+  // et session expirée (tétée en pause trop longue) : retirée à l'instant dit.
+  for (const l of props.lives ?? (props.live ? [props.live] : [])) {
+    exact(l.staleAtMs);
+    exact(l.expiresAtMs);
+  }
   // Minuit local (compteurs du jour masqués) et bascule Sieste/Nuit.
   const d = new Date(now);
   for (const [plusDay, h] of [[1, 0], [0, 8], [0, 19], [1, 8]] as const) {
@@ -436,7 +440,13 @@ export function pushNowWidgetLoading(childId: string, childName: string): void {
 
 /** App mise en arrière-plan : l'envoi en attente part maintenant (pas dans 2 s). */
 export function flushPendingWidgetPush(): void {
-  if (!pending) return;
+  // iPhone : timeline complète encore due (saisie puis départ avant 4 s).
+  // Le minuteur ne tourne plus une fois l'app suspendue : sans elle, le
+  // widget n'a plus d'entrée au-delà de 8 min et les « il y a » restent figés.
+  if (!pending) {
+    if (pendingFull) runPendingFull();
+    return;
+  }
   // Contenu « pas encore chargé » : on ne le force pas en partant, le widget
   // garde ses données précédentes (plus justes).
   if (pendingUnloaded) return;
@@ -445,6 +455,8 @@ export function flushPendingWidgetPush(): void {
   const run = pendingRun;
   pendingRun = null;
   run?.();
+  // L'envoi qui vient de partir a pu être une courte : la complète part aussi.
+  if (pendingFull) runPendingFull();
 }
 
 /**

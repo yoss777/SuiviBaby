@@ -149,6 +149,40 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     spy.mockRestore();
   });
 
+  it("sieste passée minuit, bébé changé pendant la question : la nuit est écrite sur le bébé de la session ; « Corriger » ne fait rien", () => {
+    const { Alert } = require("react-native");
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    const spy = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockImplementation(() => undefined as any);
+    const onTooLong = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ childId }: { childId: string }) => useStopTimedEventWithUndo({ childId, getSuccessLabel, onTooLong }),
+      { initialProps: { childId: "c1" } },
+    );
+    const nap = sleep({ isNap: true });
+    nap.heureDebut = new Date(new Date(NOW).setDate(NOW.getDate() - 1));
+    expect(result.current(nap as any)).toBe(false);
+    // Lien du widget : l'Accueil passe sur c2, la question reste ouverte.
+    rerender({ childId: "c2" });
+    const buttons = alertSpy.mock.calls[0][2] as { text: string; onPress?: () => void }[];
+    buttons.find((b) => b.text === "Corriger l'heure de fin")!.onPress!();
+    expect(onTooLong).not.toHaveBeenCalled();
+    buttons.find((b) => b.text === "Enregistrer comme nuit")!.onPress!();
+    expect(spy).toHaveBeenCalledWith("c1", "ev1", expect.objectContaining({ isNap: false }), nap);
+    const undo = mockShowUndoToast.mock.calls.at(-1)![1] as () => void;
+    undo();
+    expect(spy.mock.calls.at(-1)![0]).toBe("c1");
+    alertSpy.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("valeur rendue : vrai seulement si l'arrêt est écrit (retour auto du widget)", () => {
+    jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel, onTooLong: jest.fn() }));
+    expect(result.current(sleep())).toBe(true);
+    expect(result.current(sleep({ heureDebut: new Date(NOW.getTime() - 27 * 3600_000) }))).toBe(false);
+    expect(result.current(null)).toBe(false);
+  });
+
   it("nuit arrêtée après minuit : arrêt direct (pas de question)", () => {
     const { Alert } = require("react-native");
     const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);

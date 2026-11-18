@@ -110,10 +110,13 @@ describe("déclencheurs", () => {
     expect(pushed()).toHaveLength(3);
   });
 
-  it("réglage invalide de version exigée : retombe sur 2.2 (un passage 2.3 → 2.2 n'efface rien)", async () => {
-    memoryStore(seed({ "app_config/widgetPush": { enabled: true, minConsentVersion: "2.3 " } }));
-    await run(wipe.onWidgetConsentChanged, { uid: "dad" }, { healthDataConsent: { granted: true, version: "2.3" } }, { healthDataConsent: { granted: true, version: "2.2" } });
-    expect(pushed()).toHaveLength(0);
+  it("réglage mal saisi (« 2.3 » avec espace, illisible) : jamais plus permissif, le passage 2.3 → 2.2 efface", async () => {
+    for (const bad of ["2.3 ", "2,3"]) {
+      jest.clearAllMocks();
+      memoryStore(seed({ "app_config/widgetPush": { enabled: true, minConsentVersion: bad } }));
+      await run(wipe.onWidgetConsentChanged, { uid: "dad" }, { healthDataConsent: { granted: true, version: "2.3" } }, { healthDataConsent: { granted: true, version: "2.2" } });
+      expect(pushed()).toHaveLength(3);
+    }
   });
 
   it("retrait d'un consentement 2.2 alors que 2.3 est exigé : effacement quand même", async () => {

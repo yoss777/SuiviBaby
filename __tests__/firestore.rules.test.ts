@@ -1969,6 +1969,14 @@ describe("read-only collections (tips, milestones_ref, app_config)", () => {
     );
   });
 
+  test("app_config/widgetPush (testeurs, réglages serveur) : jamais lisible par l'app", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "app_config", "widgetPush"), { enabled: true, allowUids: ["u1"] });
+    });
+    const db = authedFirestore(ALICE_UID);
+    await assertFails(getDoc(doc(db, "app_config", "widgetPush")));
+  });
+
   test("authenticated user can read app_config", async () => {
     const db = authedFirestore(ALICE_UID);
     await assertSucceeds(getDoc(doc(db, "app_config", "version")));

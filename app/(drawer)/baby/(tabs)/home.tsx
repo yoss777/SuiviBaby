@@ -1436,8 +1436,11 @@ export default function HomeDashboard() {
       if (action === "sleep-stop") {
         if (sommeilEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
-          scheduleWidgetBack();
+          // Retour auto seulement si l'arrêt est écrit : une question (sieste
+          // passée minuit) ou le formulaire (plus de 24 h) attend une réponse.
+          if (stopTimedEventWithUndo(sommeilEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack })) {
+            scheduleWidgetBack();
+          }
         } else showToast("Aucun sommeil en cours");
         return;
       }
@@ -1457,8 +1460,11 @@ export default function HomeDashboard() {
       if (action === "walk-stop") {
         if (promenadeEnCours) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack });
-          scheduleWidgetBack();
+          // Retour auto seulement si l'arrêt est écrit : une question (sieste
+          // passée minuit) ou le formulaire (plus de 24 h) attend une réponse.
+          if (stopTimedEventWithUndo(promenadeEnCours, { endSource: "widget" }, { onUndo: cancelWidgetBack })) {
+            scheduleWidgetBack();
+          }
         } else showToast("Aucune balade en cours");
         return;
       }

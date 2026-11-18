@@ -41,6 +41,12 @@ class WidgetPushGuardsTest {
     // Estimation faussée d'une heure : plus de blocage 10 min après l'écriture de l'app.
     assertEquals(WidgetPushOutcome.APPLIED, WidgetPushGuards.decide("c1", 2_060_000L, 1, "c1", 0L, 2_000_000L, false, clockOffsetMs = -3_600_000L, receivedAtMs = 2_000_000L + 11 * 60_000L))
   }
+  @Test fun aClockMovedBackAfterAnAppWriteNeverFreezesTheWidget() {
+    // L'app écrit à 2 000 000, puis l'heure du téléphone recule d'une heure.
+    assertEquals(WidgetPushOutcome.APPLIED, WidgetPushGuards.decide("c1", 1_000_000L, 1, "c1", 0L, 2_000_000L, false, receivedAtMs = 2_000_000L - 3_600_000L))
+    // Dans la tolérance (2 s) : la garde joue toujours.
+    assertEquals(WidgetPushOutcome.OLDER_THAN_APP, WidgetPushGuards.decide("c1", 1_000_000L, 1, "c1", 0L, 2_000_000L, false, receivedAtMs = 2_000_000L - 1_000L))
+  }
   @Test fun rejectsAnAbsurdSequence() =
     assertEquals(WidgetPushOutcome.INVALID, decide(seq = Long.MAX_VALUE))
   @Test fun estimatesTheClockOffsetFromTheLastDay() {

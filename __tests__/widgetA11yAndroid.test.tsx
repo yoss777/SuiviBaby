@@ -112,6 +112,22 @@ describe("accessibilité", () => {
     expect(none).toContain("0 change, aucun noté. Noter un change");
   });
 
+  it("fil dit sans abréviation : « Température … degrés », durées en toutes lettres (revue jalon 6)", () => {
+    const t = tree({
+      recent: [
+        { ms: NOW - H, label: "Temp. 37,8 °C", icon: "temperature", kind: "other" },
+        { ms: NOW - 2 * H, label: "Sieste 2h05", icon: "sommeil", kind: "other" },
+        { ms: NOW - 3 * H, label: "Bain 1 min", icon: "bain", kind: "other" },
+      ],
+    });
+    const rows = walk(t).filter((n) => /^(hier )?à \d\d:\d\d, /.test(descOf(n) ?? ""));
+    expect(rows.map(descOf)).toEqual([
+      "à 14:00, Température 37,8 degrés",
+      "à 13:00, Sieste 2 heures et 5 minutes",
+      "à 12:00, Bain 1 minute",
+    ]);
+  });
+
   it("lignes du fil : non cliquables, « à HH:MM, libellé » (humeur pour un jalon)", () => {
     const t = tree({
       recent: [

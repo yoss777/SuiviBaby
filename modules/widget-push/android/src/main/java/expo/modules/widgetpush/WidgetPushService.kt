@@ -20,7 +20,9 @@ class WidgetPushService : ExpoFirebaseMessagingService() {
     runCatching {
       WidgetPushHandler.handle(applicationContext, remoteMessage.data, System.currentTimeMillis())
     }.onFailure { error ->
-      Log.w("WidgetPush", "message du widget non appliqué", error)
+      // Classe seulement : le message d'une JSONException peut recopier les
+      // données reçues (prénom, données de santé) dans le journal système.
+      Log.w("WidgetPush", "message du widget non appliqué (${error.javaClass.simpleName})")
       runCatching { WidgetPushHandler.logError(applicationContext, System.currentTimeMillis()) }
     }
   }

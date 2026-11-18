@@ -267,7 +267,8 @@ describe("offlineQueueService", () => {
 
       expect(deleted).toBe(2);
       expect(mockDb.runAsync).toHaveBeenCalledWith(
-        expect.stringContaining("DELETE FROM pending_events WHERE retryCount >= 3 AND uid = ?"),
+        expect.stringContaining("DELETE FROM pending_events WHERE retryCount >= ? AND uid = ?"),
+        3,
         "test-uid",
       );
     });
@@ -294,7 +295,7 @@ describe("offlineQueueService", () => {
       // doivent survivre pour être rejouées au re-login.
       expect(mockDb.runAsync).toHaveBeenCalledTimes(1);
       expect(mockDb.runAsync).not.toHaveBeenCalledWith(
-        expect.stringContaining("retryCount >= 3"),
+        expect.stringContaining("retryCount >="),
         expect.anything(),
       );
     });

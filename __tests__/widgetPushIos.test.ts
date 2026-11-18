@@ -10,6 +10,9 @@ jest.mock("@/services/widgetSync", () => ({
   clearNowWidget: () => mockClearWidget(),
 }));
 
+const mockCapture = jest.fn();
+jest.mock("@/utils/errorReporting", () => ({ captureServiceError: (...a: unknown[]) => mockCapture(...a) }));
+
 import { handleWidgetPushIos, readW1 } from "@/services/widgetPushIos";
 import {
   clearIosWidgetPush,
@@ -18,6 +21,7 @@ import {
   nextOffsetSamples,
   noteIosAppSnapshot,
   readWidgetPushIosState,
+  __resetWidgetPushIosReportsForTests,
 } from "@/services/widgetPushIosState";
 
 const store = new Map<string, string>();
@@ -27,6 +31,8 @@ const setAppState = (state: string) =>
 beforeEach(() => {
   store.clear();
   mockWrite.mockClear();
+  mockCapture.mockClear();
+  __resetWidgetPushIosReportsForTests();
   setAppState("background");
   (AsyncStorage.getItem as jest.Mock).mockImplementation((k: string) => Promise.resolve(store.get(k) ?? null));
   (AsyncStorage.setItem as jest.Mock).mockImplementation((k: string, v: string) => {
@@ -100,6 +106,11 @@ describe("horloge du téléphone décalée (écart estimé, dernières 24 h)", (
     await noteIosAppSnapshot("c1", T);
     store.set("widgetPushIos:offsets", history(-3_600_000, T));
     expect(await handleWidgetPushIos(msg(T + 60_000), T + 11 * 60_000)).toBe("ok");
+  });
+
+  it("heure du téléphone reculée après l'écriture de l'app : la garde ne fige pas le widget", async () => {
+    await noteIosAppSnapshot("c1", T);
+    expect(await handleWidgetPushIos(msg(T - 7_200_000), T - 3_600_000)).toBe("ok");
   });
 
   it("séquence aberrante ou données sans enfant : invalide, rien de retenu", async () => {
@@ -247,4 +258,34 @@ it("« w0 » : timeline ET effacement simple impossibles → échec annoncé, l'
   mockClearWidget.mockReturnValueOnce(false);
   expect(await handleWidgetPushIos({ t: "w0", c: "c1", s: 9_000, p: { v: 1 } })).toBe("write");
   expect((await readWidgetPushIosState()).shownChildId).toBe("c1");
+});
+
+describe("disque de l'iPhone en panne : jamais en silence", () => {
+  it("lecture impossible : raison « state » (pas « enfant inconnu »), signalée une fois", async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(() => Promise.reject(new Error("disk")));
+    expect(await handleWidgetPushIos(msg(5_000))).toBe("state");
+    expect(await handleWidgetPushIos(msg(6_000))).toBe("state");
+    expect(mockWrite).not.toHaveBeenCalled();
+    expect(mockCapture).toHaveBeenCalledTimes(1);
+    expect(mockCapture.mock.calls[0][1]).toMatchObject({ operation: "stateRead" });
+  });
+
+  it("séquence non notée après écriture du widget : « write » (iOS reçoit échec), signalée", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    (AsyncStorage.setItem as jest.Mock).mockImplementation((k: string, v: string) => {
+      if (k === "widgetPushIos:seq") return Promise.reject(new Error("full"));
+      store.set(k, v);
+      return Promise.resolve();
+    });
+    expect(await handleWidgetPushIos(msg(5_000), 5_100)).toBe("write");
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+    expect(mockCapture.mock.calls.some((c) => c[1]?.operation === "stateWrite")).toBe(true);
+  });
+
+  it("échantillons d'horloge corrompus : signalés, le message s'applique quand même", async () => {
+    await noteIosAppSnapshot("c1", 1_000);
+    store.set("widgetPushIos:offsets", "{pas du json");
+    expect(await handleWidgetPushIos(msg(5_000), 5_100)).toBe("ok");
+    expect(mockCapture.mock.calls.some((c) => c[1]?.operation === "stateOffsetsCorrupt")).toBe(true);
+  });
 });

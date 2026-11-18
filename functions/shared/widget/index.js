@@ -499,10 +499,12 @@ function assembleNowWidgetInput(src, env = localEnv) {
     recent,
     isPremium: !!src.isPremium,
     canWrite: src.canWrite !== false,
+    // Rappels absents (appelant qui ne les fournit pas) : désactivés, jamais
+    // une erreur qui ferait échouer l'envoi de tout le foyer.
     reminders: {
-      enabled: !!src.reminders.enabled,
-      repasHours: src.reminders.repasHours,
-      changesHours: src.reminders.changesHours,
+      enabled: !!src.reminders?.enabled,
+      repasHours: src.reminders?.repasHours,
+      changesHours: src.reminders?.changesHours,
     },
     now,
   };

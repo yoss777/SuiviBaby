@@ -207,7 +207,7 @@ describe("fanOutWidget", () => {
     expect(pushed().some((m) => m.to === "ExponentPushToken[m1]")).toBe(true);
   });
 
-  it("version exigée réglable (app_config) : 2.3 écarte un consentement 2.2 ; réglage invalide → 2.2", async () => {
+  it("version exigée réglable (app_config) : 2.3 écarte un consentement 2.2 ; réglage illisible → 2.3 (jamais plus permissif)", async () => {
     const base = seed({ "user_preferences/dad": { healthDataConsent: { granted: true, version: "2.2" } } });
     memoryStore({ ...base, "app_config/widgetPush": { ...base["app_config/widgetPush"], minConsentVersion: "2.3" } });
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
@@ -216,13 +216,34 @@ describe("fanOutWidget", () => {
     expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
     memoryStore({ ...base, "app_config/widgetPush": { ...base["app_config/widgetPush"], minConsentVersion: "2.3; drop" } });
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
-    expect(pushed().length).toBeGreaterThan(1);
+    expect(pushed().map((m) => m.to)).not.toContain("ExponentPushToken[a1]");
+  });
+
+  it("version exigée : nombre 2.3 ou « 2.3 » avec espaces compris ; jamais en dessous de 2.2", () => {
+    const { widgetMinConsentVersion } = require("../src/shared/consent");
+    expect(widgetMinConsentVersion({ minConsentVersion: 2.3 })).toBe("2.3");
+    expect(widgetMinConsentVersion({ minConsentVersion: " 2.3 " })).toBe("2.3");
+    expect(widgetMinConsentVersion({ minConsentVersion: "2.1" })).toBe("2.2");
+    expect(widgetMinConsentVersion({ minConsentVersion: "" })).toBe("2.3");
+    expect(widgetMinConsentVersion({})).toBe("2.2");
+    expect(widgetMinConsentVersion(null)).toBe("2.2");
   });
 
   it("consentement d'une version trop ancienne pour le widget : aucune donnée envoyée", async () => {
-    memoryStore(seed({ "user_preferences/dad": { healthDataConsent: { granted: true, version: "2.1" } } }));
+    const docs = memoryStore(seed({ "user_preferences/dad": { healthDataConsent: { granted: true, version: "2.1" } } }));
     await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
-    expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
+    // Aucune donnée (w1) vers ses appareils : seulement l'effacement (w0) de
+    // celui qui affiche déjà l'enfant (données reçues sous l'ancienne version).
+    expect(pushed().filter((m) => m.data?.t === "w1").map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
+    const wipes = pushed().filter((m) => m.data?.t === "w0");
+    expect(wipes.map((m) => m.to)).toEqual(["ExponentPushToken[d1]"]);
+    expect(wipes[0].data.p.childName ?? "").toBe("");
+    // Enfant retiré du jeton : pas d'effacement répété au prochain envoi.
+    expect(docs.get("device_tokens/d1").widgetChildId).toBeUndefined();
+    jest.clearAllMocks();
+    expoClient.sendPushNotificationsAsync.mockImplementation(async (chunk) => chunk.map(() => ({ status: "ok", id: "x" })));
+    await fanout.fanOutWidget(require("firebase-admin").firestore(), "c1", { urgent: true });
+    expect(pushed().filter((m) => m.data?.t === "w0")).toHaveLength(0);
   });
 
   it("température : la valeur mesurée, comme dans l'app (choix produit, politique 2.3)", async () => {
@@ -641,6 +662,36 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     // Le Samsung n'est pas servi deux fois.
     expect(toAndroid).toHaveLength(1);
     expect(docs.get("device_tokens/i1").lastIosPushAt).toBeGreaterThan(NOW);
+  });
+
+  it("rattrapage iPhone : deux urgents écartés pendant le même écart → un seul rattrapage, un seul envoi", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 60_000 },
+    }));
+    const waits = [];
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    fanout._setCatchUpSleepForTests(async (ms) => {
+      waits.push(ms);
+      await gate; // les deux rattrapages éventuels dorment en même temps
+    });
+    try {
+      // Le premier rattrapage dort ; le second urgent arrive pendant l'écart
+      // (la transaction réelle sérialise les réservations ; le simulateur
+      // ne rejoue pas les transactions concurrentes, d'où l'ordre explicite).
+      const a = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+      for (let i = 0; i < 100 && waits.length === 0; i++) await new Promise((r) => setImmediate(r));
+      expect(waits).toHaveLength(1);
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true }); // rend la main sans dormir
+      jest.setSystemTime(Date.now() + 61_000);
+      release();
+      await a;
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    expect(waits).toHaveLength(1);
+    expect(pushed().filter((m) => m.to === "ExponentPushToken[i1]")).toHaveLength(1);
   });
 
   it("rattrapage iPhone : jamais pour un envoi non urgent (plafond de 20 min)", async () => {
