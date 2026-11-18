@@ -331,7 +331,7 @@
   },
   "onWidgetEventWrite": {
     "availableMemoryMb": 256,
-    "timeoutSeconds": 60,
+    "timeoutSeconds": 180,
     "platform": "gcfv2",
     "region": [
       "europe-west1"
@@ -351,7 +351,7 @@
   },
   "onWidgetLiveWrite": {
     "availableMemoryMb": 256,
-    "timeoutSeconds": 60,
+    "timeoutSeconds": 180,
     "platform": "gcfv2",
     "region": [
       "europe-west1"

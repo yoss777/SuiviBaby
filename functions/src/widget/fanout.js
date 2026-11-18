@@ -78,6 +78,25 @@ function eventChange(before, after, nowMs) {
   return { childId: doc.childId, urgent };
 }
 
+/**
+ * Écriture de la tétée partagée (children/{c}/live/nursing) : seuls le début
+ * et la fin sont urgents. Une bascule de côté, une pause ou une reprise part en
+ * priorité normale : sinon elle consomme le plafond iPhone de 2 min et peut
+ * retarder l'envoi de la fin de tétée.
+ * Le document n'est jamais supprimé : la fin d'une tétée écrit un état vide
+ * (EMPTY_NURSING_TIMER). On compare donc « une tétée est en cours (utilisable) »
+ * avant et après, pas l'existence du document.
+ */
+function liveChange(before, after, nowMs = Date.now()) {
+  const was = widget.usableNursing(before, nowMs);
+  const is = widget.usableNursing(after, nowMs);
+  // Tout changement visible d'une tétée est urgent (début, fin, pause,
+  // reprise, changement de côté) : les autres téléphones du foyer doivent
+  // suivre en direct (décision du 18/11). Seule une écriture sans tétée ni
+  // avant ni après (état vide réécrit) ne l'est pas.
+  return { urgent: was != null || is != null };
+}
+
 function isPremium(subscriptionSnap, nowMs) {
   const state = subscriptionStateFrom(subscriptionSnap);
   if (state.grandfathered) return true;
@@ -208,46 +227,99 @@ function widgetMessageData(childId, seq, props) {
  * Relit l'enfant et envoie les données du widget à chaque appareil concerné.
  * Exporté pour les tests.
  */
-async function fanOutWidget(db, childId, { urgent }) {
+async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosOnly = false }) {
   const startedAt = Date.now();
   const stats = { recipients: 0, devices: 0, sent: 0, failed: 0, skipped: 0, deadTokens: 0, errors: 0 };
-  const log = (reason) =>
-    reminderLib.logJobSummary("widgetFanout", startedAt, { reason, urgent, ...stats });
+  // Renvoie aussi l'heure à laquelle un iPhone écarté par le plafond pourra
+  // recevoir (rattrapage d'un envoi urgent, coalescedFanOut).
+  let iosRetryAtMs = null;
+  const log = (reason) => {
+    reminderLib.logJobSummary("widgetFanout", startedAt, { reason, urgent, ...(iosOnly ? { iosOnly } : {}), ...stats });
+    return { reason, iosRetryAtMs };
+  };
 
-  const config = (await db.doc("app_config/widgetPush").get()).data() || {};
+  const config = preloadedConfig || (await db.doc("app_config/widgetPush").get()).data() || {};
   if (config.enabled !== true) return log("disabled");
   const allowUids = Array.isArray(config.allowUids) ? new Set(config.allowUids) : null;
   const minConsent = widgetMinConsentVersion(config);
 
-  const childSnap = await db.doc(`children/${childId}`).get();
+  // Lectures de départ en parallèle (avant : l'une après l'autre).
+  const nowMs = Date.now();
+  const since = admin.firestore.Timestamp.fromMillis(nowMs - LOOKBACK_MS);
+  const [childSnap, accessSnap, eventsSnap, liveSnap, devicesSnap] = await Promise.all([
+    db.doc(`children/${childId}`).get(),
+    db.collection(`children/${childId}/access`).get(),
+    // État courant de l'enfant : l'exécution la plus tardive lit le plus frais
+    // (readTime croissant = séquence du message).
+    db.collection("events").where("childId", "==", childId).where("date", ">=", since).get(),
+    db.doc(`children/${childId}/live/nursing`).get(),
+    // Tous les appareils qui affichent cet enfant, en une requête (avant : une
+    // par membre) ; filtrés ensuite sur les membres retenus.
+    db.collection("device_tokens").where("widgetChildId", "==", childId).get(),
+  ]);
   if (!childSnap.exists || childSnap.data()?.deletedAt) return log("no-child");
   const child = childSnap.data();
 
-  const accessSnap = await db.collection(`children/${childId}/access`).get();
   // Droit de saisie par membre (owner/admin) : un Proche reçoit canWrite=false.
   const writers = new Set(
     accessSnap.docs.filter((d) => ["owner", "admin"].includes(d.data()?.role)).map((d) => d.id),
   );
   let members = accessSnap.docs.map((d) => d.id).filter((uid) => !allowUids || allowUids.has(uid));
   if (members.length === 0) return log("no-member");
-  const leaving = await usersWithPendingDeletion(db, members);
-  members = members.filter((uid) => !leaving.has(uid));
+  // Appareils par membre (une seule requête plus haut).
+  const devicesByUid = new Map();
+  for (const d of devicesSnap.docs) {
+    const uid = d.data()?.userId;
+    if (typeof uid !== "string") {
+      stats.badDeviceDoc = (stats.badDeviceDoc || 0) + 1;
+      continue;
+    }
+    if (!devicesByUid.has(uid)) devicesByUid.set(uid, []);
+    devicesByUid.get(uid).push(d);
+  }
+  // Membres sans appareil pour cet enfant : rien à lire ni à envoyer.
+  members = members.filter((uid) => devicesByUid.has(uid));
+  if (members.length === 0) return log("no-device");
 
-  // État courant de l'enfant : l'exécution la plus tardive lit le plus frais
-  // (readTime croissant = séquence du message).
-  const nowMs = Date.now();
-  const since = admin.firestore.Timestamp.fromMillis(nowMs - LOOKBACK_MS);
-  const [eventsSnap, liveSnap] = await Promise.all([
-    db.collection("events").where("childId", "==", childId).where("date", ">=", since).get(),
-    db.doc(`children/${childId}/live/nursing`).get(),
+  const unknown = { unknownOnInvalid: true };
+  // Une lecture en erreur n'arrête pas l'envoi (comme avant, membre par
+  // membre) : dernier repas / change « inconnu », préférences relues une à une.
+  // Seule la liste des comptes en suppression est indispensable (sûreté).
+  const lastOrUnknown = (category) =>
+    reminderLib.getLastEventMillis(db, childId, child, category, null, unknown).catch((error) => {
+      stats.errors++;
+      stats.lastEventUnreadable = (stats.lastEventUnreadable || 0) + 1;
+      console.warn("widgetFanout: last event unreadable", { code: error?.code ?? "unknown" });
+      return undefined;
+    });
+  const memberRefs = members.flatMap((uid) => [db.doc(`user_preferences/${uid}`), db.doc(`subscriptions/${uid}`)]);
+  const [leaving, lastAbsoluteMealMs, lastAbsoluteDiaperMs, memberDocs] = await Promise.all([
+    usersWithPendingDeletion(db, members),
+    // Date illisible : « inconnu » (undefined), jamais « aucun repas noté ».
+    lastOrUnknown("repas"),
+    lastOrUnknown("changes"),
+    // Préférences et abonnements de tous les membres en un aller-retour.
+    db.getAll(...memberRefs).catch((error) => {
+      stats.errors++;
+      console.warn("widgetFanout: grouped member read failed", { code: error?.code ?? "unknown" });
+      // Repli : une lecture par document ; un document illisible = membre écarté.
+      return Promise.all(memberRefs.map((r) => r.get().catch(() => null)));
+    }),
   ]);
+  const prefsByUid = new Map();
+  const subByUid = new Map();
+  members.forEach((uid, i) => {
+    prefsByUid.set(uid, memberDocs[2 * i]);
+    subByUid.set(uid, memberDocs[2 * i + 1]);
+  });
+  members = members.filter((uid) => !leaving.has(uid));
+  // Mesure du jalon 4 : temps des lectures (avant : en série, membre par membre).
+  stats.readMs = Date.now() - startedAt;
+  stats.members = members.length;
+
   const seq = eventsSnap.readTime && typeof eventsSnap.readTime.toMillis === "function" ? eventsSnap.readTime.toMillis() : nowMs;
   const split = splitEvents(eventsSnap.docs, nowMs);
   const nursing = widget.usableNursing(liveSnap.exists ? liveSnap.data() : null, nowMs);
-  // Date illisible : « inconnu » (undefined), jamais « aucun repas noté ».
-  const unknown = { unknownOnInvalid: true };
-  const lastAbsoluteMealMs = await reminderLib.getLastEventMillis(db, childId, child, "repas", null, unknown);
-  const lastAbsoluteDiaperMs = await reminderLib.getLastEventMillis(db, childId, child, "changes", null, unknown);
 
   const messages = [];
   const tokenDocs = [];
@@ -255,25 +327,31 @@ async function fanOutWidget(db, childId, { urgent }) {
     // Un membre en erreur (lecture refusée, réseau) n'arrête pas l'envoi aux
     // autres : compté, journalisé sans identifiant.
     try {
-      const prefsSnap = await db.doc(`user_preferences/${uid}`).get();
+      const prefsSnap = prefsByUid.get(uid);
+      // Préférences illisibles : pas de preuve du consentement, membre écarté.
+      if (prefsSnap == null) {
+        stats.errors++;
+        stats.prefsUnreadable = (stats.prefsUnreadable || 0) + 1;
+        continue;
+      }
       const prefs = prefsSnap.exists ? prefsSnap.data() : {};
       // Consentement santé d'une version qui couvre le widget (shared/consent).
       if (!hasWidgetHealthConsent(prefs, minConsent)) {
         stats.skipped++;
         continue;
       }
-      const devicesSnap = await db
-        .collection("device_tokens")
-        .where("userId", "==", uid)
-        .where("widgetChildId", "==", childId)
-        .get();
-      const devices = devicesSnap.docs.filter((d) => {
+      const devices = (devicesByUid.get(uid) || []).filter((d) => {
         const t = d.data();
         const iosLast = typeof t.lastIosPushAt === "number" ? t.lastIosPushAt : 0;
-        const iosAllowed =
-          t.platform !== "ios" || nowMs - iosLast >= (urgent ? IOS_MIN_GAP_URGENT_MS : IOS_MIN_GAP_MS);
-        if (t.platform === "ios" && config.ios === true && !iosAllowed) stats.iosThrottled = (stats.iosThrottled || 0) + 1;
-        const platformOk = t.platform === "android" || (t.platform === "ios" && config.ios === true && iosAllowed);
+        const gap = urgent ? IOS_MIN_GAP_URGENT_MS : IOS_MIN_GAP_MS;
+        const iosAllowed = t.platform !== "ios" || nowMs - iosLast >= gap;
+        const receiver = t.widgetPush === true && Number(t.widgetCap) >= DATA_CAP;
+        if (t.platform === "ios" && config.ios === true && !iosAllowed && receiver) {
+          stats.iosThrottled = (stats.iosThrottled || 0) + 1;
+          iosRetryAtMs = Math.min(iosRetryAtMs ?? Infinity, iosLast + gap);
+        }
+        const platformOk =
+          (t.platform === "android" && !iosOnly) || (t.platform === "ios" && config.ios === true && iosAllowed);
         // widgetCap >= 3 : version qui n'annonce widgetPush que si un widget est
         // posé (les plus anciennes le gardaient vrai sans widget : plus rien).
         return t.widgetPush === true && Number(t.widgetCap) >= DATA_CAP && platformOk &&
@@ -282,7 +360,16 @@ async function fanOutWidget(db, childId, { urgent }) {
       if (devices.length === 0) continue;
       stats.recipients++;
 
-      const premium = isPremium(await db.doc(`subscriptions/${uid}`).get(), nowMs);
+      // Abonnement illisible : membre écarté (comme avant le jalon 4, où la
+      // lecture en erreur arrêtait ce membre) ; le widget garde son dernier
+      // état au lieu de passer à tort en version gratuite.
+      const subSnap = subByUid.get(uid);
+      if (subSnap == null) {
+        stats.errors++;
+        stats.subUnreadable = (stats.subUnreadable || 0) + 1;
+        continue;
+      }
+      const premium = isPremium(subSnap, nowMs);
       const r = prefs.notifications?.reminders || {};
       const reminders = {
         enabled: r.enabled === true,
@@ -313,7 +400,8 @@ async function fanOutWidget(db, childId, { urgent }) {
         if (!data) {
           stats.errors++;
           stats.tooBig = (stats.tooBig || 0) + 1;
-          console.warn("widgetFanout: message too big even without the day feed", { childId });
+          // Sans identifiant (règle du fichier) : compté dans stats.tooBig.
+          console.warn("widgetFanout: message too big even without the day feed");
           continue;
         }
         stats.devices++;
@@ -328,13 +416,20 @@ async function fanOutWidget(db, childId, { urgent }) {
       }
     } catch (error) {
       stats.errors++;
-      console.error("widgetFanout: member failed", { childId, error: error?.message ?? String(error) });
+      // Code seulement : le message peut contenir un chemin (uid, enfant).
+      console.error("widgetFanout: member failed", { code: error?.code ?? "unknown" });
     }
   }
   // Aucun message parce que des membres ont échoué : une vraie panne.
-  if (messages.length === 0) return log(stats.errors > 0 ? "failed" : "no-device");
+  // Raison précise : un widget iPhone périmé par le plafond ne doit pas passer
+  // pour « aucun appareil ».
+  if (messages.length === 0) {
+    return log(stats.errors > 0 ? "failed" : stats.iosThrottled ? "throttled" : stats.skipped ? "no-consent" : "no-device");
+  }
 
+  const sendStartedAt = Date.now();
   const { delivered, failed, dead, chunkErrors, errorsByCode } = await reminderLib.sendPushWithTickets(getExpoClient(), messages);
+  stats.sendMs = Date.now() - sendStartedAt;
   // iPhone : heure du dernier envoi, pour le plafond (champ serveur seulement).
   const iosSent = tokenDocs.filter((d) => d.platform === "ios" && !dead.has(d.token));
   await Promise.all(
@@ -354,20 +449,140 @@ async function fanOutWidget(db, childId, { urgent }) {
   return log(delivered === 0 && failed > 0 ? "failed" : "sent");
 }
 
-const TRIGGER_OPTIONS = { region: "europe-west1", memory: "256MiB", timeoutSeconds: 60, retry: false };
+/**
+ * Regroupement des envois rapprochés : plusieurs saisies coup sur coup (fil du
+ * jour, notes, compteurs) ne déclenchent qu'un envoi, celui de la dernière, qui
+ * relit l'état complet. Chaque déclenchement pose un jeton par enfant, attend
+ * 2 s, et n'envoie que s'il est toujours le dernier. Un envoi urgent (début ou
+ * fin de session) part tout de suite et rend caducs les envois en attente :
+ * il lit l'état le plus récent. Collection réservée au serveur (règle par
+ * défaut : aucun accès client), jeton et heure seulement.
+ */
+const COALESCE_MS = 2000;
+let coalesceMs = COALESCE_MS;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function coalescedFanOut(db, childId, { urgent }) {
+  const startedAt = Date.now();
+  // Interrupteur lu d'abord : widget désactivé, ni marqueur ni attente.
+  const config = (await db.doc("app_config/widgetPush").get()).data() || {};
+  if (config.enabled !== true) {
+    reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "disabled", urgent });
+    return;
+  }
+  // Réglable sans redéploiement (app_config/widgetPush.coalesceMs) ; 0 coupe
+  // le regroupement.
+  // Seulement un vrai nombre : null, "" ou false ne coupent pas le regroupement.
+  const configured = config.coalesceMs;
+  const waitMs =
+    typeof configured === "number" && Number.isFinite(configured) && configured >= 0
+      ? Math.min(configured, 10_000)
+      : coalesceMs;
+  if (waitMs === 0) return fanOutWidget(db, childId, { urgent, config });
+  // Aucun appareil n'affiche cet enfant (la plupart des familles) : ni
+  // marqueur, ni attente de 2 s ; une seule lecture.
+  try {
+    // widgetPush : un widget est vraiment posé (widgetChildId est inscrit dès
+    // l'ouverture de l'Accueil, widget ou pas).
+    const any = await db
+      .collection("device_tokens")
+      .where("widgetChildId", "==", childId)
+      .where("widgetPush", "==", true)
+      .limit(1)
+      .get();
+    if (any.empty) {
+      reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "no-device", urgent, precheck: true });
+      return;
+    }
+  } catch (error) {
+    // Lecture impossible : on continue (au pire, un marqueur pour rien).
+    console.warn("widgetFanout: pre-check failed", { code: error?.code ?? "unknown" });
+  }
+  const ref = db.doc(`widget_fanout/${childId}`);
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    // expireAt : politique TTL Firestore sur widget_fanout (marqueur jamais
+    // orphelin, même posé par un déclenchement tardif après la suppression de
+    // l'enfant).
+    await ref.set({ token, at: Date.now(), expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * HOUR) });
+  } catch (error) {
+    // Marqueur impossible : on envoie sans regrouper plutôt que de perdre l'envoi.
+    // Journal sans identifiant (règle du fichier).
+    console.warn("widgetFanout: coalesce marker failed", { code: error?.code ?? "unknown" });
+    return fanOutWidget(db, childId, { urgent, config });
+  }
+  if (urgent) {
+    const result = await sendOnce(db, childId, { urgent, config });
+    return iosCatchUp(db, childId, config, result);
+  }
+  await sleep(waitMs);
+  try {
+    const snap = await ref.get();
+    if (snap.exists && snap.data()?.token !== token) {
+      reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "coalesced", urgent, waitedMs: waitMs });
+      return;
+    }
+  } catch (error) {
+    // Lecture impossible : on envoie (au pire un envoi de plus).
+    console.warn("widgetFanout: coalesce marker unreadable", { code: error?.code ?? "unknown" });
+  }
+  return sendOnce(db, childId, { urgent, config });
+}
+
+/**
+ * Rattrapage iPhone d'un envoi urgent (début ou fin de session, pause,
+ * reprise, changement de côté de la tétée). Un iPhone écarté par le plafond
+ * d'Apple (un envoi toutes les 2 min au plus) n'est plus abandonné : il reçoit
+ * l'état le plus récent dès la fin de l'écart. Retard maximal entre appareils :
+ * 2 min, au lieu d'un envoi perdu jusqu'à la saisie suivante. Android est déjà
+ * servi : seuls les iPhone sont visés.
+ */
+async function iosCatchUp(db, childId, config, result) {
+  const retryAt = result?.iosRetryAtMs;
+  if (typeof retryAt !== "number") return result;
+  const waitMs = retryAt - Date.now() + 500;
+  // Au-delà de l'écart urgent (+ marge), ce n'est pas un plafond urgent.
+  if (waitMs > IOS_MIN_GAP_URGENT_MS + 5000) return result;
+  await catchUpSleep(Math.max(0, waitMs));
+  return fanOutWidget(db, childId, { urgent: true, config, iosOnly: true });
+}
+let catchUpSleep = sleep;
+
+/**
+ * Envoi du gagnant : les déclenchements qu'il a rendus caducs comptent sur
+ * lui (pas de nouvel essai de la plateforme, retry: false). Une erreur
+ * passagère est donc réessayée une fois, 1 s plus tard.
+ */
+async function sendOnce(db, childId, opts) {
+  try {
+    return await fanOutWidget(db, childId, opts);
+  } catch (error) {
+    console.warn("widgetFanout: send failed, retrying once", { code: error?.code ?? "unknown" });
+    await sleep(1000);
+    return fanOutWidget(db, childId, opts);
+  }
+}
+
+// 180 s : le rattrapage iPhone d'un envoi urgent peut attendre jusqu'à 2 min.
+const TRIGGER_OPTIONS = { region: "europe-west1", memory: "256MiB", timeoutSeconds: 180, retry: false };
 
 const onWidgetEventWrite = onDocumentWritten({ ...TRIGGER_OPTIONS, document: "events/{eventId}" }, async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null;
   const after = event.data?.after?.exists ? event.data.after.data() : null;
   const change = eventChange(before, after, Date.now());
   if (!change) return;
-  await fanOutWidget(admin.firestore(), change.childId, { urgent: change.urgent });
+  await coalescedFanOut(admin.firestore(), change.childId, { urgent: change.urgent });
 });
 
 const onWidgetLiveWrite = onDocumentWritten(
   { ...TRIGGER_OPTIONS, document: "children/{childId}/live/{sessionId}" },
   async (event) => {
-    await fanOutWidget(admin.firestore(), event.params.childId, { urgent: true });
+    const before = event.data?.before?.exists ? event.data.before.data() : null;
+    const after = event.data?.after?.exists ? event.data.after.data() : null;
+    // Urgence propre à la tétée : seul document de live/ aujourd'hui. Un autre
+    // type de session partagée reste urgent par défaut.
+    const change = event.params.sessionId === "nursing" ? liveChange(before, after, Date.now()) : { urgent: true };
+    await coalescedFanOut(admin.firestore(), event.params.childId, change);
   },
 );
 
@@ -376,6 +591,15 @@ module.exports = {
   onWidgetLiveWrite,
   // Tests
   eventChange,
+  liveChange,
+  coalescedFanOut,
+  sendOnce,
+  _setCoalesceMsForTests: (ms) => {
+    coalesceMs = ms;
+  },
+  _setCatchUpSleepForTests: (fn) => {
+    catchUpSleep = fn || sleep;
+  },
   splitEvents,
   propsForDevice,
   widgetMessageData,

@@ -212,6 +212,7 @@ const NOT_PURGED_BY_UID = {
   consent_records: "kept 5 years after deletion as proof of consent (GDPR art. 7.1): purgeUserData only sets expireAt, a TTL deletes them",
   adminAuditLog: "kept on purpose: investigation trail of admin actions",
   revenuecat_webhook_events: "event ids only, no personal data; TTL 30 days",
+  widget_fanout: "widget send coalescing marker per child (token, time, expireAt): no personal data, server-only, deleted with the child (deleteChildDataBatched) and by TTL within 24 h",
   deleted_idem: "tombstones of deleted idempotent events: hashed id + deletedAt only, no personal data (server-only, denied by firestore.rules)",
   app_config: "shared configuration",
   tips: "shared reference content",

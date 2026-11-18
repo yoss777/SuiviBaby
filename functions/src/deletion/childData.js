@@ -62,6 +62,15 @@ async function deleteChildDataBatched(db, childId) {
 
   // user_child_access index entries for this child
   await deleteDocsByFieldBatched(db, "user_child_access", "childId", childId);
+
+  // Marqueur de regroupement des envois du widget (jeton et heure seulement,
+  // indexé par l'enfant) : effacé avec lui.
+  // (Un déclenchement tardif peut le reposer : il expire alors seul, champ
+  // expireAt + politique TTL.)
+  await db.doc(`widget_fanout/${childId}`).delete().catch((error) => {
+    // Code seulement : le message peut contenir le chemin (identifiant de l'enfant).
+    console.warn("deleteChildData: widget_fanout marker not deleted", { code: error?.code ?? "unknown" });
+  });
 }
 
 /**
