@@ -136,6 +136,10 @@ Même format à chaque fois, pour comparer les notes d'une revue à l'autre :
 **Livrable** : `docs/strategie/ux/REVUE_ECC_Sxx.md`, avec une note sur 20 et des constats P0, P1 et P2.
 - Les **P0 sont corrigés avant le sprint suivant**.
 - Les P1 sont planifiés dans le sprint suivant.
+## Lot 5 (avant la MEP)
+
+- Jalon 4, performance du widget : plan détaillé et avancement dans [LOT5_JALON4_PERF.md](LOT5_JALON4_PERF.md).
+
 ## Décisions en attente (Yoss)
 
 1. Widget complet pour les comptes inscrits avant le Premium (proposition : oui, c'est un ajout).
