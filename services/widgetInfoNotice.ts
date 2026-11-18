@@ -24,7 +24,7 @@ export function widgetInfoMessage(os: string = Platform.OS): string {
     "Il affiche le prénom de votre bébé, ses derniers repas, changes et sommeils, les sessions en cours et, selon sa taille, les derniers soins (dont la température).",
     screen,
     `Pour le tenir à jour quand un autre aidant saisit, notre serveur envoie ce résumé à votre téléphone par Expo, puis ${os === "ios" ? "Apple" : "Google"}.`,
-    "Retirez le widget à tout moment : plus rien n'est alors envoyé. Il est aussi vidé à la déconnexion.",
+    "Vous pouvez le retirer à tout moment : plus rien n'est envoyé à ce téléphone dès la prochaine ouverture de l'app. Il est aussi vidé à la déconnexion.",
   ].join("\n\n");
 }
 
@@ -48,21 +48,23 @@ export async function markWidgetInfoShown(): Promise<void> {
 }
 
 let showing = false;
+let shownThisSession = false;
 
 /**
- * Widget détecté : montre l'information si elle n'a jamais été vue. Notée vue
- * dès l'affichage (une fermeture forcée de l'app ne la fait pas revenir en
- * boucle) ; `show` reçoit le titre, le texte et l'action « En savoir plus ».
+ * Widget détecté : montre l'information si elle n'a jamais été lue. Notée lue
+ * quand la personne la ferme (`show` reçoit `onRead`, à appeler par chaque
+ * bouton) : une fenêtre refermée par l'app (retour auto, fermeture forcée)
+ * revient à l'ouverture suivante. Une seule fois par lancement au plus.
  */
 export async function maybeShowWidgetInfo(
-  show: (title: string, message: string) => void,
+  show: (title: string, message: string, onRead: () => void) => void,
 ): Promise<boolean> {
-  if (showing) return false;
+  if (showing || shownThisSession) return false;
   showing = true;
   try {
     if (!(await shouldShowWidgetInfo())) return false;
-    await markWidgetInfoShown();
-    show(WIDGET_INFO_TITLE, widgetInfoMessage());
+    shownThisSession = true;
+    show(WIDGET_INFO_TITLE, widgetInfoMessage(), () => void markWidgetInfoShown());
     return true;
   } finally {
     showing = false;
@@ -72,4 +74,5 @@ export async function maybeShowWidgetInfo(
 /** Tests uniquement. */
 export function __resetWidgetInfoForTests(): void {
   showing = false;
+  shownThisSession = false;
 }

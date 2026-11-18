@@ -82,6 +82,10 @@ export async function recordHealthConsent(uid: string): Promise<void> {
   // retrait du consentement).
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   (require("@/services/widgetSync") as typeof import("@/services/widgetSync")).resumeWidgetWrites();
+  // Le serveur a pu retirer l'enfant du jeton (consentement trop ancien) :
+  // réinscrit, sinon le widget n'était plus mis à jour jusqu'au redémarrage.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  (require("@/services/pushTokenService") as typeof import("@/services/pushTokenService")).rewriteWidgetChild();
 }
 
 /**

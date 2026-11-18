@@ -252,6 +252,24 @@ describe("session démarrée puis modifiée hors ligne (revue jalon 6)", () => {
     expect(created).not.toHaveProperty("duree");
   });
 
+  it("création déjà arrivée au serveur (réponse perdue) puis arrêtée hors ligne : l'arrêt part en modification", async () => {
+    setNetwork(false);
+    const tempId = ajouterEvenementOptimistic("c1", sieste() as any);
+    await settle();
+    // Le serveur a déjà la création (même clé) : le rejeu renvoie l'existant.
+    const key = JSON.parse(fakeDb.rows[0].payload).idempotencyKey;
+    server.events.set("srv-old", { ...sieste(), id: "srv-old", idempotencyKey: key });
+    modifierEvenementOptimistic("c1", tempId, { duree: 90 } as any, {});
+    await settle();
+    setNetwork(true);
+    await cycle();
+    const sentCreate = server.calls.find((c) => c.name === "validateAndCreateEvent")!.payload;
+    expect(sentCreate).not.toHaveProperty("__mergedAfterQueue");
+    const upd = server.calls.find((c) => c.name === "validateAndUpdateEvent");
+    expect(upd?.payload).toMatchObject({ eventId: "srv-old", duree: 90, childId: "c1" });
+    expect(fakeDb.rows).toHaveLength(0);
+  });
+
   it("arrêt avant même la mise en file : fusionné aussi", async () => {
     setNetwork(false);
     const tempId = ajouterEvenementOptimistic("c1", sieste() as any);

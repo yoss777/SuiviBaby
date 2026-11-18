@@ -45,6 +45,12 @@ const getUserId = () => {
 
 /** Créations optimistes mises en file hors ligne : id provisoire → id dans la file. */
 const queuedOptimisticCreates = new Map<string, string>();
+/**
+ * Créations confirmées : id provisoire → id réel. Un « Annuler » ou un arrêt
+ * qui garde l'id provisoire (toast ouvert avant la confirmation) vise alors
+ * l'événement réel au lieu de se perdre en silence.
+ */
+const confirmedOptimisticIds = new Map<string, string>();
 
 /**
  * Modification d'une création restée en file : fusionnée dans celle-ci.
@@ -1036,6 +1042,7 @@ export function ajouterEvenementOptimistic(
         return;
       }
       confirmOptimistic(tempId, realId);
+      confirmedOptimisticIds.set(tempId, realId);
       runCallback(options?.onConfirmed, "onConfirmed");
       const pendingUpdate = pendingOptimisticCreateUpdates.get(tempId);
       if (pendingUpdate) {
@@ -1093,6 +1100,17 @@ export function modifierEvenementOptimistic(
   });
 
   if (eventId.startsWith("__optimistic_")) {
+    const realId = confirmedOptimisticIds.get(eventId);
+    if (realId) {
+      return modifierEvenementOptimistic(
+        childId,
+        realId,
+        data,
+        previousEvent ? { ...previousEvent, id: realId } : previousEvent,
+        expectedUpdatedAt,
+        options,
+      );
+    }
     const updated = updateOptimisticCreate(eventId, updatedEvent);
     const queueId = queuedOptimisticCreates.get(eventId);
     if (updated && queueId) {
@@ -1109,6 +1127,9 @@ export function modifierEvenementOptimistic(
         data: { ...(prev?.data ?? {}), ...cleanData } as Partial<Event>,
         previousEvent: prev?.previousEvent ?? previousEvent,
       });
+    } else {
+      // Création disparue (refusée, déjà en cours ailleurs) : jamais en silence.
+      notifyOptimisticNotice("Modification non enregistrée : la saisie n'existe plus.");
     }
     return eventId;
   }

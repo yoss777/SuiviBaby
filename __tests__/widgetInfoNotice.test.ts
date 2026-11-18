@@ -25,12 +25,22 @@ beforeEach(() => {
 });
 
 describe("information à la pose du widget", () => {
-  it("montrée une seule fois par appareil", async () => {
-    const show = jest.fn();
+  it("lue (bouton touché) : plus jamais montrée, même au lancement suivant", async () => {
+    const show = jest.fn((_t: string, _m: string, onRead: () => void) => onRead());
     expect(await maybeShowWidgetInfo(show)).toBe(true);
+    expect(show.mock.calls[0][0]).toBe(WIDGET_INFO_TITLE);
+    await Promise.resolve();
+    __resetWidgetInfoForTests(); // nouveau lancement
     expect(await maybeShowWidgetInfo(show)).toBe(false);
     expect(show).toHaveBeenCalledTimes(1);
-    expect(show.mock.calls[0][0]).toBe(WIDGET_INFO_TITLE);
+  });
+
+  it("fermée sans être lue (retour auto, app tuée) : revient au lancement suivant, une fois par lancement", async () => {
+    const show = jest.fn();
+    expect(await maybeShowWidgetInfo(show)).toBe(true);
+    expect(await maybeShowWidgetInfo(show)).toBe(false); // même lancement
+    __resetWidgetInfoForTests();
+    expect(await maybeShowWidgetInfo(show)).toBe(true);
   });
 
   it("deux détections simultanées (lancement et retour au premier plan) : un seul message", async () => {
@@ -54,7 +64,7 @@ describe("information à la pose du widget", () => {
       expect(t).toMatch(/prénom/);
       expect(t).toMatch(/température/);
       expect(t).toMatch(/Expo/);
-      expect(t).toMatch(/Retirez le widget/);
+      expect(t).toMatch(/dès la prochaine ouverture de l'app/);
     }
     expect(ios).toMatch(/Apple/);
     expect(ios).toMatch(/verrouillé par un code/);

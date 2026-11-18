@@ -20,6 +20,9 @@ jest.mock("firebase/functions", () => ({
 }));
 
 jest.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+const mockRewrite = jest.fn();
+jest.mock("@/services/pushTokenService", () => ({ rewriteWidgetChild: () => mockRewrite() }));
+jest.mock("@/services/widgetSync", () => ({ resumeWidgetWrites: jest.fn(), clearNowWidget: jest.fn(() => true) }));
 
 const snap = (data: unknown) => ({ exists: () => data !== undefined, data: () => data });
 

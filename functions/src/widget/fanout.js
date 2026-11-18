@@ -363,7 +363,10 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
         const receiver = t.widgetPush === true && Number(t.widgetCap) >= DATA_CAP;
         if (t.platform === "ios" && config.ios === true && !iosAllowed && receiver) {
           stats.iosThrottled = (stats.iosThrottled || 0) + 1;
-          iosRetryAtMs = Math.min(iosRetryAtMs ?? Infinity, iosLast + gap);
+          // Le plus TARD des iPhone écartés : au rattrapage, tous sont libres
+          // (avec le plus tôt, le second iPhone d'un foyer restait plafonné et
+          // n'était jamais rattrapé). Borné par l'écart (2 min au plus).
+          iosRetryAtMs = Math.max(iosRetryAtMs ?? 0, iosLast + gap);
         }
         const platformOk =
           (t.platform === "android" && !iosOnly) || (t.platform === "ios" && config.ios === true && iosAllowed);

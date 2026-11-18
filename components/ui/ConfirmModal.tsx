@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 import {
   getNeutralColors,
@@ -101,7 +101,7 @@ export function ConfirmModal({
   const resolvedConfirmTextColor =
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   const confirmVariant = confirmButtonColor === DESTRUCTIVE_COLOR ? "destructive" : "primary";
-  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
   const stacked = !buttonsFitSideBySide([confirmText, cancelText], windowWidth, fontScale);
   const layout = stacked ? "stack" : "row";
   const cancelButton = (
@@ -140,13 +140,19 @@ export function ConfirmModal({
         <Pressable
           style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}
+          // Pas un seul élément pour VoiceOver : titre, texte et boutons restent atteignables.
+          accessible={false}
           accessibilityViewIsModal={true}
         >
           <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
             {title}
           </Text>
           {typeof message === "string" ? (
-            <Text style={[dialogStyles.message, { color: textColor ?? nc.textNormal }]}>{message}</Text>
+            // Texte long (information à la pose du widget) ou grande police :
+            // il défile, les boutons restent toujours à l'écran.
+            <ScrollView style={{ maxHeight: windowHeight * 0.5 }} bounces={false}>
+              <Text style={[dialogStyles.message, { color: textColor ?? nc.textNormal }]}>{message}</Text>
+            </ScrollView>
           ) : (
             <View style={dialogStyles.messageContainer}>{message}</View>
           )}

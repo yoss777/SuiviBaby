@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
 import { ACTION_TOAST_MIN_MS } from "@/constants/toast";
+import { isAppModalOpen } from "@/contexts/ModalContext";
 import { useScreenReaderEnabled } from "@/hooks/useScreenReaderEnabled";
 import { moveAppToBack } from "@/modules/widget-push";
 import { isScreenReaderOnNow, refreshScreenReader } from "@/services/screenReader";
@@ -26,6 +27,9 @@ export function useWidgetBackTimer(): { schedule: () => void; cancel: () => void
     if (isScreenReaderOnNow()) return;
     const timer = setTimeout(() => {
       timerRef.current = null;
+      // Une fenêtre est ouverte (question, information à la pose du widget) :
+      // ses appuis n'atteignent pas l'écran qui annule le retour ; on reste.
+      if (isAppModalOpen()) return;
       void moveAppToBack();
     }, WIDGET_BACK_DELAY_MS);
     timerRef.current = timer;

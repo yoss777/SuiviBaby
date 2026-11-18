@@ -39,6 +39,11 @@ problème) · ⏳ en cours · — pas encore testé.
 | 19 | Sieste passée minuit arrêtée depuis le widget Android : la question reste affichée (pas de retour automatique à l'écran d'accueil) | — | Jalon 6, F |
 | 20 | TalkBack et VoiceOver sur le fil du jour : « Température 37,8 degrés », « Sieste 1 heure et 20 minutes » (jamais « Temp. », « min ») | — | Jalon 6, L |
 | 21 | Déconnexion en mode avion : la déconnexion aboutit en 5 s au plus, le widget se vide | — | Jalon 6, I |
+| 22 | Information à la pose sur un petit écran (iPhone SE) et en très grande police : le texte défile, les deux boutons restent visibles. VoiceOver atteint le titre, le texte et les deux boutons | — | Revue en profondeur, P |
+| 23 | Android, widget posé puis retiré, app non rouverte : une saisie sur un autre téléphone ne laisse rien sur ce téléphone (`readReceiveLog` : « nowidget ») | — | Revue en profondeur, N |
+| 24 | Deux iPhone dans le foyer, pauses ou changements de côté rapprochés : les deux widgets à jour au plus 2 min après | — | Revue en profondeur, M |
+| 25 | Android, app fermée : `readReceiveLog` ne montre pas de « fg » (garde de premier plan) | — | À vérifier, `isForeground` |
+| 26 | Android (Samsung), sieste au-delà d'1 h, téléphone en veille passée l'heure pleine : rallumer l'écran et chronométrer le temps avant que « 3 min » devienne « 1h03 » | — | Décision de Yoss (18/11) : test d'abord. Quelques secondes → on garde « 5 min » ; sinon → « 0h05 » dès le début (format toujours juste) |
 
 ## Après les tests
 

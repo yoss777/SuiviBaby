@@ -2,7 +2,7 @@
 import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
-import { registerPushToken, removePushTokens } from "@/services/pushTokenService";
+import { registerPushToken, removePushTokens, resetPushSession } from "@/services/pushTokenService";
 import { clearNowWidget, resumeWidgetWrites } from "@/services/widgetSync";
 import { rotateWidgetLinkKey } from "@/services/widgetLinkKey";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
@@ -321,6 +321,10 @@ export function AuthProvider({
       } else {
         // Déconnexion forcée / compte supprimé : mêmes caches à purger que signOut.
         clearSessionCaches();
+        // Plus aucun essai pour l'ancien compte (enfant du widget, jeton). Le
+        // jeton ne peut plus être supprimé sans authentification : le serveur
+        // le réattribue à la prochaine connexion sur ce téléphone.
+        resetPushSession();
         dispatch({ type: "CLEAR_USER" });
       }
     });

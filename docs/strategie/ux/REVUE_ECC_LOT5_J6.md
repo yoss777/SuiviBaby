@@ -83,3 +83,48 @@ Accessibilité, rôle « bouton » sur Android : impossible avec Glance, dont `s
 - `tsc` et lint sont propres.
 - Les nouveaux tests échouent sur l'ancien code : le rattrapage iPhone en double, et la sieste démarrée puis arrêtée hors ligne.
 - Les tests des règles (`app_config/widgetPush`) tournent dans la CI, car la CLI Firebase n'est pas installée sur ce Mac.
+
+## Revue en profondeur (18/11, après #115 et #116)
+
+Mêmes 11 volets, sur la branche de la PR #116. Chaque agent a vérifié que les corrections du jalon 6 tenaient, puis cherché plus loin. **Moyenne : 16,6/20** (15,3 avant), aucun P0.
+
+| Volet | Avant | Après |
+|---|---|---|
+| Rendu | 16 | 17 |
+| Sécurité téléphone | 18 | 17 |
+| Sécurité serveur | 16 | 17 |
+| Accueil et hooks | 16 | 17 |
+| Services | 14 | 15 |
+| Santé et RGPD | 15 | 16 |
+| Erreurs silencieuses | 15 | 16 |
+| Android | 15 | 16 |
+| WidgetKit | 14 | 15 |
+| Performance | 14 | 15 |
+| Accessibilité | 15 | 16 |
+
+**P1 corrigés** (ajoutés à la PR #116) :
+
+| # | Constat | Correction |
+|---|---|---|
+| M | Rattrapage iPhone calé sur le premier iPhone libéré : le second iPhone d'un foyer n'était jamais rattrapé. | Rattrapage à la libération du dernier (au plus 2 min) : un seul envoi sert tous les iPhone. |
+| N | « Retirez le widget : plus rien n'est envoyé » était faux : le serveur ne l'apprend qu'à la prochaine ouverture de l'app. Android gardait les données reçues sans widget posé. | Texte de l'information, politique (web et app) et registre précisés. Android ne garde plus rien et retire les dernières données (`nowidget`). |
+| O | Information à la pose notée lue dès l'affichage : le retour auto Android pouvait la refermer, et elle ne revenait jamais. | Notée lue quand on touche un bouton ; une fois par lancement au plus. Pas de retour auto tant qu'une fenêtre est ouverte. |
+| P | Texte long dans une fenêtre sans défilement : boutons hors écran sur petit écran ou en grande police. | Message défilant (moitié de l'écran au plus). Cartes des fenêtres plus traitées comme un seul élément par VoiceOver. |
+| Q | Effacement à distance (consentement trop ancien) : après un nouveau consentement, l'enfant du widget n'était pas réinscrit jusqu'au redémarrage. | Réinscrit à l'enregistrement du consentement (`rewriteWidgetChild`). |
+| R | « Annuler » ou arrêt gardant l'id provisoire après la confirmation : perdu en silence. | Redirigé vers l'événement réel ; une création disparue le dit. |
+| S | Création arrivée au serveur (réponse perdue), puis arrêtée hors ligne : le rejeu renvoyait l'existant sans l'arrêt. | Les champs fusionnés partent aussi en modification après la création. |
+| T | Question « sieste passée minuit » : la réponse réécrivait une session arrêtée ailleurs entre-temps. 23:59 proposé pour une sieste commencée à 23:59:30. | Réponse ignorée si la session n'est plus en cours. Pas de fin proposée avant le début. |
+| U | Enregistrement du jeton bloqué si WidgetKit ne répond pas (rappels coupés aussi). | Sondes bornées à 3 s, signalées. |
+| V | Déconnexion forcée (session révoquée) : nouveaux essais encore actifs pour l'ancien compte. | Session locale remise à zéro (`resetPushSession`). |
+
+**Faux constat :** « aucun test des règles de `live/nursing` ». Ils existent, dans `__tests__/liveNursing.rules.test.ts`.
+
+**Décision à prendre (Yoss) :**
+- Android, chrono d'une session au-delà d'1 h : le motif « m min » ne passe à « 1h05 » que sur une alarme inexacte. Sous Doze, on peut voir « 5 min » pour une sieste de 1 h 05. Deux options : afficher « 0h05 » dès le début (toujours juste), ou garder « 5 min » et accepter ce risque. **Décidé le 18/11 : test d'abord** (test 26 de TESTS_APPAREIL.md). Correction en quelques secondes après le réveil de l'écran → on garde « 5 min » ; sinon → « 0h05 ».
+
+**Résiduel (P2 ou à vérifier sur téléphone) :**
+- Jeton d'un téléphone déconnecté de force : il reste côté serveur tant que personne ne se reconnecte sur ce téléphone. Les envois continuent et le téléphone les ignore. Piste côté serveur : écarter les jetons sans `lastUsedAt` récent.
+- Android `isForeground` (importance du processus) : vérifier avec `readReceiveLog` qu'aucun « fg » n'apparaît app fermée.
+- Messages w0 et w1 non signés : un tiers qui connaîtrait le jeton Expo pourrait en envoyer. Accepté : il faut à la fois le jeton et l'identifiant de l'enfant.
+- Retour auto : Switch Access et Voice Access ne sont pas détectés (déjà listé).
+- `flushPendingWidgetPush` : un contenu « pas encore chargé » laisse la timeline courte (cas rare).

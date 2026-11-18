@@ -325,6 +325,9 @@ export async function enqueueEvent(
  * Faux si la création n'est plus en attente (déjà en cours d'envoi ou
  * partie) : l'appelant doit le signaler.
  */
+/** Champs modifiés après la mise en file d'une création (jamais envoyés tels quels). */
+const MERGED_KEY = "__mergedAfterQueue";
+
 export async function mergeIntoQueuedCreate(
   queueId: string,
   patch: Record<string, unknown>,
@@ -340,9 +343,14 @@ export async function mergeIntoQueuedCreate(
   if (!row) return false;
   const merged: Record<string, unknown> = { ...JSON.parse(row.payload) };
   for (const [k, v] of Object.entries(patch)) {
+    if (k === MERGED_KEY) continue;
     if (v === null) delete merged[k];
     else merged[k] = v;
   }
+  // Gardé à part : si la création était déjà arrivée au serveur (réponse
+  // perdue), le rejeu renvoie l'événement existant sans rien appliquer ; ces
+  // champs partent alors en modification juste après.
+  merged[MERGED_KEY] = { ...((merged[MERGED_KEY] as Record<string, unknown>) ?? {}), ...patch };
   const result = await database.runAsync(
     `UPDATE pending_events SET payload = ? WHERE id = ? AND uid = ? AND status IN ('pending', 'failed')`,
     JSON.stringify(merged),
@@ -536,17 +544,25 @@ export async function processQueue(): Promise<number> {
             // Écriture mise en file par une ancienne version (1.0.8) sans clé :
             // l'identifiant de la ligne, stable d'un rejeu à l'autre, en tient lieu.
             if (!payload.idempotencyKey) payload.idempotencyKey = event.id;
+            const { [MERGED_KEY]: mergedAfter, ...createPayload } = payload;
             const create = httpsCallable<Record<string, unknown>, { id: string; alreadyRunning?: boolean }>(
               functions,
               "validateAndCreateEvent",
             );
-            const created = await create(payload);
+            const created = await create(createPayload);
             // Sieste/balade déjà en cours (lancée ailleurs pendant qu'on était
             // hors ligne) : rien de créé, l'entrée affichée en attente est retirée.
             if (created?.data?.alreadyRunning) {
               purgeQueuedOptimistic({ action: "create", idempotencyKey: payload.idempotencyKey as string });
               // Jamais silencieux : la saisie faite hors ligne n'a pas été ajoutée.
               notifyOptimisticNotice(alreadyRunningNotice(payload.type));
+            } else if (mergedAfter && typeof mergedAfter === "object" && created?.data?.id) {
+              // Modifications faites hors ligne après la mise en file : renvoyées
+              // sur l'événement créé. Sans effet si la création les portait déjà ;
+              // indispensables si elle existait (réponse perdue, rejeu). Un échec
+              // repasse la ligne en file : création rejouée (même id), puis ceci.
+              const update = httpsCallable(functions, "validateAndUpdateEvent");
+              await update({ ...(mergedAfter as Record<string, unknown>), childId: payload.childId, eventId: created.data.id });
             }
             break;
           }

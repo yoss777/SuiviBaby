@@ -12,6 +12,8 @@ enum class WidgetPushOutcome(val code: String) {
   OLDER_THAN_APP("app"),
   INVALID("invalid"),
   WIPED("wipe"),
+  /** Aucun widget posé (retiré depuis la dernière ouverture de l'app) : rien n'est gardé. */
+  NO_WIDGET("nowidget"),
   ERROR("err"),
 }
 

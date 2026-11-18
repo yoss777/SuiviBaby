@@ -105,6 +105,18 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     expect(callable).toHaveBeenCalledTimes(1);
   });
 
+  it("« Annuler » qui garde l'id provisoire après la confirmation : envoyé sur l'événement réel (revue en profondeur)", async () => {
+    callable.mockResolvedValue({ data: { id: "srv1" } });
+    const tempId = ajouterEvenementOptimistic("c1", data());
+    await settle();
+    callable.mockClear();
+    callable.mockResolvedValue({ data: { success: true } });
+    modifierEvenementOptimistic("c1", tempId, { heureFin: null } as any, { id: tempId });
+    await settle();
+    expect(callable).toHaveBeenCalledTimes(1);
+    expect(callable.mock.calls[0][0]).toMatchObject({ eventId: "srv1", heureFin: null });
+  });
+
   it("sends the same key on every retry and in the queued copy", async () => {
     callable.mockRejectedValue(netError());
     ajouterEvenementOptimistic("c1", data());

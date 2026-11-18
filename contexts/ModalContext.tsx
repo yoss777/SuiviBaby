@@ -115,6 +115,9 @@ export const showAppAlert: ModalContextType["showAlert"] = (...args) => {
   if (globalShowAlert) globalShowAlert(...args);
   else if (__DEV__) console.warn("showAppAlert appelé sans ModalProvider monté");
 };
+let globalHasOpenModal: (() => boolean) | null = null;
+/** Une fenêtre de l'app est-elle ouverte ? (hors composant, ex. retour auto du widget) */
+export const isAppModalOpen = (): boolean => globalHasOpenModal?.() ?? false;
 
 export const ModalProvider = ({
   children,
@@ -312,10 +315,12 @@ export const ModalProvider = ({
 
   useEffect(() => {
     globalShowAlert = showAlert;
+    globalHasOpenModal = hasOpenModal;
     return () => {
       if (globalShowAlert === showAlert) globalShowAlert = null;
+      if (globalHasOpenModal === hasOpenModal) globalHasOpenModal = null;
     };
-  }, [showAlert]);
+  }, [showAlert, hasOpenModal]);
 
   // Valeur stable : ne contient que des actions (l'état de la modale reste local).
   const value = useMemo(

@@ -7,6 +7,8 @@ import { ACTION_TOAST_MIN_MS } from "@/constants/toast";
 import { WIDGET_BACK_DELAY_MS, useWidgetBackTimer } from "@/hooks/useWidgetBackTimer";
 
 const mockBack = jest.fn();
+let mockModalOpen = false;
+jest.mock("@/contexts/ModalContext", () => ({ isAppModalOpen: () => mockModalOpen }));
 jest.mock("@/modules/widget-push", () => ({ moveAppToBack: () => mockBack() }));
 // Faux service lecteur d'écran : cache synchrone + lecture fraîche pilotables.
 let mockReader = false; // état « cache »
@@ -32,6 +34,7 @@ const realOS = Platform.OS;
 beforeEach(() => {
   jest.useFakeTimers();
   mockBack.mockClear();
+  mockModalOpen = false;
   mockReader = false;
   mockFresh = false;
   mockListeners.clear();
@@ -141,4 +144,12 @@ it("plusieurs schedule de suite : un seul minuteur, un seul retour", () => {
   expect(mockBack).not.toHaveBeenCalled();
   act(() => { jest.advanceTimersByTime(1); });
   expect(mockBack).toHaveBeenCalledTimes(1);
+});
+
+it("fenêtre ouverte à l'échéance (question, information à la pose) : pas de retour", () => {
+  const { result } = renderHook(() => useWidgetBackTimer());
+  act(() => result.current.schedule());
+  mockModalOpen = true;
+  act(() => { jest.advanceTimersByTime(WIDGET_BACK_DELAY_MS); });
+  expect(mockBack).not.toHaveBeenCalled();
 });

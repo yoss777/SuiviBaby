@@ -1156,7 +1156,12 @@ export default function RoutinesScreen() {
   // STOP ONGOING SLEEP
   // ============================================
   const editRef = useRef<(suggestedEnd?: Date) => void>(() => {});
+  // Sommeil en cours lu au moment d'une réponse (sieste passée minuit).
+  const runningSleepIdRef = useRef<string | undefined>(undefined);
+  runningSleepIdRef.current = sommeilEnCours?.id;
+  const isSleepStillRunning = useCallback((id: string) => runningSleepIdRef.current === id, []);
   const stopTimedSleepWithUndo = useStopTimedEventWithUndo<SommeilEvent & { id: string }>({
+    isStillRunning: isSleepStillRunning,
     onTooLong: (_event, suggestedEnd) => editRef.current(suggestedEnd),
     childId: activeChild?.id,
     getSuccessLabel: (event, { isUnderOneMinute }) =>

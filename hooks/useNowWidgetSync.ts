@@ -39,7 +39,7 @@ export async function showWidgetInfoIfPlaced(): Promise<void> {
   try {
     const count = await installedWidgetCount();
     if (!count || count <= 0) return;
-    await maybeShowWidgetInfo((title, message) =>
+    await maybeShowWidgetInfo((title, message, onRead) =>
       showAppAlert(
         title,
         message,
@@ -48,11 +48,13 @@ export async function showWidgetInfoIfPlaced(): Promise<void> {
             text: "En savoir plus",
             // Chargé à l'appui seulement (le hook reste testable sans le routeur).
             onPress: () => {
+              onRead();
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               (require("expo-router") as typeof import("expo-router")).router.push("/settings/privacy");
             },
           },
-          { text: "J'ai compris", style: "cancel" },
+          // « cancel » : appelé aussi à la fermeture par le bouton retour.
+          { text: "J'ai compris", style: "cancel", onPress: onRead },
         ],
         { key: "widget-info" },
       ),

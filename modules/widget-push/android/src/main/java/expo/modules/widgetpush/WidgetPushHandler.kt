@@ -106,7 +106,13 @@ object WidgetPushHandler {
         .apply()
     }
     var finalOutcome = outcome
-    if (outcome == WidgetPushOutcome.APPLIED && p != null) {
+    // Widget retiré, l'app pas encore rouverte (le serveur l'ignore jusque-là) :
+    // les données reçues ne sont pas gardées sur le téléphone, et les
+    // dernières écrites sont retirées.
+    if (outcome == WidgetPushOutcome.APPLIED && p != null && widgetIds(context).isEmpty()) {
+      prefs.edit().remove(PROPS_KEY).commit()
+      finalOutcome = WidgetPushOutcome.NO_WIDGET
+    } else if (outcome == WidgetPushOutcome.APPLIED && p != null) {
       val written = prefs.edit()
         .putString(PROPS_KEY, p.toString())
         .putLong(SEQ_KEY, seq)
@@ -128,9 +134,14 @@ object WidgetPushHandler {
     } == true
   }
 
+  private fun widgetIds(context: Context): IntArray {
+    val component = ComponentName(context.packageName, "${context.packageName}.${WIDGET_NAME}Provider")
+    return AppWidgetManager.getInstance(context).getAppWidgetIds(component)
+  }
+
   private fun requestRedraw(context: Context) {
     val component = ComponentName(context.packageName, "${context.packageName}.${WIDGET_NAME}Provider")
-    val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(component)
+    val ids = widgetIds(context)
     if (ids.isEmpty()) return
     context.sendBroadcast(
       Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
