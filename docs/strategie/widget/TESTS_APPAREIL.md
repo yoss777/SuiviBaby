@@ -62,11 +62,16 @@ Corrigés pour la 1.0.23 (branche `fix/recette-1.0.22`) : le P1, les deux P2, la
 
 | # | Test | Statut | Notes |
 |---|------|--------|-------|
-| 27 | Lancement à froid en mode avion (app fermée complètement) : écran « Connexion indisponible » + Réessayer, **jamais** de déconnexion ; réseau rétabli → l'app se charge seule, sans appui | — | `AuthContext` : mode dégradé au lieu de l'alerte qui déconnectait ; `boot.tsx` : nouvel essai au retour du réseau |
-| 28 | Information à la pose, police au maximum (iPhone 15 et petit écran) : la fenêtre tient dans l'écran, titre et texte défilent, « J'ai compris » et « En savoir plus » toujours visibles | — | Boîte limitée à 88 % de la hauteur, texte des boutons plafonné à ×2 |
+| 27 | Lancement à froid en mode avion (app fermée complètement) : écran « Connexion indisponible » + Réessayer, **jamais** de déconnexion ; réseau rétabli → l'app se charge seule, sans appui | ⚠️ 19/11 Samsung (1.0.23), partiel | Samsung : app tuée, mode avion, lancement → « Connexion indisponible » + Réessayer + Se déconnecter, **aucune déconnexion** (P1 corrigé). Mode avion coupé : l'écran passe à « Connexion trop lente » et y reste plus de 45 s alors que le Wi-Fi est validé ; un appui sur Réessayer charge l'accueil en moins de 5 s. Cause : `boot.tsx:447-452` ne relance qu'une fois, au passage de `isOffline` à faux, quand `isInternetReachable` vaut encore `null` ; cette relance échoue et rien ne relance ensuite. iPhone à faire. |
+| 28 | Information à la pose, police au maximum (iPhone 15 et petit écran) : la fenêtre tient dans l'écran, titre et texte défilent, « J'ai compris » et « En savoir plus » toujours visibles | ✅ 19/11 Samsung (1.0.23) | Samsung, police ×2 (maximum) : fenêtre « Déconnexion » entièrement visible, boutons empilés et lisibles. iPhone 15 / petit écran à faire. Nouveau défaut vu en passant : écran de démarrage figé (> 60 s) quand la police change app ouverte (activité recréée) ; relance de l'app : OK. |
 | 29 | VoiceOver et TalkBack sur une fenêtre de l'app (information à la pose, confirmation de suppression) : titre, texte et chaque bouton atteints un par un | — | Fond des fenêtres non accessible (`accessible={false}`) |
-| 30 | Déconnexion en mode avion : écran de connexion en moins de 2 s, widget vidé (refait du test 21) | — | Plus d'attente du jeton hors connexion |
-| 31 | Play Console, envoi de la 1.0.23 : plus d'avertissement « fonctionnalités matérielles requises » (portrait, Wi-Fi), 0 appareil perdu | — | Plugin `withOptionalHardwareFeatures` |
+| 30 | Déconnexion en mode avion : écran de connexion en moins de 2 s, widget vidé (refait du test 21) | ✅ 19/11 Samsung (1.0.23) | Samsung, mode avion, appui sur « Déconnexion » : écran de connexion déjà affiché sur la première capture (≈ 1 s) ; widget vidé (plus de nom d'enfant, « Aucun repas noté »). iPhone à faire. |
+| 31 | Play Console, envoi de la 1.0.23 : plus d'avertissement « fonctionnalités matérielles requises » (portrait, Wi-Fi), 0 appareil perdu | ✅ 19/11 | Page de vérification Play : « La release est prête », aucun avertissement, 0 appareil perdu ; Chromebook 10 et Android XR 2 compatibles. Version 32 (1.0.23) publiée sur Alpha le 19/11. |
+
+## Défauts trouvés pendant la recette 1.0.23 (19/11)
+
+- P2 — retour du réseau après un lancement hors ligne : pas de rechargement automatique (test 27) ; relancer aussi quand `isInternetReachable` passe à vrai, et réessayer toutes les 10 s tant que l'écran « Connexion … » est affiché (`app/boot.tsx:447-452`).
+- P3 — Android, changement de taille de police app ouverte : écran de démarrage figé plus de 60 s (activité recréée) ; à reproduire et diagnostiquer.
 
 ## Après les tests
 
