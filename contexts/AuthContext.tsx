@@ -285,12 +285,12 @@ export function AuthProvider({
           "[AuthContext] loadUserData CATCH — error:",
           error,
         );
-        showAlert(
-          "Erreur",
-          "Impossible de charger vos données. Veuillez réessayer.",
-          [{ text: "OK", onPress: async () => await firebaseSignOut(auth) }],
-        );
-        dispatch({ type: "SET_LOADING", payload: false });
+        // Échec de lecture (souvent : lancement à froid sans réseau). La session
+        // Firebase reste valide : on garde l'utilisateur connecté en mode
+        // dégradé (écran « Connexion indisponible » + Réessayer, nouvel essai
+        // automatique au retour du réseau). Jamais de déconnexion ici : elle
+        // vidait le widget et obligeait à se reconnecter (recette 1.0.22).
+        dispatch({ type: "SET_DEGRADED", payload: fbUser });
       } finally {
         clearTimeout(timeoutId);
       }

@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import {
   getNeutralColors,
@@ -72,7 +72,8 @@ export function buttonsFitSideBySide(
   const buttonWidth = (dialogWidth - 2 * space.xl - space.sm) / 2;
   const textWidth = buttonWidth - 2 * space.md;
   const longest = Math.max(...labels.map((l) => l.length));
-  return longest * AVG_CHAR_WIDTH * Math.max(1, fontScale) <= textWidth;
+  // Texte des boutons plafonné à ×2 (DialogButton, maxFontSizeMultiplier).
+  return longest * AVG_CHAR_WIDTH * Math.min(Math.max(1, fontScale), 2) <= textWidth;
 }
 
 export function ConfirmModal({
@@ -101,7 +102,7 @@ export function ConfirmModal({
   const resolvedConfirmTextColor =
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   const confirmVariant = confirmButtonColor === DESTRUCTIVE_COLOR ? "destructive" : "primary";
-  const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
   const stacked = !buttonsFitSideBySide([confirmText, cancelText], windowWidth, fontScale);
   const layout = stacked ? "stack" : "row";
   const cancelButton = (
@@ -136,6 +137,9 @@ export function ConfirmModal({
       <Pressable
         style={dialogStyles.overlay}
         onPress={allowBackdropDismiss ? onDismiss : undefined}
+        // Le fond n'est pas un élément VoiceOver : sinon il regroupe toute la
+        // fenêtre en un seul bloc (boutons inatteignables, recette 1.0.22).
+        accessible={false}
       >
         <Pressable
           style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: surface }]}
@@ -144,18 +148,18 @@ export function ConfirmModal({
           accessible={false}
           accessibilityViewIsModal={true}
         >
-          <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
-            {title}
-          </Text>
-          {typeof message === "string" ? (
-            // Texte long (information à la pose du widget) ou grande police :
-            // il défile, les boutons restent toujours à l'écran.
-            <ScrollView style={{ maxHeight: windowHeight * 0.5 }} bounces={false}>
+          {/* Titre et texte défilent ensemble ; la boîte ne dépasse jamais
+              l'écran (dialogStyles.card), les boutons restent en dessous. */}
+          <ScrollView style={styles.scroll} bounces={false} keyboardShouldPersistTaps="handled">
+            <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
+              {title}
+            </Text>
+            {typeof message === "string" ? (
               <Text style={[dialogStyles.message, { color: textColor ?? nc.textNormal }]}>{message}</Text>
-            </ScrollView>
-          ) : (
-            <View style={dialogStyles.messageContainer}>{message}</View>
-          )}
+            ) : (
+              <View style={dialogStyles.messageContainer}>{message}</View>
+            )}
+          </ScrollView>
 
           <View style={stacked ? dialogStyles.buttonsStack : dialogStyles.buttonsRow}>
             {stacked ? [confirmButton, cancelButton] : [cancelButton, confirmButton]}
@@ -165,3 +169,9 @@ export function ConfirmModal({
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  // Se réduit quand la boîte atteint sa hauteur maximale (flexGrow 0 : pas
+  // d'espace vide quand le texte est court).
+  scroll: { flexGrow: 0, flexShrink: 1 },
+});

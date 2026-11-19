@@ -262,6 +262,7 @@
         }
       ],
       "./plugins/withIosPodfileFixes",
+      "./plugins/withOptionalHardwareFeatures",
       [
         "expo-local-authentication",
         {

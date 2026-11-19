@@ -108,7 +108,7 @@ export function InfoModal({
       animationType="fade"
       onRequestClose={dismissOnBack ? onClose : NOOP}
     >
-      <Pressable style={dialogStyles.overlay} onPress={allowBackdropDismiss ? onClose : undefined}>
+      <Pressable style={dialogStyles.overlay} onPress={allowBackdropDismiss ? onClose : undefined} accessible={false}>
         <Pressable
           style={[
             dialogStyles.card,

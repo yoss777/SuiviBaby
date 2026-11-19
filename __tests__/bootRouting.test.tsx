@@ -4,7 +4,7 @@
 // n est atteint que depuis l inscription) ; ce comportement n est donc pas testé ici.
 
 import React from "react";
-import { act, render } from "@testing-library/react-native";
+import { act, fireEvent, render } from "@testing-library/react-native";
 
 const mockReplace = jest.fn();
 jest.mock("expo-router", () => ({ router: { replace: (...a: unknown[]) => mockReplace(...a) } }));
@@ -141,6 +141,18 @@ describe("boot.tsx routing", () => {
     setAuth({ user: null, status: "degraded" });
     await boot();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("degraded session: offers a way out (Se déconnecter) besides Réessayer", async () => {
+    const signOut = jest.fn(() => Promise.resolve());
+    setAuth({ user: null, status: "degraded", signOut });
+    const { getByText } = render(<BootScreen />);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5000);
+    });
+    expect(getByText("Réessayer")).toBeTruthy();
+    fireEvent.press(getByText("Se déconnecter"));
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 
   it("sends a user with a pending deletion to pending-deletion, before any consent read", async () => {
