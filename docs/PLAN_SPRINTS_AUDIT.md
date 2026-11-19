@@ -638,7 +638,7 @@ votre pharmacien ») et la question est ajoutée à la liste pédiatre ci-dessou
 - [x] Décision MDR (Q4) : orientation uniquement, voir ci-dessus.
 - [ ] Relecture pédiatre (Q3) de tous les textes ci-dessus : à faire avant la version.
 
-## S6 — Fiabilité : plus d'action perdue en silence · app + serveur · ⏳
+## S6 — Fiabilité : plus d'action perdue en silence · app + serveur · ✅ (commit 4dbd006 + PR #17, vérifié le 2026-11-19)
 
 But : ce que l'utilisateur saisit est enregistré une fois, ou il est prévenu.
 
@@ -648,34 +648,43 @@ User stories :
 - En tant que parent, je veux savoir quel ajout a échoué et pouvoir le
   réessayer.
 
-- [ ] **6.1** File hors ligne : `idempotencyKey` générée pour tout `create` ;
+- [x] **6.1** File hors ligne : `idempotencyKey` générée pour tout `create` ;
   dédoublonnage serveur transactionnel (document à identifiant déterministe
   créé par `create()`). (`services/eventsService.ts:200`,
   `functions/index.js:2341`)
-- [ ] **6.2** `aborted` (conflit de version) traité comme définitif ;
+- [x] **6.2** `aborted` (conflit de version) traité comme définitif ;
   plafond d'échecs transitoires par élément puis passage au suivant (plus de
   file bloquée). (`services/offlineQueueService.ts:44-62`, `:274-297`)
-- [ ] **6.3** Échecs définitifs : `captureServiceError`, message à
+- [x] **6.3** Échecs définitifs : `captureServiceError`, message à
   l'utilisateur, `getExhaustedEvents` affiché dans l'écran de
   synchronisation, compteur cohérent.
-- [ ] **6.4** Échec de mise en file : `failOptimistic` + Sentry au lieu d'un
+- [x] **6.4** Échec de mise en file : `failOptimistic` + Sentry au lieu d'un
   `catch` vide ; `failOptimistic` porte le type d'événement et propose
   « Réessayer » avec les données conservées.
-- [ ] **6.5** Messages honnêtes : voix (« introuvable » vs erreur réseau),
+- [x] **6.5** Messages honnêtes : voix (« introuvable » vs erreur réseau),
   suppression mise en file (« synchronisation en attente »).
-- [ ] **6.6** Photo de jalon : délai maximal, message réseau distinct, photo
+- [x] **6.6** Photo de jalon : délai maximal, message réseau distinct, photo
   supprimée si la création échoue, ancienne photo supprimée à la modification.
-- [ ] **6.7** Suppression avec annulation exécutée tout de suite si l'app
+- [x] **6.7** Suppression avec annulation exécutée tout de suite si l'app
   passe en arrière-plan ; retry sans fermeture périmée.
-- [ ] **6.8** E-mail de demande de suppression vérifié (erreur Resend
+- [x] **6.8** E-mail de demande de suppression vérifié (erreur Resend
   remontée) ; « Restaurer mes achats » : messages distincts (configuration,
   réseau, autre compte), cas `null` géré.
-- [ ] **6.9** Tests : intégration hors ligne (création, reconnexion,
+- [x] **6.9** Tests : intégration hors ligne (création, reconnexion,
   dédoublonnage, échec visible) ; `ajouterEvenementOptimistic` /
   `modifierEvenementOptimistic` ; `useStopTimedEventWithUndo` (promesse
   attendue).
 
 **Revue ECC (S5 + S6)** : `healthcare-reviewer`, `silent-failure-hunter`.
+
+_Vérification du 2026-11-19 (silent-failure-hunter, lecture du code sur f87b49d) :
+6.1 à 6.9 livrés par le commit 4dbd006 et la PR #17 (e94c2e6). Preuves :
+`utils/idempotencyKey.ts`, `functions/src/events/callables.js` (dédoublonnage
+transactionnel ; l'ancienne référence `functions/index.js:2341` est périmée),
+`services/offlineQueueService.ts` (conflit définitif, plafond de 8 échecs
+transitoires, `getExhaustedEvents`), `contexts/ToastContext.tsx` (annulations
+exécutées au passage en arrière-plan), `services/events/milestonePhoto.ts`
+(délai 60 s), `__tests__/offlineIntegration.test.ts`._
 
 ## S7 — Performance de l'app · app (+ serveur) · ✅ (revue ECC faite ; mesures sur appareil à faire)
 

@@ -5,6 +5,57 @@
 >
 > Statuts : ⏳ à faire · 🔄 en cours · ✅ fait · ⛔ bloqué
 
+## 0. Revue ECC du 2026-11-19 : ce qui reste réellement
+
+Revue par 4 relecteurs ECC (silent-failure-hunter, security-reviewer,
+code-explorer, code-reviewer) sur `main` f87b49d, en lisant le code. Plusieurs
+lignes étaient périmées : S6 (fiabilité, 6.1-6.9), S14 (TRANSFER), A4, 4.5 et
+2.3 étaient déjà faits ; leurs statuts ci-dessous sont corrigés.
+
+**Code — avant le lancement payant**
+
+| Id | Sujet | Taille | Preuve / reste |
+|---|---|---|---|
+| R1 | **Clés RevenueCat de production encore provisoires** : en version publiée, `getApiKey()` renvoie `null`, donc aucun achat possible | S (après création des apps RevenueCat par Yoss) | `services/revenueCatService.ts:19-22`. Débloque P4 du plan stratégique (tests achat, restauration, remboursement, fin d'essai sur les deux OS) |
+| R2 | Abonnement expiré encore vu Premium dans le repli Firestore et le cache (7 j) | S | `contexts/PremiumContext.tsx:118-148`, `:233-240` ne lisent pas `expiresAt` |
+| R3 | Site faux par rapport à l'offre : « 2 co-parents invités » en gratuit, « commandes vocales illimitées », « rapports PDF » | S | `public/index.html:438`, `:451`, `:440`, `:452`, FAQ `:471` ; à corriger avant le déploiement du site (2.4) |
+| R4 | App Check non imposé en production | S (feu vert Yoss) | S4 ; commencer par les fonctions sensibles (`APPCHECK_ENFORCE_FUNCTIONS`) |
+| R5 | Rapport pédiatre (décision A du 11/11) inexistant | L | Conditionne O2, O3, O4, P2 du plan stratégique |
+| R6 | Mesure « rapport → essai » (O3) et liens `ref` par canal (M1) | M chacun | Aucun outil d'analyse aujourd'hui (`services/onboardingAnalytics.ts` reste local) |
+| R7 | Essai proposé à J-5 d'un examen (O2) | L | Aucun calendrier des examens dans le code |
+| R8 | Prédictions (porte P1 du 18/12) | M à L | Aucune prédiction avec fourchette dans le code : construire ou retirer de l'offre (décision Yoss) |
+
+**Code — reste de la recette 1.0.22 et du widget**
+
+| Id | Sujet | Taille | Preuve |
+|---|---|---|---|
+| R9 | Jeton `device_tokens` non supprimé après une déconnexion hors ligne | M | `services/pushTokenService.ts:327-333` ; rien ne réessaie |
+| R10 | InfoModal et PromptModal sans défilement en grande police | S | seul `ConfirmModal.tsx` a un ScrollView |
+| R11 | Bandeau « Pas de connexion internet » qui clignote à l'ouverture | S | `components/ui/OfflineBanner.tsx:16` (`isInternetReachable` vaut `null` au démarrage) |
+| R12 | Durée enregistrée arrondie, chrono tronqué | S | `hooks/useStopTimedEventWithUndo.ts:73` (`Math.round`) |
+| R13 | Boutons du formulaire Température coupés en très grande police | S | `SoinsForm.tsx` |
+| R14 | Écritures live/nursing toutes « urgentes », sans limite de débit | M | `docs/strategie/ux/REVUE_ECC_LOT5_J6.md:61` |
+| R15 | Règle `invitations` sans `email_verified` pour refuser (S5) | S | `firestore.rules:360` |
+| R16 | Retrait du bucket photos US et des miroirs (1.8, le 02/12) puis règles de transition (12.7 du plan d'audit, le 07/12) | M | `utils/photoStorage.ts:14,16` |
+| R17 | Captures du site avec l'app actuelle (2.5) | M | images inchangées depuis le 30/10 |
+| R18 | Workload Identity Federation au lieu de `GCP_SA_KEY` (11.7 du plan d'audit) | M | `.github/workflows/deploy-functions.yml:7-19` |
+
+**Tests sur téléphone** : 27 à 31 (1.0.23), 5 à 8 encore « — », un test
+d'effacement des widgets restés en consentement 2.2, A4 avec de vrais comptes
+Google et Apple.
+
+**Décisions et actions de Yoss** : médiateur CM2C (2.2, puis site 2.4) ;
+prix et durée d'essai (O1 : le plan dit 24,99 € / 14 j, l'app et le site
+29,99 € / 7 j) ; widget gratuit ou Premium ; historique 90 jours ; gel du
+périmètre (P3) ; activation iOS du widget en direct ; minConsentVersion 2.3
+après la politique en ligne ; AIPD et garanties de transfert Expo ; test de
+restauration des sauvegardes (A7) ; événement de test Sentry (A6) ; secrets
+Apple réels ; relecture pédiatre (A5) ; réglages RevenueCat et stores
+(3.1, 3.4, 3.5).
+
+**Hors priorité (après le 2/2/2027)** : bloc « En cours » (P1), boutons du
+petit widget iPhone (P2), découpage du formulaire des routines.
+
 ## 1. Migration des photos vers l'UE
 
 Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
@@ -27,7 +78,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 |---|---|---|---|---|---|---|
 | 2.1 | Téléphone de TESFA dans les mentions légales | 2026-11-08 | Yoss (fournir) / Claude (intégrer) | — | Plus de `[À COMPLÉTER]` téléphone dans `public/mentions-legales.html` | ✅ 2026-11-02 (+33 7 67 55 48 80) |
 | 2.2 | **Adhérer à un médiateur de la consommation** (obligatoire pour vendre des abonnements) puis l'indiquer dans CGU + mentions | 2026-11-30 | Yoss | — | Nom, adresse, site du médiateur dans `public/terms.html` et `public/mentions-legales.html` | ⏳ |
-| 2.3 | Compléter les 4 cases jaunes de `privacy.html` : DPO (→ D2), sauvegardes (→ D1), région Sentry (→ D3), non-entraînement des IA (→ D5) | 2026-11-30 | Yoss (décisions) / Claude (intégration) | Section 5 | `grep -c 'class="todo"' public/*.html` → 0 | ⏳ |
+| 2.3 | Compléter les 4 cases jaunes de `privacy.html` : DPO (→ D2), sauvegardes (→ D1), région Sentry (→ D3), non-entraînement des IA (→ D5) | 2026-11-30 | Yoss (décisions) / Claude (intégration) | Section 5 | `grep -c 'class="todo"' public/*.html` → 0 | ✅ vérifié le 2026-11-19 : 0 case jaune dans `privacy.html` ; les 2 restantes (`terms.html:190`, `mentions-legales.html:86`) sont celles du médiateur (2.2) |
 | 2.4 | Déployer le site : `firebase deploy --only hosting` | 2026-11-30 | Claude | 2.1 à 2.3, 2.5 | https://suivibaby.com affiche la nouvelle version ; pages légales sans surlignage jaune | ⏳ |
 | 2.5 | Refaire les captures du site avec la **1.0.6** (barre vocale + `+` en bas) : accueil, timeline, écran vocal (proposition à confirmer) ; thème clair, profil **Léo** sans photo ; remplacer `public/assets/img/screens/*.webp` ; aligner la démo animée du hero sur la barre livrée (phase 3 de `VOICE_BAR_REFONTE.md`) | 2026-11-15 | Claude (captures sur le Samsung branché, app du Store 1.0.6) | 1.4 | Les images du site montrent la barre vocale ; démo du hero cohérente avec l'app | ⏳ |
 
@@ -49,7 +100,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | 4.2 | Enfants refusés par les règles (`Qd3RJtmHuafDAiUKgqQA`, `obhMXGzb8ooEcXdCbKID`) : vérifier s'il s'agit de suppressions en cours ou d'accès orphelins à nettoyer | 2026-11-15 | Claude | — | Plus d'avertissement « permission denied » au démarrage | ✅ 2026-11-02 : enfants inexistants, 2 entrées `user_child_access` orphelines supprimées (sauvegardées) |
 | 4.3 | Désinstaller la version de développement `com.yoss7.samaye` du Samsung une fois les tests finis | fin des tests | Yoss | — | Seule l'app du Store reste installée | ⏳ |
 | 4.4 | Vérifier le workflow « Deploy Cloud Functions » réparé : lancement manuel (`gh workflow run deploy-functions.yml`) — redéploie les 35 fonctions à l'identique | 2026-11-04 | Claude (feu vert Yoss) | — | Exécution verte dans GitHub Actions | ✅ 2026-11-02 : exécution verte de bout en bout au push `1a41925` (run 41400889208) — 35/35 fonctions mises à jour, dont les 7 planifiées |
-| 4.5 | Passer `cleanupExpiredShareCodes` et `purgeDeletedChildren` en `europe-west1` (aujourd'hui `us-central1`, sans région explicite) pour que « fonctions serveur dans l'UE » soit exact | 2026-11-15 | Claude (feu vert Yoss) | — | `firebase functions:list` : plus aucune fonction en us-central1 hors miroirs (supprimés en 1.8) | ⏳ |
+| 4.5 | Passer `cleanupExpiredShareCodes` et `purgeDeletedChildren` en `europe-west1` (aujourd'hui `us-central1`, sans région explicite) pour que « fonctions serveur dans l'UE » soit exact | 2026-11-15 | Claude (feu vert Yoss) | — | `firebase functions:list` : plus aucune fonction en us-central1 hors miroirs (supprimés en 1.8) | ✅ vérifié le 2026-11-19 : `setGlobalOptions({ region: "europe-west1" })` (commit 2eee015) ; `firebase functions:list` → 46 fonctions en europe-west1, seules les deux miroirs (1.8) restent en us-central1 |
 
 ## 4 bis. Sécurité — audit ECC du 2026-11-02
 
@@ -59,7 +110,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | S2 | Contrôler en production qu'aucun accès `owner` ne diffère de `children.ownerId` (exploitation passée de S1) | 2026-11-04 | Claude (Yoss : `gcloud auth application-default login`) | S1 | Script d'audit en lecture seule : 0 suspect | ✅ 2026-11-02 : 6 accès owner, 1 seul ≠ `ownerId` (`LWZFCdDkjLymDv7I1E9O`, co-propriétaire ajouté par l'owner lui-même) → légitime |
 | S3 | `functions/accessControl.js` (`canWriteEvents`) : le rôle n'est pas vérifié comme dans les règles | 2026-11-15 | Claude | — | Test unitaire viewer refusé | ✅ 2026-11-02 : `hasChildRole` strict pour le partage (`createShareInvitation`, quota de partage) ; un contributeur ne peut plus inviter. Écriture d'événements inchangée (`canWriteEvents`) ; déployé le 2026-11-02 |
 | S4 | Activer App Check côté fonctions (`APPCHECK_ENFORCE=true`) après vérification des versions installées | 2026-11-30 | Claude (feu vert Yoss) | 1.0.6 majoritaire | Appels sans jeton refusés, aucune hausse d'erreurs Sentry | ⏳ |
-| S5 | Invitations par e-mail : exiger un e-mail vérifié (`email_verified`) dans `acceptInvitationCF` et les règles | 2026-11-30 | Claude | décision sur la vérification à l'inscription | Compte non vérifié refusé | ⏳ |
+| S5 | Invitations par e-mail : exiger un e-mail vérifié (`email_verified`) dans `acceptInvitationCF` et les règles | 2026-11-30 | Claude | décision sur la vérification à l'inscription | Compte non vérifié refusé | 🔄 fonctions faites (`assertVerifiedEmail` dans createShareInvitation, acceptInvitationCF, redeemShareCodeCF, roles ; commit 8c9ecc2). Reste la règle `invitations` (`firestore.rules:360`, TODO M2) : l'invité peut refuser sans e-mail vérifié, impact faible |
 | S6 | Limitation de débit des fonctions non transactionnelle (contournable en parallèle) | 2026-11-30 | Claude | — | Test de charge simple | ✅ corrigé le 2026-11-02 (lecture + écriture du compteur dans une transaction) |
 | S7 | Lancer les tests de règles dans le CI (`ci.yml`, émulateur) | 2026-11-15 | Claude | — | Job CI vert, échoue si une règle régresse | ✅ 2026-11-02 : job « Security rules tests (emulator) » vert sur GitHub (run 41407045523) |
 | S8 | Premium coupé dès l'annulation au lieu de `expiresAt` ; ordre des événements du webhook RevenueCat non vérifié (`functions/index.js`) | 2026-11-15 | Claude | — | Tests du webhook | ✅ 2026-11-02 : Premium (voix, analyses) gardé jusqu'à `expiresAt` après annulation ou incident de paiement ; ordre des events basé sur `event_timestamp_ms` (`lastEventTimestampMs`) ; déployé le 2026-11-02 |
@@ -68,7 +119,7 @@ Détail technique : [MIGRATION_PHOTOS_EU.md](MIGRATION_PHOTOS_EU.md).
 | S11 | Webhook RevenueCat : types d'événements inconnus réécrivaient l'abonnement en « active » (tier possiblement free) ; remboursement gardait Premium ; période de grâce ignorée | avec le push | Claude | — | Tests webhook | ✅ déployé le 2026-11-02 (push `0969178`, 35/35 fonctions) |
 | S12 | `createShareInvitation` résolvait l'invité via `users.email` (modifiable par chacun) → via Firebase Auth | avec le push | Claude | — | Test dédié | ✅ déployé le 2026-11-02 (push `0969178`) |
 | S13 | Restes de la relecture : `acceptInvitationCF`/`redeemShareCodeCF` ne vérifient pas un enfant en suppression ; `findUserByEmail` lit encore `users.email` ; événements TRANSFER non gérés ; parrainage qui peut rétrograder un abonné Famille ; codes générés avec `Math.random` | 2026-11-30 | Claude | — | Tests dédiés | ✅ corrigé le 2026-11-02 : enfant en suppression et émetteur toujours owner/admin vérifiés à l'acceptation et au code ; `findUserByEmail` via Firebase Auth ; parrainage (plantage `exists()` + ne rétrograde plus un abonné payant) ; codes générés par `expo-crypto` (app, 1.0.7). TRANSFER : ne vient plus des restaurations/achats (« Keep with original App User ID » renvoie une erreur au lieu de transférer), mais d'autres sources restent possibles (doc RevenueCat muette) ; l'événement est aujourd'hui ignoré par le webhook (pas d'`app_user_id`) → à gérer (S14) |
-| S14 | Webhook : gérer TRANSFER (`transferred_from` → free, `transferred_to` → tier des `entitlement_ids`) pour que les quotas serveur suivent un éventuel transfert | 2026-11-30 | Claude | — | Test webhook TRANSFER | ⏳ |
+| S14 | Webhook : gérer TRANSFER (`transferred_from` → free, `transferred_to` → tier des `entitlement_ids`) pour que les quotas serveur suivent un éventuel transfert | 2026-11-30 | Claude | — | Test webhook TRANSFER | ✅ vérifié le 2026-11-19 : `handleRevenueCatTransfer` (`functions/src/billing/revenuecat.js:107`, commit 8c9ecc2), tests `functions/__tests__/sprint4.test.js:436-526`. Pas de relecture via l'API REST RevenueCat (basse priorité) |
 | D11 | **Décision** : le rôle « Contributeur » est décrit « Peut liker et commenter uniquement » (permissions par défaut de l'app), mais les invitations et codes de partage créent les contributeurs avec `canWriteEvents: true` | — | Yoss | — | — | ✅ tranché le 2026-11-02 (Yoss) : contributeur = likes et commentaires sur les photos uniquement, aucun événement ; les invitations et codes de partage n'accordent plus `canWriteEvents` (déployé le 2026-11-02, `0969178`) |
 
 ## 4 ter. Performance de l'écran Statistiques — audit ECC du 2026-11-04
@@ -90,11 +141,11 @@ Rapport complet (P0, P1, P2, feuille de route) : [AUDIT_COMPLET_2026-11.md](AUDI
 
 | # | Action | Échéance | Qui | Dépend de | Contrôle | Statut |
 |---|---|---|---|---|---|---|
-| A1 | Webhook RevenueCat : marqueur anti-doublon dans la transaction (aucun paiement perdu sur erreur) | 2026-11-12 | Claude | — | Test : transaction en échec puis retry → abonnement appliqué | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
-| A2 | Parrainage : champs non modifiables par le client, usage tracé côté serveur, code serveur | 2026-11-12 | Claude | — | Tests de règles + test : 2ᵉ usage refusé même après effacement de `referredBy` | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
-| A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | 🔄 corrigé et testé le 2026-11-06 (sprint 1), en attente de revue et de déploiement |
-| A4 | Comptes Apple/Google : consentement santé bloquant + suppression de compte par ré-authentification fournisseur + révocation Apple | 2026-11-19 | Claude | — | Parcours testé avec un compte Google et un compte Apple | ⏳ |
-| A5 | Messages de santé : alerte fièvre selon l'âge à la saisie, « C'est normal », « meilleur endroit », fiche cododo | 2026-11-26 | Claude (code) / Yoss (relecture pédiatre) | relecture pédiatre | Textes validés et notés | ⏳ |
+| A1 | Webhook RevenueCat : marqueur anti-doublon dans la transaction (aucun paiement perdu sur erreur) | 2026-11-12 | Claude | — | Test : transaction en échec puis retry → abonnement appliqué | ✅ code vérifié le 2026-11-19 (marqueur `revenuecat_webhook_events/{eventId}` dans la transaction) |
+| A2 | Parrainage : champs non modifiables par le client, usage tracé côté serveur, code serveur | 2026-11-12 | Claude | — | Tests de règles + test : 2ᵉ usage refusé même après effacement de `referredBy` | ✅ code vérifié le 2026-11-19 (`firestore.rules:695-701`, `functions/src/billing/referral.js`) |
+| A3 | Une seule purge `purgeUserData` pour les deux parcours de suppression ; e-mail seulement après succès Auth ; photos avant événements | 2026-11-12 | Claude | — | Test qui compare les collections purgées | ✅ code vérifié le 2026-11-19 (`functions/src/deletion/purgeUser.js`) |
+| A4 | Comptes Apple/Google : consentement santé bloquant + suppression de compte par ré-authentification fournisseur + révocation Apple | 2026-11-19 | Claude | — | Parcours testé avec un compte Google et un compte Apple | ✅ code vérifié le 2026-11-19 (commit fefaeb5, correctifs e11519b et df3ef13) : écran `app/(auth)/health-consent.tsx`, ré-auth `services/accountDeletionService.ts:206-240`, révocation Apple `functions/src/deletion/apple.js`. Reste : parcours testé avec un vrai compte Google et Apple ; vérifier que les secrets Apple ne sont pas factices (sinon révocation ignorée, `apple.js:43`) |
+| A5 | Messages de santé : alerte fièvre selon l'âge à la saisie, « C'est normal », « meilleur endroit », fiche cododo | 2026-11-26 | Claude (code) / Yoss (relecture pédiatre) | relecture pédiatre | Textes validés et notés | 🔄 code fait (commits ae0b5a3, e94c2e6 : `utils/temperatureAlert.ts`, fiche cododo dans `data/tips_seed.json`). Reste la relecture pédiatre (= 5.7 de PLAN_SPRINTS_AUDIT) et vérifier que les conseils sont poussés en prod (`compareTipsWithSeed.mjs`) |
 | A6 | Sentry en production : filtrage des données de santé, DSN EAS, source maps, release/dist | 2026-11-12 | Claude / Yoss (DSN) | D3 | Événement de test reçu, sans donnée de santé | 🔄 DSN (UE) et jeton dans EAS, source maps activées (PR #14) ; événement de test à la prochaine version |
 | A7 | Sauvegardes Firestore + protection contre la suppression + alertes serveur et budget | 2026-11-19 | Yoss (gcloud) / Claude | D1 | Sauvegarde visible, restauration testée, alerte de test reçue | 🔄 Sauvegardes 7 j / 30 j, protection, 3 alertes e-mail, budget 25 €/mois en place ; test de restauration après la 1ʳᵉ sauvegarde |
 
