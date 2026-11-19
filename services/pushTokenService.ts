@@ -2,6 +2,7 @@
 // Enregistre / supprime le push token Expo dans Firestore
 // pour permettre l'envoi de notifications push via Cloud Functions.
 
+import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
@@ -296,11 +297,41 @@ export function resetPushSession(): void {
   lastWidgetPush = null;
 }
 
+/** Réseau absent (lecture NetInfo bornée à 1 s ; dans le doute : en ligne). */
+async function isOfflineNow(): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const state = await Promise.race([
+      NetInfo.fetch(),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), 1000);
+      }),
+    ]);
+    return !!state && (state.isConnected === false || state.isInternetReachable === false);
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function removePushTokens(userId: string): Promise<void> {
   // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
   // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
   // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
   resetPushSession();
+  // Hors connexion : ni l'enregistrement en cours ni la suppression ne peuvent
+  // aboutir avant la déconnexion (le serveur refusera ensuite, faute
+  // d'authentification). On n'attend pas : la déconnexion prenait 5 s et plus
+  // (recette 1.0.22, test 21). Le téléphone n'applique déjà plus rien (widget
+  // vidé, enfant oublié) ; le document orphelin est ignoré par l'appareil.
+  if (await isOfflineNow()) {
+    captureServiceError(new Error("removePushTokens: skipped (offline)"), {
+      service: "pushToken",
+      operation: "removePushTokensOffline",
+    });
+    return;
+  }
   // Enregistrement en cours : il voit la nouvelle génération et n'écrit rien,
   // ou supprime ce qu'il a recréé. On l'attend pour que cela se fasse avant la
   // déconnexion Firebase (sinon refusé faute d'authentification).

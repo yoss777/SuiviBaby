@@ -77,7 +77,7 @@ export function PromptModal({
       // Bouton retour Android = Annuler
       onRequestClose={onCancel}
     >
-      <Pressable style={dialogStyles.overlay}>
+      <Pressable style={dialogStyles.overlay} accessible={false}>
         <Pressable
           style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: surface }]}
           onPress={(event) => event.stopPropagation()}

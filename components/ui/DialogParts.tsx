@@ -73,7 +73,10 @@ export function DialogButton({
       accessibilityHint={variant === "destructive" ? "Action définitive" : undefined}
       testID={testID}
     >
-      <Text style={[filled ? styles.strong : styles.normal, { color: ink }]}>{text}</Text>
+      {/* Plafond ×2 : en très grande police, les boutons restent à l'écran. */}
+      <Text style={[filled ? styles.strong : styles.normal, { color: ink }]} maxFontSizeMultiplier={2}>
+        {text}
+      </Text>
     </Pressable>
   );
 }
@@ -90,6 +93,9 @@ export const dialogStyles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 400,
+    // Jamais plus haute que l'écran (très grande police) : le contenu défile,
+    // les boutons restent visibles (recette 1.0.22, test 22).
+    maxHeight: "88%",
     borderRadius: radius.xl,
     padding: space.xl,
   },

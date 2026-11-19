@@ -442,6 +442,15 @@ function BootScreenContent() {
     }
   }, [consentCheck, firebaseUser, refreshUser]);
 
+  // Session gardée sans réseau (mode dégradé) : nouvel essai automatique dès
+  // que le réseau revient, sans attendre un appui sur « Réessayer ».
+  const wasOfflineRef = useRef(isOffline);
+  useEffect(() => {
+    const cameBack = wasOfflineRef.current && !isOffline;
+    wasOfflineRef.current = isOffline;
+    if (cameBack && hasAuthDegradedSession) handleRetry();
+  }, [isOffline, hasAuthDegradedSession, handleRetry]);
+
   const fallbackTitle = isOffline
     ? "Connexion indisponible"
     : "Connexion trop lente";
@@ -486,6 +495,21 @@ function BootScreenContent() {
               >
                 <Text style={styles.retryButtonText}>Réessayer</Text>
               </Pressable>
+              {hasAuthDegradedSession && (
+                // Issue pour un compte qui ne se charge jamais (droits, compte
+                // abîmé) : la session est gardée en mode dégradé, sans autre
+                // moyen d'en sortir ou de changer de compte.
+                <Pressable
+                  style={({ pressed }) => [styles.signOutLink, pressed && styles.retryButtonPressed]}
+                  onPress={() => {
+                    signOut().catch((error) => console.warn("[BOOT] signOut échoué:", error));
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                >
+                  <Text style={styles.signOutText}>Se déconnecter</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <IconPulseDots
@@ -568,6 +592,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: neutralColors.white,
+  },
+  signOutLink: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    textDecorationLine: "underline",
   },
 });
 

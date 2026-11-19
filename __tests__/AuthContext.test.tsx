@@ -241,6 +241,28 @@ describe("AuthContext", () => {
       });
     });
 
+    it("keeps the session (degraded, no sign-out) when the user doc read fails offline", async () => {
+      (getDoc as jest.Mock).mockRejectedValue(
+        Object.assign(new Error("Failed to get document because the client is offline."), { code: "unavailable" }),
+      );
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      const authCallback = captureAuthCallback();
+      await act(async () => {
+        await authCallback(mockFirebaseUser());
+      });
+
+      await waitFor(() => {
+        expect(result.current.status).toBe("degraded");
+        expect(result.current.loading).toBe(false);
+        expect(result.current.firebaseUser?.uid).toBe("test-uid");
+      });
+      // Recette 1.0.22 : plus de fenêtre « Impossible de charger vos données »
+      // dont le OK déconnectait le compte.
+      expect(mockShowAlert).not.toHaveBeenCalled();
+      expect(firebaseSignOut).not.toHaveBeenCalled();
+    });
+
     it("should switch to degraded when user doc loading times out", async () => {
       jest.useFakeTimers();
       (getDoc as jest.Mock).mockImplementation(

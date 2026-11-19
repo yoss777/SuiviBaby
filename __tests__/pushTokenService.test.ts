@@ -288,7 +288,8 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     await until(() => mocked(setDoc).mock.calls.length > 0);
     let signedOut = false;
     const signOut = removePushTokens("u1").then(() => (signedOut = true));
-    await Promise.resolve();
+    // Lecture du réseau (NetInfo) avant les attentes bornées : laisser passer.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
     expect(signedOut).toBe(false);
     jest.advanceTimersByTime(SIGN_OUT_WAIT_MS);
     await signOut;
@@ -300,11 +301,21 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     expect(deleteDoc).toHaveBeenCalled();
   });
 
+  it("réseau absent (NetInfo) : la déconnexion n'attend rien et ne tente aucune suppression (recette 1.0.22, test 21)", async () => {
+    const NetInfo = require("@react-native-community/netinfo");
+    NetInfo.fetch.mockResolvedValueOnce({ isConnected: false, isInternetReachable: false });
+    mocked(getDocs).mockClear();
+    await removePushTokens("u1");
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(deleteDoc).not.toHaveBeenCalled();
+  });
+
   it("hors ligne, suppression des jetons qui ne se termine pas : la déconnexion n'attend que 5 s", async () => {
     mocked(getDocs).mockImplementationOnce(() => new Promise(() => {})); // jamais résolue
     let signedOut = false;
     const signOut = removePushTokens("u1").then(() => (signedOut = true));
-    await Promise.resolve();
+    // Lecture du réseau (NetInfo) avant les attentes bornées : laisser passer.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
     expect(signedOut).toBe(false);
     jest.advanceTimersByTime(SIGN_OUT_WAIT_MS);
     await signOut;
