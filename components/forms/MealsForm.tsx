@@ -805,7 +805,7 @@ export function MealsForm({
               accessibilityLabel={`Retirer ${BIBERON_STEP_ML} ml`}
               accessibilityState={{ disabled: isSubmitting || quantite <= 0 }}
             >
-              <Text
+              <Text maxFontSizeMultiplier={1.4}
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
               >
                 −
@@ -851,7 +851,7 @@ export function MealsForm({
                 disabled: isSubmitting || quantite >= MAX_BIBERON_ML,
               }}
             >
-              <Text
+              <Text maxFontSizeMultiplier={1.4}
                 style={[styles.quantityButtonText, { color: nc.textStrong }]}
               >
                 +
@@ -1547,7 +1547,7 @@ export function MealsForm({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -1567,9 +1567,8 @@ export function MealsForm({
             {isSubmitting ? (
               <ActivityIndicator size="small" color={accentColors.filledText} />
             ) : (
-              <Text
-                style={[
-                  styles.validateText,
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+                style={[styles.validateText,
                   {
                     color: accentColors.filledText,
                   },
