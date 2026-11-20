@@ -7,6 +7,7 @@ import {
   removePushTokens,
   resetPushSession,
   retryPendingPushUnregister,
+  startTokenRevocationRetry,
   stopPushAfterSessionEnd,
 } from "@/services/pushTokenService";
 import { clearNowWidget, resumeWidgetWrites } from "@/services/widgetSync";
@@ -312,6 +313,9 @@ export function AuthProvider({
     // stored in plaintext). Fire-and-forget; idempotent after first run.
     purgeLegacyBiometricCredentials().catch(() => {});
 
+    // Révocation d'un ancien jeton restée en attente : envoyée au retour du réseau (R22).
+    const stopRevocationRetry = startTokenRevocationRetry();
+
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!isMountedRef.current) return;
       if (fbUser) {
@@ -331,14 +335,15 @@ export function AuthProvider({
         // Plus aucun essai pour l'ancien compte (enfant du widget, jeton). Le
         // jeton ne peut plus être supprimé sans authentification : le serveur
         // le réattribue à la prochaine connexion sur ce téléphone.
-        const wasSignedIn = stateRef.current.firebaseUser != null;
+        const previousUid = stateRef.current.firebaseUser?.uid ?? null;
+        const wasSignedIn = previousUid != null;
         resetPushSession();
         // Fin de session (déconnexion, y compris forcée : compte supprimé,
         // session révoquée) : on rend le jeton invalide pour que l'ancien
         // compte ne reçoive plus rien ici ; une nouvelle connexion réinscrit
         // le téléphone. Lancement sans compte : on termine une désinscription
         // restée à faire (R9).
-        (wasSignedIn ? stopPushAfterSessionEnd() : retryPendingPushUnregister()).catch((error) =>
+        (wasSignedIn ? stopPushAfterSessionEnd(previousUid) : retryPendingPushUnregister()).catch((error) =>
           captureServiceError(error, { service: "pushToken", operation: "sessionEndUnregister" }),
         );
         dispatch({ type: "CLEAR_USER" });
@@ -348,6 +353,7 @@ export function AuthProvider({
     return () => {
       isMountedRef.current = false;
       unsubscribe();
+      stopRevocationRetry();
     };
   }, [loadUserData]);
 

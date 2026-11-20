@@ -110,3 +110,7 @@ exports.onWidgetLiveWrite = widgetFanout.onWidgetLiveWrite;
 const widgetWipe = require("./src/widget/wipe");
 exports.onWidgetAccessRemoved = widgetWipe.onWidgetAccessRemoved;
 exports.onWidgetConsentChanged = widgetWipe.onWidgetConsentChanged;
+// Révocation du jeton d'un téléphone sans compte connecté (R22) : déconnexion
+// hors ligne ou forcée, surtout sur iPhone.
+const notificationsDeviceToken = require("./src/notifications/deviceToken");
+exports.revokeDeviceToken = notificationsDeviceToken.revokeDeviceToken;

@@ -28,6 +28,7 @@ jest.mock("@/services/pushTokenService", () => ({
   resetPushSession: jest.fn(),
   stopPushAfterSessionEnd: jest.fn(() => Promise.resolve()),
   retryPendingPushUnregister: jest.fn(() => Promise.resolve()),
+  startTokenRevocationRetry: jest.fn(() => () => {}),
 }));
 
 jest.mock("@/services/offlineQueueService", () => ({
@@ -365,7 +366,8 @@ describe("AuthContext", () => {
       // Plus aucun essai de jeton ou d'enfant du widget pour l'ancien compte.
       expect(require("@/services/pushTokenService").resetPushSession).toHaveBeenCalled();
       // R9 : le jeton de ce téléphone est rendu invalide pour l'ancien compte.
-      expect(require("@/services/pushTokenService").stopPushAfterSessionEnd).toHaveBeenCalled();
+      // R22 : l'uid de l'ancien compte est transmis pour la révocation serveur.
+      expect(require("@/services/pushTokenService").stopPushAfterSessionEnd).toHaveBeenCalledWith(expect.any(String));
       expect(require("@/services/pushTokenService").retryPendingPushUnregister).not.toHaveBeenCalled();
     });
 

@@ -14,7 +14,9 @@ jest.mock("expo-notifications", () => ({
   AndroidImportance: { MAX: 5 },
 }));
 
-jest.mock("@/config/firebase", () => ({ db: {} }));
+jest.mock("@/config/firebase", () => ({ db: {}, functions: {} }));
+const mockRevoke = jest.fn((_data?: unknown) => Promise.resolve({ data: { ok: true } }));
+jest.mock("firebase/functions", () => ({ httpsCallable: () => (data: unknown) => mockRevoke(data) }));
 let mockInstalled: number | null = 1;
 let mockHang = false;
 jest.mock("@/modules/widget-push", () => ({
@@ -523,5 +525,120 @@ describe("déconnexion : seul le jeton de ce téléphone est supprimé", () => {
     } finally {
       Platform.OS = os;
     }
+  });
+});
+
+describe("R22 : révocation serveur du jeton après une déconnexion qui n'a pas pu le supprimer", () => {
+  const NetInfo = require("@react-native-community/netinfo");
+  const AsyncStorage = require("@react-native-async-storage/async-storage");
+  const { PUSH_REVOKE_PENDING_KEY, flushTokenRevocation, stopPushAfterSessionEnd } = require("@/services/pushTokenService");
+  const { Platform } = require("react-native");
+  const originalOS = Platform.OS;
+  let store: Record<string, string>;
+  const flush = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+
+  beforeEach(async () => {
+    store = {};
+    AsyncStorage.getItem.mockImplementation((k: string) => Promise.resolve(store[k] ?? null));
+    AsyncStorage.setItem.mockImplementation((k: string, v: string) => {
+      store[k] = v;
+      return Promise.resolve();
+    });
+    AsyncStorage.removeItem.mockImplementation((k: string) => {
+      delete store[k];
+      return Promise.resolve();
+    });
+    Platform.OS = "ios";
+    mockRevoke.mockReset().mockResolvedValue({ data: { ok: true } });
+    // Jeton de ce téléphone connu (inscription en ligne).
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(setDoc).mockResolvedValue(undefined);
+    await registerPushToken("dad");
+    await flush();
+    mockRevoke.mockClear();
+  });
+  afterEach(() => {
+    Platform.OS = originalOS;
+    jest.restoreAllMocks();
+  });
+
+  it("iPhone, déconnexion hors ligne : jeton mis en attente avec l'ancien compte, sans faire attendre la déconnexion", async () => {
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: false, isInternetReachable: false });
+    mockRevoke.mockImplementation(() => new Promise(() => {})); // réseau absent : ne répond jamais
+    await removePushTokens("dad"); // se termine sans attendre l'appel
+    expect(JSON.parse(store[PUSH_REVOKE_PENDING_KEY])).toEqual({
+      token: "ExponentPushToken[abc]",
+      userId: "dad",
+      queuedAt: expect.any(Number),
+    });
+    expect(mockRevoke).toHaveBeenCalledWith(expect.objectContaining({ token: "ExponentPushToken[abc]", userId: "dad" }));
+  });
+
+  it("révocation réussie au retour du réseau : plus rien en attente", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
+    await flushTokenRevocation();
+    expect(mockRevoke).toHaveBeenCalledTimes(1);
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("échec réseau : la révocation reste en attente", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
+    mockRevoke.mockRejectedValueOnce(Object.assign(new Error("offline"), { code: "functions/unavailable" }));
+    await flushTokenRevocation();
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeDefined();
+  });
+
+  it("demande refusée comme invalide : oubliée (pas de nouvel essai sans fin)", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
+    mockRevoke.mockRejectedValueOnce(Object.assign(new Error("bad"), { code: "functions/invalid-argument" }));
+    await flushTokenRevocation();
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("déconnexion forcée (document jamais supprimé) : révocation avec l'uid de l'ancien compte", async () => {
+    await stopPushAfterSessionEnd("dad");
+    await flush();
+    expect(mockRevoke).toHaveBeenCalledWith(expect.objectContaining({ token: "ExponentPushToken[abc]", userId: "dad" }));
+  });
+
+  it("demande de plus de 30 jours : oubliée sans appel", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({
+      token: "ExponentPushToken[abc]",
+      userId: "dad",
+      queuedAt: Date.now() - 31 * 24 * 3600_000,
+    });
+    await flushTokenRevocation();
+    expect(mockRevoke).not.toHaveBeenCalled();
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("nouvelle connexion : la révocation en attente part AVANT l'écriture du jeton, puis est effacée", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[old]", userId: "dad", queuedAt: Date.now() });
+    const order: string[] = [];
+    mockRevoke.mockImplementation(async () => {
+      order.push("revoke");
+      return { data: { ok: true } };
+    });
+    mocked(setDoc).mockImplementation(async () => {
+      order.push("write");
+    });
+    await removePushTokens("dad");
+    await registerPushToken("mum");
+    await flush();
+    expect(order.indexOf("revoke")).toBeGreaterThan(-1);
+    expect(order.indexOf("revoke")).toBeLessThan(order.lastIndexOf("write"));
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("déconnexion en ligne réussie : aucune révocation (le document est supprimé)", async () => {
+    mocked(deleteDoc).mockResolvedValue(undefined);
+    await removePushTokens("dad");
+    await flush();
+    expect(mockRevoke).not.toHaveBeenCalled();
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
   });
 });

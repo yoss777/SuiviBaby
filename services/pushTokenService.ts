@@ -16,7 +16,9 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import { httpsCallable } from "firebase/functions";
+
+import { db, functions } from "@/config/firebase";
 import { widgetPushIosCap } from "@/services/widgetPushIos";
 import { installedWidgetCount } from "@/modules/widget-push";
 import { getWidgetLinkKey } from "@/services/widgetLinkKey";
@@ -194,6 +196,9 @@ async function registerOnce(userId: string, gen: number): Promise<void> {
     // sinon elle pouvait invalider le jeton tout juste obtenu pour ce compte
     // (reconnexion rapide), et ses rappels n'arrivaient plus, sans le dire.
     if (stopInFlight) await stopInFlight;
+    // Révocation d'un ancien compte en attente : envoyée avant d'écrire, pour
+    // qu'elle ne supprime jamais le document que ce compte va écrire.
+    await flushTokenRevocation();
     const token = await getExpoPushToken();
     if (!token) return;
 
@@ -255,8 +260,12 @@ async function registerOnce(userId: string, gen: number): Promise<void> {
       },
       { merge: true },
     );
-    // Téléphone réinscrit pour ce compte : plus de désinscription en attente.
+    // Téléphone réinscrit pour ce compte : plus de désinscription ni de
+    // révocation en attente (le document lui appartient maintenant).
     AsyncStorage.removeItem(PUSH_UNREGISTER_PENDING_KEY).catch(() => {});
+    AsyncStorage.removeItem(PUSH_REVOKE_PENDING_KEY).catch(() => {});
+    // Nouvelle session : la fin de session précédente est oubliée.
+    sessionEndHandled = false;
     // Déconnexion pendant l'écriture : le jeton recréé est supprimé aussitôt,
     // sauf si un enregistrement a démarré depuis (reconnexion rapide, même
     // document) : c'est lui qui fait foi.
@@ -335,12 +344,15 @@ export function stopPushOnThisDevice(): Promise<void> {
  * locale seulement si removePushTokens n'a pas déjà supprimé le document
  * (déconnexion hors ligne, délai dépassé, déconnexion forcée).
  */
-export function stopPushAfterSessionEnd(): Promise<void> {
+export function stopPushAfterSessionEnd(userId?: string | null): Promise<void> {
   if (sessionEndHandled) {
     sessionEndHandled = false;
     return Promise.resolve();
   }
-  return stopPushOnThisDevice();
+  // Déconnexion forcée : le document n'a pas été supprimé. Révocation serveur
+  // (jeton lu avant que la désinscription ne l'oublie), puis désinscription.
+  const token = cachedToken;
+  return Promise.all([queueTokenRevocation(token, userId), stopPushOnThisDevice()]).then(() => undefined);
 }
 
 async function doStopPush(): Promise<void> {
@@ -369,15 +381,122 @@ async function doStopPush(): Promise<void> {
   }
 }
 
-/** Lancement sans compte connecté : termine une désinscription restée à faire. */
+// ============================================
+// R22 — révocation serveur du jeton, sans compte connecté
+// ============================================
+
+/**
+ * Jeton de l'ancien compte à révoquer côté serveur ({ token, userId }), quand
+ * la déconnexion n'a pas pu supprimer son document (hors ligne, délai, refus,
+ * déconnexion forcée). Indispensable sur iPhone, où la désinscription locale
+ * ne rend pas le jeton invalide. Envoyé au retour du réseau, compte connecté
+ * ou non (fonction revokeDeviceToken).
+ */
+export const PUSH_REVOKE_PENDING_KEY = "@suivibaby_push_revoke_pending";
+const REVOKE_TIMEOUT_MS = 8000;
+/**
+ * queuedAt : heure de la demande (horloge du téléphone, comme lastUsedAt du
+ * document). Le serveur ne supprime pas un jeton réinscrit après elle.
+ */
+type PendingRevocation = { token: string; userId: string; queuedAt: number };
+const MAX_REVOCATION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const revokeDeviceTokenCF = httpsCallable<PendingRevocation, { ok: boolean }>(functions, "revokeDeviceToken");
+let revokeInFlight: Promise<void> | null = null;
+
+async function readPendingRevocation(): Promise<PendingRevocation | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PUSH_REVOKE_PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingRevocation>;
+    const valid =
+      typeof parsed.token === "string" &&
+      typeof parsed.userId === "string" &&
+      typeof parsed.queuedAt === "number" &&
+      Date.now() - parsed.queuedAt < MAX_REVOCATION_AGE_MS;
+    if (!valid) {
+      // Demande illisible ou trop ancienne : oubliée (sinon réessayée sans fin).
+      await AsyncStorage.removeItem(PUSH_REVOKE_PENDING_KEY).catch(() => {});
+      return null;
+    }
+    return { token: parsed.token as string, userId: parsed.userId as string, queuedAt: parsed.queuedAt as number };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Met le jeton en attente, puis lance la révocation sans l'attendre : hors
+ * ligne, l'appel échouerait après plusieurs secondes et la déconnexion doit
+ * rester immédiate. Nouvel essai au retour du réseau ou au lancement.
+ */
+export async function queueTokenRevocation(token: string | null, userId: string | null | undefined): Promise<void> {
+  if (!token || !userId) return;
+  try {
+    await AsyncStorage.setItem(PUSH_REVOKE_PENDING_KEY, JSON.stringify({ token, userId, queuedAt: Date.now() }));
+  } catch (error) {
+    captureServiceError(error, { service: "pushToken", operation: "queueTokenRevocation" });
+  }
+  void flushTokenRevocation();
+}
+
+/** Retour du réseau : envoie une révocation restée en attente. Renvoie l'arrêt de l'écoute. */
+export function startTokenRevocationRetry(): () => void {
+  try {
+    return NetInfo.addEventListener((state) => {
+      if (state.isConnected !== false && state.isInternetReachable === true) void flushTokenRevocation();
+    });
+  } catch {
+    return () => {};
+  }
+}
+
+/**
+ * Envoie la révocation en attente. Réussite, ou demande refusée comme
+ * invalide : on l'oublie. Réseau absent ou autre erreur : on la garde pour la
+ * prochaine fois (lancement, retour du réseau, prochaine inscription).
+ */
+export function flushTokenRevocation(): Promise<void> {
+  if (revokeInFlight) return revokeInFlight;
+  revokeInFlight = (async () => {
+    const pending = await readPendingRevocation();
+    if (!pending) return;
+    try {
+      const done = await withTimeout(
+        revokeDeviceTokenCF(pending).then(() => true),
+        REVOKE_TIMEOUT_MS,
+        false,
+        "revokeDeviceToken",
+      );
+      if (done) await AsyncStorage.removeItem(PUSH_REVOKE_PENDING_KEY).catch(() => {});
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? "";
+      if (code.endsWith("invalid-argument")) {
+        await AsyncStorage.removeItem(PUSH_REVOKE_PENDING_KEY).catch(() => {});
+      }
+      if (!isConnectivityError(error)) {
+        captureServiceError(error, { service: "pushToken", operation: "revokeDeviceToken" });
+      }
+    }
+  })().finally(() => {
+    revokeInFlight = null;
+  });
+  return revokeInFlight;
+}
+
+/**
+ * Lancement sans compte connecté : termine une désinscription (Android) ou
+ * une révocation serveur restée à faire.
+ */
 export async function retryPendingPushUnregister(): Promise<void> {
   let pending: string | null = null;
   try {
     pending = await AsyncStorage.getItem(PUSH_UNREGISTER_PENDING_KEY);
   } catch {
-    return;
+    pending = null;
   }
   if (pending) await stopPushOnThisDevice();
+  await flushTokenRevocation();
 }
 
 /** Réseau absent (lecture NetInfo bornée à 1 s ; dans le doute : en ligne). */
@@ -404,10 +523,10 @@ async function isOfflineNow(): Promise<boolean> {
  * l'un coupait les notifications et le widget des autres jusqu'à leur
  * prochaine ouverture de l'app.
  */
-// `_userId` : gardé pour les appelants ; seul le jeton de ce téléphone est visé.
-export async function removePushTokens(_userId: string): Promise<void> {
+export async function removePushTokens(userId: string): Promise<void> {
   // Jeton de ce téléphone, lu avant toute remise à zéro.
   const docId = getTokenDocId();
+  const token = cachedToken;
   // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
   // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
   // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
@@ -424,7 +543,9 @@ export async function removePushTokens(_userId: string): Promise<void> {
       service: "pushToken",
       operation: "removePushTokensOffline",
     });
-    // Le document reste sur le serveur : on rend le jeton invalide (R9).
+    // Le document reste sur le serveur : révocation au retour du réseau
+    // (R22), et désinscription locale (Android, R9).
+    await queueTokenRevocation(token, userId);
     await stopPushOnThisDevice();
     sessionEndHandled = true;
     return;
@@ -472,6 +593,7 @@ export async function removePushTokens(_userId: string): Promise<void> {
       // rien à supprimer pour celui-ci. Pas de désinscription locale ici :
       // le jeton est partagé, elle couperait l'autre compte.
       if ((error as { code?: string })?.code === "permission-denied") {
+        // Document absent ou repris par un autre compte : rien à faire.
         captureServiceError(error, { service: "pushToken", operation: "removePushTokensDenied" });
         return;
       }
@@ -492,12 +614,15 @@ export async function removePushTokens(_userId: string): Promise<void> {
         service: "pushToken",
         operation: "removePushTokensTimeout",
       });
+      await queueTokenRevocation(token, userId);
       await stopPushOnThisDevice();
     }
     sessionEndHandled = true;
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });
+    // Suppression en échec : le document reste ; révocation serveur (R22).
+    await queueTokenRevocation(token, userId);
   } finally {
     if (timer) clearTimeout(timer);
   }
