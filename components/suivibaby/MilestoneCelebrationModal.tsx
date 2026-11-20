@@ -7,10 +7,10 @@
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { buildShareMessage, type MilestoneCelebration } from "@/services/milestoneCelebrationService";
-import { isShareAppLinkEnabled } from "@/services/shareConfigService";
+import { SHARE_INCLUDE_APP_LINK } from "@/constants/app";
 import { isReduceMotionEnabled } from "@/utils/motion";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -27,26 +27,20 @@ interface Props {
   /** Prénom de l'enfant, utilisé dans le texte de partage. */
   childName?: string;
   onDismiss: () => void;
+  /** Ajoute le lien du site au partage (défaut : SHARE_INCLUDE_APP_LINK). */
+  includeAppLink?: boolean;
 }
 
-export function MilestoneCelebrationModal({ milestone, childName, onDismiss }: Props) {
+export function MilestoneCelebrationModal({
+  milestone,
+  childName,
+  onDismiss,
+  includeAppLink = SHARE_INCLUDE_APP_LINK,
+}: Props) {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  // Lien du site dans le partage : interrupteur distant, coupé par défaut.
-  const [includeAppLink, setIncludeAppLink] = useState(false);
-
-  useEffect(() => {
-    if (!milestone) return;
-    let active = true;
-    isShareAppLinkEnabled().then((on) => {
-      if (active) setIncludeAppLink(on);
-    });
-    return () => {
-      active = false;
-    };
-  }, [milestone]);
 
   useEffect(() => {
     if (milestone) {

@@ -15,11 +15,6 @@ jest.mock("expo-haptics", () => ({
   ImpactFeedbackStyle: { Medium: "medium" },
 }));
 
-const mockLinkEnabled = jest.fn(() => Promise.resolve(false));
-jest.mock("@/services/shareConfigService", () => ({
-  isShareAppLinkEnabled: () => mockLinkEnabled(),
-}));
-
 const milestone: MilestoneCelebration = {
   id: "tracking_30d",
   type: "tracking_duration",
@@ -109,11 +104,9 @@ describe("MilestoneCelebrationModal", () => {
     expect(share).toHaveBeenCalledWith({ message: "Léa a 1 mois de suivi sur SuiviBaby 🎉" });
   });
 
-  it("interrupteur distant allumé : le lien du site en dernière ligne", async () => {
-    mockLinkEnabled.mockResolvedValueOnce(true);
+  it("lien activé : le site en dernière ligne", async () => {
     const share = jest.spyOn(Share, "share").mockResolvedValue({ action: "sharedAction" } as any);
-    render(<MilestoneCelebrationModal milestone={milestone} childName="Léa" onDismiss={() => {}} />);
-    await act(async () => {});
+    render(<MilestoneCelebrationModal milestone={milestone} childName="Léa" includeAppLink onDismiss={() => {}} />);
     await act(async () => {
       fireEvent.press(screen.getByRole("button", { name: "Partager" }));
     });
