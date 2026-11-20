@@ -570,26 +570,30 @@ describe("R22 : révocation serveur du jeton après une déconnexion qui n'a pas
     jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: false, isInternetReachable: false });
     mockRevoke.mockImplementation(() => new Promise(() => {})); // réseau absent : ne répond jamais
     await removePushTokens("dad"); // se termine sans attendre l'appel
-    expect(JSON.parse(store[PUSH_REVOKE_PENDING_KEY])).toEqual({ token: "ExponentPushToken[abc]", userId: "dad" });
-    expect(mockRevoke).toHaveBeenCalledWith({ token: "ExponentPushToken[abc]", userId: "dad" });
+    expect(JSON.parse(store[PUSH_REVOKE_PENDING_KEY])).toEqual({
+      token: "ExponentPushToken[abc]",
+      userId: "dad",
+      queuedAt: expect.any(Number),
+    });
+    expect(mockRevoke).toHaveBeenCalledWith(expect.objectContaining({ token: "ExponentPushToken[abc]", userId: "dad" }));
   });
 
   it("révocation réussie au retour du réseau : plus rien en attente", async () => {
-    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad" });
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
     await flushTokenRevocation();
     expect(mockRevoke).toHaveBeenCalledTimes(1);
     expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
   });
 
   it("échec réseau : la révocation reste en attente", async () => {
-    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad" });
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
     mockRevoke.mockRejectedValueOnce(Object.assign(new Error("offline"), { code: "functions/unavailable" }));
     await flushTokenRevocation();
     expect(store[PUSH_REVOKE_PENDING_KEY]).toBeDefined();
   });
 
   it("demande refusée comme invalide : oubliée (pas de nouvel essai sans fin)", async () => {
-    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad" });
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[abc]", userId: "dad", queuedAt: Date.now() });
     mockRevoke.mockRejectedValueOnce(Object.assign(new Error("bad"), { code: "functions/invalid-argument" }));
     await flushTokenRevocation();
     expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
@@ -598,11 +602,22 @@ describe("R22 : révocation serveur du jeton après une déconnexion qui n'a pas
   it("déconnexion forcée (document jamais supprimé) : révocation avec l'uid de l'ancien compte", async () => {
     await stopPushAfterSessionEnd("dad");
     await flush();
-    expect(mockRevoke).toHaveBeenCalledWith({ token: "ExponentPushToken[abc]", userId: "dad" });
+    expect(mockRevoke).toHaveBeenCalledWith(expect.objectContaining({ token: "ExponentPushToken[abc]", userId: "dad" }));
+  });
+
+  it("demande de plus de 30 jours : oubliée sans appel", async () => {
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({
+      token: "ExponentPushToken[abc]",
+      userId: "dad",
+      queuedAt: Date.now() - 31 * 24 * 3600_000,
+    });
+    await flushTokenRevocation();
+    expect(mockRevoke).not.toHaveBeenCalled();
+    expect(store[PUSH_REVOKE_PENDING_KEY]).toBeUndefined();
   });
 
   it("nouvelle connexion : la révocation en attente part AVANT l'écriture du jeton, puis est effacée", async () => {
-    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[old]", userId: "dad" });
+    store[PUSH_REVOKE_PENDING_KEY] = JSON.stringify({ token: "ExponentPushToken[old]", userId: "dad", queuedAt: Date.now() });
     const order: string[] = [];
     mockRevoke.mockImplementation(async () => {
       order.push("revoke");

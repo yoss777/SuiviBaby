@@ -562,6 +562,7 @@
     "httpsTrigger": {}
   },
   "revokeDeviceToken": {
+    "maxInstances": 2,
     "platform": "gcfv2",
     "region": [
       "europe-west1"

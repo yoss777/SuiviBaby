@@ -394,7 +394,12 @@ async function doStopPush(): Promise<void> {
  */
 export const PUSH_REVOKE_PENDING_KEY = "@suivibaby_push_revoke_pending";
 const REVOKE_TIMEOUT_MS = 8000;
-type PendingRevocation = { token: string; userId: string };
+/**
+ * queuedAt : heure de la demande (horloge du téléphone, comme lastUsedAt du
+ * document). Le serveur ne supprime pas un jeton réinscrit après elle.
+ */
+type PendingRevocation = { token: string; userId: string; queuedAt: number };
+const MAX_REVOCATION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const revokeDeviceTokenCF = httpsCallable<PendingRevocation, { ok: boolean }>(functions, "revokeDeviceToken");
 let revokeInFlight: Promise<void> | null = null;
@@ -404,9 +409,17 @@ async function readPendingRevocation(): Promise<PendingRevocation | null> {
     const raw = await AsyncStorage.getItem(PUSH_REVOKE_PENDING_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingRevocation>;
-    return typeof parsed.token === "string" && typeof parsed.userId === "string"
-      ? { token: parsed.token, userId: parsed.userId }
-      : null;
+    const valid =
+      typeof parsed.token === "string" &&
+      typeof parsed.userId === "string" &&
+      typeof parsed.queuedAt === "number" &&
+      Date.now() - parsed.queuedAt < MAX_REVOCATION_AGE_MS;
+    if (!valid) {
+      // Demande illisible ou trop ancienne : oubliée (sinon réessayée sans fin).
+      await AsyncStorage.removeItem(PUSH_REVOKE_PENDING_KEY).catch(() => {});
+      return null;
+    }
+    return { token: parsed.token as string, userId: parsed.userId as string, queuedAt: parsed.queuedAt as number };
   } catch {
     return null;
   }
@@ -420,7 +433,7 @@ async function readPendingRevocation(): Promise<PendingRevocation | null> {
 export async function queueTokenRevocation(token: string | null, userId: string | null | undefined): Promise<void> {
   if (!token || !userId) return;
   try {
-    await AsyncStorage.setItem(PUSH_REVOKE_PENDING_KEY, JSON.stringify({ token, userId }));
+    await AsyncStorage.setItem(PUSH_REVOKE_PENDING_KEY, JSON.stringify({ token, userId, queuedAt: Date.now() }));
   } catch (error) {
     captureServiceError(error, { service: "pushToken", operation: "queueTokenRevocation" });
   }
