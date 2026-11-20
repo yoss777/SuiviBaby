@@ -52,9 +52,12 @@ const CHILD2_ID = "child2";
 let testEnv: RulesTestEnvironment;
 
 /** Shorthand: get a Firestore instance authenticated as a given user */
-function authedFirestore(uid: string, email?: string) {
+function authedFirestore(uid: string, email?: string, opts: { emailVerified?: boolean } = {}) {
   return testEnv
-    .authenticatedContext(uid, { email: email ?? `${uid}@test.com` })
+    .authenticatedContext(uid, {
+      email: email ?? `${uid}@test.com`,
+      ...(opts.emailVerified === undefined ? {} : { email_verified: opts.emailVerified }),
+    })
     .firestore();
 }
 
@@ -1375,12 +1378,30 @@ describe("shareInvitations collection", () => {
     );
   });
 
-  test("invitee matched by email can reject", async () => {
-    const db = authedFirestore(CHARLIE_UID, "bob@test.com");
+  test("invitee matched by a VERIFIED email can read and reject", async () => {
+    const db = authedFirestore(CHARLIE_UID, "bob@test.com", { emailVerified: true });
+    await assertSucceeds(getDoc(doc(db, "shareInvitations", "invite1")));
     await assertSucceeds(
       updateDoc(doc(db, "shareInvitations", "invite1"), {
         status: "rejected",
       })
+    );
+  });
+
+  test("unverified email matching the invitee: cannot read nor reject (R15)", async () => {
+    const db = authedFirestore(CHARLIE_UID, "bob@test.com", { emailVerified: false });
+    await assertFails(getDoc(doc(db, "shareInvitations", "invite1")));
+    await assertFails(
+      updateDoc(doc(db, "shareInvitations", "invite1"), {
+        status: "rejected",
+      })
+    );
+  });
+
+  test("unverified email cannot list invitations sent to that address (R15)", async () => {
+    const db = authedFirestore(CHARLIE_UID, "bob@test.com", { emailVerified: false });
+    await assertFails(
+      getDocs(query(collection(db, "shareInvitations"), where("invitedEmail", "==", "bob@test.com"), limit(10)))
     );
   });
 
