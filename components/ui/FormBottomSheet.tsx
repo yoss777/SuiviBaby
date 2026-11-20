@@ -303,10 +303,16 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginBottom: space.lg,
     marginTop: 10,
+    // Place de la croix (44, décalée de 8) réservée des deux côtés : un titre
+    // long passe à la ligne au lieu de glisser sous la croix (police ×2,
+    // recette 1.0.24), et reste centré.
+    paddingHorizontal: 36,
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    flexShrink: 1,
+    textAlign: "center",
   },
   closeButton: {
     position: "absolute",
