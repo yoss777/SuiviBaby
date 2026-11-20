@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, useColorScheme as useSystemColorScheme } from 'react-native';
+import { Appearance, AppState, useColorScheme as useSystemColorScheme } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -8,7 +8,12 @@ import {
   obtenirReglagesTheme,
   ThemePreference,
 } from '@/services/userPreferencesService';
-import { isNightHour, resolveColorScheme, resolveDarkAtNight } from '@/utils/themeResolution';
+import {
+  isNightHour,
+  nativeAppearanceOverride,
+  resolveColorScheme,
+  resolveDarkAtNight,
+} from '@/utils/themeResolution';
 
 const THEME_STORAGE_KEY = '@suivibaby_theme_preference';
 const LEGACY_THEME_KEY = '@samaye_theme_preference';
@@ -153,6 +158,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }),
     [preference, darkAtNight, nightMode, systemScheme]
   );
+
+  // Clavier, alertes, sélecteurs : imposer la même apparence que l'app.
+  const nativeOverride = nativeAppearanceOverride({ preference, darkAtNight, isNight: nightMode });
+  useEffect(() => {
+    if (!localLoaded) return;
+    try {
+      Appearance.setColorScheme(nativeOverride);
+    } catch {
+      // module natif absent : les éléments natifs suivent le téléphone
+    }
+  }, [nativeOverride, localLoaded]);
 
   /** Mise à jour optimiste groupée, avec retour arrière des deux valeurs. */
   const applySettings = useCallback(

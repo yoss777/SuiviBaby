@@ -1,5 +1,6 @@
 // Calcul du thème : choix × « Sombre la nuit » × heure × réglage du téléphone.
 import {
+  nativeAppearanceOverride,
   isNightHour,
   resolveColorScheme,
   resolveDarkAtNight,
@@ -81,5 +82,20 @@ describe("aucun \\\\u00 affiché brut dans les écrans de réglages", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "app", "settings", f), "utf8");
       expect(src).not.toMatch(/\\u00[0-9a-fA-F]{2}/);
     }
+  });
+});
+
+describe("nativeAppearanceOverride (clavier, alertes)", () => {
+  const cases: [ThemePreference, boolean, boolean, string][] = [
+    ["dark", false, false, "dark"],
+    ["light", true, true, "dark"],
+    ["light", false, true, "light"],
+    ["light", true, false, "light"],
+    ["auto", true, true, "dark"],
+    ["auto", false, true, "auto"],
+    ["auto", true, false, "auto"],
+  ];
+  it.each(cases)("%s, interrupteur %s, nuit %s → %s", (preference, darkAtNight, isNight, expected) => {
+    expect(nativeAppearanceOverride({ preference, darkAtNight, isNight })).toBe(expected);
   });
 });

@@ -1,7 +1,7 @@
 // ThemeContext : « Sombre la nuit », écriture unique, retour arrière, hors ligne.
 import { act, render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { AppState, Text } from "react-native";
+import { Appearance, AppState, Text } from "react-native";
 
 const mockObtenir = jest.fn();
 const mockMaj = jest.fn();
@@ -114,5 +114,24 @@ describe("ThemeContext", () => {
     const handler = spy.mock.calls[spy.mock.calls.length - 1][1] as (s: string) => void;
     act(() => handler("active"));
     expect(ctx.resolvedColorScheme).toBe("dark");
+  });
+
+  it("clavier et alertes suivent l'app : sombre forcé la nuit, retour au téléphone en Automatique le jour", async () => {
+    const set = jest.spyOn(Appearance, "setColorScheme").mockImplementation(() => {});
+    const appState = jest.spyOn(AppState, "addEventListener");
+    mockObtenir.mockResolvedValue({ theme: "auto", darkAtNight: true });
+    await mount();
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("dark"));
+    mockHour = 10;
+    const handler = appState.mock.calls[appState.mock.calls.length - 1][1] as (s: string) => void;
+    act(() => handler("active"));
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("auto"));
+  });
+
+  it("Clair interrupteur coupé : clavier forcé en clair même si le téléphone est sombre", async () => {
+    const set = jest.spyOn(Appearance, "setColorScheme").mockImplementation(() => {});
+    mockObtenir.mockResolvedValue({ theme: "light", darkAtNight: false });
+    await mount();
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("light"));
   });
 });

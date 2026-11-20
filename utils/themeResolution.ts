@@ -72,3 +72,21 @@ export function shouldShowDarkAtNightNotice(params: {
   const { preference, storedDarkAtNight, isNight, alreadyShown } = params;
   return preference === 'light' && storedDarkAtNight === undefined && isNight && !alreadyShown;
 }
+
+/**
+ * Apparence imposée aux éléments natifs (clavier, alertes, sélecteurs de
+ * date, feuille de partage), qui suivent le téléphone et non nos couleurs.
+ * 'auto' = suivre le téléphone : indispensable en Automatique hors nuit
+ * forcée, car pendant un forçage React Native ne donne plus le vrai réglage
+ * du téléphone (useColorScheme renvoie la valeur forcée).
+ */
+export function nativeAppearanceOverride(params: {
+  preference: ThemePreference;
+  darkAtNight: boolean;
+  isNight: boolean;
+}): 'light' | 'dark' | 'auto' {
+  const { preference, darkAtNight, isNight } = params;
+  if (preference === 'dark') return 'dark';
+  if (darkAtNight && isNight) return 'dark';
+  return preference === 'light' ? 'light' : 'auto';
+}
