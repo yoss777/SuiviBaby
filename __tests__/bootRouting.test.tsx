@@ -47,9 +47,10 @@ jest.mock("@/services/accountDeletionService", () => ({
   hasPendingDeletion: (u: any) => !!u?.pendingDeletion?.deletionDate,
 }));
 const mockBiometricEnabled = jest.fn();
+const mockUnlock = jest.fn();
 jest.mock("@/services/biometricAuthService", () => ({
   isBiometricEnabled: () => mockBiometricEnabled(),
-  unlockWithBiometric: jest.fn(),
+  unlockWithBiometric: () => mockUnlock(),
 }));
 const mockConsent = jest.fn();
 jest.mock("@/services/healthConsentService", () => ({
@@ -114,6 +115,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockHasOnboarded.mockResolvedValue(true);
   mockBiometricEnabled.mockResolvedValue(false);
+  mockUnlock.mockResolvedValue(undefined);
   mockConsent.mockResolvedValue(true);
   setAuth();
   setBaby();
@@ -265,6 +267,89 @@ describe("boot.tsx routing", () => {
       expect(refreshUser).toHaveBeenCalledTimes(12);
       fireEvent.press(getByText("Réessayer"));
       expect(refreshUser).toHaveBeenCalledTimes(13);
+    });
+  });
+
+  describe("écran de démarrage figé : garde-temps", () => {
+    const never = () => new Promise<never>(() => {});
+    // Par pas d'une seconde : un seul grand saut ne laisse pas les chaînes
+    // de promesses du démarrage s'exécuter entre les minuteurs.
+    async function advance(ms: number) {
+      for (let t = 0; t < ms; t += 1000) {
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(Math.min(1000, ms - t));
+        });
+      }
+    }
+
+    it("demande d'empreinte sans réponse : « Réessayer » après 20 s, sans déconnexion, et la relance passe", async () => {
+      const signOut = jest.fn(() => Promise.resolve());
+      setAuth({ signOut, refreshUser: jest.fn(() => Promise.resolve()) });
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementationOnce(never).mockResolvedValue("u1");
+      const { getByText, queryByText } = render(<BootScreen />);
+      await advance(19_000);
+      expect(queryByText("Démarrage trop long")).toBeNull();
+      await advance(2_000);
+      expect(getByText("Démarrage trop long")).toBeTruthy();
+      expect(queryByText("La connexion semble instable.")).toBeNull();
+      expect(signOut).not.toHaveBeenCalled();
+      fireEvent.press(getByText("Réessayer"));
+      await advance(5_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(2);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+    });
+
+    it("pas d'essai automatique toutes les 10 s quand seul le démarrage est trop long", async () => {
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementation(never);
+      render(<BootScreen />);
+      await advance(120_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    it("lecture du consentement sans réponse : carte « Réessayer » après 15 s", async () => {
+      mockConsent.mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      await advance(16_000);
+      expect(getByText("Réessayer")).toBeTruthy();
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it("lecture du réglage d'empreinte bloquée : ni passage sans verrou, ni déconnexion", async () => {
+      const signOut = jest.fn(() => Promise.resolve());
+      setAuth({ signOut });
+      mockBiometricEnabled.mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      // 15 s de délai, comptés à partir de l'étape (≈ 1 s après l'ouverture)
+      await advance(18_000);
+      expect(getByText("Démarrage trop long")).toBeTruthy();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(signOut).not.toHaveBeenCalled();
+    });
+
+    it("démarrage normal : pas de carte", async () => {
+      const { queryByText } = render(<BootScreen />);
+      await advance(5_000);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+      await advance(30_000);
+      expect(queryByText("Réessayer")).toBeNull();
+    });
+
+    it("verrou d'empreinte : un nouveau rendu pendant la lecture du réglage ne saute pas le verrou", async () => {
+      let resolveEnabled: (v: boolean) => void = () => {};
+      mockBiometricEnabled.mockImplementation(() => new Promise<boolean>((r) => (resolveEnabled = r)));
+      mockUnlock.mockImplementation(never);
+      const { rerender } = render(<BootScreen />);
+      await advance(2_000);
+      setBaby({ children: [child, { id: "c2", name: "Tom" }] });
+      rerender(<BootScreen />);
+      await advance(3_000);
+      expect(mockReplace).not.toHaveBeenCalled();
+      await act(async () => resolveEnabled(true));
+      await advance(1_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 });

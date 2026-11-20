@@ -35,6 +35,20 @@ import { neutralColors } from "@/constants/dashboardColors";
 const BOOT_NETWORK_TIMEOUT_MS = 8000;
 const BOOT_AUTO_RETRY_INTERVAL_MS = 10_000;
 const BOOT_AUTO_RETRY_MAX = 12;
+/** Au-delà, l'écran de chargement propose « Réessayer » quoi qu'il bloque. */
+const BOOT_WATCHDOG_MS = 20_000;
+/** Lectures locales ou réseau d'une étape du démarrage. */
+const BOOT_STEP_TIMEOUT_MS = 15_000;
+
+class BootStepTimeoutError extends Error {}
+
+function withBootTimeout<T>(promise: Promise<T>, ms = BOOT_STEP_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new BootStepTimeoutError("délai dépassé")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 function logBoot(...args: unknown[]) {
   if (__DEV__ && process.env.NODE_ENV !== "test") {
@@ -75,6 +89,13 @@ function BootScreenContent() {
   >("pending");
   const consentCheckStartedRef = useRef(false);
   const hasNavigatedRef = useRef(false);
+  // Écran de chargement affiché trop longtemps sans issue (étape bloquée,
+  // par exemple après la recréation de l'activité Android quand la taille de
+  // police change app ouverte) : on propose « Réessayer ».
+  const [bootTooLong, setBootTooLong] = useState(false);
+  // Incrémenté à chaque « Réessayer » : le résultat tardif d'un essai
+  // abandonné est ignoré.
+  const bootGenerationRef = useRef(0);
   const bootResourceKeyRef = useRef<string | null>(null);
   const bootResourcePromiseRef = useRef<Promise<void> | null>(null);
   const bootAssignedChildIdRef = useRef<string | null>(null);
@@ -271,8 +292,10 @@ function BootScreenContent() {
         if (!uid) return;
         consentCheckStartedRef.current = true;
         setConsentCheck("running");
+        const generation = bootGenerationRef.current;
         try {
-          const granted = await fetchHealthConsentStatus(uid);
+          const granted = await withBootTimeout(fetchHealthConsentStatus(uid));
+          if (generation !== bootGenerationRef.current) return;
           if (granted) {
             setConsentCheck("granted");
           } else {
@@ -283,6 +306,7 @@ function BootScreenContent() {
           }
         } catch (error) {
           // Unknown state (offline...): do not let the user through, offer retry.
+          if (generation !== bootGenerationRef.current) return;
           console.warn("[BOOT] Lecture du consentement échouée:", error);
           consentCheckStartedRef.current = false;
           setConsentCheck("error");
@@ -298,26 +322,41 @@ function BootScreenContent() {
       // on prompte avant tout chargement enfants. Échec → signOut + login.
       if (biometricCheck === "pending" && !biometricCheckStartedRef.current) {
         biometricCheckStartedRef.current = true;
-        const enabled = await isBiometricEnabled();
+        const generation = bootGenerationRef.current;
+        let enabled: boolean;
+        try {
+          enabled = await withBootTimeout(isBiometricEnabled());
+        } catch {
+          // Lecture locale bloquée : on ne laisse pas passer sans le verrou,
+          // et on ne déconnecte pas non plus. « Réessayer » relance l'étape.
+          if (generation === bootGenerationRef.current) setBootTooLong(true);
+          return;
+        }
+        if (generation !== bootGenerationRef.current) return;
         if (!enabled) {
           setBiometricCheck("passed");
         } else {
           setBiometricCheck("running");
           try {
             const expectedUid = await unlockWithBiometric();
+            if (generation !== bootGenerationRef.current) return;
             if (expectedUid && expectedUid === firebaseUser?.uid) {
               setBiometricCheck("passed");
             } else {
               setBiometricCheck("failed");
             }
           } catch {
+            if (generation !== bootGenerationRef.current) return;
             setBiometricCheck("failed");
           }
         }
         return;
       }
 
-      if (biometricCheck === "running") {
+      // « pending » avec l'étape déjà lancée = lecture du réglage en cours (ou
+      // bloquée) : on attend. Sans ce garde, un nouveau rendu pendant la
+      // lecture sautait le verrou et ouvrait l'accueil sans empreinte.
+      if (biometricCheck === "pending" || biometricCheck === "running") {
         return;
       }
 
@@ -424,15 +463,33 @@ function BootScreenContent() {
     authStatus === "degraded" && !!firebaseUser && !user;
   const isOffline =
     netInfo.isConnected === false || netInfo.isInternetReachable === false;
-  const showBootFallback =
+  const networkFallback =
     hasAuthDegradedSession ||
     consentCheck === "error" ||
     (bootStalled && (authLoading || (!!user && babyLoading && children.length === 0)));
+  const showBootFallback = networkFallback || bootTooLong;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!hasNavigatedRef.current) setBootTooLong(true);
+    }, BOOT_WATCHDOG_MS);
+    return () => clearTimeout(timer);
+  }, [bootRetryKey]);
 
   const handleRetry = useCallback(() => {
     setBootStalled(false);
+    setBootTooLong(false);
     setBootRetryKey((prev) => prev + 1);
-    if (consentCheck === "error") setConsentCheck("pending");
+    bootGenerationRef.current += 1;
+    if (consentCheck === "error" || consentCheck === "running") {
+      consentCheckStartedRef.current = false;
+      setConsentCheck("pending");
+    }
+    // Étape d'empreinte jamais terminée (fenêtre perdue) : on la relance.
+    if (biometricCheck === "pending" || biometricCheck === "running") {
+      biometricCheckStartedRef.current = false;
+      setBiometricCheck("pending");
+    }
     bootAssignedChildIdRef.current = null;
     bootResourceKeyRef.current = null;
     bootResourcePromiseRef.current = null;
@@ -442,7 +499,7 @@ function BootScreenContent() {
         console.warn("[BOOT] refreshUser échoué:", error);
       });
     }
-  }, [consentCheck, firebaseUser, refreshUser]);
+  }, [consentCheck, biometricCheck, firebaseUser, refreshUser]);
 
   // Retour automatique après un démarrage hors ligne (test 27), sans attendre
   // un appui sur « Réessayer » :
@@ -467,10 +524,12 @@ function BootScreenContent() {
     wasOnlineRef.current = isOnline;
     if (!cameOnline) return;
     autoRetryCountRef.current = 0;
-    if (showBootFallback) handleRetryRef.current();
-  }, [isOnline, showBootFallback]);
+    if (networkFallback) handleRetryRef.current();
+  }, [isOnline, networkFallback]);
 
-  const autoRetryActive = showBootFallback && !isOffline;
+  // Problèmes de réseau seulement : on ne relance jamais toutes les 10 s une
+  // demande d'empreinte que l'utilisateur est peut-être en train de faire.
+  const autoRetryActive = networkFallback && !isOffline;
   useEffect(() => {
     if (!autoRetryActive) return;
     const interval = setInterval(() => {
@@ -484,11 +543,15 @@ function BootScreenContent() {
     return () => clearInterval(interval);
   }, [autoRetryActive]);
 
+  const tooLongOnly = bootTooLong && !networkFallback;
   const fallbackTitle = isOffline
     ? "Connexion indisponible"
+    : tooLongOnly
+    ? "Démarrage trop long"
     : "Connexion trop lente";
-  const fallbackMessage =
-    hasAuthDegradedSession || stallPhase === "auth" || consentCheck === "error"
+  const fallbackMessage = tooLongOnly
+    ? "Le démarrage prend plus de temps que prévu. Réessayez ; si cela continue, fermez puis rouvrez l'application."
+    : hasAuthDegradedSession || stallPhase === "auth" || consentCheck === "error"
       ? "Impossible de vérifier votre session pour le moment. Vérifiez votre réseau puis réessayez."
       : "Les données de votre enfant mettent trop de temps à charger. Vérifiez votre réseau puis réessayez.";
 
@@ -512,11 +575,13 @@ function BootScreenContent() {
             <View style={styles.feedbackCard}>
               <Text style={styles.feedbackTitle}>{fallbackTitle}</Text>
               <Text style={styles.feedbackText}>{fallbackMessage}</Text>
-              <Text style={styles.feedbackHint}>
-                {isOffline
-                  ? "Aucune connexion internet détectée."
-                  : "La connexion semble instable."}
-              </Text>
+              {!tooLongOnly && (
+                <Text style={styles.feedbackHint}>
+                  {isOffline
+                    ? "Aucune connexion internet détectée."
+                    : "La connexion semble instable."}
+                </Text>
+              )}
               <Pressable
                 style={({ pressed }) => [
                   styles.retryButton,
