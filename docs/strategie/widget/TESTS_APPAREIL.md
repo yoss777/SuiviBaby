@@ -78,6 +78,25 @@ Corrigés pour la 1.0.23 (branche `fix/recette-1.0.22`) : le P1, les deux P2, la
   - 1.0.24 : garde-temps sans attendre la reproduction. Après 20 s sans issue, l'écran de chargement affiche « Démarrage trop long » + Réessayer. Les lectures du consentement et du réglage d'empreinte s'arrêtent au bout de 15 s. Réessayer relance aussi une demande d'empreinte perdue. **Cause trouvée le 20/11 sur le Samsung (1.0.23).** La police passe à 1,3 app ouverte, Android recrée l'activité. React Native monte le nouvel arbre avant de démonter l'ancien (`startSurface` 0 à 05:46:46.715, `stopSurface` 1 à 46.744). Le démontage de l'ancien remet la navigation d'expo-router à l'état « non branchée » (`routingQueueContext.js`) : toute navigation du nouvel arbre échoue. Ouverture depuis le lanceur : l'écran de chargement reste figé, `router.replace` échoue en silence. Ouverture depuis le widget (lien `widget=meal`) : écran « Oups ! Une erreur est survenue », car `router.setParams` est appelé au montage de l'Accueil (« The imperative router is unavailable before the first render has finished »). Correctif 1.0.24 : `patches/expo-router+58.0.30.patch` garde la navigation du dernier arbre monté. Autre défaut trouvé au même endroit : après une recréation, le lien du widget qui avait ouvert l'app était rejoué (formulaire rouvert, sieste ou promenade relancée sans confirmation). Corrigé : garde hors composant, remis à zéro par un vrai nouvel appui (événement `url`). À revérifier sur appareil : police changée app ouverte, depuis le lanceur puis depuis le widget.
 - P1 (trouvé en écrivant les tests, existait avant la 1.0.24) — verrou par empreinte contournable : si l'écran se redessinait pendant la lecture du réglage d'empreinte, l'étape était sautée et l'accueil s'ouvrait sans empreinte. **Corrigé dans la 1.0.24.**
 
+## Version 1.0.24 (« Sombre la nuit », corrections de la recette 1.0.23) : recette Samsung le 20/11, iPhone à faire
+
+Samsung, 1.0.24 (versionCode 33) installée depuis Google Play (Tests fermés – Alpha), pilotée par adb (USB). Aucune saisie créée.
+
+| # | Test | Statut | Notes |
+|---|------|--------|-------|
+| 32 | Police changée app ouverte, app lancée depuis l'icône : pas d'écran figé | ✅ 20/11 Samsung | Police 1,0 → 1,3 accueil chargé : l'accueil se réaffiche, texte agrandi ; onglet Journal ouvert ensuite (navigation fonctionnelle). Aucune erreur JavaScript dans les journaux. En 1.0.23 : écran de chargement figé. |
+| 33 | Police changée app ouverte, app ouverte par le lien « repas » du widget : pas d'écran d'erreur, lien non rejoué | ✅ 20/11 Samsung | Lien `widget=meal` : formulaire « Nouveau repas » ouvert ; police 1,3 → 1,0 : retour à l'accueil, pas d'écran « Oups », formulaire pas rouvert. Effet connu : un formulaire non enregistré est perdu quand Android relance l'écran. En 1.0.23 : écran « Oups ! Une erreur est survenue ». |
+| 34 | Police au maximum (×2) : fenêtre « Déconnexion » | ✅ 20/11 Samsung | Titre « Déconnexion » entier sur une ligne, question entière jusqu'au « ? », boutons empilés et entiers. Fermée par « Annuler ». En 1.0.23 : « Déconne/xion ». |
+| 35 | Police au maximum (×2) : formulaire Température | ✅ 20/11 Samsung | « Annuler » et « Ajouter » entiers, − et + dans leur cercle. Fermé par « Annuler » (rien enregistré). En 1.0.23 : « Annul/er », « Ajout/er ». |
+| 36 | Test 27 refait : lancement en mode avion puis retour du réseau sans appui | ✅ 20/11 Samsung | Mode avion, lancement : « Connexion indisponible » + Réessayer + Se déconnecter, aucune déconnexion. Mode avion coupé : « Connexion trop lente » à +11 s, **accueil chargé seul à +18 s** (mesure par sondage toutes les 3 s). En 1.0.23 : bloqué plus de 45 s. |
+| 37 | Écran Thème : « Sombre la nuit » | ✅ 20/11 Samsung (de jour) | Interrupteur présent et activé (compte en Automatique), descriptions selon l'interrupteur (« Clair le jour, sombre de 22 h à 7 h », « Suit votre téléphone, et passe en sombre de 22 h à 7 h »), encadré sur l'ergonomie de nuit. Passage en sombre à 22 h, clavier et alertes : à vérifier ce soir. |
+
+À faire : iPhone 15 et 13 Pro Max (mêmes tests) ; de nuit : sombre à 22 h en Clair, clavier et alertes sombres, message unique ; chrono 5 min 50 s → « 5 min » (crée une saisie : à faire par Yoss) ; notifications avec deux téléphones ; abonnement test annulé.
+
+## Défauts trouvés pendant la recette 1.0.24 (20/11)
+
+- P3 — police ×2 : dans la feuille « Ajouter un événement » (bouton + › Plus), la croix de fermeture chevauche la fin du titre (« événem×ent »).
+
 ## Après les tests
 
 - Ouvrir le temps réel iPhone (`app_config/widgetPush.ios`) pour les comptes de Yoss, puis tester : une saisie sur un téléphone met à jour le widget de l'autre.
