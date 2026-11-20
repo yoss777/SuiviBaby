@@ -22,6 +22,7 @@ jest.mock("@react-native-community/netinfo", () => ({
 jest.mock("@sentry/react-native", () => ({
   startInactiveSpan: jest.fn(() => ({ end: jest.fn() })),
   captureException: jest.fn(),
+  withScope: (fn: (scope: unknown) => void) => fn({ setTag: jest.fn(), setExtras: jest.fn() }),
   addBreadcrumb: jest.fn(),
 }));
 
@@ -282,15 +283,15 @@ describe("boot.tsx routing", () => {
       }
     }
 
-    it("demande d'empreinte sans réponse : « Réessayer » après 20 s, sans déconnexion, et la relance passe", async () => {
+    it("demande d'empreinte sans réponse : « Réessayer » après 60 s (temps de répondre), sans déconnexion, et la relance passe", async () => {
       const signOut = jest.fn(() => Promise.resolve());
       setAuth({ signOut, refreshUser: jest.fn(() => Promise.resolve()) });
       mockBiometricEnabled.mockResolvedValue(true);
       mockUnlock.mockImplementationOnce(never).mockResolvedValue("u1");
       const { getByText, queryByText } = render(<BootScreen />);
-      await advance(19_000);
+      await advance(58_000);
       expect(queryByText("Démarrage trop long")).toBeNull();
-      await advance(2_000);
+      await advance(4_000);
       expect(getByText("Démarrage trop long")).toBeTruthy();
       expect(queryByText("La connexion semble instable.")).toBeNull();
       expect(signOut).not.toHaveBeenCalled();
@@ -351,5 +352,57 @@ describe("boot.tsx routing", () => {
       expect(mockUnlock).toHaveBeenCalledTimes(1);
       expect(mockReplace).not.toHaveBeenCalled();
     });
+
+    it("réseau lent pendant la demande d'empreinte : les essais automatiques ne la relancent pas", async () => {
+      // Enfants qui ne chargent pas (réseau lent) pendant que l'empreinte est demandée.
+      setBaby({ children: [], loading: true, activeChild: null });
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementation(never);
+      render(<BootScreen />);
+      await advance(45_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    it("consentement illisible puis réseau correct : nouvel essai automatique qui passe", async () => {
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      mockConsent.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValue(true);
+      render(<BootScreen />);
+      await advance(15_000);
+      expect(mockConsent).toHaveBeenCalledTimes(2);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+    });
+
+    it("réponse tardive d'une lecture du consentement abandonnée : ignorée", async () => {
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      let resolveLate: (v: boolean) => void = () => {};
+      mockConsent
+        .mockImplementationOnce(() => new Promise<boolean>((r) => (resolveLate = r)))
+        .mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      await advance(16_000); // délai de 15 s dépassé : carte « Réessayer »
+      fireEvent.press(getByText("Réessayer"));
+      await advance(1_000);
+      await act(async () => resolveLate(false)); // « pas de consentement », trop tard
+      await advance(1_000);
+      expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/health-consent");
+    });
+  });
+
+  it("essais automatiques épuisés : la carte invite à appuyer sur Réessayer", async () => {
+    const refreshUser = jest.fn(() => Promise.resolve());
+    setAuth({ user: null, status: "degraded", refreshUser });
+    mockNet = { isConnected: true, isInternetReachable: null };
+    const { getByText, queryByText } = render(<BootScreen />);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5_000);
+    });
+    expect(queryByText("La connexion semble instable. Appuyez sur Réessayer.")).toBeNull();
+    for (let i = 0; i < 14; i++) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000);
+      });
+    }
+    expect(getByText("La connexion semble instable. Appuyez sur Réessayer.")).toBeTruthy();
   });
 });

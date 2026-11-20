@@ -37,3 +37,10 @@ describe("expo-router : recréation de l'activité Android", () => {
     expect(() => router.replace("/baby/home")).toThrow(/before the first render/);
   });
 });
+
+describe("patch expo-router lié à sa version", () => {
+  it("expo-router installé = 58.0.30 : à une mise à jour, vérifier si le correctif est intégré en amont puis retirer ou refaire le patch", () => {
+    const { version } = jest.requireActual("expo-router/package.json");
+    expect(version).toBe("58.0.30");
+  });
+});

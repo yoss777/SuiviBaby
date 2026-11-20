@@ -13,12 +13,15 @@ import { shouldShowDarkAtNightNotice } from '@/utils/themeResolution';
 export const DARK_AT_NIGHT_NOTICE_KEY = '@suivibaby_dark_at_night_notice_shown';
 
 export function useDarkAtNightNotice(): void {
-  const { preference, storedDarkAtNight, isNightMode, isLoading, setDarkAtNight } = useThemePreference();
-  const { showActionToast } = useToast();
+  const { preference, storedDarkAtNight, isNightMode, isLoading, syncedFromServer, setDarkAtNight } =
+    useThemePreference();
+  const { showActionToast, showToast } = useToast();
   const doneRef = useRef(false);
 
   useEffect(() => {
-    if (doneRef.current || isLoading) return;
+    // Seulement d'après le réglage relu sur le serveur : hors ligne, un compte
+    // qui a coupé l'interrupteur sur un autre téléphone le verrait à tort.
+    if (doneRef.current || isLoading || !syncedFromServer) return;
     if (!shouldShowDarkAtNightNotice({ preference, storedDarkAtNight, isNight: isNightMode, alreadyShown: false })) {
       return;
     }
@@ -27,19 +30,21 @@ export function useDarkAtNightNotice(): void {
       .then((shown) => {
         if (!active || shown || doneRef.current) return;
         doneRef.current = true;
-        AsyncStorage.setItem(DARK_AT_NIGHT_NOTICE_KEY, '1').catch(() => {});
         showActionToast(
           "La nuit, de 22 h à 7 h, l'écran passe maintenant en sombre. Réglable dans Paramètres › Thème.",
           'Désactiver',
           () => {
-            setDarkAtNight(false).catch(() => {});
+            setDarkAtNight(false)
+              .then(() => showToast('Sombre la nuit désactivé'))
+              .catch(() => showToast("Impossible d'enregistrer. Réessayez dans Paramètres › Thème."));
           },
           10_000
         );
+        AsyncStorage.setItem(DARK_AT_NIGHT_NOTICE_KEY, '1').catch(() => {});
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [preference, storedDarkAtNight, isNightMode, isLoading, setDarkAtNight, showActionToast]);
+  }, [preference, storedDarkAtNight, isNightMode, isLoading, syncedFromServer, setDarkAtNight, showActionToast, showToast]);
 }

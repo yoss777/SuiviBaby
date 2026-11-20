@@ -25,6 +25,7 @@ import {
   getExpiresAtFromCustomerInfo,
   addCustomerInfoListener,
 } from "@/services/revenueCatService";
+import { captureServiceError } from "@/utils/errorReporting";
 import { entitledTier, msUntilEntitlementEnds } from "@/utils/premiumEntitlement";
 
 // ============================================
@@ -230,8 +231,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         liveResolved = true;
         saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false, expiresAt: rcExpiresAt });
         setIsLoading(false);
-      } catch {
+      } catch (error) {
         // RevenuCat failed — fallback to Firestore
+        captureServiceError(error, { service: "premium", operation: "revenueCatLogin" });
         if (!cancelled) unsubFallback = syncFromFirestore();
       }
     };
@@ -262,7 +264,11 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
           }
           setIsLoading(false);
         },
-        () => { if (!cancelled) setIsLoading(false); }
+        (error: unknown) => {
+          // Copie locale gardée faute de mieux : on le signale.
+          captureServiceError(error, { service: "premium", operation: "subscriptionFallbackListener" });
+          if (!cancelled) setIsLoading(false);
+        }
       );
     };
 
@@ -294,7 +300,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
           if (data.billingPeriod) setBillingPeriod(data.billingPeriod);
         }
       },
-      () => {}
+      (error: unknown) => {
+        captureServiceError(error, { service: "premium", operation: "subscriptionListener" });
+      }
     );
 
     return () => {

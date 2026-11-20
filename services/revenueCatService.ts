@@ -165,6 +165,11 @@ export function getStatusFromCustomerInfo(
 
   if (premiumEntitlement.periodType === "TRIAL") return "trial";
 
+  // Achat à vie : willRenew vaut false et il n'y a pas de date de fin. Ce
+  // n'est pas une annulation (le serveur l'enregistre « active ») ; sans ce
+  // cas, la règle de droit (utils/premiumEntitlement) le passait en gratuit.
+  if (premiumEntitlement.willRenew === false && !premiumEntitlement.expirationDate) return "active";
+
   // Check billing issue via managementURL or willRenew
   if (premiumEntitlement.willRenew === false) return "cancelled";
 

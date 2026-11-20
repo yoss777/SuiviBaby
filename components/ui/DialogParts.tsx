@@ -159,14 +159,23 @@ export function DialogTitle({ title, color }: { title: string; color: string }) 
 export function DialogScroll({ children }: { children: React.ReactNode }) {
   const ref = useRef<ScrollViewInstance>(null);
   const viewportHeight = useRef(0);
+  const contentHeight = useRef(0);
   const flashed = useRef(false);
-  const onContentSizeChange = useCallback((_w: number, contentHeight: number) => {
+  // Les deux mesures arrivent dans un ordre variable : on vérifie à chacune.
+  const maybeFlash = useCallback(() => {
     if (flashed.current || Platform.OS !== "ios") return;
-    if (viewportHeight.current > 0 && contentHeight > viewportHeight.current + 1) {
+    if (viewportHeight.current > 0 && contentHeight.current > viewportHeight.current + 1) {
       flashed.current = true;
       ref.current?.flashScrollIndicators();
     }
   }, []);
+  const onContentSizeChange = useCallback(
+    (_w: number, height: number) => {
+      contentHeight.current = height;
+      maybeFlash();
+    },
+    [maybeFlash],
+  );
   return (
     <ScrollView
       ref={ref}
@@ -176,6 +185,7 @@ export function DialogScroll({ children }: { children: React.ReactNode }) {
       persistentScrollbar
       onLayout={(e) => {
         viewportHeight.current = e.nativeEvent.layout.height;
+        maybeFlash();
       }}
       onContentSizeChange={onContentSizeChange}
     >

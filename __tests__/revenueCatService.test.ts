@@ -40,6 +40,7 @@ function mockCustomerInfo(
     periodType?: string;
     willRenew?: boolean;
     productIdentifier?: string;
+    expirationDate?: string | null;
   }> = {},
 ) {
   return {
@@ -293,12 +294,35 @@ describe("revenueCatService", () => {
           isActive: true,
           periodType: "NORMAL",
           willRenew: false,
+          expirationDate: "2026-12-20T12:00:00Z",
         },
       });
 
       expect(revenueCatService.getStatusFromCustomerInfo(info)).toBe(
         "cancelled",
       );
+    });
+
+    it("achat à vie (willRenew false, pas de date de fin) : actif, donc Premium (revue ECC 1.0.24)", () => {
+      const info = mockCustomerInfo({
+        premium: {
+          isActive: true,
+          periodType: "NORMAL",
+          willRenew: false,
+          expirationDate: null,
+          productIdentifier: "suivibaby_premium_lifetime",
+        },
+      });
+      const status = revenueCatService.getStatusFromCustomerInfo(info);
+      expect(status).toBe("active");
+      const { isEntitledSubscription } = require("@/utils/premiumEntitlement");
+      expect(
+        isEntitledSubscription({
+          tier: revenueCatService.getTierFromCustomerInfo(info),
+          status,
+          expiresAt: revenueCatService.getExpiresAtFromCustomerInfo(info),
+        }),
+      ).toBe(true);
     });
 
     it("should return 'active' for normal active subscription", () => {

@@ -12,11 +12,16 @@ import { getBackgroundTint, getNeutralColors } from '@/constants/dashboardColors
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getWaitingCount } from '@/services/offlineQueueService';
+import { captureServiceError } from '@/utils/errorReporting';
+
+/** Lecture de la file impossible : ne jamais afficher « rien en attente » à la place. */
+export const WAITING_UNKNOWN = 'unknown' as const;
 
 /** Texte d'état selon le nombre de saisies encore dans la file hors ligne. */
-export function backupStatusText(waiting: number | null): string {
+export function backupStatusText(waiting: number | null | typeof WAITING_UNKNOWN): string {
   if (waiting === null) return 'Vérification en cours…';
-  if (waiting === 0) return 'Tout est enregistré sur nos serveurs.';
+  if (waiting === WAITING_UNKNOWN) return "Impossible de vérifier l'envoi pour le moment. Réessayez plus tard.";
+  if (waiting === 0) return "Aucune saisie en attente d'envoi.";
   if (waiting === 1) return '1 saisie attend le réseau pour être envoyée.';
   return `${waiting} saisies attendent le réseau pour être envoyées.`;
 }
@@ -26,7 +31,7 @@ export default function BackupScreen() {
   const nc = getNeutralColors(colorScheme);
   const tint = Colors[colorScheme].tint;
   const router = useRouter();
-  const [waiting, setWaiting] = useState<number | null>(null);
+  const [waiting, setWaiting] = useState<number | null | typeof WAITING_UNKNOWN>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -35,8 +40,9 @@ export default function BackupScreen() {
         .then((n) => {
           if (active) setWaiting(n);
         })
-        .catch(() => {
-          if (active) setWaiting(0);
+        .catch((error) => {
+          captureServiceError(error, { service: 'offlineQueue', operation: 'getWaitingCount' });
+          if (active) setWaiting(WAITING_UNKNOWN);
         });
       return () => {
         active = false;
@@ -86,7 +92,8 @@ export default function BackupScreen() {
               là. Les proches invités voient les mêmes données.
             </ThemedText>
             <Text style={[styles.note, { color: nc.textLight }]}>
-              Données hébergées par Google Firebase dans l&apos;Union européenne.
+              Base de données hébergée par Google Firebase dans l&apos;Union européenne. Détails
+              dans Paramètres › Confidentialité.
             </Text>
           </View>
 

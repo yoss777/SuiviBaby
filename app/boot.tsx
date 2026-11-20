@@ -6,6 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Sentry from "@sentry/react-native";
 import { useNetInfo } from "@react-native-community/netinfo";
 
+import { captureServiceError } from "@/utils/errorReporting";
+
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import BackgroundImage from "@/components/ui/BackgroundImage";
 import { IconPulseDots } from "@/components/ui/IconPulseDtos";
@@ -37,6 +39,8 @@ const BOOT_AUTO_RETRY_INTERVAL_MS = 10_000;
 const BOOT_AUTO_RETRY_MAX = 12;
 /** Au-delà, l'écran de chargement propose « Réessayer » quoi qu'il bloque. */
 const BOOT_WATCHDOG_MS = 20_000;
+/** Pendant une demande d'empreinte affichée (l'utilisateur répond). */
+const BOOT_WATCHDOG_BIOMETRIC_MS = 60_000;
 /** Lectures locales ou réseau d'une étape du démarrage. */
 const BOOT_STEP_TIMEOUT_MS = 15_000;
 
@@ -308,6 +312,10 @@ function BootScreenContent() {
           // Unknown state (offline...): do not let the user through, offer retry.
           if (generation !== bootGenerationRef.current) return;
           console.warn("[BOOT] Lecture du consentement échouée:", error);
+          captureServiceError(error, {
+            service: "boot",
+            operation: error instanceof BootStepTimeoutError ? "consentRead.timeout" : "consentRead",
+          });
           consentCheckStartedRef.current = false;
           setConsentCheck("error");
         }
@@ -326,9 +334,13 @@ function BootScreenContent() {
         let enabled: boolean;
         try {
           enabled = await withBootTimeout(isBiometricEnabled());
-        } catch {
+        } catch (error) {
           // Lecture locale bloquée : on ne laisse pas passer sans le verrou,
           // et on ne déconnecte pas non plus. « Réessayer » relance l'étape.
+          captureServiceError(error, {
+            service: "boot",
+            operation: error instanceof BootStepTimeoutError ? "biometricEnabled.timeout" : "biometricEnabled",
+          });
           if (generation === bootGenerationRef.current) setBootTooLong(true);
           return;
         }
@@ -345,8 +357,9 @@ function BootScreenContent() {
             } else {
               setBiometricCheck("failed");
             }
-          } catch {
+          } catch (error) {
             if (generation !== bootGenerationRef.current) return;
+            captureServiceError(error, { service: "boot", operation: "biometricUnlock" });
             setBiometricCheck("failed");
           }
         }
@@ -469,24 +482,40 @@ function BootScreenContent() {
     (bootStalled && (authLoading || (!!user && babyLoading && children.length === 0)));
   const showBootFallback = networkFallback || bootTooLong;
 
+  // Demande d'empreinte affichée : l'utilisateur peut prendre son temps, la
+  // carte « Démarrage trop long » n'apparaît qu'au bout d'une minute.
+  const biometricPromptOpen = biometricCheck === "running";
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!hasNavigatedRef.current) setBootTooLong(true);
-    }, BOOT_WATCHDOG_MS);
+    }, biometricPromptOpen ? BOOT_WATCHDOG_BIOMETRIC_MS : BOOT_WATCHDOG_MS);
     return () => clearTimeout(timer);
-  }, [bootRetryKey]);
+  }, [bootRetryKey, biometricPromptOpen]);
 
-  const handleRetry = useCallback(() => {
+  // Essais automatiques épuisés : on le dit, pour que l'utilisateur appuie.
+  const [autoRetryExhausted, setAutoRetryExhausted] = useState(false);
+
+  /**
+   * auto : essai lancé par l'app (retour du réseau, filet de 10 s). Il ne
+   * touche jamais à l'étape d'empreinte : relancer une demande que
+   * l'utilisateur est en train de faire l'annulerait (et sur Android, un
+   * second appel peut échouer et déconnecter). Seul l'appui sur
+   * « Réessayer » relance une demande d'empreinte perdue.
+   */
+  const handleRetry = useCallback((opts?: { auto?: boolean }) => {
+    const auto = opts?.auto === true;
     setBootStalled(false);
     setBootTooLong(false);
+    if (!auto) setAutoRetryExhausted(false);
     setBootRetryKey((prev) => prev + 1);
-    bootGenerationRef.current += 1;
     if (consentCheck === "error" || consentCheck === "running") {
+      bootGenerationRef.current += 1;
       consentCheckStartedRef.current = false;
       setConsentCheck("pending");
     }
     // Étape d'empreinte jamais terminée (fenêtre perdue) : on la relance.
-    if (biometricCheck === "pending" || biometricCheck === "running") {
+    if (!auto && (biometricCheck === "pending" || biometricCheck === "running")) {
+      bootGenerationRef.current += 1;
       biometricCheckStartedRef.current = false;
       setBiometricCheck("pending");
     }
@@ -524,7 +553,8 @@ function BootScreenContent() {
     wasOnlineRef.current = isOnline;
     if (!cameOnline) return;
     autoRetryCountRef.current = 0;
-    if (networkFallback) handleRetryRef.current();
+    setAutoRetryExhausted(false);
+    if (networkFallback) handleRetryRef.current({ auto: true });
   }, [isOnline, networkFallback]);
 
   // Problèmes de réseau seulement : on ne relance jamais toutes les 10 s une
@@ -535,10 +565,11 @@ function BootScreenContent() {
     const interval = setInterval(() => {
       if (autoRetryCountRef.current >= BOOT_AUTO_RETRY_MAX) {
         clearInterval(interval);
+        setAutoRetryExhausted(true);
         return;
       }
       autoRetryCountRef.current += 1;
-      handleRetryRef.current();
+      handleRetryRef.current({ auto: true });
     }, BOOT_AUTO_RETRY_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [autoRetryActive]);
@@ -579,6 +610,8 @@ function BootScreenContent() {
                 <Text style={styles.feedbackHint}>
                   {isOffline
                     ? "Aucune connexion internet détectée."
+                    : autoRetryExhausted
+                    ? "La connexion semble instable. Appuyez sur Réessayer."
                     : "La connexion semble instable."}
                 </Text>
               )}
@@ -587,7 +620,7 @@ function BootScreenContent() {
                   styles.retryButton,
                   pressed && styles.retryButtonPressed,
                 ]}
-                onPress={handleRetry}
+                onPress={() => handleRetry()}
                 accessibilityRole="button"
                 accessibilityLabel="Réessayer le démarrage"
               >

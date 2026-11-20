@@ -134,4 +134,61 @@ describe("ThemeContext", () => {
     await mount();
     await waitFor(() => expect(set).toHaveBeenLastCalledWith("light"));
   });
+
+  it("première connexion, rien en base : le choix fait sur ce téléphone est gardé et enregistré", async () => {
+    await AsyncStorage.setItem("@suivibaby_dark_at_night", "0");
+    mockObtenir.mockResolvedValue({ theme: "light", darkAtNight: undefined });
+    await mount();
+    expect(ctx.darkAtNight).toBe(false);
+    expect(mockMaj).toHaveBeenCalledWith({ darkAtNight: false });
+    expect(ctx.syncedFromServer).toBe(true);
+  });
+
+  it("hors ligne : réglage pas relu sur le serveur (le message unique attendra)", async () => {
+    mockObtenir.mockRejectedValue(new Error("offline"));
+    await mount();
+    expect(ctx.syncedFromServer).toBe(false);
+  });
+
+  it("changement fait pendant la lecture serveur : la réponse tardive ne l'écrase pas", async () => {
+    let resolveRead: (v: unknown) => void = () => {};
+    mockObtenir.mockImplementation(() => new Promise((r) => (resolveRead = r)));
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    await waitFor(() => expect(ctx).toBeDefined());
+    await ctx.setPreference("dark");
+    await act(async () => resolveRead({ theme: "light", darkAtNight: true }));
+    expect(ctx.preference).toBe("dark");
+  });
+
+  it("deux changements rapides, le premier échoue : pas de retour arrière qui écrase le second", async () => {
+    mockObtenir.mockResolvedValue({ theme: "light", darkAtNight: false });
+    await mount();
+    let rejectFirst: (e: Error) => void = () => {};
+    mockMaj.mockImplementationOnce(() => new Promise((_, rej) => (rejectFirst = rej)));
+    const first = ctx.setPreference("auto");
+    await waitFor(() => expect(ctx.preference).toBe("auto"));
+    await ctx.setDarkAtNight(false);
+    await waitFor(() => expect(ctx.darkAtNight).toBe(false));
+    rejectFirst(new Error("offline"));
+    await expect(first).rejects.toThrow("offline");
+    await act(async () => {});
+    expect(ctx.preference).toBe("auto");
+    expect(ctx.darkAtNight).toBe(false);
+  });
+
+  it("changer de thème met à jour clavier et alertes", async () => {
+    mockHour = 10;
+    const set = jest.spyOn(Appearance, "setColorScheme").mockImplementation(() => {});
+    mockObtenir.mockResolvedValue({ theme: "auto", darkAtNight: true });
+    await mount();
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("auto"));
+    await ctx.setPreference("dark");
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("dark"));
+    await ctx.setPreference("light");
+    await waitFor(() => expect(set).toHaveBeenLastCalledWith("light"));
+  });
 });

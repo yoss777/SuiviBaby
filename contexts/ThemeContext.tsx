@@ -47,6 +47,8 @@ interface ThemeContextValue {
   /** Valeur enregistrée ; undefined = jamais touchée. */
   storedDarkAtNight: boolean | undefined;
   isLoading: boolean;
+  /** Réglages relus sur le serveur pendant cette session (faux hors ligne). */
+  syncedFromServer: boolean;
   /** Choisir Automatique active aussi « Sombre la nuit », dans la même écriture. */
   setPreference: (value: ThemePreference) => Promise<void>;
   setDarkAtNight: (value: boolean) => Promise<void>;
@@ -61,7 +63,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [storedDarkAtNight, setStoredDarkAtNight] = useState<boolean | undefined>(undefined);
   const [localLoaded, setLocalLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [syncedFromServer, setSyncedFromServer] = useState(false);
   const localLoadedRef = useRef(false);
+  // Incrémenté à chaque changement fait par l'utilisateur : une lecture
+  // serveur partie avant ne l'écrase pas, et seul le dernier changement en
+  // cours peut être annulé en cas d'échec d'écriture.
+  const editVersionRef = useRef(0);
+  const storedDarkAtNightRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    storedDarkAtNightRef.current = storedDarkAtNight;
+  }, [storedDarkAtNight]);
 
   // Step 1: Load local preference ASAP (fast, no network)
   useEffect(() => {
@@ -104,16 +115,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     let isMounted = true;
     setIsLoading(true);
+    const versionAtStart = editVersionRef.current;
 
     obtenirReglagesTheme()
       .then(({ theme, darkAtNight }) => {
         if (!isMounted) return;
+        setSyncedFromServer(true);
+        // Changement fait pendant la lecture : il prime (déjà envoyé).
+        if (editVersionRef.current !== versionAtStart) return;
         setPreferenceState(theme);
         AsyncStorage.setItem(THEME_STORAGE_KEY, theme).catch(() => {});
-        setStoredDarkAtNight(darkAtNight);
         if (darkAtNight === undefined) {
+          // Rien en base mais un choix fait sur ce téléphone (avant la
+          // connexion, ou hors ligne) : on le garde et on l'enregistre.
+          const local = storedDarkAtNightRef.current;
+          if (local !== undefined) {
+            mettreAJourReglagesTheme({ darkAtNight: local }).catch(() => {});
+            return;
+          }
+          setStoredDarkAtNight(undefined);
           AsyncStorage.removeItem(DARK_AT_NIGHT_STORAGE_KEY).catch(() => {});
         } else {
+          setStoredDarkAtNight(darkAtNight);
           AsyncStorage.setItem(DARK_AT_NIGHT_STORAGE_KEY, darkAtNight ? '1' : '0').catch(() => {});
         }
       })
@@ -175,6 +198,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     async (next: { theme?: ThemePreference; darkAtNight?: boolean }) => {
       const previousTheme = preference;
       const previousDark = storedDarkAtNight;
+      const version = ++editVersionRef.current;
       if (next.theme !== undefined) {
         setPreferenceState(next.theme);
         AsyncStorage.setItem(THEME_STORAGE_KEY, next.theme).catch(() => {});
@@ -189,6 +213,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       try {
         await mettreAJourReglagesTheme(next);
       } catch (error) {
+        // Un autre changement a suivi : c'est lui qui compte, pas de retour
+        // arrière qui l'écraserait.
+        if (version !== editVersionRef.current) throw error;
         setPreferenceState(previousTheme);
         AsyncStorage.setItem(THEME_STORAGE_KEY, previousTheme).catch(() => {});
         setStoredDarkAtNight(previousDark);
@@ -232,6 +259,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         darkAtNight,
         storedDarkAtNight,
         isLoading,
+        syncedFromServer,
         setPreference,
         setDarkAtNight,
       }}
