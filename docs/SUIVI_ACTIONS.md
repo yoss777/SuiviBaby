@@ -30,12 +30,12 @@ lignes étaient périmées : S6 (fiabilité, 6.1-6.9), S14 (TRANSFER), A4, 4.5 e
 | Id | Sujet | Taille | Preuve |
 |---|---|---|---|
 | R9 | ✅ 1.0.24 Android, ⚠️ iPhone → R22 — Jeton `device_tokens` non supprimé après une déconnexion hors ligne. La déconnexion ne supprime plus que le jeton de ce téléphone (avant : tous les appareils du compte perdaient notifications et widget). Android : si le document n'a pas pu être supprimé (hors ligne, délai, déconnexion forcée), le jeton FCM est supprimé (`unregisterForNotificationsAsync`) et le serveur efface le document au prochain envoi (DeviceNotRegistered) ; hors ligne, terminé au lancement suivant. iPhone : pas d'équivalent (la désinscription ne rend pas le jeton invalide et peut empêcher la réinscription, vérification ECC du 20/11) | M | `services/pushTokenService.ts` (`removePushTokens`, `stopPushOnThisDevice`, `stopPushAfterSessionEnd`), `contexts/AuthContext.tsx` |
-| R10 | ✅ 1.0.24 — InfoModal et PromptModal sans défilement en grande police : `DialogScroll` dans les quatre fenêtres (Confirmation, Information, Saisie, Choix) | S | seul `ConfirmModal.tsx` a un ScrollView |
+| R10 | InfoModal et PromptModal sans défilement en grande police | S | seul `ConfirmModal.tsx` a un ScrollView |
 | R11 | ✅ 1.0.24 — Bandeau « Pas de connexion internet » qui clignote à l'ouverture : venait de `components/ui/OfflineBanner.tsx`, jamais monté (code mort), supprimé. Le bandeau réellement affiché est « Hors ligne » dans `app/(drawer)/_layout.tsx`, qui ne s'affiche que si le téléphone est sûr d'être hors ligne (pas de clignotement) | S | `app/(drawer)/_layout.tsx:188` |
 | R12 | ✅ 1.0.24 — Durée enregistrée arrondie, chrono tronqué : minutes entières (`Math.floor`), comme le chrono | S | `hooks/useStopTimedEventWithUndo.ts` (`Math.floor`) |
 | R13 | ✅ 1.0.24 (à vérifier police au maximum) — Boutons du formulaire Température coupés en très grande police : pied des 8 formulaires sur une ligne (réduit si besoin), signes − et + plafonnés ×1,4 | S | `SoinsForm.tsx` |
 | R14 | Écritures live/nursing toutes « urgentes », sans limite de débit | M | `docs/strategie/ux/REVUE_ECC_LOT5_J6.md:61` |
-| R15 | ✅ 1.0.25 (règles, déployées à la fusion) — Règle `invitations` sans `email_verified` : la correspondance par adresse e-mail (lecture, liste, refus) exige maintenant une adresse vérifiée, comme `acceptInvitationCF` ; la correspondance par uid ne change pas | S | `firestore.rules:360` |
+| R15 | Règle `invitations` sans `email_verified` pour refuser (S5) | S | `firestore.rules:360` |
 | R16 | Retrait du bucket photos US et des miroirs (1.8, le 02/12) puis règles de transition (12.7 du plan d'audit, le 07/12) | M | `utils/photoStorage.ts:14,16` |
 | R17 | Captures du site avec l'app actuelle (2.5) | M | images inchangées depuis le 30/10 |
 | R18 | Workload Identity Federation au lieu de `GCP_SA_KEY` (11.7 du plan d'audit) | M | `.github/workflows/deploy-functions.yml:7-19` |

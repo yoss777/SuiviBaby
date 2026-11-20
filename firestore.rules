@@ -331,23 +331,14 @@ service cloud.firestore {
     // ============================================
 
     match /shareInvitations/{inviteId} {
-      // Correspondance par adresse e-mail : seulement une adresse vérifiée
-      // (R15, S5). Sinon, n'importe qui pouvait créer un compte avec l'adresse
-      // d'un invité, lire l'invitation (prénom de l'enfant, adresse de
-      // l'inviteur) et la refuser. acceptInvitationCF l'exige déjà
-      // (assertVerifiedEmail). La correspondance par uid ne change pas.
-      function emailMatches(field) {
-        return field is string &&
-          request.auth.token.email_verified == true &&
-          request.auth.token.email == field;
-      }
-
       // Lecture (get) : parties concernées uniquement
       allow get: if isSignedIn() && (
-        emailMatches(resource.data.invitedEmail) ||
+        (resource.data.invitedEmail is string &&
+         request.auth.token.email == resource.data.invitedEmail) ||
         request.auth.uid == resource.data.invitedUserId ||
         request.auth.uid == resource.data.inviterId ||
-        emailMatches(resource.data.inviterEmail)
+        (resource.data.inviterEmail is string &&
+         request.auth.token.email == resource.data.inviterEmail)
       );
 
       // Liste : uniquement ses propres invitations (envoyées ou reçues)
@@ -355,7 +346,7 @@ service cloud.firestore {
         request.query.limit <= 200 && (
           resource.data.inviterId == request.auth.uid ||
           resource.data.invitedUserId == request.auth.uid ||
-          emailMatches(resource.data.invitedEmail)
+          resource.data.invitedEmail == request.auth.token.email
         );
 
       // Création : uniquement via createShareInvitation (quota co-parents,
@@ -366,9 +357,11 @@ service cloud.firestore {
       // Mise à jour : l'invité peut seulement REFUSER une invitation en attente
       // (l'acceptation passe par acceptInvitationCF). Aucun autre champ
       // (childId, inviterId…) n'est modifiable.
+      // TODO(M2) : exiger email_verified ici et en lecture, une fois la
+      // vérification d'e-mail imposée à l'inscription.
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.invitedUserId ||
-        emailMatches(resource.data.invitedEmail)
+        request.auth.token.email == resource.data.invitedEmail
       ) &&
         resource.data.status == 'pending' &&
         request.resource.data.status == 'rejected' &&
