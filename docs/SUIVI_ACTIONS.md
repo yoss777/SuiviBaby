@@ -17,7 +17,7 @@ lignes étaient périmées : S6 (fiabilité, 6.1-6.9), S14 (TRANSFER), A4, 4.5 e
 | Id | Sujet | Taille | Preuve / reste |
 |---|---|---|---|
 | R1 | **Clés RevenueCat de production encore provisoires** : en version publiée, `getApiKey()` renvoie `null`, donc aucun achat possible | S (après création des apps RevenueCat par Yoss) | `services/revenueCatService.ts:19-22`. Débloque P4 du plan stratégique (tests achat, restauration, remboursement, fin d'essai sur les deux OS) |
-| R2 | Abonnement expiré encore vu Premium dans le repli Firestore et le cache (7 j) | S | `contexts/PremiumContext.tsx:118-148`, `:233-240` ne lisent pas `expiresAt` |
+| R2 | ✅ 1.0.24 (à vérifier avec un abonnement test annulé) — Abonnement expiré encore vu Premium dans le repli Firestore et le cache (7 j). Corrigé : même règle que le serveur (`utils/premiumEntitlement.ts`), `expiresAt` gardé dans la copie locale, retour en gratuit à l'échéance app ouverte | S | `contexts/PremiumContext.tsx:118-148`, `:233-240` ne lisent pas `expiresAt` |
 | R3 | Site faux par rapport à l'offre : « 2 co-parents invités » en gratuit, « commandes vocales illimitées », « rapports PDF » | S | `public/index.html:438`, `:451`, `:440`, `:452`, FAQ `:471` ; à corriger avant le déploiement du site (2.4) |
 | R4 | App Check non imposé en production | S (feu vert Yoss) | S4 ; commencer par les fonctions sensibles (`APPCHECK_ENFORCE_FUNCTIONS`) |
 | R5 | Rapport pédiatre (décision A du 11/11) inexistant | L | Conditionne O2, O3, O4, P2 du plan stratégique |

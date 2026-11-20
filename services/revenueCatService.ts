@@ -172,6 +172,18 @@ export function getStatusFromCustomerInfo(
 }
 
 /**
+ * Fin de la période payée de l'abonnement actif (ISO), null pour l'achat à
+ * vie ou sans abonnement. Gardée avec la copie locale : un abonnement annulé
+ * ne doit plus être vu Premium après cette date, même hors ligne.
+ */
+export function getExpiresAtFromCustomerInfo(customerInfo: CustomerInfo): string | null {
+  const entitlement =
+    customerInfo.entitlements.active[ENTITLEMENT_FAMILY] ??
+    customerInfo.entitlements.active[ENTITLEMENT_PREMIUM];
+  return entitlement?.expirationDate ?? null;
+}
+
+/**
  * Détermine le billing period (monthly, annual, lifetime) depuis CustomerInfo.
  */
 export function getBillingPeriodFromCustomerInfo(
