@@ -4,6 +4,7 @@
 // directement le formulaire de la catégorie sur l'Accueil, pour le bon bébé.
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef } from "react";
+import { Linking } from "react-native";
 
 import { useBaby } from "@/contexts/BabyContext";
 
@@ -38,6 +39,40 @@ export function widgetDeepLink(action: WidgetDeepLinkAction, childId?: string, n
   return `suivibaby:///baby/home?widget=${action}${childId ? `&child=${encodeURIComponent(childId)}` : ""}${nap === undefined ? "" : `&nap=${nap ? 1 : 0}`}`;
 }
 
+// Dernier lien traité, gardé hors du composant. Sur Android, quand l'activité
+// est recréée (taille de police changée app ouverte…), toute l'app remonte
+// avec le lien qui l'avait ouverte : sans ce garde, l'action était rejouée
+// (formulaire rouvert, sieste ou promenade relancée sans confirmation). Un
+// nouvel appui sur le widget arrive par un événement « url » : il remet le
+// garde à zéro, même si le lien est identique.
+let lastHandledWidgetLink: string | null = null;
+let linkingSubscribed = false;
+function subscribeLinkingOnce() {
+  if (linkingSubscribed) return;
+  linkingSubscribed = true;
+  try {
+    Linking.addEventListener("url", () => {
+      lastHandledWidgetLink = null;
+    });
+  } catch {
+    // Linking indisponible (tests) : le garde reste celui du composant
+  }
+}
+
+/** Tests uniquement. */
+export function resetWidgetDeepLinkGuardForTests() {
+  lastHandledWidgetLink = null;
+}
+
+function clearWidgetParams() {
+  try {
+    router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined, ask: undefined });
+  } catch (error) {
+    // Navigation pas encore prête : ne pas faire tomber l'Accueil pour ça.
+    console.warn("[widget] effacement du lien impossible:", error);
+  }
+}
+
 export function useWidgetDeepLink(opts: {
   /** Données de l'Accueil chargées : la feuille s'ouvre sur un état juste. */
   ready: boolean;
@@ -56,13 +91,23 @@ export function useWidgetDeepLink(opts: {
   const handledRef = useRef<string | null>(null);
 
   useEffect(() => {
+    subscribeLinkingOnce();
+  }, []);
+
+  useEffect(() => {
     if (!widget) {
       handledRef.current = null;
       return;
     }
     const key = `${widget}|${child ?? ""}|${nap ?? ""}|${ask ?? ""}`;
     if (handledRef.current === key) return;
-    const clear = () => router.setParams({ widget: undefined, child: undefined, nap: undefined, k: undefined, ask: undefined });
+    const clear = clearWidgetParams;
+    // Même lien que le dernier traité, sans nouvel appui : app remontée.
+    if (lastHandledWidgetLink === key) {
+      handledRef.current = key;
+      clear();
+      return;
+    }
     if (!ACTIONS.has(widget)) {
       clear();
       return;
@@ -77,6 +122,7 @@ export function useWidgetDeepLink(opts: {
     }
     if (!ready) return;
     handledRef.current = key;
+    lastHandledWidgetLink = key;
     const linkOpts = {
       ...(nap === "1" ? { nap: true } : nap === "0" ? { nap: false } : {}),
       ...(k ? { linkKey: k } : {}),
