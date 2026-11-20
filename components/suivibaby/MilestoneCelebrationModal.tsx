@@ -7,9 +7,10 @@
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { buildShareMessage, type MilestoneCelebration } from "@/services/milestoneCelebrationService";
+import { isShareAppLinkEnabled } from "@/services/shareConfigService";
 import { isReduceMotionEnabled } from "@/utils/motion";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -33,6 +34,19 @@ export function MilestoneCelebrationModal({ milestone, childName, onDismiss }: P
   const nc = getNeutralColors(colorScheme);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Lien du site dans le partage : interrupteur distant, coupé par défaut.
+  const [includeAppLink, setIncludeAppLink] = useState(false);
+
+  useEffect(() => {
+    if (!milestone) return;
+    let active = true;
+    isShareAppLinkEnabled().then((on) => {
+      if (active) setIncludeAppLink(on);
+    });
+    return () => {
+      active = false;
+    };
+  }, [milestone]);
 
   useEffect(() => {
     if (milestone) {
@@ -69,11 +83,12 @@ export function MilestoneCelebrationModal({ milestone, childName, onDismiss }: P
     if (!milestone) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await Share.share({ message: buildShareMessage(milestone, childName) });
+      // Lien dans `message` seulement (un `url` en plus le doublerait sur iOS).
+      await Share.share({ message: buildShareMessage(milestone, childName, { includeAppLink }) });
     } catch {
       // User cancelled share
     }
-  }, [milestone, childName]);
+  }, [milestone, childName, includeAppLink]);
 
   if (!milestone) return null;
 

@@ -17,6 +17,7 @@
 // Inactifs, faute de donnée peu coûteuse : streak_30d (la fenêtre locale ne
 // couvre que 8 jours), types "growth" et "first" (aucune détection).
 
+import { SHARE_APP_URL } from "@/constants/app";
 import { captureServiceError } from "@/utils/errorReporting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { countChildEvents, getFirstEventDate } from "@/services/eventsRepository";
@@ -199,10 +200,19 @@ export async function detectNewMilestones(
   return candidates;
 }
 
-/** Texte de partage (français) : « Léa a 1 mois de suivi sur SuiviBaby 🎉 ». */
-export function buildShareMessage(milestone: MilestoneCelebration, childName?: string): string {
+/**
+ * Texte de partage (français) : « Léa a 1 mois de suivi sur SuiviBaby 🎉 ».
+ * Avec `includeAppLink`, le lien du site est ajouté seul en dernière ligne
+ * (aucun identifiant dedans).
+ */
+export function buildShareMessage(
+  milestone: MilestoneCelebration,
+  childName?: string,
+  options: { includeAppLink?: boolean } = {},
+): string {
   const who = childName?.trim() || "Mon bébé";
-  return `${who} ${milestone.sharePhrase} sur SuiviBaby ${milestone.emoji}`;
+  const sentence = `${who} ${milestone.sharePhrase} sur SuiviBaby ${milestone.emoji}`;
+  return options.includeAppLink ? `${sentence}\n${SHARE_APP_URL}` : sentence;
 }
 
 // ============================================

@@ -39,6 +39,8 @@ lignes étaient périmées : S6 (fiabilité, 6.1-6.9), S14 (TRANSFER), A4, 4.5 e
 | R16 | Retrait du bucket photos US et des miroirs (1.8, le 02/12) puis règles de transition (12.7 du plan d'audit, le 07/12) | M | `utils/photoStorage.ts:14,16` |
 | R17 | Captures du site avec l'app actuelle (2.5) | M | images inchangées depuis le 30/10 |
 | R18 | Workload Identity Federation au lieu de `GCP_SA_KEY` (11.7 du plan d'audit) | M | `.github/workflows/deploy-functions.yml:7-19` |
+| R19 | Lien du site dans les partages de célébration : code prêt en 1.0.24 (`buildShareMessage`, `SHARE_APP_URL`), coupé par l'interrupteur `app_config/sharing.includeAppLink`. À allumer à la MEP (2/2/2027) une fois les fiches stores publiques et la page d'accueil corrigée (R3). Avis board + ECC du 20/11 : 7 « oui sous conditions », 13,9/20 ; lien = `https://suivibaby.com`, sans code parrain (décision de Yoss), prénom gardé | S | `services/milestoneCelebrationService.ts`, `services/shareConfigService.ts` |
+| R20 | Suivi des clics du lien de partage (`utm_source=celebration`) : seulement quand les analyses (R6) et la politique de confidentialité seront à jour. Bilan après environ 4 semaines | S | dépend de R6 |
 
 **Tests sur téléphone** : 27 à 31 (1.0.23), 5 à 8 encore « — », un test
 d'effacement des widgets restés en consentement 2.2, A4 avec de vrais comptes

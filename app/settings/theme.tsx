@@ -52,19 +52,19 @@ export default function ThemeScreen() {
       {
         value: "light",
         label: "Clair",
-        description: "Th\u00e8me clair pour une meilleure lisibilit\u00e9 en journ\u00e9e",
+        description: "Thème clair pour une meilleure lisibilité en journée",
         icon: "sunny",
       },
       {
         value: "dark",
         label: "Sombre",
-        description: "Th\u00e8me sombre pour r\u00e9duire la fatigue oculaire",
+        description: "Thème sombre pour réduire la fatigue oculaire",
         icon: "moon",
       },
       {
         value: "auto",
         label: "Automatique",
-        description: "Suit les param\u00e8tres syst\u00e8me de votre appareil",
+        description: "Suit les paramètres système de votre appareil",
         icon: "phone-portrait",
       },
     ],
@@ -187,7 +187,7 @@ export default function ThemeScreen() {
       >
         <Stack.Screen
           options={{
-            title: "Th\u00e8me",
+            title: "Thème",
             headerBackTitle: "Retour",
           }}
         />
@@ -221,8 +221,8 @@ export default function ThemeScreen() {
             />
             <ThemedText style={styles.infoText}>
               Le mode automatique adapte l&apos;apparence de l&apos;application en
-              fonction des param\u00e8tres de votre appareil pour un confort optimal
-              \u00e0 toute heure.
+              fonction des paramètres de votre appareil pour un confort optimal
+              à toute heure.
             </ThemedText>
           </View>
         </ScrollView>

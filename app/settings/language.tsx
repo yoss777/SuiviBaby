@@ -47,13 +47,13 @@ export default function LanguageScreen() {
 
   const languages = useMemo<Language[]>(
     () => [
-      { code: "fr", name: "French", nativeName: "Fran\u00e7ais", flag: "\ud83c\uddeb\ud83c\uddf7" },
-      { code: "en", name: "English", nativeName: "English", flag: "\ud83c\uddec\ud83c\udde7" },
-      { code: "es", name: "Spanish", nativeName: "Espa\u00f1ol", flag: "\ud83c\uddea\ud83c\uddf8" },
-      { code: "de", name: "German", nativeName: "Deutsch", flag: "\ud83c\udde9\ud83c\uddea" },
-      { code: "it", name: "Italian", nativeName: "Italiano", flag: "\ud83c\uddee\ud83c\uddf9" },
-      { code: "pt", name: "Portuguese", nativeName: "Portugu\u00eas", flag: "\ud83c\uddf5\ud83c\uddf9" },
-      { code: "ar", name: "Arabic", nativeName: "\u0627\u0644\u0639\u0631\u0628\u064a\u0629", flag: "\ud83c\uddf8\ud83c\udde6" },
+      { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷" },
+      { code: "en", name: "English", nativeName: "English", flag: "🇬🇧" },
+      { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸" },
+      { code: "de", name: "German", nativeName: "Deutsch", flag: "🇩🇪" },
+      { code: "it", name: "Italian", nativeName: "Italiano", flag: "🇮🇹" },
+      { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇵🇹" },
+      { code: "ar", name: "Arabic", nativeName: "العربية", flag: "🇸🇦" },
     ],
     []
   );
@@ -216,8 +216,8 @@ export default function LanguageScreen() {
               color={Colors[colorScheme].tint}
             />
             <ThemedText style={styles.infoText}>
-              Le changement de langue sera appliqu\u00e9 imm\u00e9diatement \u00e0 l&apos;ensemble
-              de l&apos;application. Les donn\u00e9es m\u00e9dicales resteront dans leur langue
+              Le changement de langue sera appliqué immédiatement à l&apos;ensemble
+              de l&apos;application. Les données médicales resteront dans leur langue
               d&apos;origine.
             </ThemedText>
           </View>

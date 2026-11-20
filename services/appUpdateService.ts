@@ -80,15 +80,3 @@ export async function checkForUpdate(): Promise<{
     return null;
   }
 }
-
-/**
- * Get the store URL for the current platform
- */
-export function getStoreUrl(): string {
-  const bundleId = "com.tesfa.suivibaby";
-  if (Platform.OS === "ios") {
-    // App Store link — replace APPLE_ID with real ID when published
-    return `https://apps.apple.com/app/suivi-baby/${bundleId}`;
-  }
-  return `https://play.google.com/store/apps/details?id=${bundleId}`;
-}
