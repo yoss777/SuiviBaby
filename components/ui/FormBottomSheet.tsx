@@ -20,6 +20,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -96,6 +97,8 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
     const onTint = Colors[colorScheme].onTint;
     const nc = getNeutralColors(colorScheme);
     const insets = useSafeAreaInsets();
+    const { fontScale } = useWindowDimensions();
+    const largeText = fontScale > LARGE_TEXT_FONT_SCALE;
     const scrollViewRef = useRef<any>(null);
     const panGestures = enablePanGestures ?? enablePanDownToClose;
     const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -178,7 +181,7 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
             }}
           >
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, largeText && styles.headerLargeText]}>
               {iconLib === "mci" ? (
                 <MaterialCommunityIcons name={icon as any} size={24} color={accentColor} />
               ) : (
@@ -187,6 +190,9 @@ export const FormBottomSheet = forwardRef<BottomSheet, FormBottomSheetProps>(
               <Text
                 accessibilityRole="header"
                 style={[styles.title, { color: nc.textStrong }]}
+                // Titre d'en-tête : agrandi ×1,6 au plus (le contenu de la
+                // feuille, lui, suit toute la taille réglée).
+                maxFontSizeMultiplier={TITLE_MAX_FONT_MULTIPLIER}
               >
                 {title}
               </Text>
@@ -291,6 +297,10 @@ FormBottomSheet.displayName = "FormBottomSheet";
 // STYLES
 // ============================================
 
+const TITLE_MAX_FONT_MULTIPLIER = 1.6;
+/** Au-delà, l'en-tête réserve la place de la croix. */
+const LARGE_TEXT_FONT_SCALE = 1.15;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -303,9 +313,12 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginBottom: space.lg,
     marginTop: 10,
-    // Place de la croix (44, décalée de 8) réservée des deux côtés : un titre
-    // long passe à la ligne au lieu de glisser sous la croix (police ×2,
-    // recette 1.0.24), et reste centré.
+  },
+  // Grande police : place de la croix (44, décalée de 8) réservée des deux
+  // côtés, pour qu'un titre long passe à la ligne au lieu de glisser sous la
+  // croix (police ×2, recette 1.0.24) tout en restant centré. Pas à taille
+  // normale : sur un petit écran, « Modifier l'activité » passerait à la ligne.
+  headerLargeText: {
     paddingHorizontal: 36,
   },
   title: {
