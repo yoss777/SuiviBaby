@@ -231,44 +231,61 @@ export async function createEmailInvitation(
 }
 
 /**
- * Récupère les invitations en attente pour l'utilisateur connecté
+ * Recherche des invitations par adresse e-mail : seulement une adresse
+ * vérifiée. Les règles l'exigeront (R15) ; l'acceptation l'exige déjà. Les
+ * invitations liées au compte (invitedUserId) restent visibles dans tous les
+ * cas.
+ */
+function canQueryByEmail(user: { email: string | null; emailVerified: boolean }): user is { email: string; emailVerified: true } {
+  return !!user.email && user.emailVerified === true;
+}
+
+function isPermissionDenied(error: unknown): boolean {
+  const code = (error as { code?: string })?.code ?? "";
+  return code === "permission-denied" || code.endsWith("/permission-denied");
+}
+
+/**
+ * Récupère les invitations en attente pour l'utilisateur connecté. Une
+ * requête refusée (adresse non vérifiée, par exemple) n'efface pas les
+ * résultats de l'autre.
  */
 export async function getPendingInvitations(): Promise<ShareInvitation[]> {
   try {
     const user = auth.currentUser;
-    if (!user || !user.email) return [];
-
-    const emailQuery = query(
-      collection(db, "shareInvitations"),
-      where("invitedEmail", "==", user.email.toLowerCase()),
-      where("status", "==", "pending"),
-    );
+    if (!user) return [];
 
     const userIdQuery = query(
       collection(db, "shareInvitations"),
       where("invitedUserId", "==", user.uid),
       where("status", "==", "pending"),
     );
+    const queries = [getDocs(userIdQuery)];
+    if (canQueryByEmail(user)) {
+      queries.push(
+        getDocs(
+          query(
+            collection(db, "shareInvitations"),
+            where("invitedEmail", "==", user.email.toLowerCase()),
+            where("status", "==", "pending"),
+          ),
+        ),
+      );
+    }
 
-    const [emailSnapshot, userSnapshot] = await Promise.all([
-      getDocs(emailQuery),
-      getDocs(userIdQuery),
-    ]);
-
+    const results = await Promise.allSettled(queries);
     const invitesById = new Map<string, ShareInvitation>();
-    emailSnapshot.docs.forEach((docSnap) => {
-      invitesById.set(docSnap.id, {
-        id: docSnap.id,
-        ...docSnap.data(),
-      } as ShareInvitation);
-    });
-    userSnapshot.docs.forEach((docSnap) => {
-      invitesById.set(docSnap.id, {
-        id: docSnap.id,
-        ...docSnap.data(),
-      } as ShareInvitation);
-    });
-
+    for (const result of results) {
+      if (result.status === "rejected") {
+        if (!isPermissionDenied(result.reason)) {
+          captureServiceError(result.reason, { service: "childSharing", operation: "getPendingInvitations" });
+        }
+        continue;
+      }
+      result.value.docs.forEach((docSnap) => {
+        invitesById.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as ShareInvitation);
+      });
+    }
     return Array.from(invitesById.values());
   } catch (error) {
     console.error("Erreur lors de la récupération des invitations:", error);
@@ -284,17 +301,19 @@ export function listenToPendingInvitations(
   callback: (invitations: ShareInvitation[]) => void,
 ): () => void {
   const user = auth.currentUser;
-  if (!user || !user.email) {
+  if (!user) {
     callback([]);
     return () => {};
   }
 
-  const emailQuery = query(
-    collection(db, "shareInvitations"),
-    where("invitedEmail", "==", user.email.toLowerCase()),
-    where("status", "==", "pending"),
-    limit(200)
-  );
+  const emailQuery = canQueryByEmail(user)
+    ? query(
+        collection(db, "shareInvitations"),
+        where("invitedEmail", "==", user.email.toLowerCase()),
+        where("status", "==", "pending"),
+        limit(200),
+      )
+    : null;
 
   const userIdQuery = query(
     collection(db, "shareInvitations"),
@@ -317,21 +336,28 @@ export function listenToPendingInvitations(
     callback(Array.from(invitesById.values()));
   };
 
-  const unsubscribeEmail = onSnapshot(
-    emailQuery,
-    (snapshot) => {
-      emailInvites = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as ShareInvitation[];
-      mergeAndEmit();
-    },
-    (error) => {
-      console.error("Erreur écoute invitations (email):", error);
-      captureServiceError(error, { service: "childSharing", operation: "listenToPendingInvitations.email" });
-      callback([]);
-    }
-  );
+  // Une écoute en erreur vide seulement sa propre part de la liste : avant,
+  // callback([]) effaçait aussi les invitations de l'autre écoute.
+  const unsubscribeEmail = emailQuery
+    ? onSnapshot(
+        emailQuery,
+        (snapshot) => {
+          emailInvites = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as ShareInvitation[];
+          mergeAndEmit();
+        },
+        (error) => {
+          if (!isPermissionDenied(error)) {
+            console.error("Erreur écoute invitations (email):", error);
+            captureServiceError(error, { service: "childSharing", operation: "listenToPendingInvitations.email" });
+          }
+          emailInvites = [];
+          mergeAndEmit();
+        },
+      )
+    : () => {};
 
   const unsubscribeUserId = onSnapshot(
     userIdQuery,
@@ -345,7 +371,8 @@ export function listenToPendingInvitations(
     (error) => {
       console.error("Erreur écoute invitations (uid):", error);
       captureServiceError(error, { service: "childSharing", operation: "listenToPendingInvitations.uid" });
-      callback([]);
+      userInvites = [];
+      mergeAndEmit();
     }
   );
 
@@ -362,6 +389,8 @@ export async function cleanupDuplicatePendingInvitations(
   invitedEmail?: string,
 ): Promise<number> {
   const user = auth.currentUser;
+  // Sa propre adresse non vérifiée : la recherche serait refusée (R15).
+  if (!invitedEmail && user && !canQueryByEmail(user)) return 0;
   const email = (invitedEmail ?? user?.email ?? "").toLowerCase();
   if (!email) return 0;
 

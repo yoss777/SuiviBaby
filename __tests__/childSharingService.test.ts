@@ -21,7 +21,7 @@ import { createShareInvitationCF } from "@/services/premiumUsageService";
 
 // Mock config/firebase
 jest.mock("@/config/firebase", () => ({
-  auth: { currentUser: { uid: "test-uid", email: "test@example.com" } },
+  auth: { currentUser: { uid: "test-uid", email: "test@example.com", emailVerified: true } },
   db: {},
   functions: {},
 }));
@@ -118,7 +118,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   // Reset currentUser to default
   const auth = getAuthMock();
-  auth.currentUser = { uid: "test-uid", email: "test@example.com" };
+  auth.currentUser = { uid: "test-uid", email: "test@example.com", emailVerified: true };
 
   // Make doc() return a mock ref so assertions with expect.anything() work
   (doc as jest.Mock).mockReturnValue({ id: "mock-doc-ref", path: "mock/path" });
@@ -645,16 +645,44 @@ describe("childSharingService", () => {
       expect(invitations).toEqual([]);
     });
 
-    it("should return empty array when user has no email", async () => {
-      getAuthMock().currentUser = { uid: "test-uid", email: null };
+    it("no email: only the account (uid) query runs", async () => {
+      getAuthMock().currentUser = { uid: "test-uid", email: null, emailVerified: false };
+      const inviteU = mockDocSnap(true, { childId: "child-u" }, "inv-u");
+      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([inviteU]));
 
       const invitations = await getPendingInvitations();
 
-      expect(invitations).toEqual([]);
+      expect(getDocs).toHaveBeenCalledTimes(1);
+      expect(invitations.map((i) => i.id)).toEqual(["inv-u"]);
     });
 
-    it("should return empty array on error (does not throw)", async () => {
-      (getDocs as jest.Mock).mockRejectedValueOnce(new Error("fail"));
+    it("unverified email: no query by email, account invitations still listed (R15)", async () => {
+      getAuthMock().currentUser = { uid: "test-uid", email: "test@example.com", emailVerified: false };
+      const inviteU = mockDocSnap(true, { childId: "child-u" }, "inv-u");
+      (getDocs as jest.Mock).mockResolvedValueOnce(mockQuerySnap([inviteU]));
+
+      const invitations = await getPendingInvitations();
+
+      expect(getDocs).toHaveBeenCalledTimes(1);
+      expect(invitations.map((i) => i.id)).toEqual(["inv-u"]);
+    });
+
+    it("email query denied: account invitations kept, no error report", async () => {
+      const inviteU = mockDocSnap(true, { childId: "child-u" }, "inv-u");
+      (getDocs as jest.Mock)
+        .mockResolvedValueOnce(mockQuerySnap([inviteU])) // uid query
+        .mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "permission-denied" })); // email query
+
+      const invitations = await getPendingInvitations();
+
+      expect(invitations.map((i) => i.id)).toEqual(["inv-u"]);
+      expect(captureServiceError).not.toHaveBeenCalled();
+    });
+
+    it("unexpected error: reported, never throws", async () => {
+      (getDocs as jest.Mock)
+        .mockRejectedValueOnce(new Error("fail"))
+        .mockResolvedValueOnce(mockQuerySnap([]));
 
       const invitations = await getPendingInvitations();
 
@@ -872,6 +900,28 @@ describe("childSharingService", () => {
 
       expect(callback).toHaveBeenCalledWith([]);
       expect(typeof unsub).toBe("function");
+    });
+
+    it("unverified email: only the account (uid) listener (R15)", () => {
+      getAuthMock().currentUser = { uid: "test-uid", email: "test@example.com", emailVerified: false };
+      listenToPendingInvitations(jest.fn());
+      expect(onSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("email listener denied: account invitations are NOT wiped", () => {
+      const callback = jest.fn();
+      const handlers: { next: (s: unknown) => void; error: (e: unknown) => void }[] = [];
+      (onSnapshot as jest.Mock).mockImplementation((_q: unknown, next: any, error: any) => {
+        handlers.push({ next, error });
+        return jest.fn();
+      });
+      listenToPendingInvitations(callback);
+      const [emailListener, uidListener] = handlers;
+      uidListener.next(mockQuerySnap([mockDocSnap(true, { childId: "c" }, "inv-u")]));
+      emailListener.error(Object.assign(new Error("denied"), { code: "permission-denied" }));
+      const last = callback.mock.calls[callback.mock.calls.length - 1][0];
+      expect(last.map((i: { id: string }) => i.id)).toEqual(["inv-u"]);
+      expect(captureServiceError).not.toHaveBeenCalled();
     });
 
     it("should set up two onSnapshot listeners", () => {
