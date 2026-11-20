@@ -9,8 +9,12 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 const mockReplace = jest.fn();
 jest.mock("expo-router", () => ({ router: { replace: (...a: unknown[]) => mockReplace(...a) } }));
 
+let mockNet: { isConnected: boolean | null; isInternetReachable: boolean | null } = {
+  isConnected: true,
+  isInternetReachable: true,
+};
 jest.mock("@react-native-community/netinfo", () => ({
-  useNetInfo: () => ({ isConnected: true, isInternetReachable: true }),
+  useNetInfo: () => mockNet,
   addEventListener: jest.fn(() => jest.fn()),
   fetch: jest.fn(() => Promise.resolve({ isConnected: true })),
 }));
@@ -105,6 +109,7 @@ async function boot() {
 }
 
 beforeEach(() => {
+  mockNet = { isConnected: true, isInternetReachable: true };
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockHasOnboarded.mockResolvedValue(true);
@@ -204,5 +209,62 @@ describe("boot.tsx routing", () => {
     await boot();
     expect(signOut).toHaveBeenCalled();
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
+  });
+
+  describe("test 27 : retour du réseau après un lancement hors ligne", () => {
+    async function bootDegradedOffline() {
+      const refreshUser = jest.fn(() => Promise.resolve());
+      setAuth({ user: null, status: "degraded", refreshUser });
+      mockNet = { isConnected: false, isInternetReachable: false };
+      const r = render(<BootScreen />);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      return { ...r, refreshUser };
+    }
+    async function setNet(net: typeof mockNet, rerender: (el: React.ReactElement) => void) {
+      mockNet = net;
+      rerender(<BootScreen />);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+    }
+
+    it("hors ligne : aucun essai automatique", async () => {
+      const { refreshUser, getByText } = await bootDegradedOffline();
+      expect(getByText("Connexion indisponible")).toBeTruthy();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+      expect(refreshUser).not.toHaveBeenCalled();
+    });
+
+    it("Wi-Fi revenu mais internet pas encore confirmé, puis confirmé : un essai à la confirmation", async () => {
+      const { refreshUser, rerender } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      expect(refreshUser).not.toHaveBeenCalled();
+      await setNet({ isConnected: true, isInternetReachable: true }, rerender);
+      expect(refreshUser).toHaveBeenCalledTimes(1);
+    });
+
+    it("le premier essai échoue : nouvel essai toutes les 10 s", async () => {
+      const { refreshUser, rerender } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(30_000);
+      });
+      expect(refreshUser).toHaveBeenCalledTimes(3);
+    });
+
+    it("12 essais au plus, puis seul « Réessayer » relance", async () => {
+      const { refreshUser, rerender, getByText } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60_000);
+      });
+      expect(refreshUser).toHaveBeenCalledTimes(12);
+      fireEvent.press(getByText("Réessayer"));
+      expect(refreshUser).toHaveBeenCalledTimes(13);
+    });
   });
 });

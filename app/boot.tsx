@@ -33,6 +33,8 @@ import { hasCompletedOnboarding } from "./(auth)/onboarding";
 import { neutralColors } from "@/constants/dashboardColors";
 
 const BOOT_NETWORK_TIMEOUT_MS = 8000;
+const BOOT_AUTO_RETRY_INTERVAL_MS = 10_000;
+const BOOT_AUTO_RETRY_MAX = 12;
 
 function logBoot(...args: unknown[]) {
   if (__DEV__ && process.env.NODE_ENV !== "test") {
@@ -442,14 +444,45 @@ function BootScreenContent() {
     }
   }, [consentCheck, firebaseUser, refreshUser]);
 
-  // Session gardée sans réseau (mode dégradé) : nouvel essai automatique dès
-  // que le réseau revient, sans attendre un appui sur « Réessayer ».
-  const wasOfflineRef = useRef(isOffline);
+  // Retour automatique après un démarrage hors ligne (test 27), sans attendre
+  // un appui sur « Réessayer » :
+  // 1. dès qu'internet est confirmé joignable (isInternetReachable passe à
+  //    vrai : au simple retour du Wi-Fi il vaut encore null, et un essai
+  //    lancé à ce moment échoue) ;
+  // 2. filet : tant que l'écran « Connexion … » est affiché et que le
+  //    téléphone n'est pas hors ligne, un essai toutes les 10 s (12 au plus),
+  //    car Firestore peut mettre jusqu'à ~60 s à se reconnecter seul.
+  const handleRetryRef = useRef(handleRetry);
   useEffect(() => {
-    const cameBack = wasOfflineRef.current && !isOffline;
-    wasOfflineRef.current = isOffline;
-    if (cameBack && hasAuthDegradedSession) handleRetry();
-  }, [isOffline, hasAuthDegradedSession, handleRetry]);
+    handleRetryRef.current = handleRetry;
+  }, [handleRetry]);
+  const isOnline = netInfo.isConnected === true && netInfo.isInternetReachable === true;
+  const wasOnlineRef = useRef(isOnline);
+  // Compteur hors effet : un essai masque l'écran « Connexion … » quelques
+  // secondes puis il revient ; le compteur ne repart à zéro qu'à un nouveau
+  // retour du réseau, sinon le plafond ne serait jamais atteint.
+  const autoRetryCountRef = useRef(0);
+  useEffect(() => {
+    const cameOnline = !wasOnlineRef.current && isOnline;
+    wasOnlineRef.current = isOnline;
+    if (!cameOnline) return;
+    autoRetryCountRef.current = 0;
+    if (showBootFallback) handleRetryRef.current();
+  }, [isOnline, showBootFallback]);
+
+  const autoRetryActive = showBootFallback && !isOffline;
+  useEffect(() => {
+    if (!autoRetryActive) return;
+    const interval = setInterval(() => {
+      if (autoRetryCountRef.current >= BOOT_AUTO_RETRY_MAX) {
+        clearInterval(interval);
+        return;
+      }
+      autoRetryCountRef.current += 1;
+      handleRetryRef.current();
+    }, BOOT_AUTO_RETRY_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [autoRetryActive]);
 
   const fallbackTitle = isOffline
     ? "Connexion indisponible"
