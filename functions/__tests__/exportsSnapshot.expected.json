@@ -561,6 +561,19 @@
     "labels": {},
     "httpsTrigger": {}
   },
+  "revokeDeviceToken": {
+    "platform": "gcfv2",
+    "region": [
+      "europe-west1"
+    ],
+    "labels": {},
+    "callableTrigger": {},
+    "callableOptions": {
+      "enforceAppCheck": false,
+      "consumeAppCheckToken": false,
+      "cors": "default"
+    }
+  },
   "sendDeletionRequestEmail": {
     "platform": "gcfv2",
     "region": [
