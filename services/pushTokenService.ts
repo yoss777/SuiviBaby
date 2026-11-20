@@ -8,17 +8,13 @@ import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import {
-  collection,
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
-  query,
   setDoc,
   deleteField,
   Timestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 import { widgetPushIosCap } from "@/services/widgetPushIos";
@@ -366,11 +362,22 @@ async function isOfflineNow(): Promise<boolean> {
   }
 }
 
-export async function removePushTokens(userId: string): Promise<void> {
+/**
+ * Fin de session sur CE téléphone : seul son jeton est supprimé. Avant, tous
+ * les jetons du compte (tous ses appareils) l'étaient : se déconnecter de
+ * l'un coupait les notifications et le widget des autres jusqu'à leur
+ * prochaine ouverture de l'app.
+ */
+// `_userId` : gardé pour les appelants ; seul le jeton de ce téléphone est visé.
+export async function removePushTokens(_userId: string): Promise<void> {
+  // Jeton de ce téléphone, lu avant toute remise à zéro.
+  const docId = getTokenDocId();
   // Remise à zéro AVANT les appels réseau : un nouvel essai planifié ne doit
   // ni réécrire l'enfant ni réenregistrer le jeton pendant la déconnexion,
   // même si la suppression échoue. Le prochain enregistrement réécrit l'enfant.
   resetPushSession();
+  // Génération de la session qui suit cette déconnexion.
+  const genAtSignOut = sessionGen;
   // Hors connexion : ni l'enregistrement en cours ni la suppression ne peuvent
   // aboutir avant la déconnexion (le serveur refusera ensuite, faute
   // d'authentification). On n'attend pas : la déconnexion prenait 5 s et plus
@@ -406,17 +413,29 @@ export async function removePushTokens(userId: string): Promise<void> {
   // suppressions ne se terminent qu'au retour du réseau, et la déconnexion
   // restait figée. Au-delà du délai, on continue et on le signale (le
   // téléphone, lui, n'applique plus rien : widget vidé, enfant oublié).
+  // Nouvelle connexion commencée sur ce téléphone depuis la déconnexion
+  // (même document, puisqu'il dérive du jeton) : c'est elle qui fait foi,
+  // on ne supprime pas son jeton.
+  if (lastStartedGen >= genAtSignOut) return;
+  // Jeton inconnu (enregistrement jamais abouti pendant cette session) : on
+  // ne peut pas viser le document ; on rend le jeton invalide, le serveur le
+  // supprimera au prochain envoi (R9).
+  if (!docId) {
+    await stopPushOnThisDevice();
+    return;
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = Symbol("timeout");
   try {
-    const removal = (async () => {
-      const q = query(
-        collection(db, COLLECTION),
-        where("userId", "==", userId),
-      );
-      const snapshot = await getDocs(q);
-      await Promise.all(snapshot.docs.map((d) => deleteDoc(d.ref)));
-    })();
+    const removal = (lastStartedGen >= genAtSignOut
+      ? Promise.resolve()
+      : deleteDoc(doc(db, COLLECTION, docId))
+    ).catch((error: unknown) => {
+      // Document absent ou repris par un autre compte sur ce téléphone :
+      // rien à supprimer pour celui-ci.
+      if ((error as { code?: string })?.code === "permission-denied") return;
+      throw error;
+    });
     const outcome = await Promise.race([
       removal.then(() => undefined),
       new Promise<typeof timedOut>((resolve) => {

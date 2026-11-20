@@ -280,7 +280,9 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     expect(signedOut).toBe(false); // attend l'enregistrement en cours
     hold.finish();
     await Promise.all([pending, signOut]);
-    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    // Le jeton recréé par l'enregistrement en cours est supprimé (document de
+    // ce téléphone, suppression idempotente).
+    expect(deleteDoc).toHaveBeenCalled();
   });
 
   it("hors ligne, enregistrement qui ne se termine pas : la déconnexion n'attend que 5 s", async () => {
@@ -295,7 +297,7 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     jest.advanceTimersByTime(SIGN_OUT_WAIT_MS);
     await signOut;
     expect(signedOut).toBe(true);
-    expect(getDocs).toHaveBeenCalled();
+    expect(deleteDoc).toHaveBeenCalled();
     // Réseau revenu : l'écriture se termine, le jeton recréé est supprimé.
     hold.finish();
     await pending;
@@ -312,7 +314,8 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
   });
 
   it("hors ligne, suppression des jetons qui ne se termine pas : la déconnexion n'attend que 5 s", async () => {
-    mocked(getDocs).mockImplementationOnce(() => new Promise(() => {})); // jamais résolue
+    await registerPushToken("u1"); // jeton de ce téléphone connu
+    mocked(deleteDoc).mockImplementationOnce(() => new Promise(() => {})); // jamais résolue
     let signedOut = false;
     const signOut = removePushTokens("u1").then(() => (signedOut = true));
     // Lecture du réseau (NetInfo) avant les attentes bornées : laisser passer.
@@ -440,5 +443,24 @@ describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (
     await registerPushToken("u2");
     await Promise.resolve();
     expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBeUndefined();
+  });
+});
+
+describe("déconnexion : seul le jeton de ce téléphone est supprimé", () => {
+  it("supprime le document de ce téléphone, sans toucher aux autres appareils du compte", async () => {
+    const NetInfo = require("@react-native-community/netinfo");
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(setDoc).mockResolvedValue(undefined);
+    mocked(deleteDoc).mockResolvedValue(undefined);
+    const firestore = require("firebase/firestore");
+    await registerPushToken("u1");
+    mocked(firestore.doc).mockClear();
+    await removePushTokens("u1");
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(deleteDoc).toHaveBeenCalledTimes(1);
+    expect(firestore.doc).toHaveBeenCalledWith(expect.anything(), "device_tokens", "ExponentPushToken_abc_");
+    jest.restoreAllMocks();
   });
 });
