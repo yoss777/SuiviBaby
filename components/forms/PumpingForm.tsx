@@ -284,9 +284,8 @@ export function PumpingForm({
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité gauche"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -311,9 +310,8 @@ export function PumpingForm({
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité gauche"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -345,9 +343,8 @@ export function PumpingForm({
               disabled={isSubmitting}
               accessibilityLabel="Diminuer quantité droite"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -372,9 +369,8 @@ export function PumpingForm({
               disabled={isSubmitting}
               accessibilityLabel="Augmenter quantité droite"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -415,7 +411,7 @@ export function PumpingForm({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -437,9 +433,8 @@ export function PumpingForm({
                 size="small"
               />
             ) : (
-              <Text
-                style={[
-                  styles.validateText,
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+                style={[styles.validateText,
                   {
                     color: accentColors.filledText,
                   },

@@ -104,6 +104,17 @@ describe("MilestoneCelebrationModal", () => {
     expect(share).toHaveBeenCalledWith({ message: "Léa a 1 mois de suivi sur SuiviBaby 🎉" });
   });
 
+  it("lien activé : le site en dernière ligne", async () => {
+    const share = jest.spyOn(Share, "share").mockResolvedValue({ action: "sharedAction" } as any);
+    render(<MilestoneCelebrationModal milestone={milestone} childName="Léa" includeAppLink onDismiss={() => {}} />);
+    await act(async () => {
+      fireEvent.press(screen.getByRole("button", { name: "Partager" }));
+    });
+    expect(share).toHaveBeenCalledWith({
+      message: "Léa a 1 mois de suivi sur SuiviBaby 🎉\nhttps://suivibaby.com",
+    });
+  });
+
   it("n'écrit plus dans le stockage : le marquage se fait à l'affichage", () => {
     const AsyncStorage = require("@react-native-async-storage/async-storage");
     AsyncStorage.setItem.mockClear();

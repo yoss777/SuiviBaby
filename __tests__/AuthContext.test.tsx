@@ -26,6 +26,8 @@ jest.mock("@/services/pushTokenService", () => ({
   registerPushToken: jest.fn(() => Promise.resolve()),
   removePushTokens: jest.fn(() => Promise.resolve()),
   resetPushSession: jest.fn(),
+  stopPushAfterSessionEnd: jest.fn(() => Promise.resolve()),
+  retryPendingPushUnregister: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock("@/services/offlineQueueService", () => ({
@@ -317,6 +319,17 @@ describe("AuthContext", () => {
       expect(result.current.loading).toBe(false);
     });
 
+    it("lancement sans compte : termine une désinscription restée à faire, sans en lancer une nouvelle (R9)", async () => {
+      renderHook(() => useAuth(), { wrapper });
+      const authCallback = captureAuthCallback();
+      await act(async () => {
+        await authCallback(null);
+      });
+      const push = require("@/services/pushTokenService");
+      expect(push.retryPendingPushUnregister).toHaveBeenCalledTimes(1);
+      expect(push.stopPushAfterSessionEnd).not.toHaveBeenCalled();
+    });
+
     it("should clear caches on signOut", async () => {
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -351,6 +364,9 @@ describe("AuthContext", () => {
       expect(resetChildPermissionsStore).toHaveBeenCalled();
       // Plus aucun essai de jeton ou d'enfant du widget pour l'ancien compte.
       expect(require("@/services/pushTokenService").resetPushSession).toHaveBeenCalled();
+      // R9 : le jeton de ce téléphone est rendu invalide pour l'ancien compte.
+      expect(require("@/services/pushTokenService").stopPushAfterSessionEnd).toHaveBeenCalled();
+      expect(require("@/services/pushTokenService").retryPendingPushUnregister).not.toHaveBeenCalled();
     });
 
     it("still signs out when the export cleanup fails", async () => {

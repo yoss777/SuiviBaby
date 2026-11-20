@@ -1,5 +1,12 @@
-import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  Modal,
+  Pressable,
+  Text,
+  type TextLayoutEvent,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import {
   getNeutralColors,
@@ -9,7 +16,14 @@ import {
 import { getReadableTextColor } from "@/constants/theme";
 import { elevation, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { DialogButton, dialogStyles } from "./DialogParts";
+import {
+  DialogButton,
+  DialogScroll,
+  DialogTitle,
+  dialogStyles,
+  dialogTextWidth,
+  estimateBoldTextWidth,
+} from "./DialogParts";
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -60,7 +74,6 @@ const NOOP = () => {};
  * taille du texte réglée par l'utilisateur (iPhone SE, texte agrandi).
  * Sinon : boutons empilés, action en haut, annulation en dessous.
  */
-const AVG_CHAR_WIDTH = 8.5; // pt, texte 16 semi-gras, minuscules (boutons des fenêtres)
 export function buttonsFitSideBySide(
   labels: string[],
   windowWidth: number,
@@ -68,12 +81,13 @@ export function buttonsFitSideBySide(
 ): boolean {
   // Mêmes mesures que dialogStyles (marge 20, boîte ≤ 400, intérieur 24) et
   // DialogButton (marge intérieure 16, écart 12).
-  const dialogWidth = Math.min(windowWidth - 2 * space.lg, 400);
-  const buttonWidth = (dialogWidth - 2 * space.xl - space.sm) / 2;
+  const buttonWidth = (dialogTextWidth(windowWidth) - space.sm) / 2;
   const textWidth = buttonWidth - 2 * space.md;
-  const longest = Math.max(...labels.map((l) => l.length));
+  const longest = Math.max(...labels.map((l) => estimateBoldTextWidth(l, 16)));
   // Texte des boutons plafonné à ×2 (DialogButton, maxFontSizeMultiplier).
-  return longest * AVG_CHAR_WIDTH * Math.min(Math.max(1, fontScale), 2) <= textWidth;
+  // Ce n'est qu'une estimation : si un libellé passe quand même à la ligne,
+  // la fenêtre empile les boutons après la mesure (ConfirmModal).
+  return longest * Math.min(Math.max(1, fontScale), 2) <= textWidth;
 }
 
 export function ConfirmModal({
@@ -103,8 +117,20 @@ export function ConfirmModal({
     confirmTextColor ?? getReadableTextColor(confirmButtonColor);
   const confirmVariant = confirmButtonColor === DESTRUCTIVE_COLOR ? "destructive" : "primary";
   const { width: windowWidth, fontScale } = useWindowDimensions();
-  const stacked = !buttonsFitSideBySide([confirmText, cancelText], windowWidth, fontScale);
+  // Libellé passé à la ligne malgré l'estimation (largeur réelle des lettres,
+  // police du système) : on empile. Recalculé quand les libellés ou la police
+  // changent.
+  const layoutKey = `${confirmText}|${cancelText}|${windowWidth}|${fontScale}`;
+  const [wrappedFor, setWrappedFor] = useState<string | null>(null);
+  const stacked =
+    wrappedFor === layoutKey || !buttonsFitSideBySide([confirmText, cancelText], windowWidth, fontScale);
   const layout = stacked ? "stack" : "row";
+  const onButtonTextLayout = useCallback(
+    (event: TextLayoutEvent) => {
+      if (!stacked && event.nativeEvent.lines.length > 1) setWrappedFor(layoutKey);
+    },
+    [stacked, layoutKey],
+  );
   const cancelButton = (
     <DialogButton
       key="cancel"
@@ -114,6 +140,7 @@ export function ConfirmModal({
       color={cancelButtonColor}
       textColor={cancelTextColor}
       onPress={onCancel}
+      onTextLayout={onButtonTextLayout}
     />
   );
   const confirmButton = (
@@ -125,6 +152,7 @@ export function ConfirmModal({
       color={confirmButtonColor}
       textColor={resolvedConfirmTextColor}
       onPress={onConfirm}
+      onTextLayout={onButtonTextLayout}
     />
   );
   return (
@@ -150,16 +178,14 @@ export function ConfirmModal({
         >
           {/* Titre et texte défilent ensemble ; la boîte ne dépasse jamais
               l'écran (dialogStyles.card), les boutons restent en dessous. */}
-          <ScrollView style={styles.scroll} bounces={false} keyboardShouldPersistTaps="handled">
-            <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
-              {title}
-            </Text>
+          <DialogScroll>
+            <DialogTitle title={title} color={ink} />
             {typeof message === "string" ? (
               <Text style={[dialogStyles.message, { color: textColor ?? nc.textNormal }]}>{message}</Text>
             ) : (
               <View style={dialogStyles.messageContainer}>{message}</View>
             )}
-          </ScrollView>
+          </DialogScroll>
 
           <View style={stacked ? dialogStyles.buttonsStack : dialogStyles.buttonsRow}>
             {stacked ? [confirmButton, cancelButton] : [cancelButton, confirmButton]}
@@ -169,9 +195,3 @@ export function ConfirmModal({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  // Se réduit quand la boîte atteint sa hauteur maximale (flexGrow 0 : pas
-  // d'espace vide quand le texte est court).
-  scroll: { flexGrow: 0, flexShrink: 1 },
-});

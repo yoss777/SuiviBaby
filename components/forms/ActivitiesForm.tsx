@@ -539,9 +539,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               disabled={isSubmitting}
               accessibilityLabel="Diminuer la durée"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -566,9 +565,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
               disabled={isSubmitting}
               accessibilityLabel="Augmenter la durée"
             >
-              <Text
-                style={[
-                  styles.quantityButtonText,
+              <Text maxFontSizeMultiplier={1.4}
+                style={[styles.quantityButtonText,
                   { color: nc.textStrong },
                   isSubmitting && { color: nc.textLight },
                 ]}
@@ -627,7 +625,7 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -644,9 +642,8 @@ export const ActivitiesForm: React.FC<ActivitiesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text
-              style={[
-                styles.validateText,
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+              style={[styles.validateText,
                 {
                   color: chipActiveColors.filledText,
                 },

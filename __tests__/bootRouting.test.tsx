@@ -9,8 +9,12 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 const mockReplace = jest.fn();
 jest.mock("expo-router", () => ({ router: { replace: (...a: unknown[]) => mockReplace(...a) } }));
 
+let mockNet: { isConnected: boolean | null; isInternetReachable: boolean | null } = {
+  isConnected: true,
+  isInternetReachable: true,
+};
 jest.mock("@react-native-community/netinfo", () => ({
-  useNetInfo: () => ({ isConnected: true, isInternetReachable: true }),
+  useNetInfo: () => mockNet,
   addEventListener: jest.fn(() => jest.fn()),
   fetch: jest.fn(() => Promise.resolve({ isConnected: true })),
 }));
@@ -18,6 +22,7 @@ jest.mock("@react-native-community/netinfo", () => ({
 jest.mock("@sentry/react-native", () => ({
   startInactiveSpan: jest.fn(() => ({ end: jest.fn() })),
   captureException: jest.fn(),
+  withScope: (fn: (scope: unknown) => void) => fn({ setTag: jest.fn(), setExtras: jest.fn() }),
   addBreadcrumb: jest.fn(),
 }));
 
@@ -43,9 +48,10 @@ jest.mock("@/services/accountDeletionService", () => ({
   hasPendingDeletion: (u: any) => !!u?.pendingDeletion?.deletionDate,
 }));
 const mockBiometricEnabled = jest.fn();
+const mockUnlock = jest.fn();
 jest.mock("@/services/biometricAuthService", () => ({
   isBiometricEnabled: () => mockBiometricEnabled(),
-  unlockWithBiometric: jest.fn(),
+  unlockWithBiometric: () => mockUnlock(),
 }));
 const mockConsent = jest.fn();
 jest.mock("@/services/healthConsentService", () => ({
@@ -105,10 +111,12 @@ async function boot() {
 }
 
 beforeEach(() => {
+  mockNet = { isConnected: true, isInternetReachable: true };
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockHasOnboarded.mockResolvedValue(true);
   mockBiometricEnabled.mockResolvedValue(false);
+  mockUnlock.mockResolvedValue(undefined);
   mockConsent.mockResolvedValue(true);
   setAuth();
   setBaby();
@@ -204,5 +212,197 @@ describe("boot.tsx routing", () => {
     await boot();
     expect(signOut).toHaveBeenCalled();
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
+  });
+
+  describe("test 27 : retour du réseau après un lancement hors ligne", () => {
+    async function bootDegradedOffline() {
+      const refreshUser = jest.fn(() => Promise.resolve());
+      setAuth({ user: null, status: "degraded", refreshUser });
+      mockNet = { isConnected: false, isInternetReachable: false };
+      const r = render(<BootScreen />);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      return { ...r, refreshUser };
+    }
+    async function setNet(net: typeof mockNet, rerender: (el: React.ReactElement) => void) {
+      mockNet = net;
+      rerender(<BootScreen />);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+    }
+
+    it("hors ligne : aucun essai automatique", async () => {
+      const { refreshUser, getByText } = await bootDegradedOffline();
+      expect(getByText("Connexion indisponible")).toBeTruthy();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+      expect(refreshUser).not.toHaveBeenCalled();
+    });
+
+    it("Wi-Fi revenu mais internet pas encore confirmé, puis confirmé : un essai à la confirmation", async () => {
+      const { refreshUser, rerender } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      expect(refreshUser).not.toHaveBeenCalled();
+      await setNet({ isConnected: true, isInternetReachable: true }, rerender);
+      expect(refreshUser).toHaveBeenCalledTimes(1);
+    });
+
+    it("le premier essai échoue : nouvel essai toutes les 10 s", async () => {
+      const { refreshUser, rerender } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(30_000);
+      });
+      expect(refreshUser).toHaveBeenCalledTimes(3);
+    });
+
+    it("12 essais au plus, puis seul « Réessayer » relance", async () => {
+      const { refreshUser, rerender, getByText } = await bootDegradedOffline();
+      await setNet({ isConnected: true, isInternetReachable: null }, rerender);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60_000);
+      });
+      expect(refreshUser).toHaveBeenCalledTimes(12);
+      fireEvent.press(getByText("Réessayer"));
+      expect(refreshUser).toHaveBeenCalledTimes(13);
+    });
+  });
+
+  describe("écran de démarrage figé : garde-temps", () => {
+    const never = () => new Promise<never>(() => {});
+    // Par pas d'une seconde : un seul grand saut ne laisse pas les chaînes
+    // de promesses du démarrage s'exécuter entre les minuteurs.
+    async function advance(ms: number) {
+      for (let t = 0; t < ms; t += 1000) {
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(Math.min(1000, ms - t));
+        });
+      }
+    }
+
+    it("demande d'empreinte sans réponse : « Réessayer » après 60 s (temps de répondre), sans déconnexion, et la relance passe", async () => {
+      const signOut = jest.fn(() => Promise.resolve());
+      setAuth({ signOut, refreshUser: jest.fn(() => Promise.resolve()) });
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementationOnce(never).mockResolvedValue("u1");
+      const { getByText, queryByText } = render(<BootScreen />);
+      await advance(58_000);
+      expect(queryByText("Démarrage trop long")).toBeNull();
+      await advance(4_000);
+      expect(getByText("Démarrage trop long")).toBeTruthy();
+      expect(queryByText("La connexion semble instable.")).toBeNull();
+      expect(signOut).not.toHaveBeenCalled();
+      fireEvent.press(getByText("Réessayer"));
+      await advance(5_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(2);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+    });
+
+    it("pas d'essai automatique toutes les 10 s quand seul le démarrage est trop long", async () => {
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementation(never);
+      render(<BootScreen />);
+      await advance(120_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    it("lecture du consentement sans réponse : carte « Réessayer » après 15 s", async () => {
+      mockConsent.mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      await advance(16_000);
+      expect(getByText("Réessayer")).toBeTruthy();
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it("lecture du réglage d'empreinte bloquée : ni passage sans verrou, ni déconnexion", async () => {
+      const signOut = jest.fn(() => Promise.resolve());
+      setAuth({ signOut });
+      mockBiometricEnabled.mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      // 15 s de délai, comptés à partir de l'étape (≈ 1 s après l'ouverture)
+      await advance(18_000);
+      expect(getByText("Démarrage trop long")).toBeTruthy();
+      expect(mockReplace).not.toHaveBeenCalled();
+      expect(signOut).not.toHaveBeenCalled();
+    });
+
+    it("démarrage normal : pas de carte", async () => {
+      const { queryByText } = render(<BootScreen />);
+      await advance(5_000);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+      await advance(30_000);
+      expect(queryByText("Réessayer")).toBeNull();
+    });
+
+    it("verrou d'empreinte : un nouveau rendu pendant la lecture du réglage ne saute pas le verrou", async () => {
+      let resolveEnabled: (v: boolean) => void = () => {};
+      mockBiometricEnabled.mockImplementation(() => new Promise<boolean>((r) => (resolveEnabled = r)));
+      mockUnlock.mockImplementation(never);
+      const { rerender } = render(<BootScreen />);
+      await advance(2_000);
+      setBaby({ children: [child, { id: "c2", name: "Tom" }] });
+      rerender(<BootScreen />);
+      await advance(3_000);
+      expect(mockReplace).not.toHaveBeenCalled();
+      await act(async () => resolveEnabled(true));
+      await advance(1_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it("réseau lent pendant la demande d'empreinte : les essais automatiques ne la relancent pas", async () => {
+      // Enfants qui ne chargent pas (réseau lent) pendant que l'empreinte est demandée.
+      setBaby({ children: [], loading: true, activeChild: null });
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      mockBiometricEnabled.mockResolvedValue(true);
+      mockUnlock.mockImplementation(never);
+      render(<BootScreen />);
+      await advance(45_000);
+      expect(mockUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    it("consentement illisible puis réseau correct : nouvel essai automatique qui passe", async () => {
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      mockConsent.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValue(true);
+      render(<BootScreen />);
+      await advance(15_000);
+      expect(mockConsent).toHaveBeenCalledTimes(2);
+      expect(mockReplace).toHaveBeenCalledWith("/(drawer)/baby");
+    });
+
+    it("réponse tardive d'une lecture du consentement abandonnée : ignorée", async () => {
+      setAuth({ refreshUser: jest.fn(() => Promise.resolve()) });
+      let resolveLate: (v: boolean) => void = () => {};
+      mockConsent
+        .mockImplementationOnce(() => new Promise<boolean>((r) => (resolveLate = r)))
+        .mockImplementation(never);
+      const { getByText } = render(<BootScreen />);
+      await advance(16_000); // délai de 15 s dépassé : carte « Réessayer »
+      fireEvent.press(getByText("Réessayer"));
+      await advance(1_000);
+      await act(async () => resolveLate(false)); // « pas de consentement », trop tard
+      await advance(1_000);
+      expect(mockReplace).not.toHaveBeenCalledWith("/(auth)/health-consent");
+    });
+  });
+
+  it("essais automatiques épuisés : la carte invite à appuyer sur Réessayer", async () => {
+    const refreshUser = jest.fn(() => Promise.resolve());
+    setAuth({ user: null, status: "degraded", refreshUser });
+    mockNet = { isConnected: true, isInternetReachable: null };
+    const { getByText, queryByText } = render(<BootScreen />);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5_000);
+    });
+    expect(queryByText("La connexion semble instable. Appuyez sur Réessayer.")).toBeNull();
+    for (let i = 0; i < 14; i++) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10_000);
+      });
+    }
+    expect(getByText("La connexion semble instable. Appuyez sur Réessayer.")).toBeTruthy();
   });
 });

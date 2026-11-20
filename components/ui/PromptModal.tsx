@@ -12,7 +12,7 @@ import { getNeutralColors } from "@/constants/dashboardColors";
 import { Colors, getReadableTextColor } from "@/constants/theme";
 import { elevation, radius, space } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { DialogButton, dialogStyles } from "./DialogParts";
+import { DialogButton, DialogScroll, DialogTitle, dialogStyles } from "./DialogParts";
 
 interface PromptModalProps {
   visible: boolean;
@@ -85,17 +85,17 @@ export function PromptModal({
           accessible={false}
           accessibilityViewIsModal={true}
         >
-          <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text style={[styles.modalSubtitle, { color: ink }]}>{subtitle}</Text>
-          ) : null}
-          {message ? (
-            <Text style={[dialogStyles.message, { color: nc.textNormal }]}>
-              {message}
-            </Text>
-          ) : null}
+          <DialogScroll>
+            <DialogTitle title={title} color={ink} />
+            {subtitle ? (
+              <Text style={[styles.modalSubtitle, { color: ink }]}>{subtitle}</Text>
+            ) : null}
+            {message ? (
+              <Text style={[dialogStyles.message, { color: nc.textNormal }]}>
+                {message}
+              </Text>
+            ) : null}
+          </DialogScroll>
           <TextInput
             style={[styles.input, { color: ink, borderColor: nc.border }]}
             placeholder={placeholder}

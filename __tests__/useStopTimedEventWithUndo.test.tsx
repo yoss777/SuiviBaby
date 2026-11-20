@@ -234,6 +234,13 @@ describe("useStopTimedEventWithUndo (hook seul)", () => {
     spy.mockRestore();
   });
 
+  it("durée = minutes entières, comme le chrono affiché (5 min 50 s → 5 min, pas 6) (R12)", () => {
+    const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
+    const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));
+    result.current(sleep({ heureDebut: new Date(NOW.getTime() - (5 * 60 + 50) * 1000) }));
+    expect(modifier.mock.calls[0][2]).toMatchObject({ duree: 5 });
+  });
+
   it("never records a duration below one minute", () => {
     const modifier = jest.spyOn(eventsService, "modifierEvenementOptimistic").mockReturnValue("op1");
     const { result } = renderHook(() => useStopTimedEventWithUndo({ childId: "c1", getSuccessLabel }));

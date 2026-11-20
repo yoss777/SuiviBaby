@@ -342,4 +342,12 @@ describe("buildShareMessage", () => {
     expect(buildShareMessage(m, "  ")).toBe("Mon bébé a fait une belle et longue nuit sur SuiviBaby 🌙");
     expect(buildShareMessage(m)).not.toMatch(/\d/);
   });
+
+  it("avec le lien : site seul en dernière ligne, sans identifiant", async () => {
+    const [m] = await detectNewMilestones(base({ trackingStart: daysAgo(31) }));
+    const msg = buildShareMessage(m, "Léa", { includeAppLink: true });
+    expect(msg).toBe("Léa a 1 mois de suivi sur SuiviBaby 🎉\nhttps://suivibaby.com");
+    expect(msg.split("\n").pop()).toBe("https://suivibaby.com");
+    expect(buildShareMessage(m, "Léa", { includeAppLink: false })).not.toContain("http");
+  });
 });

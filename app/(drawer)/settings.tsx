@@ -39,6 +39,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useBaby } from "@/contexts/BabyContext";
 import { useThemePreference } from "@/contexts/ThemeContext";
+import { themeSummaryLabel } from "@/utils/themeResolution";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   cancelAccountDeletion,
@@ -84,7 +85,7 @@ export default function SettingsScreen() {
   const isPasswordUser = deletionAuthMethod === "password";
   const { activeChild, children, hiddenChildrenIds } = useBaby();
   const hiddenPhotoIds = useHiddenPhotos();
-  const { preference: themePreference } = useThemePreference();
+  const { preference: themePreference, darkAtNight } = useThemePreference();
   const router = useRouter();
   const { push: guardedPush } = useGuardedNavigation();
   const { delete: deleteParam } = useLocalSearchParams();
@@ -495,12 +496,7 @@ export default function SettingsScreen() {
         id: "theme",
         icon: "moon-outline",
         label: "Thème",
-        value:
-          themePreference === "auto"
-            ? "Automatique"
-            : themePreference === "dark"
-            ? "Sombre"
-              : "Clair",
+        value: themeSummaryLabel(themePreference, darkAtNight),
         onPress: () => {
           guardedPush("/settings/theme");
         },
@@ -526,7 +522,7 @@ export default function SettingsScreen() {
         },
       },
     ],
-    [guardedPush, themePreference],
+    [guardedPush, themePreference, darkAtNight],
   );
 
   const informationSettings: SettingItem[] = useMemo(

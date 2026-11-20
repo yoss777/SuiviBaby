@@ -992,9 +992,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
-            <Text
-              style={[
-                styles.quantityButtonText,
+            <Text maxFontSizeMultiplier={1.4}
+              style={[styles.quantityButtonText,
                 { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
@@ -1017,9 +1016,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
-            <Text
-              style={[
-                styles.quantityButtonText,
+            <Text maxFontSizeMultiplier={1.4}
+              style={[styles.quantityButtonText,
                 { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
@@ -1050,9 +1048,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Diminuer"
           >
-            <Text
-              style={[
-                styles.quantityButtonText,
+            <Text maxFontSizeMultiplier={1.4}
+              style={[styles.quantityButtonText,
                 { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
@@ -1076,9 +1073,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Augmenter"
           >
-            <Text
-              style={[
-                styles.quantityButtonText,
+            <Text maxFontSizeMultiplier={1.4}
+              style={[styles.quantityButtonText,
                 { color: nc.textStrong },
                 isSubmitting && styles.quantityButtonTextDisabled,
               ]}
@@ -1164,7 +1160,7 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -1181,9 +1177,8 @@ export const RoutinesForm: React.FC<RoutinesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text
-              style={[
-                styles.validateText,
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+              style={[styles.validateText,
                 {
                   color: chipActiveColors.filledText,
                 },

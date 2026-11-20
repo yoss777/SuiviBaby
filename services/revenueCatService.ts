@@ -165,10 +165,27 @@ export function getStatusFromCustomerInfo(
 
   if (premiumEntitlement.periodType === "TRIAL") return "trial";
 
+  // Achat à vie : willRenew vaut false et il n'y a pas de date de fin. Ce
+  // n'est pas une annulation (le serveur l'enregistre « active ») ; sans ce
+  // cas, la règle de droit (utils/premiumEntitlement) le passait en gratuit.
+  if (premiumEntitlement.willRenew === false && !premiumEntitlement.expirationDate) return "active";
+
   // Check billing issue via managementURL or willRenew
   if (premiumEntitlement.willRenew === false) return "cancelled";
 
   return "active";
+}
+
+/**
+ * Fin de la période payée de l'abonnement actif (ISO), null pour l'achat à
+ * vie ou sans abonnement. Gardée avec la copie locale : un abonnement annulé
+ * ne doit plus être vu Premium après cette date, même hors ligne.
+ */
+export function getExpiresAtFromCustomerInfo(customerInfo: CustomerInfo): string | null {
+  const entitlement =
+    customerInfo.entitlements.active[ENTITLEMENT_FAMILY] ??
+    customerInfo.entitlements.active[ENTITLEMENT_PREMIUM];
+  return entitlement?.expirationDate ?? null;
 }
 
 /**

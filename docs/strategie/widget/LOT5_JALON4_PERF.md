@@ -168,7 +168,7 @@ Android n'est pas concerné : le récepteur natif peut avoir réécrit le widget
 
 **À faire au moment de la fusion :**
 
-- [ ] Politique TTL Firestore sur `widget_fanout.expireAt`. Elle est déclarée dans `firestore.indexes.json`. Vérifier après la fusion qu'elle est active ; sinon, la poser avec :
+- [x] Politique TTL Firestore sur `widget_fanout.expireAt` : **ACTIVE** (vérifié le 20/11, `gcloud firestore fields ttls list`). Elle est déclarée dans `firestore.indexes.json`. Vérifier après la fusion qu'elle est active ; sinon, la poser avec :
   `gcloud firestore fields ttls update expireAt --collection-group=widget_fanout --enable-ttl --project=samaye-53723`
 
 **Pistes relevées, non retenues pour ce jalon** (gain/risque, à mesurer d'abord) :
@@ -278,3 +278,48 @@ Android n'est pas concerné : le récepteur natif peut avoir réécrit le widget
   - sinon, revenir au commit précédent. Les documents `widget_fanout` sont inertes.
 - **App :** revenir à la version précédente. Aucune migration de données.
 - **Timeline iPhone :** le build précédent reste sur TestFlight.
+
+## Bilan 48 h en production (20/11/2026)
+
+Journaux Cloud Logging `jsonPayload.job="widgetFanout"`, projet `samaye-53723`, lecture seule. PR #113 fusionnée le 18/11 vers 11 h ; premier journal au nouveau format (avec `readMs`) le 18/11 à 11:48 UTC.
+
+- **Avant** : 16/11 10:00 → 18/11 10:00 UTC, 198 journaux.
+- **Après** : 18/11 10:00 → 20/11 10:00 UTC, 89 journaux.
+
+L'usage n'est pas le même sur les deux périodes (142 envois avant, 63 après) : les comparaisons portent sur des médianes et des p95, pas sur des volumes.
+
+### 1. Temps de traitement des envois (`reason="sent"`)
+
+| | Avant | Après | Écart |
+|---|---|---|---|
+| `durationMs` p50 | 530 ms | 293 ms | −237 ms (−45 %) |
+| `durationMs` p95 | 1 844 ms | 932 ms | −912 ms (−49 %) |
+| Urgents p50 / p95 | 504 / 1 869 ms (108) | 297 / 957 ms (29) | −207 / −912 ms |
+| Non urgents p50 / p95 | 586 / 1 829 ms (34) | 290 / 688 ms (34) | −296 / −1 141 ms |
+| `readMs` p50 / p95 | non mesuré | 109 / 156 ms | — |
+| `sendMs` p50 / p95 | non mesuré | 189 / 544 ms | — |
+
+Gain attendu de 300 à 600 ms : atteint sur le p95 (largement dépassé, −0,9 s) ; sur le p50, −237 ms, un peu sous la cible, car le temps restant est surtout l'envoi à Expo (`sendMs` 189 ms) et non plus les lectures (`readMs` 109 ms). Le `durationMs` des envois non urgents n'inclut pas l'attente de 2 s du regroupement.
+
+### 2. Regroupement (`reason="coalesced"`)
+
+- 5 envois regroupés sur 68 déclenchements qui auraient envoyé (sent + coalesced), soit **7 %** ; 5,6 % de tous les journaux après.
+- Attente `waitedMs` = 2 000 ms à chaque fois, comme prévu.
+- Part des envois urgents : 66 % avant (130/198), 37 % après (33/89), cohérent avec le point 1 (les bascules de côté de la tétée ne sont plus urgentes).
+
+### 3. iPhone
+
+- 1 rattrapage iPhone (`iosOnly: true`), le 19/11 à 05:56:49 UTC, 22 s après un envoi où 2 iPhone avaient été retenus par le plafond (`iosThrottled: 2`) : le mécanisme a fonctionné.
+- Aucun autre plafonnement sur 48 h.
+
+### 4. Erreurs
+
+- Aucune raison `failed`, `throttled` ou `no-consent` ; aucun journal avec `errors > 0`, `failed > 0` ou `deadTokens > 0`.
+- Aucun avertissement « pre-check failed », « coalesce marker » ou « send failed, retrying once », et aucun journal de niveau WARNING ou plus pour les fonctions du widget depuis le 16/11.
+- `no-device` : 56 avant, 21 après (enfants sans widget posé : normal).
+- `skipped` : 322 appareils écartés avant, 0 après : la requête unique `widgetChildId == childId` ne ramène plus les appareils d'autres enfants.
+
+### Conclusion
+
+Jalon 4 validé en production : temps de traitement divisé par deux au p95, regroupement et rattrapage iPhone actifs, aucune erreur, TTL active. Piste suivante si l'on veut gagner encore sur le p50 : l'envoi à Expo (`sendMs`), plus les lectures.
+

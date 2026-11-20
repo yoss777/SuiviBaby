@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -20,13 +21,14 @@ import { useThemePreference } from "@/contexts/ThemeContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import type { ThemePreference } from "@/services/userPreferencesService";
+import { themeOptionDescription } from "@/utils/themeResolution";
 
 type ThemeOption = ThemePreference;
 
 export default function ThemeScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(colorScheme);
-  const { preference, isLoading, setPreference } = useThemePreference();
+  const { preference, isLoading, setPreference, darkAtNight, setDarkAtNight } = useThemePreference();
   const { showToast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
   const isMountedRef = useRef(true);
@@ -44,7 +46,6 @@ export default function ThemeScreen() {
     {
       value: ThemeOption;
       label: string;
-      description: string;
       icon: keyof typeof Ionicons.glyphMap;
     }[]
   >(
@@ -52,19 +53,16 @@ export default function ThemeScreen() {
       {
         value: "light",
         label: "Clair",
-        description: "Th\u00e8me clair pour une meilleure lisibilit\u00e9 en journ\u00e9e",
         icon: "sunny",
       },
       {
         value: "dark",
         label: "Sombre",
-        description: "Th\u00e8me sombre pour r\u00e9duire la fatigue oculaire",
         icon: "moon",
       },
       {
         value: "auto",
         label: "Automatique",
-        description: "Suit les param\u00e8tres syst\u00e8me de votre appareil",
         icon: "phone-portrait",
       },
     ],
@@ -86,22 +84,43 @@ export default function ThemeScreen() {
       await setPreference(value);
       if (!isMountedRef.current) return;
       // P6: Success toast
-      showToast("Thème mis à jour");
+      showToast(value === "auto" ? "Thème Automatique, sombre la nuit activé" : "Thème mis à jour");
     } catch (error) {
       if (!isMountedRef.current) return;
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message: "Impossible de mettre à jour le thème.",
+        message: "Impossible d'enregistrer. Votre choix précédent est rétabli.",
       });
     } finally {
       if (isMountedRef.current) setIsSaving(false);
     }
-  }, [isSaving, isLoading, preference, setPreference]);
+  }, [isSaving, isLoading, preference, setPreference, showToast]);
+
+  const handleToggleDarkAtNight = useCallback(async (value: boolean) => {
+    if (isSaving || isLoading) return;
+    try {
+      setIsSaving(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await setDarkAtNight(value);
+      if (!isMountedRef.current) return;
+      showToast(value ? "Sombre la nuit activé" : "Sombre la nuit désactivé");
+    } catch {
+      if (!isMountedRef.current) return;
+      setModalConfig({
+        visible: true,
+        title: "Erreur",
+        message: "Impossible d'enregistrer. Votre choix précédent est rétabli.",
+      });
+    } finally {
+      if (isMountedRef.current) setIsSaving(false);
+    }
+  }, [isSaving, isLoading, setDarkAtNight, showToast]);
 
   const renderThemeOption = (option: (typeof themeOptions)[0]) => {
     const isSelected = preference === option.value;
     const isDisabled = isSaving || isLoading;
+    const description = themeOptionDescription(option.value, darkAtNight);
 
     return (
       <TouchableOpacity
@@ -117,7 +136,7 @@ export default function ThemeScreen() {
         activeOpacity={0.7}
         disabled={isDisabled}
         accessibilityRole="radio"
-        accessibilityLabel={`${option.label}: ${option.description}`}
+        accessibilityLabel={`${option.label} : ${description}`}
         accessibilityState={{ selected: isSelected, disabled: isDisabled }}
       >
         <View style={styles.themeLeft}>
@@ -161,7 +180,7 @@ export default function ThemeScreen() {
                 { color: nc.textLight },
               ]}
             >
-              {option.description}
+              {description}
             </Text>
           </View>
         </View>
@@ -187,7 +206,7 @@ export default function ThemeScreen() {
       >
         <Stack.Screen
           options={{
-            title: "Th\u00e8me",
+            title: "Thème",
             headerBackTitle: "Retour",
           }}
         />
@@ -204,7 +223,7 @@ export default function ThemeScreen() {
             >
               Apparence
             </ThemedText>
-            <View style={styles.themesContainer}>
+            <View style={styles.themesContainer} accessibilityRole="radiogroup">
               {isLoading ? (
                 <SkeletonList rows={themeOptions.length} />
               ) : (
@@ -213,6 +232,43 @@ export default function ThemeScreen() {
             </View>
           </View>
 
+          {!isLoading && (
+            <View style={[styles.section, { backgroundColor: nc.backgroundCard }]}>
+              {preference === "dark" ? (
+                <Text style={[styles.themeDescription, { color: nc.textLight }]}>
+                  Le thème Sombre est déjà sombre à toute heure.
+                </Text>
+              ) : (
+                <View style={styles.switchRow}>
+                  <View style={styles.themeContent}>
+                    <ThemedText style={[styles.themeLabel, { color: nc.textStrong, fontWeight: "500" }]}>
+                      Sombre la nuit
+                    </ThemedText>
+                    <Text style={[styles.themeDescription, { color: nc.textLight }]}>
+                      De 22 h à 7 h, l&apos;écran passe en sombre pour ne pas vous éblouir.
+                    </Text>
+                  </View>
+                  <View style={styles.switchHitArea}>
+                    <Switch
+                      value={darkAtNight}
+                      onValueChange={handleToggleDarkAtNight}
+                      disabled={isSaving}
+                      trackColor={{
+                        false: nc.border,
+                        true: getBackgroundTint(Colors[colorScheme].tint, 0.31),
+                      }}
+                      thumbColor={darkAtNight ? Colors[colorScheme].tint : nc.backgroundCard}
+                      ios_backgroundColor={nc.border}
+                      accessibilityRole="switch"
+                      accessibilityLabel="Sombre la nuit, de 22 h à 7 h"
+                      accessibilityState={{ checked: darkAtNight, disabled: isSaving }}
+                    />
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
           <View style={[styles.infoBox, { backgroundColor: nc.backgroundCard }]}>
             <Ionicons
               name="information-circle"
@@ -220,9 +276,8 @@ export default function ThemeScreen() {
               color={Colors[colorScheme].tint}
             />
             <ThemedText style={styles.infoText}>
-              Le mode automatique adapte l&apos;apparence de l&apos;application en
-              fonction des param\u00e8tres de votre appareil pour un confort optimal
-              \u00e0 toute heure.
+              Que « Sombre la nuit » soit activé ou non, de 22 h à 7 h
+              l&apos;application agrandit ses boutons et coupe les animations.
             </ThemedText>
           </View>
         </ScrollView>
@@ -294,6 +349,17 @@ const styles = StyleSheet.create({
   themeDescription: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  switchHitArea: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   infoBox: {
     flexDirection: "row",

@@ -698,7 +698,7 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -715,9 +715,8 @@ export const MilestonesForm: React.FC<MilestonesFormProps> = ({
             disabled={isSubmitting}
             accessibilityLabel={isEditing ? "Enregistrer" : "Ajouter"}
           >
-            <Text
-              style={[
-                styles.validateText,
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+              style={[styles.validateText,
                 {
                   color: accentColors.filledText,
                 },

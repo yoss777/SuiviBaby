@@ -22,8 +22,11 @@ import {
   getTierFromCustomerInfo,
   getStatusFromCustomerInfo,
   getBillingPeriodFromCustomerInfo,
+  getExpiresAtFromCustomerInfo,
   addCustomerInfoListener,
 } from "@/services/revenueCatService";
+import { captureServiceError } from "@/utils/errorReporting";
+import { entitledTier, msUntilEntitlementEnds } from "@/utils/premiumEntitlement";
 
 // ============================================
 // TYPES
@@ -124,6 +127,8 @@ interface CachedPremiumState {
   tier: PremiumTier;
   status: SubscriptionStatus;
   grandfathered: boolean;
+  /** Fin de la période payée : sans elle, un abonné annulé restait Premium hors ligne. */
+  expiresAt?: string | null;
   cachedAt: number;
 }
 
@@ -164,6 +169,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SubscriptionStatus>("active");
   const [grandfathered, setGrandfathered] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("unknown");
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  // Réévalue le droit quand la période payée d'un abonné annulé se termine.
+  const [entitlementClock, setEntitlementClock] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [devOverride, setDevOverride] = useState<PremiumTier | null>(null);
   const [devBillingOverride, setDevBillingOverride] = useState<BillingPeriod | null>(null);
@@ -179,6 +187,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       setTier("free");
       setStatus("active");
       setGrandfathered(false);
+      setExpiresAt(null);
       setIsLoading(false);
       logoutRevenueCat().catch(() => {});
       return;
@@ -196,6 +205,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       setTier(cached.tier);
       setStatus(cached.status);
       setGrandfathered(cached.grandfathered);
+      setExpiresAt(cached.expiresAt ?? null);
     });
 
     const syncFromRevenueCat = async () => {
@@ -212,15 +222,18 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         const rcTier = getTierFromCustomerInfo(customerInfo);
         const rcStatus = getStatusFromCustomerInfo(customerInfo);
         const rcBilling = getBillingPeriodFromCustomerInfo(customerInfo);
+        const rcExpiresAt = getExpiresAtFromCustomerInfo(customerInfo);
 
         setTier(rcTier);
         setStatus(rcStatus);
         setBillingPeriod(rcBilling);
+        setExpiresAt(rcExpiresAt);
         liveResolved = true;
-        saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false });
+        saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false, expiresAt: rcExpiresAt });
         setIsLoading(false);
-      } catch {
+      } catch (error) {
         // RevenuCat failed — fallback to Firestore
+        captureServiceError(error, { service: "premium", operation: "revenueCatLogin" });
         if (!cancelled) unsubFallback = syncFromFirestore();
       }
     };
@@ -232,16 +245,37 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return;
           if (snap.exists()) {
             const data = snap.data() as SubscriptionData;
+            // ISO (écrit par le webhook RevenueCat) ; Timestamp Firestore accepté par prudence.
+            const rawExpires = data.expiresAt as unknown;
+            const docExpiresAt =
+              typeof rawExpires === "string"
+                ? rawExpires
+                : rawExpires && typeof (rawExpires as { toDate?: () => Date }).toDate === "function"
+                  ? (rawExpires as { toDate: () => Date }).toDate().toISOString()
+                  : null;
+            // Même lecture que le serveur (subscriptionStateFrom).
+            const docGrandfathered = data.grandfathered === true || data.status === "grandfathered";
             setTier(data.tier ?? "free");
             setStatus(data.status ?? "active");
             setBillingPeriod(data.billingPeriod ?? "unknown");
-            setGrandfathered(data.grandfathered ?? false);
+            setGrandfathered(docGrandfathered);
+            setExpiresAt(docExpiresAt);
             liveResolved = true;
-            saveCache({ uid, tier: data.tier ?? "free", status: data.status ?? "active", grandfathered: data.grandfathered ?? false });
+            saveCache({
+              uid,
+              tier: data.tier ?? "free",
+              status: data.status ?? "active",
+              grandfathered: docGrandfathered,
+              expiresAt: docExpiresAt,
+            });
           }
           setIsLoading(false);
         },
-        () => { if (!cancelled) setIsLoading(false); }
+        (error: unknown) => {
+          // Copie locale gardée faute de mieux : on le signale.
+          captureServiceError(error, { service: "premium", operation: "subscriptionFallbackListener" });
+          if (!cancelled) setIsLoading(false);
+        }
       );
     };
 
@@ -251,11 +285,13 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       const rcTier = getTierFromCustomerInfo(info);
       const rcStatus = getStatusFromCustomerInfo(info);
       const rcBilling = getBillingPeriodFromCustomerInfo(info);
+      const rcExpiresAt = getExpiresAtFromCustomerInfo(info);
       setTier(rcTier);
       setStatus(rcStatus);
       setBillingPeriod(rcBilling);
+      setExpiresAt(rcExpiresAt);
       liveResolved = true;
-      saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false });
+      saveCache({ uid, tier: rcTier, status: rcStatus, grandfathered: false, expiresAt: rcExpiresAt });
     });
 
     syncFromRevenueCat();
@@ -267,11 +303,13 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         if (snap.exists()) {
           const data = snap.data() as SubscriptionData;
-          if (data.grandfathered) setGrandfathered(true);
+          if (data.grandfathered === true || data.status === "grandfathered") setGrandfathered(true);
           if (data.billingPeriod) setBillingPeriod(data.billingPeriod);
         }
       },
-      () => {}
+      (error: unknown) => {
+        captureServiceError(error, { service: "premium", operation: "subscriptionListener" });
+      }
     );
 
     return () => {
@@ -282,7 +320,25 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     };
   }, [firebaseUser?.uid]);
 
-  const effectiveTier = devOverride ?? tier;
+  // Abonné annulé : l'écran repasse en gratuit à la fin de la période payée,
+  // même app ouverte. setTimeout plafonné (~24,8 j) : on se relance au besoin.
+  useEffect(() => {
+    const remaining = msUntilEntitlementEnds({ tier, status, expiresAt });
+    if (remaining === null) return;
+    const timer = setTimeout(
+      () => setEntitlementClock((n) => n + 1),
+      Math.min(remaining + 1000, 2_000_000_000),
+    );
+    return () => clearTimeout(timer);
+  }, [tier, status, expiresAt, entitlementClock]);
+
+  const grantedTier = useMemo(
+    () => entitledTier({ tier, status, expiresAt }),
+    // entitlementClock : recalcul à l'échéance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tier, status, expiresAt, entitlementClock],
+  );
+  const effectiveTier = devOverride ?? grantedTier;
 
   const isPremium = effectiveTier === "premium" || effectiveTier === "family";
   const isFamily = effectiveTier === "family";

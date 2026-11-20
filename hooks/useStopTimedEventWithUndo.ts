@@ -70,7 +70,9 @@ export function useStopTimedEventWithUndo<TEvent extends TimedEvent>({
       // (jamais de NaN écrit dans Firestore).
       const hasStart = isValidDate(start);
       const elapsedMs = hasStart ? heureFin.getTime() - start.getTime() : 0;
-      const elapsedMinutes = Math.round(elapsedMs / 60000);
+      // Minutes entières écoulées, comme le chrono affiché (qui ignore les
+      // secondes) : « 5 min » à l'écran, 5 min enregistrées (R12).
+      const elapsedMinutes = Math.floor(elapsedMs / 60000);
       const isUnderOneMinute = elapsedMs < 60_000;
       const duree = hasStart ? Math.max(1, elapsedMinutes) : undefined;
       if (duree !== undefined && duree > MAX_TIMED_EVENT_MINUTES) {

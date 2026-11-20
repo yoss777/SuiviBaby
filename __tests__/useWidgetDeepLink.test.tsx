@@ -1,3 +1,4 @@
+/* eslint-disable import/first */
 // Appui sur une zone du widget : ouvre le bon formulaire, pour le bon bébé.
 import { renderHook } from "@testing-library/react-native";
 
@@ -20,10 +21,24 @@ jest.mock("@/contexts/BabyContext", () => ({
   }),
 }));
 
-import { useWidgetDeepLink, widgetDeepLink } from "@/hooks/useWidgetDeepLink";
+import { Linking } from "react-native";
+
+let mockUrlListener: (() => void) | undefined;
+jest.spyOn(Linking, "addEventListener").mockImplementation(((_: string, l: () => void) => {
+  mockUrlListener = l;
+  return { remove: jest.fn() };
+}) as never);
+
+import {
+  resetWidgetDeepLinkGuardForTests,
+  useWidgetDeepLink,
+  widgetDeepLink,
+} from "@/hooks/useWidgetDeepLink";
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  resetWidgetDeepLinkGuardForTests();
+  mockSetParams.mockReset();
+  mockSetActiveChild.mockReset();
   mockParams = {};
   mockActive = { id: "c1" };
   mockLoaded = true;
@@ -94,9 +109,11 @@ it("un lien n'est traité qu'une fois, même si l'effet se relance avant l'effac
   rerender({ fn: (...a: unknown[]) => open(...a) });
   rerender({ fn: (...a: unknown[]) => open(...a) });
   expect(open).toHaveBeenCalledTimes(1);
-  // Lien effacé puis nouvel appui : traité à nouveau.
+  // Lien effacé puis nouvel appui (qui arrive avec un événement « url ») :
+  // traité à nouveau.
   mockParams = {};
   rerender({ fn: open });
+  mockUrlListener?.();
   mockParams = { widget: "sleep-start", child: "c1", nap: "1" };
   rerender({ fn: open });
   expect(open).toHaveBeenCalledTimes(2);
@@ -132,4 +149,41 @@ it("petit widget iPhone : ask=1 transmis (fromSmall), stop-pick accepté", () =>
   const open2 = jest.fn();
   renderHook(() => useWidgetDeepLink({ ready: true, open: open2 }));
   expect(open2).toHaveBeenCalledWith("stop-pick", { fromSmall: true });
+});
+
+describe("app remontée par Android avec le lien qui l'avait ouverte", () => {
+  it("activité recréée : l'action n'est pas rejouée, le lien est effacé", () => {
+    mockParams = { widget: "sleep-start", child: "c1", nap: "1", k: "key" };
+    const open = jest.fn();
+    const first = renderHook(() => useWidgetDeepLink({ ready: true, open }));
+    expect(open).toHaveBeenCalledTimes(1);
+    first.unmount();
+    mockSetParams.mockClear();
+    // nouvel arbre, mêmes paramètres (lien de lancement de l'activité)
+    renderHook(() => useWidgetDeepLink({ ready: true, open }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+  });
+
+  it("nouvel appui sur la même zone du widget (événement url) : l'action est bien relancée", () => {
+    mockParams = { widget: "meal", child: "c1" };
+    const open = jest.fn();
+    const first = renderHook(() => useWidgetDeepLink({ ready: true, open }));
+    first.unmount();
+    expect(mockUrlListener).toBeDefined();
+    mockUrlListener?.();
+    renderHook(() => useWidgetDeepLink({ ready: true, open }));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("navigation pas prête : l'effacement du lien ne fait pas tomber l'Accueil", () => {
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockSetParams.mockImplementation(() => {
+      throw new Error("The imperative router is unavailable before the first render has finished.");
+    });
+    mockParams = { widget: "meal", child: "c1" };
+    const open = jest.fn();
+    expect(() => renderHook(() => useWidgetDeepLink({ ready: true, open }))).not.toThrow();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
 });

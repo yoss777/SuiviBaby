@@ -126,13 +126,52 @@ describe("ModalContext : deux boutons à libellé long", () => {
 
 describe("buttonsFitSideBySide (petits écrans, texte agrandi)", () => {
   const { buttonsFitSideBySide } = require("@/components/ui/ConfirmModal");
-  it("iPhone SE : « Annuler / Supprimer » côte à côte, « Enregistrer quand même » empilé", () => {
-    expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1)).toBe(true);
+  it("iPhone SE : « Supprimer » (≈ 79 pt) ne tient pas dans 78 pt, on empile ; « Enregistrer quand même » empilé", () => {
+    expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1)).toBe(false);
     expect(buttonsFitSideBySide(["Corriger", "Enregistrer quand même"], 320, 1)).toBe(false);
+  });
+  it("iPhone 13 Pro Max, plus grande taille standard (×1,35) : « Déconnexion » empilé (recette 1.0.23, test 28)", () => {
+    expect(buttonsFitSideBySide(["Annuler", "Déconnexion"], 428, 1)).toBe(true);
+    expect(buttonsFitSideBySide(["Annuler", "Déconnexion"], 428, 1.35)).toBe(false);
   });
   it("texte agrandi : empilé plus tôt", () => {
     expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 393, 1)).toBe(true);
     expect(buttonsFitSideBySide(["Annuler", "Supprimer"], 320, 1.5)).toBe(false);
+  });
+});
+
+describe("titre des fenêtres en très grande police", () => {
+  const { titleMaxFontSizeMultiplier, estimateBoldTextWidth } = require("@/components/ui/DialogParts");
+  it("le mot le plus long du titre tient sur une ligne (plus de « Déconne/xion »)", () => {
+    for (const width of [320, 393, 428]) {
+      const cap = titleMaxFontSizeMultiplier("Déconnexion", width);
+      const textWidth = Math.min(width - 40, 400) - 48;
+      expect(estimateBoldTextWidth("Déconnexion", 20) * cap).toBeLessThanOrEqual(textWidth);
+    }
+  });
+  it("titre court : grandit jusqu'à ×3 ; jamais sous la taille normale", () => {
+    expect(titleMaxFontSizeMultiplier("Oui", 393)).toBe(3);
+    expect(titleMaxFontSizeMultiplier("Anticonstitutionnellement", 320)).toBe(1);
+  });
+  it("lettres étroites et larges pèsent différemment", () => {
+    expect(estimateBoldTextWidth("mmmm", 16)).toBeGreaterThan(estimateBoldTextWidth("iiii", 16) * 2);
+  });
+});
+
+describe("ConfirmModal : libellé passé à la ligne malgré l'estimation", () => {
+  it("les boutons s'empilent après la mesure", () => {
+    const { ConfirmModal } = require("@/components/ui/ConfirmModal");
+    const ui = render(
+      <ConfirmModal visible title="Supprimer ?" message="Texte" confirmText="Oui" cancelText="Non" onConfirm={jest.fn()} onCancel={jest.fn()} />,
+    );
+    const confirmLabel = ui.getByText("Oui");
+    // côte à côte d'abord (libellés courts) : « Non » puis « Oui »
+    expect(ui.getAllByText(/^(Oui|Non)$/).map((t) => t.props.children)).toEqual(["Non", "Oui"]);
+    act(() => {
+      confirmLabel.props.onTextLayout({ nativeEvent: { lines: [{}, {}] } });
+    });
+    // empilé : action en haut
+    expect(ui.getAllByText(/^(Oui|Non)$/).map((t) => t.props.children)).toEqual(["Oui", "Non"]);
   });
 });
 

@@ -1266,9 +1266,8 @@ export function SoinsForm({
                 disabled={isSubmitting || temperatureValue <= TEMP_BOUNDS.min}
                 accessibilityLabel="Diminuer la température"
               >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
+                <Text maxFontSizeMultiplier={1.4}
+                  style={[styles.quantityButtonText,
                     { color: nc.textStrong },
                     isSubmitting && styles.quantityButtonTextDisabled,
                   ]}
@@ -1298,9 +1297,8 @@ export function SoinsForm({
                 disabled={isSubmitting || temperatureValue >= TEMP_BOUNDS.max}
                 accessibilityLabel="Augmenter la température"
               >
-                <Text
-                  style={[
-                    styles.quantityButtonText,
+                <Text maxFontSizeMultiplier={1.4}
+                  style={[styles.quantityButtonText,
                     { color: nc.textStrong },
                     isSubmitting && styles.quantityButtonTextDisabled,
                   ]}
@@ -1728,9 +1726,8 @@ export function SoinsForm({
                   disabled={isSubmitting}
                   accessibilityLabel="Diminuer les gouttes"
                 >
-                  <Text
-                    style={[
-                      styles.quantityButtonText,
+                  <Text maxFontSizeMultiplier={1.4}
+                    style={[styles.quantityButtonText,
                       { color: nc.textStrong },
                       isSubmitting && styles.quantityButtonTextDisabled,
                     ]}
@@ -1759,9 +1756,8 @@ export function SoinsForm({
                   disabled={isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT}
                   accessibilityLabel="Augmenter les gouttes"
                 >
-                  <Text
-                    style={[
-                      styles.quantityButtonText,
+                  <Text maxFontSizeMultiplier={1.4}
+                    style={[styles.quantityButtonText,
                       { color: nc.textStrong },
                       (isSubmitting || gouttesCount >= MAX_GOUTTES_COUNT) &&
                         styles.quantityButtonTextDisabled,
@@ -1838,7 +1834,7 @@ export function SoinsForm({
             disabled={isSubmitting}
             accessibilityLabel="Annuler"
           >
-            <Text style={[styles.cancelText, { color: nc.textNormal }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2} style={[styles.cancelText, { color: nc.textNormal }]}>
               Annuler
             </Text>
           </Pressable>
@@ -1858,9 +1854,8 @@ export function SoinsForm({
             {isSubmitting ? (
               <ActivityIndicator size="small" color={accentColors.filledText} />
             ) : (
-              <Text
-                style={[
-                  styles.validateText,
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={2}
+                style={[styles.validateText,
                   {
                     color: accentColors.filledText,
                   },
