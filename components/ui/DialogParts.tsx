@@ -2,8 +2,18 @@
 // leurs boutons, calqués sur le pied des formulaires : même hauteur (52), mêmes
 // arrondis (14), « Annuler » en contour, action principale pleine. Une fenêtre
 // ouverte depuis un formulaire a ainsi les mêmes boutons que lui.
-import React from "react";
-import { Pressable, StyleSheet, Text, type ViewStyle } from "react-native";
+import React, { useCallback, useRef } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  type ScrollViewInstance,
+  StyleSheet,
+  Text,
+  type TextLayoutEvent,
+  useWindowDimensions,
+  type ViewStyle,
+} from "react-native";
 
 import { getNeutralColors, neutralColors } from "@/constants/dashboardColors";
 import { Colors } from "@/constants/theme";
@@ -29,6 +39,7 @@ export function DialogButton({
   textColor,
   disabled = false,
   testID,
+  onTextLayout,
 }: {
   text: string;
   variant: DialogButtonVariant;
@@ -40,6 +51,8 @@ export function DialogButton({
   textColor?: string;
   disabled?: boolean;
   testID?: string;
+  /** Lignes réellement rendues (la fenêtre empile les boutons si un libellé passe à la ligne). */
+  onTextLayout?: (event: TextLayoutEvent) => void;
 }) {
   const scheme = useColorScheme() ?? "light";
   const nc = getNeutralColors(scheme);
@@ -74,10 +87,100 @@ export function DialogButton({
       testID={testID}
     >
       {/* Plafond ×2 : en très grande police, les boutons restent à l'écran. */}
-      <Text style={[filled ? styles.strong : styles.normal, { color: ink }]} maxFontSizeMultiplier={2}>
+      <Text
+        style={[filled ? styles.strong : styles.normal, { color: ink }]}
+        maxFontSizeMultiplier={2}
+        onTextLayout={onTextLayout}
+      >
         {text}
       </Text>
     </Pressable>
+  );
+}
+
+/**
+ * Largeur approchée d'un texte gras (pt), lettre par lettre : les lettres
+ * étroites (i, l, r, t…) et larges (m, w, majuscules) pèsent très différemment
+ * (« Déconnexion » est plus large que sa longueur ne le laisse croire).
+ */
+export function estimateBoldTextWidth(text: string, fontSize: number): number {
+  let units = 0;
+  for (const ch of text) {
+    if ("il.,:;'’!|".includes(ch)) units += 0.28;
+    else if ("rtfj ".includes(ch)) units += 0.38;
+    else if ("mwMW".includes(ch)) units += 0.88;
+    else if (ch >= "A" && ch <= "Z") units += 0.7;
+    else units += 0.58;
+  }
+  return units * fontSize;
+}
+
+const TITLE_FONT_SIZE = 20;
+/** Largeur du texte dans la boîte (marges de l'écran 20, boîte ≤ 400, intérieur 24). */
+export function dialogTextWidth(windowWidth: number): number {
+  return Math.min(windowWidth - 2 * space.lg, 400) - 2 * space.xl;
+}
+
+/**
+ * Agrandissement maximal du titre : son mot le plus long doit tenir sur une
+ * ligne, sinon le système le coupe au milieu (« Déconne/xion », recette
+ * 1.0.23, test 28). Jamais moins que la taille normale, ×3 au plus.
+ */
+export function titleMaxFontSizeMultiplier(title: string, windowWidth: number): number {
+  const longestWord = title
+    .split(/\s+/)
+    .reduce((widest, word) => Math.max(widest, estimateBoldTextWidth(word, TITLE_FONT_SIZE)), 0);
+  if (longestWord === 0) return 3;
+  // 10 % de marge : l'estimation n'est qu'approchée.
+  const fit = (dialogTextWidth(windowWidth) * 0.9) / longestWord;
+  return Math.max(1, Math.min(3, Math.floor(fit * 10) / 10));
+}
+
+/** Titre des fenêtres : grandit avec la police sans couper un mot. */
+export function DialogTitle({ title, color }: { title: string; color: string }) {
+  const { width } = useWindowDimensions();
+  return (
+    <Text
+      style={[dialogStyles.title, { color }]}
+      accessibilityRole="header"
+      maxFontSizeMultiplier={titleMaxFontSizeMultiplier(title, width)}
+    >
+      {title}
+    </Text>
+  );
+}
+
+/**
+ * Zone qui défile (titre et texte) quand la fenêtre atteint sa hauteur
+ * maximale. La barre de défilement reste visible (Android) ou clignote à
+ * l'ouverture (iPhone) : sans elle, rien n'indiquait qu'il restait du texte
+ * sous les boutons (recette 1.0.23, test 28).
+ */
+export function DialogScroll({ children }: { children: React.ReactNode }) {
+  const ref = useRef<ScrollViewInstance>(null);
+  const viewportHeight = useRef(0);
+  const flashed = useRef(false);
+  const onContentSizeChange = useCallback((_w: number, contentHeight: number) => {
+    if (flashed.current || Platform.OS !== "ios") return;
+    if (viewportHeight.current > 0 && contentHeight > viewportHeight.current + 1) {
+      flashed.current = true;
+      ref.current?.flashScrollIndicators();
+    }
+  }, []);
+  return (
+    <ScrollView
+      ref={ref}
+      style={styles.scroll}
+      bounces={false}
+      keyboardShouldPersistTaps="handled"
+      persistentScrollbar
+      onLayout={(e) => {
+        viewportHeight.current = e.nativeEvent.layout.height;
+      }}
+      onContentSizeChange={onContentSizeChange}
+    >
+      {children}
+    </ScrollView>
   );
 }
 
@@ -125,6 +228,9 @@ export const dialogStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  // Se réduit quand la boîte atteint sa hauteur maximale (flexGrow 0 : pas
+  // d'espace vide quand le texte est court).
+  scroll: { flexGrow: 0, flexShrink: 1 },
   button: {
     ...RIPPLE_CLIP,
     minHeight: DIALOG_BUTTON_MIN_HEIGHT,

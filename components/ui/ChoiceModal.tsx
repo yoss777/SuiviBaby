@@ -4,7 +4,7 @@ import { Modal, Text, View } from "react-native";
 import { getNeutralColors } from "@/constants/dashboardColors";
 import { elevation } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { DialogButton, dialogStyles } from "./DialogParts";
+import { DialogButton, DialogScroll, DialogTitle, dialogStyles } from "./DialogParts";
 
 export type ChoiceButtonStyle = "default" | "cancel" | "destructive";
 
@@ -64,16 +64,16 @@ export function ChoiceModal({
           style={[dialogStyles.card, elevation.raised(colorScheme), { backgroundColor: nc.backgroundCard }]}
           accessibilityViewIsModal={true}
         >
-          <Text style={[dialogStyles.title, { color: nc.textStrong }]} accessibilityRole="header">
-            {title}
-          </Text>
-          {typeof message === "string" ? (
-            message ? (
-              <Text style={[dialogStyles.message, { color: nc.textNormal }]}>{message}</Text>
-            ) : null
-          ) : message ? (
-            <View style={dialogStyles.messageContainer}>{message}</View>
-          ) : null}
+          <DialogScroll>
+            <DialogTitle title={title} color={nc.textStrong} />
+            {typeof message === "string" ? (
+              message ? (
+                <Text style={[dialogStyles.message, { color: nc.textNormal }]}>{message}</Text>
+              ) : null
+            ) : message ? (
+              <View style={dialogStyles.messageContainer}>{message}</View>
+            ) : null}
+          </DialogScroll>
 
           <View style={dialogStyles.buttonsStack}>
             {ordered.map((button, index) => {

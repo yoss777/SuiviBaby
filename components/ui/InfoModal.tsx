@@ -12,7 +12,7 @@ import { Colors, getReadableTextColor } from '@/constants/theme';
 import { elevation, space } from "@/constants/tokens";
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { DESTRUCTIVE_COLOR } from './ConfirmModal';
-import { DialogButton, dialogStyles } from './DialogParts';
+import { DialogButton, DialogScroll, DialogTitle, dialogStyles } from './DialogParts';
 import { pressedOpacity } from './pressFeedback';
 
 interface InfoModalProps {
@@ -120,10 +120,10 @@ export function InfoModal({
           accessible={false}
           accessibilityViewIsModal={true}
         >
-          <Text style={[dialogStyles.title, { color: ink }]} accessibilityRole="header">
-            {title}
-          </Text>
-          {renderMessage()}
+          <DialogScroll>
+            <DialogTitle title={title} color={ink} />
+            {renderMessage()}
+          </DialogScroll>
           {showConfirmButton && (
             <View style={dialogStyles.buttonsRow}>
               <DialogButton
