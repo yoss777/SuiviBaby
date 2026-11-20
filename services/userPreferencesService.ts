@@ -47,6 +47,8 @@ interface UserPreferences {
   lastActiveChildId?: string;
   notifications?: NotificationPreferences;
   theme?: ThemePreference;
+  /** « Sombre la nuit » (22 h – 7 h). Absent = jamais touché (activé par défaut). */
+  darkAtNight?: boolean;
   language?: LanguagePreference;
   healthDataConsent?: HealthDataConsent;
 }
@@ -127,6 +129,7 @@ function toUserPreferences(data: UserPreferences): UserPreferences {
       } as ReminderPreferences,
     },
     theme: data.theme ?? defaultThemePreference,
+    darkAtNight: typeof data.darkAtNight === "boolean" ? data.darkAtNight : undefined,
     language: data.language ?? defaultLanguagePreference,
   };
 }
@@ -290,31 +293,38 @@ export async function synchroniserFuseauHoraire(): Promise<boolean> {
   }
 }
 
-/**
- * Obtenir la préférence de thème
- */
-export async function obtenirPreferenceTheme(): Promise<ThemePreference> {
-  const preferences = await obtenirPreferences();
-  return preferences.theme ?? defaultThemePreference;
+export interface ThemeSettings {
+  theme: ThemePreference;
+  /** undefined = l'utilisateur n'a jamais touché l'interrupteur. */
+  darkAtNight?: boolean;
 }
 
 /**
- * Mettre à jour la préférence de thème
+ * Obtenir le thème et l'interrupteur « Sombre la nuit »
  */
-export async function mettreAJourPreferenceTheme(theme: ThemePreference) {
+export async function obtenirReglagesTheme(): Promise<ThemeSettings> {
+  const preferences = await obtenirPreferences();
+  return {
+    theme: preferences.theme ?? defaultThemePreference,
+    darkAtNight: preferences.darkAtNight,
+  };
+}
+
+/**
+ * Enregistre le thème et/ou l'interrupteur en une seule écriture (merge : le
+ * document n'a pas besoin d'exister).
+ */
+export async function mettreAJourReglagesTheme(settings: Partial<ThemeSettings>) {
   try {
     const userId = getUserId();
-    const docRef = doc(db, "user_preferences", userId);
-
-    await updateDoc(docRef, {
-      theme,
-      updatedAt: new Date(),
-    });
-
+    const data: DocumentData = { updatedAt: new Date() };
+    if (settings.theme !== undefined) data.theme = settings.theme;
+    if (settings.darkAtNight !== undefined) data.darkAtNight = settings.darkAtNight;
+    await mergeUserPreferences(userId, data);
     return true;
   } catch (e) {
     console.error("Erreur lors de la mise à jour du thème:", e);
-    captureServiceError(e, { service: "userPreferences", operation: "mettreAJourPreferenceTheme" });
+    captureServiceError(e, { service: "userPreferences", operation: "mettreAJourReglagesTheme" });
     throw e;
   }
 }

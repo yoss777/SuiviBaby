@@ -46,7 +46,7 @@ const SLIDES = [
     icon: "clock" as const,
     title: "Saisie en 3 secondes",
     description:
-      "Un biberon à 3 h du matin ? Trois touches, ou votre voix. Mode nuit automatique, pensé pour les parents fatigués.",
+      "Un biberon à 3 h du matin ? Trois touches, ou votre voix. De 22 h à 7 h, l'écran passe en sombre pour ne pas vous éblouir (réglable dans Thème).",
   },
   {
     icon: "users" as const,

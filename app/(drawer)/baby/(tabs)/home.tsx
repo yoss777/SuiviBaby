@@ -30,6 +30,7 @@ import { useDeleteWithUndo } from "@/hooks/useDeleteWithUndo";
 import { useSoftDeletedIds } from "@/hooks/useSoftDeletedIds";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useNightMode } from "@/hooks/useNightMode";
+import { useDarkAtNightNotice } from "@/hooks/useDarkAtNightNotice";
 import { softDeleteNow } from "@/utils/softDeleteNow";
 import { useCanManageContentState } from "@/hooks/useCanManageContent";
 import { useEventEditHandler } from "@/hooks/useEventEditHandler";
@@ -210,6 +211,8 @@ export default function HomeDashboard() {
   const colorScheme = useColorScheme() ?? "light";
   // La nuit (22 h – 7 h), l'Accueil va à l'essentiel : pas de conseils éditoriaux.
   const { isNightMode, animations: nightAnimations } = useNightMode();
+  // 1.0.24 : prévient une fois les comptes en Clair du sombre la nuit.
+  useDarkAtNightNotice();
   const nc = getNeutralColors(colorScheme);
   const cat = getCategoryColors(colorScheme);
   const headerOwnerId = useRef(`home-${Math.random().toString(36).slice(2)}`);
