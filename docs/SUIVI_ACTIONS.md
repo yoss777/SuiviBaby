@@ -29,11 +29,11 @@ lignes étaient périmées : S6 (fiabilité, 6.1-6.9), S14 (TRANSFER), A4, 4.5 e
 
 | Id | Sujet | Taille | Preuve |
 |---|---|---|---|
-| R9 | Jeton `device_tokens` non supprimé après une déconnexion hors ligne | M | `services/pushTokenService.ts:327-333` ; rien ne réessaie |
+| R9 | ✅ 1.0.24 (à vérifier sur appareil) — Jeton `device_tokens` non supprimé après une déconnexion hors ligne. Corrigé : à toute fin de session, le téléphone est désinscrit des notifications (`unregisterForNotificationsAsync`) ; le jeton devient invalide et le serveur supprime le document au prochain envoi (DeviceNotRegistered). Android hors ligne : désinscription notée et terminée au lancement suivant ; une nouvelle connexion réinscrit le téléphone | M | `services/pushTokenService.ts:327-333` ; rien ne réessaie |
 | R10 | InfoModal et PromptModal sans défilement en grande police | S | seul `ConfirmModal.tsx` a un ScrollView |
-| R11 | Bandeau « Pas de connexion internet » qui clignote à l'ouverture | S | `components/ui/OfflineBanner.tsx:16` (`isInternetReachable` vaut `null` au démarrage) |
-| R12 | Durée enregistrée arrondie, chrono tronqué | S | `hooks/useStopTimedEventWithUndo.ts:73` (`Math.round`) |
-| R13 | Boutons du formulaire Température coupés en très grande police | S | `SoinsForm.tsx` |
+| R11 | ✅ 1.0.24 — Bandeau « Pas de connexion internet » qui clignote à l'ouverture : `isInternetReachable` null n'est plus « hors ligne ». Le composant n'est monté nulle part (le monter = décision produit) | S | `components/ui/OfflineBanner.tsx:16` (`isInternetReachable` vaut `null` au démarrage) |
+| R12 | ✅ 1.0.24 — Durée enregistrée arrondie, chrono tronqué : minutes entières (`Math.floor`), comme le chrono | S | `hooks/useStopTimedEventWithUndo.ts:73` (`Math.round`) |
+| R13 | ✅ 1.0.24 (à vérifier police au maximum) — Boutons du formulaire Température coupés en très grande police : pied des 8 formulaires sur une ligne (réduit si besoin), signes − et + plafonnés ×1,4 | S | `SoinsForm.tsx` |
 | R14 | Écritures live/nursing toutes « urgentes », sans limite de débit | M | `docs/strategie/ux/REVUE_ECC_LOT5_J6.md:61` |
 | R15 | Règle `invitations` sans `email_verified` pour refuser (S5) | S | `firestore.rules:360` |
 | R16 | Retrait du bucket photos US et des miroirs (1.8, le 02/12) puis règles de transition (12.7 du plan d'audit, le 07/12) | M | `utils/photoStorage.ts:14,16` |

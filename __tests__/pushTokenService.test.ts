@@ -10,6 +10,7 @@ jest.mock("expo-notifications", () => ({
   requestPermissionsAsync: jest.fn(),
   setNotificationChannelAsync: jest.fn(),
   getExpoPushTokenAsync: jest.fn(),
+  unregisterForNotificationsAsync: jest.fn(() => Promise.resolve()),
   AndroidImportance: { MAX: 5 },
 }));
 
@@ -383,5 +384,61 @@ describe("données du widget seulement si un widget est posé", () => {
     mockInstalled = null;
     await registerPushToken("u1");
     expect(mocked(setDoc).mock.calls.at(-1)[1]).not.toHaveProperty("widgetPush");
+  });
+});
+
+describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (R9)", () => {
+  const NetInfo = require("@react-native-community/netinfo");
+  const AsyncStorage = require("@react-native-async-storage/async-storage");
+  const {
+    PUSH_UNREGISTER_PENDING_KEY,
+    retryPendingPushUnregister,
+  } = require("@/services/pushTokenService");
+  let store: Record<string, string>;
+  beforeEach(() => {
+    store = {};
+    AsyncStorage.getItem.mockImplementation((k: string) => Promise.resolve(store[k] ?? null));
+    AsyncStorage.setItem.mockImplementation((k: string, v: string) => {
+      store[k] = v;
+      return Promise.resolve();
+    });
+    AsyncStorage.removeItem.mockImplementation((k: string) => {
+      delete store[k];
+      return Promise.resolve();
+    });
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: false, isInternetReachable: false });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it("hors ligne : le téléphone est désinscrit (jeton invalide, le serveur le supprimera)", async () => {
+    await removePushTokens("u1");
+    expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("désinscription impossible (Android hors ligne) : notée, puis terminée au lancement suivant", async () => {
+    mocked(Notifications.unregisterForNotificationsAsync).mockRejectedValueOnce(new Error("SERVICE_NOT_AVAILABLE"));
+    await removePushTokens("u1");
+    expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBe("1");
+    await retryPendingPushUnregister();
+    expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(2);
+    expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("rien en attente : aucun appel au lancement", async () => {
+    await retryPendingPushUnregister();
+    expect(Notifications.unregisterForNotificationsAsync).not.toHaveBeenCalled();
+  });
+
+  it("nouvelle connexion : téléphone réinscrit, plus rien en attente", async () => {
+    store[PUSH_UNREGISTER_PENDING_KEY] = "1";
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(setDoc).mockResolvedValue(undefined);
+    await registerPushToken("u2");
+    await Promise.resolve();
+    expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBeUndefined();
   });
 });

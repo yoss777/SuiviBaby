@@ -2,6 +2,7 @@
 // Enregistre / supprime le push token Expo dans Firestore
 // pour permettre l'envoi de notifications push via Cloud Functions.
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
@@ -254,6 +255,8 @@ async function registerOnce(userId: string, gen: number): Promise<void> {
       },
       { merge: true },
     );
+    // Téléphone réinscrit pour ce compte : plus de désinscription en attente.
+    AsyncStorage.removeItem(PUSH_UNREGISTER_PENDING_KEY).catch(() => {});
     // Déconnexion pendant l'écriture : le jeton recréé est supprimé aussitôt,
     // sauf si un enregistrement a démarré depuis (reconnexion rapide, même
     // document) : c'est lui qui fait foi.
@@ -297,6 +300,54 @@ export function resetPushSession(): void {
   lastWidgetPush = null;
 }
 
+/**
+ * Désinscription de ce téléphone restée à faire (Android hors ligne : la
+ * suppression du jeton FCM a besoin du réseau). Réessayée au prochain
+ * lancement sans compte connecté.
+ */
+export const PUSH_UNREGISTER_PENDING_KEY = "@suivibaby_push_unregister_pending";
+const UNREGISTER_TIMEOUT_MS = 3000;
+
+/**
+ * Plus aucune notification sur ce téléphone pour l'ancien compte, quand son
+ * jeton n'a pas pu être supprimé du serveur (déconnexion hors ligne,
+ * déconnexion forcée). Le jeton devient invalide : au prochain envoi, Expo
+ * répond DeviceNotRegistered et le serveur supprime le document
+ * (functions/src/notifications/reminders.js). Une nouvelle connexion
+ * réinscrit le téléphone (getExpoPushTokenAsync). R9.
+ */
+export async function stopPushOnThisDevice(): Promise<void> {
+  cachedToken = null;
+  let ok = false;
+  try {
+    ok = await withTimeout(
+      Notifications.unregisterForNotificationsAsync().then(() => true),
+      UNREGISTER_TIMEOUT_MS,
+      false,
+      "unregisterPush",
+    );
+  } catch (error) {
+    if (!isConnectivityError(error)) captureServiceError(error, { service: "pushToken", operation: "unregisterPush" });
+  }
+  try {
+    if (ok) await AsyncStorage.removeItem(PUSH_UNREGISTER_PENDING_KEY);
+    else await AsyncStorage.setItem(PUSH_UNREGISTER_PENDING_KEY, "1");
+  } catch {
+    // stockage indisponible : la désinscription sera retentée à la prochaine déconnexion
+  }
+}
+
+/** Lancement sans compte connecté : termine une désinscription restée à faire. */
+export async function retryPendingPushUnregister(): Promise<void> {
+  let pending: string | null = null;
+  try {
+    pending = await AsyncStorage.getItem(PUSH_UNREGISTER_PENDING_KEY);
+  } catch {
+    return;
+  }
+  if (pending) await stopPushOnThisDevice();
+}
+
 /** Réseau absent (lecture NetInfo bornée à 1 s ; dans le doute : en ligne). */
 async function isOfflineNow(): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -330,6 +381,8 @@ export async function removePushTokens(userId: string): Promise<void> {
       service: "pushToken",
       operation: "removePushTokensOffline",
     });
+    // Le document reste sur le serveur : on rend le jeton invalide (R9).
+    await stopPushOnThisDevice();
     return;
   }
   // Enregistrement en cours : il voit la nouvelle génération et n'écrit rien,
@@ -379,6 +432,7 @@ export async function removePushTokens(userId: string): Promise<void> {
         service: "pushToken",
         operation: "removePushTokensTimeout",
       });
+      await stopPushOnThisDevice();
     }
   } catch (error) {
     console.error("Erreur removePushTokens:", error);

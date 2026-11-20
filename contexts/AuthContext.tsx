@@ -2,7 +2,13 @@
 import { auth } from "@/config/firebase";
 import { useModal } from "@/contexts/ModalContext";
 import { cancelAllReminders } from "@/services/localNotificationService";
-import { registerPushToken, removePushTokens, resetPushSession } from "@/services/pushTokenService";
+import {
+  registerPushToken,
+  removePushTokens,
+  resetPushSession,
+  retryPendingPushUnregister,
+  stopPushOnThisDevice,
+} from "@/services/pushTokenService";
 import { clearNowWidget, resumeWidgetWrites } from "@/services/widgetSync";
 import { rotateWidgetLinkKey } from "@/services/widgetLinkKey";
 import { onSignOut as onOfflineQueueSignOut, startAutoSync } from "@/services/offlineQueueService";
@@ -324,7 +330,14 @@ export function AuthProvider({
         // Plus aucun essai pour l'ancien compte (enfant du widget, jeton). Le
         // jeton ne peut plus être supprimé sans authentification : le serveur
         // le réattribue à la prochaine connexion sur ce téléphone.
+        const wasSignedIn = stateRef.current.firebaseUser != null;
         resetPushSession();
+        // Fin de session (déconnexion, y compris forcée : compte supprimé,
+        // session révoquée) : on rend le jeton invalide pour que l'ancien
+        // compte ne reçoive plus rien ici ; une nouvelle connexion réinscrit
+        // le téléphone. Lancement sans compte : on termine une désinscription
+        // restée à faire (R9).
+        (wasSignedIn ? stopPushOnThisDevice() : retryPendingPushUnregister()).catch(() => {});
         dispatch({ type: "CLEAR_USER" });
       }
     });
