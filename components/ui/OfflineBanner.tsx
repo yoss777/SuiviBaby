@@ -15,7 +15,10 @@ export function OfflineBanner() {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = !!state.isConnected && !!state.isInternetReachable;
+      // isInternetReachable vaut null tant que le test n'est pas fait (au
+      // démarrage) : inconnu n'est pas « hors ligne », sinon le bandeau
+      // clignotait à l'ouverture (R11).
+      const connected = state.isConnected !== false && state.isInternetReachable !== false;
 
       if (!connected) {
         wasOfflineRef.current = true;
