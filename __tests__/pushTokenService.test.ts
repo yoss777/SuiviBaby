@@ -339,6 +339,7 @@ describe("courses avec la déconnexion et le changement d'enfant", () => {
     await Promise.all([first, signOut, second]);
     expect(deleteDoc).not.toHaveBeenCalled();
     expect(lastSetDoc()).toMatchObject({ userId: "u2" });
+    expect(Notifications.unregisterForNotificationsAsync).not.toHaveBeenCalled();
   });
 
   it("deux enregistrements simultanés du même compte : une seule écriture", async () => {
@@ -390,7 +391,9 @@ describe("données du widget seulement si un widget est posé", () => {
   });
 });
 
-describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (R9)", () => {
+describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (R9, Android)", () => {
+  const { Platform } = require("react-native");
+  const originalOS = Platform.OS;
   const NetInfo = require("@react-native-community/netinfo");
   const AsyncStorage = require("@react-native-async-storage/async-storage");
   const {
@@ -410,14 +413,54 @@ describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (
       return Promise.resolve();
     });
     jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: false, isInternetReachable: false });
+    Platform.OS = "android";
   });
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    Platform.OS = originalOS;
+    jest.restoreAllMocks();
+  });
+
+  it("iPhone : pas de désinscription native (sans effet sur le jeton, risque pour la réinscription)", async () => {
+    Platform.OS = "ios";
+    await removePushTokens("u1");
+    expect(Notifications.unregisterForNotificationsAsync).not.toHaveBeenCalled();
+  });
 
   it("hors ligne : le téléphone est désinscrit (jeton invalide, le serveur le supprimera)", async () => {
+    store[PUSH_UNREGISTER_PENDING_KEY] = "1"; // reste d'une fois précédente
     await removePushTokens("u1");
     expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
-    expect(getDocs).not.toHaveBeenCalled();
     expect(store[PUSH_UNREGISTER_PENDING_KEY]).toBeUndefined();
+  });
+
+  it("fin de session déjà traitée par la déconnexion : l'écouteur d'authentification ne désinscrit pas une 2e fois", async () => {
+    const { stopPushAfterSessionEnd } = require("@/services/pushTokenService");
+    await removePushTokens("u1");
+    await stopPushAfterSessionEnd();
+    expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
+    // Déconnexion forcée ensuite (sans removePushTokens) : désinscription.
+    await stopPushAfterSessionEnd();
+    expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it("reconnexion rapide : l'inscription attend la fin de la désinscription en cours", async () => {
+    const { stopPushOnThisDevice } = require("@/services/pushTokenService");
+    let finishUnregister: () => void = () => {};
+    mocked(Notifications.unregisterForNotificationsAsync).mockImplementationOnce(
+      () => new Promise<void>((r) => (finishUnregister = r)),
+    );
+    jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    permission("granted");
+    mocked(getDoc).mockResolvedValue({ exists: () => false });
+    mocked(setDoc).mockResolvedValue(undefined);
+    const stop = stopPushOnThisDevice();
+    const reg = registerPushToken("u2");
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(Notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
+    finishUnregister();
+    await Promise.all([stop, reg]);
+    expect(Notifications.getExpoPushTokenAsync).toHaveBeenCalled();
+    expect(setDoc).toHaveBeenCalled();
   });
 
   it("désinscription impossible (Android hors ligne) : notée, puis terminée au lancement suivant", async () => {
@@ -447,6 +490,7 @@ describe("déconnexion hors ligne : plus de notifications pour l'ancien compte (
 });
 
 describe("déconnexion : seul le jeton de ce téléphone est supprimé", () => {
+  afterEach(() => jest.restoreAllMocks());
   it("supprime le document de ce téléphone, sans toucher aux autres appareils du compte", async () => {
     const NetInfo = require("@react-native-community/netinfo");
     jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
@@ -461,6 +505,23 @@ describe("déconnexion : seul le jeton de ce téléphone est supprimé", () => {
     expect(getDocs).not.toHaveBeenCalled();
     expect(deleteDoc).toHaveBeenCalledTimes(1);
     expect(firestore.doc).toHaveBeenCalledWith(expect.anything(), "device_tokens", "ExponentPushToken_abc_");
-    jest.restoreAllMocks();
+  });
+
+  it("jeton inconnu (jamais enregistré cette session) : rien supprimé, téléphone désinscrit (Android)", async () => {
+    const { Platform } = require("react-native");
+    const os = Platform.OS;
+    Platform.OS = "android";
+    try {
+      const NetInfo = require("@react-native-community/netinfo");
+      jest.spyOn(NetInfo, "fetch").mockResolvedValue({ isConnected: true, isInternetReachable: true });
+      const { stopPushOnThisDevice } = require("@/services/pushTokenService");
+      await stopPushOnThisDevice(); // oublie le jeton connu
+      mocked(Notifications.unregisterForNotificationsAsync).mockClear();
+      await removePushTokens("u1");
+      expect(deleteDoc).not.toHaveBeenCalled();
+      expect(Notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(1);
+    } finally {
+      Platform.OS = os;
+    }
   });
 });

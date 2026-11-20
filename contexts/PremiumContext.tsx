@@ -245,7 +245,14 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return;
           if (snap.exists()) {
             const data = snap.data() as SubscriptionData;
-            const docExpiresAt = typeof data.expiresAt === "string" ? data.expiresAt : null;
+            // ISO (écrit par le webhook RevenueCat) ; Timestamp Firestore accepté par prudence.
+            const rawExpires = data.expiresAt as unknown;
+            const docExpiresAt =
+              typeof rawExpires === "string"
+                ? rawExpires
+                : rawExpires && typeof (rawExpires as { toDate?: () => Date }).toDate === "function"
+                  ? (rawExpires as { toDate: () => Date }).toDate().toISOString()
+                  : null;
             // Même lecture que le serveur (subscriptionStateFrom).
             const docGrandfathered = data.grandfathered === true || data.status === "grandfathered";
             setTier(data.tier ?? "free");

@@ -81,7 +81,7 @@ const PLANS: PlanConfig[] = [
       "Partage illimité avec la famille",
       `${FREE_LIMITS.voiceCommandsPerDay} commandes vocales par jour`,
       "1 export PDF",
-      "Mode nuit automatique",
+      "Sombre la nuit (22 h – 7 h)",
     ],
   },
   {

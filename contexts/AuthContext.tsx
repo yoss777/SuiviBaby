@@ -7,7 +7,7 @@ import {
   removePushTokens,
   resetPushSession,
   retryPendingPushUnregister,
-  stopPushOnThisDevice,
+  stopPushAfterSessionEnd,
 } from "@/services/pushTokenService";
 import { clearNowWidget, resumeWidgetWrites } from "@/services/widgetSync";
 import { rotateWidgetLinkKey } from "@/services/widgetLinkKey";
@@ -17,6 +17,7 @@ import { clearWeeklyEventsCache } from "@/services/weeklyEventsCache";
 import { resetChildPermissionsStore } from "@/hooks/useChildPermissions";
 import { signOutGoogle } from "@/services/socialAuthService";
 import { cleanupStaleExports } from "@/services/tempShareService";
+import { captureServiceError } from "@/utils/errorReporting";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   disableBiometric,
@@ -337,7 +338,9 @@ export function AuthProvider({
         // compte ne reçoive plus rien ici ; une nouvelle connexion réinscrit
         // le téléphone. Lancement sans compte : on termine une désinscription
         // restée à faire (R9).
-        (wasSignedIn ? stopPushOnThisDevice() : retryPendingPushUnregister()).catch(() => {});
+        (wasSignedIn ? stopPushAfterSessionEnd() : retryPendingPushUnregister()).catch((error) =>
+          captureServiceError(error, { service: "pushToken", operation: "sessionEndUnregister" }),
+        );
         dispatch({ type: "CLEAR_USER" });
       }
     });

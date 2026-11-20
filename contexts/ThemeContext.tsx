@@ -69,6 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // serveur partie avant ne l'écrase pas, et seul le dernier changement en
   // cours peut être annulé en cas d'échec d'écriture.
   const editVersionRef = useRef(0);
+  const hadUserRef = useRef(false);
   const storedDarkAtNightRef = useRef<boolean | undefined>(undefined);
   useEffect(() => {
     storedDarkAtNightRef.current = storedDarkAtNight;
@@ -109,9 +110,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!localLoaded) return;
 
     if (!firebaseUser) {
+      // Fin de session : le choix « Sombre la nuit » appartenait au compte.
+      // Sans cela, le compte suivant sur ce téléphone en héritait, et il était
+      // même enregistré chez lui à sa première connexion.
+      if (hadUserRef.current) {
+        hadUserRef.current = false;
+        setStoredDarkAtNight(undefined);
+        setSyncedFromServer(false);
+        AsyncStorage.removeItem(DARK_AT_NIGHT_STORAGE_KEY).catch(() => {});
+      }
       setIsLoading(false);
       return;
     }
+    hadUserRef.current = true;
 
     let isMounted = true;
     setIsLoading(true);

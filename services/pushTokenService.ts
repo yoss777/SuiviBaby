@@ -190,6 +190,10 @@ export function registerPushToken(userId: string): Promise<void> {
 
 async function registerOnce(userId: string, gen: number): Promise<void> {
   try {
+    // Désinscription de la session précédente encore en cours : on l'attend,
+    // sinon elle pouvait invalider le jeton tout juste obtenu pour ce compte
+    // (reconnexion rapide), et ses rappels n'arrivaient plus, sans le dire.
+    if (stopInFlight) await stopInFlight;
     const token = await getExpoPushToken();
     if (!token) return;
 
@@ -305,15 +309,47 @@ export const PUSH_UNREGISTER_PENDING_KEY = "@suivibaby_push_unregister_pending";
 const UNREGISTER_TIMEOUT_MS = 3000;
 
 /**
- * Plus aucune notification sur ce téléphone pour l'ancien compte, quand son
- * jeton n'a pas pu être supprimé du serveur (déconnexion hors ligne,
- * déconnexion forcée). Le jeton devient invalide : au prochain envoi, Expo
- * répond DeviceNotRegistered et le serveur supprime le document
+ * Android : plus aucune notification sur ce téléphone pour l'ancien compte,
+ * quand son jeton n'a pas pu être supprimé du serveur (déconnexion hors
+ * ligne, déconnexion forcée). Le jeton FCM est supprimé : au prochain envoi,
+ * Expo répond DeviceNotRegistered et le serveur supprime le document
  * (functions/src/notifications/reminders.js). Une nouvelle connexion
- * réinscrit le téléphone (getExpoPushTokenAsync). R9.
+ * réinscrit le téléphone (getExpoPushTokenAsync). R9. Sans effet sur iPhone.
  */
-export async function stopPushOnThisDevice(): Promise<void> {
+let stopInFlight: Promise<void> | null = null;
+// Fin de session déjà traitée par removePushTokens (document supprimé en
+// ligne) : la désinscription locale est alors inutile.
+let sessionEndHandled = false;
+
+export function stopPushOnThisDevice(): Promise<void> {
+  // Un seul appel natif à la fois (la déconnexion hors ligne l'appelait deux fois).
+  if (stopInFlight) return stopInFlight;
+  stopInFlight = doStopPush().finally(() => {
+    stopInFlight = null;
+  });
+  return stopInFlight;
+}
+
+/**
+ * Fin de session vue par l'écouteur d'authentification : désinscription
+ * locale seulement si removePushTokens n'a pas déjà supprimé le document
+ * (déconnexion hors ligne, délai dépassé, déconnexion forcée).
+ */
+export function stopPushAfterSessionEnd(): Promise<void> {
+  if (sessionEndHandled) {
+    sessionEndHandled = false;
+    return Promise.resolve();
+  }
+  return stopPushOnThisDevice();
+}
+
+async function doStopPush(): Promise<void> {
   cachedToken = null;
+  // iPhone : unregisterForRemoteNotifications ne rend pas le jeton invalide
+  // (les notifications peuvent continuer d'arriver, Apple ne le garantit pas)
+  // et une réinscription peut ensuite ne jamais répondre : on ne l'appelle
+  // pas. La protection iPhone doit venir du serveur (SUIVI_ACTIONS R22).
+  if (Platform.OS === "ios") return;
   let ok = false;
   try {
     ok = await withTimeout(
@@ -390,6 +426,7 @@ export async function removePushTokens(_userId: string): Promise<void> {
     });
     // Le document reste sur le serveur : on rend le jeton invalide (R9).
     await stopPushOnThisDevice();
+    sessionEndHandled = true;
     return;
   }
   // Enregistrement en cours : il voit la nouvelle génération et n'écrit rien,
@@ -409,31 +446,35 @@ export async function removePushTokens(_userId: string): Promise<void> {
     ]);
     if (timer) clearTimeout(timer);
   }
-  // Suppression bornée elle aussi : hors ligne, la lecture et les
-  // suppressions ne se terminent qu'au retour du réseau, et la déconnexion
-  // restait figée. Au-delà du délai, on continue et on le signale (le
-  // téléphone, lui, n'applique plus rien : widget vidé, enfant oublié).
   // Nouvelle connexion commencée sur ce téléphone depuis la déconnexion
   // (même document, puisqu'il dérive du jeton) : c'est elle qui fait foi,
-  // on ne supprime pas son jeton.
-  if (lastStartedGen >= genAtSignOut) return;
+  // on ne supprime pas son jeton, et on ne désinscrit pas le téléphone.
+  if (lastStartedGen >= genAtSignOut) {
+    sessionEndHandled = true;
+    return;
+  }
   // Jeton inconnu (enregistrement jamais abouti pendant cette session) : on
   // ne peut pas viser le document ; on rend le jeton invalide, le serveur le
   // supprimera au prochain envoi (R9).
   if (!docId) {
     await stopPushOnThisDevice();
+    sessionEndHandled = true;
     return;
   }
+  // Suppression bornée : hors ligne, elle ne se termine qu'au retour du
+  // réseau, et la déconnexion restait figée. Au-delà du délai, on continue,
+  // on le signale et on désinscrit le téléphone.
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = Symbol("timeout");
   try {
-    const removal = (lastStartedGen >= genAtSignOut
-      ? Promise.resolve()
-      : deleteDoc(doc(db, COLLECTION, docId))
-    ).catch((error: unknown) => {
+    const removal = deleteDoc(doc(db, COLLECTION, docId)).catch((error: unknown) => {
       // Document absent ou repris par un autre compte sur ce téléphone :
-      // rien à supprimer pour celui-ci.
-      if ((error as { code?: string })?.code === "permission-denied") return;
+      // rien à supprimer pour celui-ci. Pas de désinscription locale ici :
+      // le jeton est partagé, elle couperait l'autre compte.
+      if ((error as { code?: string })?.code === "permission-denied") {
+        captureServiceError(error, { service: "pushToken", operation: "removePushTokensDenied" });
+        return;
+      }
       throw error;
     });
     const outcome = await Promise.race([
@@ -453,6 +494,7 @@ export async function removePushTokens(_userId: string): Promise<void> {
       });
       await stopPushOnThisDevice();
     }
+    sessionEndHandled = true;
   } catch (error) {
     console.error("Erreur removePushTokens:", error);
     captureServiceError(error, { service: "pushToken", operation: "removePushTokens" });

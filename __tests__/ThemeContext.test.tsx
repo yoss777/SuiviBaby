@@ -10,7 +10,8 @@ jest.mock("@/services/userPreferencesService", () => ({
   mettreAJourReglagesTheme: (...a: unknown[]) => mockMaj(...a),
 }));
 const mockUser = { uid: "u1" };
-jest.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ firebaseUser: mockUser }) }));
+let mockAuthUser: { uid: string } | null = mockUser;
+jest.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ firebaseUser: mockAuthUser }) }));
 
 import { ThemeProvider, useThemePreference } from "@/contexts/ThemeContext";
 
@@ -34,6 +35,7 @@ async function mount() {
 }
 
 beforeEach(async () => {
+  mockAuthUser = mockUser;
   mockHour = 23;
   ctx = undefined as unknown as typeof ctx;
   jest.spyOn(Date.prototype, "getHours").mockImplementation(() => mockHour);
@@ -190,5 +192,20 @@ describe("ThemeContext", () => {
     await waitFor(() => expect(set).toHaveBeenLastCalledWith("dark"));
     await ctx.setPreference("light");
     await waitFor(() => expect(set).toHaveBeenLastCalledWith("light"));
+  });
+
+  it("déconnexion : le choix « Sombre la nuit » ne passe pas au compte suivant", async () => {
+    mockObtenir.mockResolvedValue({ theme: "light", darkAtNight: false });
+    const r = await mount();
+    expect(ctx.darkAtNight).toBe(false);
+    mockAuthUser = null;
+    r.rerender(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    await waitFor(() => expect(ctx.darkAtNight).toBe(true));
+    expect(ctx.storedDarkAtNight).toBeUndefined();
+    expect(await AsyncStorage.getItem("@suivibaby_dark_at_night")).toBeNull();
   });
 });
