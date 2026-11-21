@@ -478,7 +478,9 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     const calls = failingMarker(firestore, "set");
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     await withCoalesce(() => fanout.coalescedFanOut(firestore, "c1", { urgent: false }));
-    expect(calls.n).toBe(1);
+    // R14 : marqueur incertain → la réservation tranche (un urgent en attente a
+    // peut-être passé la main) ; l'écriture a bien été tentée.
+    expect(calls.n).toBeGreaterThanOrEqual(1);
     expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker failed", { code: "unavailable" });
     expect(JSON.stringify(warn.mock.calls)).not.toContain("c1");
     expect(pushed()).toHaveLength(2);
@@ -490,7 +492,7 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     const firestore = db();
     const calls = failingMarker(firestore, "get");
     await withCoalesce(() => fanout.coalescedFanOut(firestore, "c1", { urgent: false }));
-    expect(calls.n).toBe(1);
+    expect(calls.n).toBeGreaterThanOrEqual(1);
     expect(pushed()).toHaveLength(2);
   });
 
@@ -892,9 +894,12 @@ describe("R14 : débit des envois urgents par enfant", () => {
       throw Object.assign(new Error("aborted"), { code: "aborted" });
     });
     await fanout.coalescedFanOut(firestore, "c1", { urgent: true });
-    expect(highCount()).toBe(2);
+    // Envoyé quand même, en mode plafonné (pas compté : pas de priorité haute
+    // Android ; l'iPhone garde l'écart urgent).
+    expect(pushed()).toHaveLength(2);
+    expect(highCount()).toBe(0);
     expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", { phase: "claim", code: "aborted" });
-    expect(summaries().some((f) => f.urgentSlot === "failopen")).toBe(true);
+    expect(summaries().some((f) => f.urgentSlot === "failopen" && f.urgentCapped === true)).toBe(true);
     warn.mockRestore();
   });
 
@@ -985,5 +990,120 @@ describe("R14 : débit des envois urgents par enfant", () => {
     await fanout.coalescedFanOut(db(), "c1", { urgent: true });
     await fanout.coalescedFanOut(db(), "c2", { urgent: true }); // pas bloqué par c1
     expect(pushed().filter((m) => m.priority === "high").map((m) => m.to)).toContain("ExponentPushToken[m2]");
+  });
+
+  const iosSeed = (extra = {}) => seed({
+    "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 5 * 60_000 },
+    ...extra,
+  });
+
+  it("plafonné : Android en priorité normale, mais l'iPhone garde l'écart URGENT (servi à 5 min, pas à 20)", async () => {
+    memoryStore(iosSeed({ "app_config/widgetPush": { enabled: true, ios: true, urgentGapMs: 0, urgentPerHour: 1 } }));
+    fanout._setCatchUpSleepForTests(async () => {});
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true }); // 1/1, iPhone servi (5 min > 2 min)
+      jest.setSystemTime(NOW + 3 * 60_000); // 3 min après : < 20 min (écart normal), > 2 min (écart urgent)
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true }); // plafonné
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    const toIos = pushed().filter((m) => m.to === "ExponentPushToken[i1]");
+    expect(toIos).toHaveLength(2);
+    const lastAndroid = pushed().filter((m) => m.to === "ExponentPushToken[m1]").pop();
+    expect(lastAndroid.priority).toBe("normal");
+  });
+
+  it("plafonné puis une saisie non urgente prend la main : elle hérite et part en mode plafonné (iPhone protégé)", async () => {
+    memoryStore(iosSeed({ "app_config/widgetPush": { enabled: true, ios: true, urgentGapMs: 0, urgentPerHour: 1 } }));
+    fanout._setCatchUpSleepForTests(async () => {});
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+      jest.setSystemTime(NOW + 3 * 60_000);
+      const end = fanout.coalescedFanOut(db(), "c1", { urgent: true }); // plafonné, attend le regroupement
+      await new Promise((r) => setTimeout(r, 2));
+      const history = fanout.coalescedFanOut(db(), "c1", { urgent: false }); // prend la main
+      await Promise.all([end, history]);
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    expect(pushed().filter((m) => m.to === "ExponentPushToken[i1]")).toHaveLength(2);
+    expect(summaries().some((f) => f.inheritedUrgent === true && f.urgentCapped === true)).toBe(true);
+  });
+
+  it("nouvelle réservation alors qu'un autre urgent a pris la main : rien n'est écrit, l'autre envoie", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const ref = firestore.doc("widget_fanout/c1");
+    await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW });
+    await fanout.claimUrgentSlot(firestore, ref, "b", { gapMs: 300, perHour: 60, nowMs: NOW + 10 }); // b attend, jeton b
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW + 20, reclaim: true })).toEqual({ action: "superseded" });
+    expect((await ref.get()).data().token).toBe("b");
+    // Nouvelle réservation qui doit encore attendre : n'écrit pas.
+    const before = (await ref.get()).data();
+    expect(await fanout.claimUrgentSlot(firestore, ref, "b", { gapMs: 300, perHour: 60, nowMs: NOW + 30, reclaim: true })).toEqual({ action: "wait", waitMs: 270 });
+    expect((await ref.get()).data()).toEqual(before);
+  });
+
+  it("heure enregistrée dans le futur : l'attente est bornée à l'écart", async () => {
+    memoryStore(seed({ "widget_fanout/c1": { lastUrgentAt: NOW + 10 * 60_000 } }));
+    const firestore = db();
+    const ref = firestore.doc("widget_fanout/c1");
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW })).toEqual({ action: "wait", waitMs: 300 });
+  });
+
+  it("drapeau « urgent en attente » trop ancien : une saisie normale reste normale", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, urgentGapMs: 300 },
+      "widget_fanout/c1": { urgentPending: true, urgentPendingAt: NOW - 5 * 60_000 },
+    }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect(highCount()).toBe(0);
+    expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(2);
+  });
+
+  it("marqueur illisible chez une saisie normale : envoi urgent par la réservation (un urgent en attente n'est pas rétrogradé)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    const firestore = db();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const ref = firestore.doc("widget_fanout/c1");
+    const realGet = ref.get.bind(ref);
+    let failed = false;
+    const origDoc = firestore.doc.getMockImplementation();
+    firestore.doc.mockImplementation((path) => {
+      const r = origDoc(path);
+      if (path === "widget_fanout/c1") {
+        const g = r.get;
+        r.get = async () => {
+          if (!failed) {
+            failed = true;
+            throw Object.assign(new Error("x"), { code: "unavailable" });
+          }
+          return g();
+        };
+      }
+      return r;
+    });
+    await fanout.coalescedFanOut(firestore, "c1", { urgent: false });
+    expect(highCount()).toBe(2);
+    expect(summaries().some((f) => f.inheritedUrgent === true && f.markerUncertain === true)).toBe(true);
+    void realGet;
+    warn.mockRestore();
+  });
+
+  it("chaque ligne de journal porte l'identifiant court du déclenchement (sans donnée personnelle)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    const sent = summaries().find((f) => f.reason === "sent");
+    expect(sent.trig).toMatch(/^[a-z0-9-]{8}$/);
+    expect(sent.urgentRequested).toBe(true);
+    expect(JSON.stringify(summaries())).not.toContain("c1");
+  });
+
+  it("coalesceMs 0 : interrupteur d'urgence, aucune limite ni marqueur", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, coalesceMs: 0, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(4);
+    expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
   });
 });

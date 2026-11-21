@@ -237,7 +237,7 @@ async function fanOutWidget(db, childId, { urgent, capped = false, logExtra = {}
   // recevoir (rattrapage d'un envoi urgent, coalescedFanOut).
   let iosRetryAtMs = null;
   const log = (reason) => {
-    reminderLib.logJobSummary("widgetFanout", startedAt, { reason, urgent, ...(iosOnly ? { iosOnly } : {}), ...logExtra, ...stats });
+    reminderLib.logJobSummary("widgetFanout", startedAt, { ...logExtra, reason, urgent, ...(iosOnly ? { iosOnly } : {}), ...stats });
     return { reason, iosRetryAtMs };
   };
 
@@ -475,10 +475,11 @@ async function fanOutWidget(db, childId, { urgent, capped = false, logExtra = {}
  * Regroupement des envois rapprochés : plusieurs saisies coup sur coup (fil du
  * jour, notes, compteurs) ne déclenchent qu'un envoi, celui de la dernière, qui
  * relit l'état complet. Chaque déclenchement pose un jeton par enfant, attend
- * 2 s, et n'envoie que s'il est toujours le dernier. Un envoi urgent (début ou
- * fin de session) part tout de suite et rend caducs les envois en attente :
- * il lit l'état le plus récent. Collection réservée au serveur (règle par
- * défaut : aucun accès client), jeton et heure seulement.
+ * 2 s, et n'envoie que s'il est toujours le dernier. Un envoi urgent (début
+ * ou fin de sommeil ou de promenade, tout changement visible d'une tétée)
+ * suit le débit limité de R14 (ci-dessous) et rend caducs les envois en
+ * attente : il lit l'état le plus récent. Collection réservée au serveur
+ * (règle par défaut : aucun accès client), jeton, heure et compteurs.
  */
 const COALESCE_MS = 2000;
 let coalesceMs = COALESCE_MS;
@@ -504,8 +505,9 @@ let coalesceMs = COALESCE_MS;
  */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const URGENT_GAP_MS = 5000;
-// 15 s au plus : avec l'envoi (et son nouvel essai) et le rattrapage iPhone
-// (jusqu'à 2 min), le déclenchement reste sous son délai de 180 s.
+// 15 s au plus : avec le regroupement (10 s au plus), l'envoi et son nouvel
+// essai, puis le rattrapage iPhone (jusqu'à 2 min), le déclenchement reste
+// sous son délai de 180 s (pire cas ≈ 156 s, revue ECC du 21/11).
 const URGENT_GAP_MAX_MS = 15_000;
 const URGENT_PER_HOUR = 60;
 // L'attente se fait par tranches : un urgent remplacé par un autre s'arrête tôt.
@@ -526,16 +528,32 @@ function configNumber(config, key, fallback, max) {
 }
 
 /**
- * Réserve un créneau urgent pour cet enfant (transaction : deux déclenchements
- * simultanés ne partent pas tous les deux). Pose toujours le jeton du
- * déclenchement (tokenUrgent : vrai). Renvoie { action: "send" } (créneau
- * pris), { action: "wait", waitMs } (écart pas écoulé, urgentPending posé) ou
- * { action: "downgrade" } (plafond de la fenêtre d'une heure atteint).
+ * Un urgent en attente plus vieux que cela n'est plus « en attente » : son
+ * déclenchement a disparu (délai, erreur). Le drapeau est alors ignoré, pour
+ * qu'une saisie normale ne parte pas en urgent à tort.
  */
-async function claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs }) {
+const URGENT_PENDING_STALE_MS = 60_000;
+
+/**
+ * Réserve un créneau urgent pour cet enfant (transaction : deux déclenchements
+ * simultanés ne partent pas tous les deux). Première réservation : pose le
+ * jeton du déclenchement (tokenUrgent : vrai). Renvoie :
+ * - { action: "send" } : créneau pris (urgentPending remis à faux) ;
+ * - { action: "wait", waitMs } : écart pas écoulé (urgentPending posé, pour
+ *   qu'un déclenchement qui prendrait la main hérite de l'urgence) ;
+ * - { action: "downgrade" } : plafond de la fenêtre d'une heure atteint
+ *   (urgentPending posé aussi : celui qui garde la main envoie en mode plafonné,
+ *   qui protège l'iPhone) ;
+ * - { action: "superseded" } : nouvelle réservation (reclaim) alors qu'un autre
+ *   déclenchement a pris la main ; rien n'est écrit.
+ * reclaim : après une attente, ne réécrit pas le jeton ; s'il faut encore
+ * attendre, rien n'est écrit (on garde le jeton déjà posé).
+ */
+async function claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs, reclaim = false }) {
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() || {} : {};
+    if (reclaim && data.token !== token) return { action: "superseded" };
     const lastUrgentAt = typeof data.lastUrgentAt === "number" ? data.lastUrgentAt : 0;
     const sameHour = typeof data.urgentHourStart === "number" && nowMs - data.urgentHourStart < HOUR;
     const hourStart = sameHour ? data.urgentHourStart : nowMs;
@@ -546,13 +564,16 @@ async function claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs }) {
       at: nowMs,
       expireAt: admin.firestore.Timestamp.fromMillis(nowMs + 24 * HOUR),
     };
+    const pending = { urgentPending: true, urgentPendingAt: nowMs };
     if (perHour > 0 && hourCount >= perHour) {
-      tx.set(ref, { ...base, urgentPending: false }, { merge: true });
+      tx.set(ref, { ...base, ...pending }, { merge: true });
       return { action: "downgrade" };
     }
-    const waitMs = gapMs > 0 ? lastUrgentAt + gapMs - nowMs : 0;
+    // Borné à l'écart : une heure enregistrée dans le futur (horloge décalée,
+    // donnée abîmée) ne fait pas dormir jusqu'au délai de la fonction.
+    const waitMs = gapMs > 0 ? Math.min(lastUrgentAt + gapMs - nowMs, gapMs) : 0;
     if (waitMs > 0) {
-      tx.set(ref, { ...base, urgentPending: true }, { merge: true });
+      if (!reclaim) tx.set(ref, { ...base, ...pending }, { merge: true });
       return { action: "wait", waitMs };
     }
     tx.set(
@@ -564,97 +585,111 @@ async function claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs }) {
   });
 }
 
+/** Remet urgentPending à faux si ce déclenchement a toujours la main (au mieux). */
+async function clearUrgentPendingIfMine(db, ref, token) {
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data()?.token === token) tx.set(ref, { urgentPending: false }, { merge: true });
+    });
+  } catch (error) {
+    console.warn("widgetFanout: urgent pending reset failed", { code: error?.code ?? "unknown" });
+  }
+}
+
 /**
- * Attend la fin de l'écart par tranches. Renvoie "mine" (toujours le dernier
- * déclenchement), "urgent-superseded" (un urgent plus récent a pris la main :
- * il enverra) ou "handed-over" (un déclenchement non urgent a pris la main :
- * il héritera de l'urgence via urgentPending).
+ * Attend la fin de l'écart par tranches. Renvoie { turn, readFailures } avec
+ * turn : "mine" (toujours le dernier déclenchement), "urgent-superseded" (un
+ * urgent plus récent a pris la main : il enverra) ou "handed-over" (un
+ * déclenchement non urgent a pris la main : il héritera de l'urgence).
  */
 async function waitForUrgentTurn(ref, token, deadlineMs) {
+  let readFailures = 0;
   for (;;) {
     const remaining = deadlineMs - Date.now();
-    if (remaining <= 0) return "mine";
+    if (remaining <= 0) return { turn: "mine", readFailures };
     await sleep(Math.min(remaining, waitSliceMs));
     let data = null;
     try {
       const snap = await ref.get();
       data = snap.exists ? snap.data() : null;
     } catch (error) {
-      // Lecture impossible : on continue d'attendre la fin de l'écart.
-      console.warn("widgetFanout: urgent wait read failed", { code: error?.code ?? "unknown" });
+      // Lecture impossible : on continue d'attendre ; la nouvelle réservation
+      // revérifie qui a la main.
+      readFailures += 1;
+      if (readFailures === 1) console.warn("widgetFanout: urgent wait read failed", { code: error?.code ?? "unknown" });
       continue;
     }
-    if (data && data.token !== token) return data.tokenUrgent === true ? "urgent-superseded" : "handed-over";
+    if (data && data.token !== token) {
+      return { turn: data.tokenUrgent === true ? "urgent-superseded" : "handed-over", readFailures };
+    }
   }
 }
 
 /**
  * Envoi urgent limité : réserve un créneau, attend si besoin, envoie et
  * rattrape les iPhone. Renvoie { capped: true } si le plafond est atteint
- * (l'appelant regroupe et envoie en priorité normale sur Android).
+ * (l'appelant regroupe et envoie en mode plafonné). logExtra porte le
+ * déclenchement (trig) et l'origine (urgentRequested ou inheritedUrgent).
  */
 async function sendUrgent(db, childId, ref, token, config, startedAt, logExtra) {
   const gapMs = configNumber(config, "urgentGapMs", urgentGapMs, URGENT_GAP_MAX_MS);
   const perHour = configNumber(config, "urgentPerHour", URGENT_PER_HOUR, 10_000);
+  const coalesced = (extra) =>
+    reminderLib.logJobSummary("widgetFanout", startedAt, { ...logExtra, reason: "coalesced", urgent: true, rateLimited: true, ...extra });
   let slot;
-  let failOpen = false;
-  let waitedMs = 0;
   try {
     slot = await claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs: Date.now() });
   } catch (error) {
-    // Réservation impossible : on envoie (au pire un envoi de plus), signalé.
+    // Réservation impossible : on envoie quand même, en mode plafonné (pas
+    // compté, donc pas de priorité haute Android ; l'iPhone garde l'écart
+    // urgent et son rattrapage), signalé.
     console.warn("widgetFanout: urgent slot failed", { phase: "claim", code: error?.code ?? "unknown" });
-    slot = { action: "send" };
-    failOpen = true;
+    return sendCapped(db, childId, config, { ...logExtra, urgentSlot: "failopen" });
   }
-  if (slot.action === "wait") {
-    waitedMs = slot.waitMs;
-    const turn = await waitForUrgentTurn(ref, token, Date.now() + slot.waitMs);
-    if (turn !== "mine") {
-      reminderLib.logJobSummary("widgetFanout", startedAt, {
-        reason: "coalesced",
-        urgent: true,
-        rateLimited: true,
-        waitedMs,
-        supersededBy: turn === "urgent-superseded" ? "urgent" : "normal",
-        ...logExtra,
-      });
+  let waitedMs = 0;
+  let readFailures = 0;
+  while (slot.action === "wait") {
+    waitedMs += slot.waitMs;
+    const waited = await waitForUrgentTurn(ref, token, Date.now() + slot.waitMs);
+    readFailures += waited.readFailures;
+    const failures = readFailures > 0 ? { waitReadFailures: readFailures } : {};
+    if (waited.turn !== "mine") {
+      coalesced({ waitedMs, supersededBy: waited.turn === "urgent-superseded" ? "urgent" : "normal", ...failures });
       return null;
     }
     try {
-      slot = await claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs: Date.now() });
+      slot = await claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs: Date.now(), reclaim: true });
     } catch (error) {
       console.warn("widgetFanout: urgent slot failed", { phase: "reclaim", code: error?.code ?? "unknown" });
-      slot = { action: "send" };
-      failOpen = true;
+      await clearUrgentPendingIfMine(db, ref, token);
+      return sendCapped(db, childId, config, { ...logExtra, urgentSlot: "failopen", waitedMs, ...failures });
     }
-    // Un autre urgent a pris le créneau entre-temps : il porte l'état récent.
-    if (slot.action === "wait") {
-      reminderLib.logJobSummary("widgetFanout", startedAt, {
-        reason: "coalesced",
-        urgent: true,
-        rateLimited: true,
-        waitedMs,
-        supersededBy: "urgent",
-        ...logExtra,
-      });
+    if (slot.action === "superseded") {
+      coalesced({ waitedMs, supersededBy: "urgent", ...failures });
       return null;
     }
+    // "wait" encore (un autre urgent est parti entre-temps sans reprendre le
+    // jeton) : on attend la nouvelle fin d'écart, jeton conservé.
   }
   if (slot.action === "downgrade") return { capped: true };
-  const urgentSlot = failOpen ? "failopen" : waitedMs > 0 ? "deferred" : "send";
   const result = await sendOnce(db, childId, {
     urgent: true,
     config,
-    logExtra: { urgentSlot, ...(waitedMs > 0 ? { waitedMs } : {}), ...logExtra },
+    logExtra: {
+      ...logExtra,
+      urgentSlot: waitedMs > 0 ? "deferred" : "send",
+      ...(waitedMs > 0 ? { waitedMs } : {}),
+      ...(readFailures > 0 ? { waitReadFailures: readFailures } : {}),
+    },
   });
-  return iosCatchUp(db, childId, config, result);
+  return iosCatchUp(db, childId, config, result, logExtra);
 }
 
-/** Envoi au-delà du plafond : priorité normale sur Android, écart urgent et rattrapage sur iPhone. */
+/** Mode plafonné : priorité normale sur Android, écart urgent et rattrapage sur iPhone. */
 async function sendCapped(db, childId, config, logExtra) {
-  const result = await sendOnce(db, childId, { urgent: true, capped: true, config, logExtra: { urgentCapped: true, ...logExtra } });
-  return iosCatchUp(db, childId, config, result);
+  const result = await sendOnce(db, childId, { urgent: true, capped: true, config, logExtra: { ...logExtra, urgentCapped: true } });
+  return iosCatchUp(db, childId, config, result, logExtra);
 }
 
 async function coalescedFanOut(db, childId, change) {
@@ -696,13 +731,17 @@ async function coalescedFanOut(db, childId, change) {
   }
   const ref = db.doc(`widget_fanout/${childId}`);
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  // Identifiant court du déclenchement (aléatoire, sans donnée personnelle) :
+  // relie ses lignes de journal pour le bilan (aucun urgent perdu).
+  const trig = token.slice(-8);
+  const origin = urgentRequested ? { trig, urgentRequested: true } : { trig };
   let capped = false;
   if (urgentRequested) {
     // Une seule écriture : la réservation pose le jeton.
-    const outcome = await sendUrgent(db, childId, ref, token, config, startedAt, { urgentRequested: true });
+    const outcome = await sendUrgent(db, childId, ref, token, config, startedAt, origin);
     if (!outcome?.capped) return outcome;
     capped = true;
-    reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "urgent-capped", urgent: true, urgentRequested: true });
+    reminderLib.logJobSummary("widgetFanout", startedAt, { ...origin, reason: "urgent-capped", urgent: true });
   } else {
     try {
       // expireAt : politique TTL Firestore sur widget_fanout (marqueur jamais
@@ -714,34 +753,57 @@ async function coalescedFanOut(db, childId, change) {
         { merge: true },
       );
     } catch (error) {
-      // Marqueur impossible : on envoie sans regrouper plutôt que de perdre l'envoi.
-      // Journal sans identifiant (règle du fichier).
+      // Marqueur incertain (refusé, ou écrit malgré une erreur) : un urgent en
+      // attente a peut-être passé la main. La réservation tranche (au pire un
+      // urgent de plus) plutôt que d'envoyer en priorité normale.
       console.warn("widgetFanout: coalesce marker failed", { code: error?.code ?? "unknown" });
-      return fanOutWidget(db, childId, { urgent: false, config });
+      return inheritOrCap(db, childId, ref, token, config, startedAt, { trig, inheritedUrgent: true, markerUncertain: true });
     }
   }
   await sleep(waitMs);
   let marker = null;
+  let markerUnreadable = false;
   try {
     const snap = await ref.get();
     marker = snap.exists ? snap.data() : null;
     if (marker && marker.token !== token) {
-      reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "coalesced", urgent: capped, waitedMs: waitMs });
+      reminderLib.logJobSummary("widgetFanout", startedAt, {
+        ...origin,
+        reason: "coalesced",
+        urgent: capped,
+        waitedMs: waitMs,
+        supersededBy: marker.tokenUrgent === true ? "urgent" : "normal",
+      });
       return;
     }
   } catch (error) {
-    // Lecture impossible : on envoie (au pire un envoi de plus).
     console.warn("widgetFanout: coalesce marker unreadable", { code: error?.code ?? "unknown" });
+    markerUnreadable = true;
   }
-  if (capped) return sendCapped(db, childId, config, {});
-  // Un urgent attendait et ce déclenchement a pris la main : il hérite de
-  // l'urgence (même limite : écart, plafond).
-  if (marker?.urgentPending === true) {
-    const outcome = await sendUrgent(db, childId, ref, token, config, startedAt, { inheritedUrgent: true });
-    if (!outcome?.capped) return outcome;
-    return sendCapped(db, childId, config, { inheritedUrgent: true });
+  if (capped) {
+    await clearUrgentPendingIfMine(db, ref, token);
+    return sendCapped(db, childId, config, origin);
   }
-  return sendOnce(db, childId, { urgent: false, config });
+  // Un urgent attendait (ou on ne peut pas le savoir) et ce déclenchement a
+  // la main : il hérite de l'urgence, avec la même limite (écart, plafond).
+  const pendingAge = Date.now() - (typeof marker?.urgentPendingAt === "number" ? marker.urgentPendingAt : 0);
+  const inherits = markerUnreadable || (marker?.urgentPending === true && pendingAge <= URGENT_PENDING_STALE_MS);
+  if (inherits) {
+    return inheritOrCap(db, childId, ref, token, config, startedAt, {
+      trig,
+      inheritedUrgent: true,
+      ...(markerUnreadable ? { markerUncertain: true } : {}),
+    });
+  }
+  return sendOnce(db, childId, { urgent: false, config, logExtra: { trig } });
+}
+
+/** Héritage de l'urgence : envoi urgent limité, ou mode plafonné au-delà du plafond. */
+async function inheritOrCap(db, childId, ref, token, config, startedAt, logExtra) {
+  const outcome = await sendUrgent(db, childId, ref, token, config, startedAt, logExtra);
+  if (!outcome?.capped) return outcome;
+  await clearUrgentPendingIfMine(db, ref, token);
+  return sendCapped(db, childId, config, logExtra);
 }
 
 /**
@@ -752,7 +814,7 @@ async function coalescedFanOut(db, childId, change) {
  * 2 min, au lieu d'un envoi perdu jusqu'à la saisie suivante. Android est déjà
  * servi : seuls les iPhone sont visés.
  */
-async function iosCatchUp(db, childId, config, result) {
+async function iosCatchUp(db, childId, config, result, logExtra = {}) {
   const retryAt = result?.iosRetryAtMs;
   if (typeof retryAt !== "number") return result;
   const waitMs = retryAt - Date.now() + 500;
@@ -764,11 +826,11 @@ async function iosCatchUp(db, childId, config, result) {
   // instances occupées pour rien). Le rattrapage retenu lit l'état au réveil :
   // il porte aussi les changements des suivants.
   if (!(await claimIosCatchUp(db, childId, retryAt))) {
-    reminderLib.logJobSummary("widgetFanout", Date.now(), { reason: "ios-catchup-claimed", urgent: true, iosOnly: true });
+    reminderLib.logJobSummary("widgetFanout", Date.now(), { ...logExtra, reason: "ios-catchup-claimed", urgent: true, iosOnly: true });
     return { ...result, iosCatchUp: "claimed-elsewhere" };
   }
   await catchUpSleep(Math.max(0, waitMs));
-  return fanOutWidget(db, childId, { urgent: true, config, iosOnly: true });
+  return fanOutWidget(db, childId, { urgent: true, config, iosOnly: true, logExtra });
 }
 let catchUpSleep = sleep;
 
@@ -809,7 +871,9 @@ async function sendOnce(db, childId, opts) {
 }
 
 // 180 s : le rattrapage iPhone d'un envoi urgent peut attendre jusqu'à 2 min.
-const TRIGGER_OPTIONS = { region: "europe-west1", memory: "256MiB", timeoutSeconds: 180, retry: false };
+// maxInstances : borne le coût d'un téléphone qui écrit en boucle (chaque
+// déclenchement peut dormir : regroupement 2 s, écart urgent jusqu'à 15 s).
+const TRIGGER_OPTIONS = { region: "europe-west1", memory: "256MiB", timeoutSeconds: 180, retry: false, maxInstances: 30 };
 
 const onWidgetEventWrite = onDocumentWritten({ ...TRIGGER_OPTIONS, document: "events/{eventId}" }, async (event) => {
   const before = event.data?.before?.exists ? event.data.before.data() : null;
