@@ -795,11 +795,14 @@ describe("R14 : débit des envois urgents par enfant", () => {
   let summary;
   beforeEach(() => {
     summary = jest.spyOn(require("../lib/reminders"), "logJobSummary");
+    fanout._setWaitSliceMsForTests(5);
   });
   afterEach(() => {
     fanout._setUrgentGapMsForTests(0);
+    fanout._setWaitSliceMsForTests(1000);
     summary.mockRestore();
   });
+  const settle = () => new Promise((r) => setTimeout(r, 40));
   const summaries = () => summary.mock.calls.map((c) => c[2]);
 
   it("valeurs par défaut : 5 s d'écart, 60 urgents par heure", () => {
@@ -818,7 +821,9 @@ describe("R14 : débit des envois urgents par enfant", () => {
     jest.setSystemTime(NOW + 400); // écart écoulé au réveil
     await Promise.all([a, b]);
     expect(highCount()).toBe(4); // un seul envoi de plus (2 appareils)
-    expect(summaries().some((f) => f.rateLimited === true && f.reason === "coalesced")).toBe(true);
+    // Rafale de 2 : exactement un déclenchement écarté, l'autre envoie en différé.
+    expect(summaries().filter((f) => f.rateLimited === true && f.reason === "coalesced")).toHaveLength(1);
+    expect(summaries().filter((f) => f.urgentSlot === "deferred").length).toBeGreaterThan(0);
   });
 
   it("l'envoi différé porte l'état le plus récent (le dernier déclenchement gagne)", async () => {
@@ -832,6 +837,8 @@ describe("R14 : débit des envois urgents par enfant", () => {
     jest.setSystemTime(NOW + 400);
     await Promise.all([first, last]);
     expect(highCount()).toBe(4);
+    // Le premier est écarté par un urgent plus récent.
+    expect(summaries().filter((f) => f.supersededBy === "urgent")).toHaveLength(1);
   });
 
   it("au-delà de l'écart : chaque urgent part tout de suite", async () => {
@@ -850,6 +857,7 @@ describe("R14 : débit des envois urgents par enfant", () => {
     expect(highCount()).toBe(2);
     expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(2);
     expect(summaries().some((f) => f.reason === "urgent-capped")).toBe(true);
+    expect(summaries().some((f) => f.urgentCapped === true)).toBe(true);
   });
 
   it("plafond horaire : une heure plus tard, de nouveau urgent", async () => {
@@ -885,7 +893,8 @@ describe("R14 : débit des envois urgents par enfant", () => {
     });
     await fanout.coalescedFanOut(firestore, "c1", { urgent: true });
     expect(highCount()).toBe(2);
-    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", { code: "aborted" });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", { phase: "claim", code: "aborted" });
+    expect(summaries().some((f) => f.urgentSlot === "failopen")).toBe(true);
     warn.mockRestore();
   });
 
@@ -899,5 +908,82 @@ describe("R14 : débit des envois urgents par enfant", () => {
     // Le jeton du dernier déclenchement est posé, même en attente.
     expect((await ref.get()).data().token).toBe("t2");
     expect(await fanout.claimUrgentSlot(firestore, ref, "t3", { ...opts, nowMs: NOW + 300 })).toEqual({ action: "send" });
+  });
+
+  it("urgence héritée : la fin de tétée en attente est remplacée par une saisie non urgente, l'envoi part quand même en URGENT (revue ECC)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true }); // changement de côté
+    expect(highCount()).toBe(2);
+    jest.setSystemTime(NOW + 50);
+    const end = fanout.coalescedFanOut(db(), "c1", { urgent: true }); // fin de tétée : attend
+    await settle();
+    expect((await db().doc("widget_fanout/c1").get()).data().urgentPending).toBe(true);
+    const history = fanout.coalescedFanOut(db(), "c1", { urgent: false }); // tétée enregistrée dans l'historique
+    await settle();
+    jest.setSystemTime(NOW + 400);
+    await Promise.all([end, history]);
+    expect(highCount()).toBe(4); // parti en urgent, une seule fois
+    expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(0);
+    expect(summaries().some((f) => f.supersededBy === "normal")).toBe(true);
+    expect(summaries().some((f) => f.inheritedUrgent === true && f.reason === "sent")).toBe(true);
+    expect((await db().doc("widget_fanout/c1").get()).data().urgentPending).toBe(false);
+  });
+
+  it("sans urgent en attente, une saisie non urgente reste en priorité normale", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + 1000);
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect(highCount()).toBe(2);
+    expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(2);
+  });
+
+  it("plafond atteint pendant l'attente : envoi au-delà du plafond (normal sur Android)", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, urgentGapMs: 300, urgentPerHour: 1 },
+    }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true }); // compte 1/1
+    jest.setSystemTime(NOW + 50);
+    const p = fanout.coalescedFanOut(db(), "c1", { urgent: true }); // attend puis plafond
+    await settle();
+    jest.setSystemTime(NOW + 400);
+    await p;
+    expect(highCount()).toBe(2);
+    expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(2);
+    expect(summaries().some((f) => f.reason === "urgent-capped")).toBe(true);
+  });
+
+  it("fenêtre d'une heure : plafond jusqu'à la dernière milliseconde, compteur remis à 1 ensuite", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const ref = firestore.doc("widget_fanout/c1");
+    const opts = { gapMs: 0, perHour: 1 };
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { ...opts, nowMs: NOW })).toEqual({ action: "send" });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "b", { ...opts, nowMs: NOW + HOUR - 1 })).toEqual({ action: "downgrade" });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "c", { ...opts, nowMs: NOW + HOUR })).toEqual({ action: "send" });
+    const data = (await ref.get()).data();
+    expect(data.urgentHourCount).toBe(1);
+    expect(data.urgentHourStart).toBe(NOW + HOUR);
+  });
+
+  it("réglage trop grand plafonné à 15 s et signalé ; réglage invalide signalé", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 999999, urgentPerHour: "beaucoup" } }));
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: config value capped", { key: "urgentGapMs", max: 15000 });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: invalid config value, default used", { key: "urgentPerHour" });
+    warn.mockRestore();
+  });
+
+  it("deux enfants : limites indépendantes", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, urgentGapMs: 300 },
+      "children/c2": { name: "Tom", ownerId: "mum" },
+      "children/c2/access/mum": { role: "owner" },
+      "device_tokens/m2": { userId: "mum", token: "ExponentPushToken[m2]", platform: "android", widgetPush: true, widgetCap: 3, widgetChildId: "c2", tz: "Europe/Paris" },
+    }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await fanout.coalescedFanOut(db(), "c2", { urgent: true }); // pas bloqué par c1
+    expect(pushed().filter((m) => m.priority === "high").map((m) => m.to)).toContain("ExponentPushToken[m2]");
   });
 });

@@ -323,3 +323,15 @@ Gain attendu de 300 à 600 ms : atteint sur le p95 (largement dépassé, −0,9 
 
 Jalon 4 validé en production : temps de traitement divisé par deux au p95, regroupement et rattrapage iPhone actifs, aucune erreur, TTL active. Piste suivante si l'on veut gagner encore sur le p50 : l'envoi à Expo (`sendMs`), plus les lectures.
 
+## R14 : débit des envois urgents (1.0.25, serveur)
+
+Depuis la décision du 18/11, tout changement visible d'une tétée part en urgent. Sans limite, des changements de côté rapides ou un téléphone qui écrit en boucle donnaient autant d'envois que d'écritures. Changement (`coalescedFanOut`, `claimUrgentSlot`, `functions/src/widget/fanout.js`) :
+
+- **Écart minimal par enfant : 5 s** entre deux envois urgents (`app_config/widgetPush.urgentGapMs`, 15 s au plus, 0 coupe). Un urgent qui arrive plus tôt part en urgent à la fin de l'écart, avec l'état le plus récent ; une rafale donne un seul envoi. Le changement de côté arrive donc chez les autres téléphones avec jusqu'à 5 s de retard dans une rafale, au lieu de tout de suite.
+- **Urgence héritée** : si une saisie non urgente prend la main pendant l'attente (l'enregistrement de la tétée dans l'historique, par exemple), elle envoie en urgent. Sans cela, la fin d'une tétée pouvait partir en priorité normale et rester « en cours » jusqu'à 20 min sur iPhone (revue ECC du 21/11).
+- **Plafond : 60 urgents par fenêtre d'une heure** (`urgentPerHour`, 0 coupe). Au-delà : regroupé, priorité normale sur Android ; l'iPhone garde l'écart urgent et son rattrapage.
+- Créneau réservé en transaction sur `widget_fanout/{childId}` ; réservation impossible : envoi quand même, journalisé `urgentSlot: "failopen"`.
+- `coalesceMs = 0` coupe aussi la limite (interrupteur d'urgence).
+
+Journal `widgetFanout` : `urgentRequested`, `urgentSlot` (`send`, `deferred`, `failopen`), `waitedMs`, `rateLimited` et `supersededBy` (`urgent` ou `normal`) sur un urgent écarté, `inheritedUrgent`, `reason: "urgent-capped"` et `urgentCapped`. Bilan à faire : aucun urgent demandé ne doit disparaître sans `supersededBy` ou envoi.
+
