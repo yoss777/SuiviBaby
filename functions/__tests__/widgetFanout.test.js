@@ -481,7 +481,7 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     // R14 : marqueur incertain → la réservation tranche (un urgent en attente a
     // peut-être passé la main) ; l'écriture a bien été tentée.
     expect(calls.n).toBeGreaterThanOrEqual(1);
-    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker failed", { code: "unavailable" });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker failed", expect.objectContaining({ code: "unavailable" }));
     expect(JSON.stringify(warn.mock.calls)).not.toContain("c1");
     expect(pushed()).toHaveLength(2);
     warn.mockRestore();
@@ -541,7 +541,7 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
       fanout.coalescedFanOut(firestore, "c1", { urgent: false }),
     ]);
     expect(pushed()).toHaveLength(4);
-    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker unreadable", { code: "unavailable" });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: coalesce marker unreadable", expect.objectContaining({ code: "unavailable" }));
     warn.mockRestore();
   });
 
@@ -898,7 +898,7 @@ describe("R14 : débit des envois urgents par enfant", () => {
     // Android ; l'iPhone garde l'écart urgent).
     expect(pushed()).toHaveLength(2);
     expect(highCount()).toBe(0);
-    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", { phase: "claim", code: "aborted" });
+    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", expect.objectContaining({ phase: "claim", code: "aborted" }));
     expect(summaries().some((f) => f.urgentSlot === "failopen" && f.urgentCapped === true)).toBe(true);
     warn.mockRestore();
   });
@@ -1036,7 +1036,7 @@ describe("R14 : débit des envois urgents par enfant", () => {
     const ref = firestore.doc("widget_fanout/c1");
     await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW });
     await fanout.claimUrgentSlot(firestore, ref, "b", { gapMs: 300, perHour: 60, nowMs: NOW + 10 }); // b attend, jeton b
-    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW + 20, reclaim: true })).toEqual({ action: "superseded" });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW + 20, reclaim: true })).toEqual({ action: "superseded", byUrgent: true });
     expect((await ref.get()).data().token).toBe("b");
     // Nouvelle réservation qui doit encore attendre : n'écrit pas.
     const before = (await ref.get()).data();
@@ -1044,11 +1044,11 @@ describe("R14 : débit des envois urgents par enfant", () => {
     expect((await ref.get()).data()).toEqual(before);
   });
 
-  it("heure enregistrée dans le futur : l'attente est bornée à l'écart", async () => {
+  it("heure enregistrée dans le futur : ignorée (pas d'attente en boucle jusqu'au délai)", async () => {
     memoryStore(seed({ "widget_fanout/c1": { lastUrgentAt: NOW + 10 * 60_000 } }));
     const firestore = db();
     const ref = firestore.doc("widget_fanout/c1");
-    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW })).toEqual({ action: "wait", waitMs: 300 });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW })).toEqual({ action: "send" });
   });
 
   it("drapeau « urgent en attente » trop ancien : une saisie normale reste normale", async () => {
@@ -1085,7 +1085,7 @@ describe("R14 : débit des envois urgents par enfant", () => {
     });
     await fanout.coalescedFanOut(firestore, "c1", { urgent: false });
     expect(highCount()).toBe(2);
-    expect(summaries().some((f) => f.inheritedUrgent === true && f.markerUncertain === true)).toBe(true);
+    expect(summaries().some((f) => f.markerUncertain === true && f.reason === "sent")).toBe(true);
     void realGet;
     warn.mockRestore();
   });
@@ -1105,5 +1105,103 @@ describe("R14 : débit des envois urgents par enfant", () => {
     await fanout.coalescedFanOut(db(), "c1", { urgent: true });
     expect(highCount()).toBe(4);
     expect((await db().doc("widget_fanout/c1").get()).exists).toBe(false);
+  });
+
+  it("réservation refaite en erreur après l'attente : drapeau remis à faux, envoi plafonné, failopen", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    const firestore = db();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await fanout.coalescedFanOut(firestore, "c1", { urgent: true });
+    jest.setSystemTime(NOW + 50);
+    const p = fanout.coalescedFanOut(firestore, "c1", { urgent: true });
+    await settle(); // première réservation faite : attente
+    jest.setSystemTime(NOW + 400);
+    firestore.runTransaction.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("aborted"), { code: "aborted" });
+    });
+    await p;
+    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", expect.objectContaining({ phase: "reclaim" }));
+    expect(summaries().some((f) => f.urgentSlot === "failopen" && f.waitedMs > 0 && f.urgentCapped === true)).toBe(true);
+    expect((await firestore.doc("widget_fanout/c1").get()).data().urgentPending).toBe(false);
+    warn.mockRestore();
+  });
+
+  it("remise à faux du drapeau : jamais celui d'un autre déclenchement", async () => {
+    memoryStore(seed({ "widget_fanout/c1": { token: "autre", urgentPending: true, urgentPendingAt: NOW } }));
+    const firestore = db();
+    await fanout._clearUrgentPendingIfMineForTests(firestore, firestore.doc("widget_fanout/c1"), "moi");
+    expect((await firestore.doc("widget_fanout/c1").get()).data().urgentPending).toBe(true);
+  });
+
+  it("réservation remplacée par une saisie normale : étiquette supersededBy « normal »", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const ref = firestore.doc("widget_fanout/c1");
+    await firestore.doc("widget_fanout/c1").set({ token: "n1", tokenUrgent: false });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "a", { gapMs: 300, perHour: 60, nowMs: NOW, reclaim: true })).toEqual({ action: "superseded", byUrgent: false });
+  });
+
+  it("l'héritier note l'identifiant de l'urgent d'origine (inheritedFrom)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + 50);
+    const end = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await settle();
+    const pendingTrig = (await db().doc("widget_fanout/c1").get()).data().urgentTrig;
+    expect(pendingTrig).toMatch(/^[a-z0-9-]{8}$/);
+    const history = fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    await settle();
+    jest.setSystemTime(NOW + 400);
+    await Promise.all([end, history]);
+    expect(summaries().some((f) => f.inheritedFrom === pendingTrig && f.reason === "sent")).toBe(true);
+  });
+
+  it("drapeau trop ancien : envoi normal signalé stalePending", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, urgentGapMs: 300 },
+      "widget_fanout/c1": { urgentPending: true, urgentPendingAt: NOW - 10 * 60_000 },
+    }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: false });
+    expect(summaries().some((f) => f.stalePending === true && f.reason === "sent")).toBe(true);
+  });
+
+  it("envoi en échec après son nouvel essai : ligne « failed » avec le déclenchement, drapeau remis pour une reprise", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    const firestore = db();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    firestore.getAll.mockRejectedValue(Object.assign(new Error("boom"), { code: "unavailable" }));
+    await expect(fanout.coalescedFanOut(firestore, "c1", { urgent: true })).rejects.toThrow("boom");
+    const failed = summaries().find((f) => f.reason === "failed");
+    expect(failed).toMatchObject({ urgentRequested: true, errorCode: "unavailable" });
+    expect(failed.trig).toMatch(/^[a-z0-9-]{8}$/);
+    const marker = (await firestore.doc("widget_fanout/c1").get()).data();
+    expect(marker.urgentPending).toBe(true);
+    expect(marker.urgentTrig).toBe(failed.trig);
+    warn.mockRestore();
+  });
+
+  it("rattrapage iPhone : l'identifiant du déclenchement figure sur sa ligne", async () => {
+    memoryStore(seed({
+      "app_config/widgetPush": { enabled: true, ios: true },
+      "device_tokens/i1": { userId: "dad", token: "ExponentPushToken[i1]", platform: "ios", widgetPush: true, widgetCap: 3, widgetChildId: "c1", tz: "Europe/Paris", lastIosPushAt: NOW - 60_000 },
+    }));
+    fanout._setCatchUpSleepForTests(async (ms) => jest.setSystemTime(Date.now() + ms));
+    try {
+      await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    } finally {
+      fanout._setCatchUpSleepForTests(null);
+    }
+    const lines = summaries().filter((f) => f.reason === "sent");
+    expect(lines.length).toBe(2); // envoi + rattrapage
+    expect(lines[0].trig).toBeDefined();
+    expect(lines[1].trig).toBe(lines[0].trig);
+    expect(lines[1].iosOnly).toBe(true);
+  });
+
+  it("rattrapage iPhone qui finirait après 160 s : sauté et signalé", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, ios: true } }));
+    const out = await fanout._iosCatchUpForTests(db(), "c1", { enabled: true, ios: true }, { iosRetryAtMs: NOW + 100_000 }, { trig: "t" }, NOW - 70_000);
+    expect(out.iosCatchUp).toBe("skipped-deadline");
+    expect(summaries().some((f) => f.reason === "ios-catchup-skipped" && f.trig === "t")).toBe(true);
   });
 });
