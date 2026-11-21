@@ -90,8 +90,10 @@ Samsung, 1.0.24 (versionCode 33) installée depuis Google Play (Tests fermés �
 | 35 | Police au maximum (×2) : formulaire Température | ✅ 20/11 Samsung | « Annuler » et « Ajouter » entiers, − et + dans leur cercle. Fermé par « Annuler » (rien enregistré). En 1.0.23 : « Annul/er », « Ajout/er ». |
 | 36 | Test 27 refait : lancement en mode avion puis retour du réseau sans appui | ✅ 20/11 Samsung | Mode avion, lancement : « Connexion indisponible » + Réessayer + Se déconnecter, aucune déconnexion. Mode avion coupé : « Connexion trop lente » à +11 s, **accueil chargé seul à +18 s** (mesure par sondage toutes les 3 s). En 1.0.23 : bloqué plus de 45 s. |
 | 37 | Écran Thème : « Sombre la nuit » | ✅ 20/11 Samsung (de jour) | Interrupteur présent et activé (compte en Automatique), descriptions selon l'interrupteur (« Clair le jour, sombre de 22 h à 7 h », « Suit votre téléphone, et passe en sombre de 22 h à 7 h »), encadré sur l'ergonomie de nuit. Passage en sombre à 22 h, clavier et alertes : à vérifier ce soir. |
+| 38 | « Sombre la nuit » de nuit, thème Clair | ✅ 21/11 (Yoss, 1.0.24) | À 2 h 57, thème Clair réglé, l'app est en sombre. |
+| 39 | Chrono arrêté : durée enregistrée = minutes affichées (R12) | ✅ 21/11 (Yoss, 1.0.24) | Arrêté à 7 min 50 s : enregistré « 7 min » (avant : arrondi à 8). |
 
-À faire : iPhone 15 et 13 Pro Max (mêmes tests) ; de nuit : sombre à 22 h en Clair, clavier et alertes sombres, message unique ; chrono 5 min 50 s → « 5 min » (crée une saisie : à faire par Yoss) ; notifications avec deux téléphones ; abonnement test annulé.
+À faire : iPhone 15 et 13 Pro Max (mêmes tests) ; de nuit : clavier et alertes sombres, message unique ; notifications avec deux téléphones ; abonnement test annulé.
 
 ## Défauts trouvés pendant la recette 1.0.24 (20/11)
 
