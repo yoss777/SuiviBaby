@@ -483,9 +483,66 @@ async function fanOutWidget(db, childId, { urgent, config: preloadedConfig, iosO
  */
 const COALESCE_MS = 2000;
 let coalesceMs = COALESCE_MS;
+
+/**
+ * Débit des envois urgents par enfant (R14). Tout changement visible d'une
+ * tétée part en urgent (décision du 18/11) : sans limite, des changements de
+ * côté rapides ou un téléphone qui écrit en boucle déclenchaient autant
+ * d'envois que d'écritures (coût, notifications en rafale sur Android).
+ * - écart minimal entre deux envois urgents : un urgent qui arrive plus tôt
+ *   n'est pas perdu, il part en urgent à la fin de l'écart avec l'état le plus
+ *   récent (et un seul pour toute la rafale) ;
+ * - plafond par heure glissante : au-delà, les urgents passent en priorité
+ *   normale, regroupés.
+ * Réglables sans redéploiement (app_config/widgetPush.urgentGapMs,
+ * urgentPerHour) ; 0 coupe la limite correspondante.
+ */
+const URGENT_GAP_MS = 5000;
+const URGENT_GAP_MAX_MS = 30_000;
+const URGENT_PER_HOUR = 60;
+let urgentGapMs = URGENT_GAP_MS;
+
+function configNumber(value, fallback, max) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(value, max) : fallback;
+}
+
+/**
+ * Réserve un créneau urgent pour cet enfant (transaction : deux déclenchements
+ * simultanés ne partent pas tous les deux). Pose toujours le jeton du
+ * déclenchement (les envois en attente plus anciens deviennent caducs).
+ * Renvoie { action: "send" } (créneau pris), { action: "wait", waitMs }
+ * (écart pas écoulé) ou { action: "downgrade" } (plafond horaire atteint).
+ */
+async function claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs }) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() || {} : {};
+    const lastUrgentAt = typeof data.lastUrgentAt === "number" ? data.lastUrgentAt : 0;
+    const sameHour = typeof data.urgentHourStart === "number" && nowMs - data.urgentHourStart < HOUR;
+    const hourStart = sameHour ? data.urgentHourStart : nowMs;
+    const hourCount = sameHour && typeof data.urgentHourCount === "number" ? data.urgentHourCount : 0;
+    const base = { token, at: nowMs, expireAt: admin.firestore.Timestamp.fromMillis(nowMs + 24 * HOUR) };
+    if (perHour > 0 && hourCount >= perHour) {
+      tx.set(ref, base, { merge: true });
+      return { action: "downgrade" };
+    }
+    const waitMs = gapMs > 0 ? lastUrgentAt + gapMs - nowMs : 0;
+    if (waitMs > 0) {
+      tx.set(ref, base, { merge: true });
+      return { action: "wait", waitMs };
+    }
+    tx.set(
+      ref,
+      { ...base, lastUrgentAt: nowMs, urgentHourStart: hourStart, urgentHourCount: hourCount + 1 },
+      { merge: true },
+    );
+    return { action: "send" };
+  });
+}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function coalescedFanOut(db, childId, { urgent }) {
+async function coalescedFanOut(db, childId, change) {
+  let urgent = change.urgent;
   const startedAt = Date.now();
   // Interrupteur lu d'abord : widget désactivé, ni marqueur ni attente.
   const config = (await db.doc("app_config/widgetPush").get()).data() || {};
@@ -540,8 +597,39 @@ async function coalescedFanOut(db, childId, { urgent }) {
     return fanOutWidget(db, childId, { urgent, config });
   }
   if (urgent) {
-    const result = await sendOnce(db, childId, { urgent, config });
-    return iosCatchUp(db, childId, config, result);
+    const gapMs = configNumber(config.urgentGapMs, urgentGapMs, URGENT_GAP_MAX_MS);
+    const perHour = configNumber(config.urgentPerHour, URGENT_PER_HOUR, 10_000);
+    let slot;
+    try {
+      slot = await claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs: Date.now() });
+      if (slot.action === "wait") {
+        // Rafale : un seul envoi à la fin de l'écart, celui du dernier
+        // déclenchement (les précédents ont perdu le jeton).
+        await sleep(slot.waitMs);
+        const latest = await ref.get();
+        if (latest.exists && latest.data()?.token !== token) {
+          reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "coalesced", urgent, rateLimited: true, waitedMs: slot.waitMs });
+          return;
+        }
+        slot = await claimUrgentSlot(db, ref, token, { gapMs, perHour, nowMs: Date.now() });
+        // Un autre urgent a pris le créneau entre-temps : il porte l'état récent.
+        if (slot.action === "wait") {
+          reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "coalesced", urgent, rateLimited: true });
+          return;
+        }
+      }
+    } catch (error) {
+      // Réservation impossible : on envoie (au pire un envoi de plus).
+      console.warn("widgetFanout: urgent slot failed", { code: error?.code ?? "unknown" });
+      slot = { action: "send" };
+    }
+    if (slot.action === "send") {
+      const result = await sendOnce(db, childId, { urgent, config });
+      return iosCatchUp(db, childId, config, result);
+    }
+    // Plafond horaire atteint : priorité normale, regroupée comme le reste.
+    reminderLib.logJobSummary("widgetFanout", startedAt, { reason: "urgent-capped", urgent });
+    urgent = false;
   }
   await sleep(waitMs);
   try {
@@ -652,6 +740,12 @@ module.exports = {
   liveChange,
   coalescedFanOut,
   sendOnce,
+  _setUrgentGapMsForTests: (ms) => {
+    urgentGapMs = ms;
+  },
+  claimUrgentSlot,
+  URGENT_GAP_MS,
+  URGENT_PER_HOUR,
   _setCoalesceMsForTests: (ms) => {
     coalesceMs = ms;
   },

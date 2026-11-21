@@ -18,6 +18,9 @@ const fanout = require("../src/widget/fanout");
 // chemins du marqueur sont réellement parcourus par toute la suite.
 const SUITE_COALESCE_MS = 20;
 fanout._setCoalesceMsForTests(SUITE_COALESCE_MS);
+// Écart entre envois urgents (R14) coupé pour la suite historique, activé
+// dans ses propres tests.
+fanout._setUrgentGapMsForTests(0);
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse("2026-11-13T16:00:00Z"); // 17:00 à Paris
@@ -783,5 +786,118 @@ describe("jalon 4 : replis et filtres (revue ECC)", () => {
     memoryStore(seed({ "users/dad": { pendingDeletion: true } }));
     await fanout.fanOutWidget(db(), "c1", { urgent: true });
     expect(pushed().map((m) => m.to)).toEqual(["ExponentPushToken[m1]"]);
+  });
+});
+
+describe("R14 : débit des envois urgents par enfant", () => {
+  const db = () => require("firebase-admin").firestore();
+  const highCount = () => pushed().filter((m) => m.priority === "high").length;
+  let summary;
+  beforeEach(() => {
+    summary = jest.spyOn(require("../lib/reminders"), "logJobSummary");
+  });
+  afterEach(() => {
+    fanout._setUrgentGapMsForTests(0);
+    summary.mockRestore();
+  });
+  const summaries = () => summary.mock.calls.map((c) => c[2]);
+
+  it("valeurs par défaut : 5 s d'écart, 60 urgents par heure", () => {
+    expect(fanout.URGENT_GAP_MS).toBe(5000);
+    expect(fanout.URGENT_PER_HOUR).toBe(60);
+  });
+
+  it("rafale d'urgents dans l'écart : le premier part tout de suite, UN seul envoi urgent à la fin de l'écart", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(2); // 2 appareils
+    jest.setSystemTime(NOW + 50);
+    const a = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    const b = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await new Promise((r) => setTimeout(r, 30));
+    jest.setSystemTime(NOW + 400); // écart écoulé au réveil
+    await Promise.all([a, b]);
+    expect(highCount()).toBe(4); // un seul envoi de plus (2 appareils)
+    expect(summaries().some((f) => f.rateLimited === true && f.reason === "coalesced")).toBe(true);
+  });
+
+  it("l'envoi différé porte l'état le plus récent (le dernier déclenchement gagne)", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + 50);
+    const first = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await new Promise((r) => setTimeout(r, 5));
+    const last = fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    await new Promise((r) => setTimeout(r, 30));
+    jest.setSystemTime(NOW + 400);
+    await Promise.all([first, last]);
+    expect(highCount()).toBe(4);
+  });
+
+  it("au-delà de l'écart : chaque urgent part tout de suite", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + 1000);
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(4);
+  });
+
+  it("plafond horaire atteint : l'urgent passe en priorité normale, regroupé", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 0, urgentPerHour: 1 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + 1000);
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(2);
+    expect(pushed().filter((m) => m.priority === "normal")).toHaveLength(2);
+    expect(summaries().some((f) => f.reason === "urgent-capped")).toBe(true);
+  });
+
+  it("plafond horaire : une heure plus tard, de nouveau urgent", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 0, urgentPerHour: 1 } }));
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    jest.setSystemTime(NOW + HOUR + 1000);
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(4);
+  });
+
+  it("urgentGapMs 0 et urgentPerHour 0 : aucune limite", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 0, urgentPerHour: 0 } }));
+    for (let i = 0; i < 3; i++) await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(6);
+  });
+
+  it("réglage invalide (texte, négatif) : valeurs par défaut", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: "vite", urgentPerHour: -3 } }));
+    fanout._setUrgentGapMsForTests(fanout.URGENT_GAP_MS);
+    await fanout.coalescedFanOut(db(), "c1", { urgent: true });
+    expect(highCount()).toBe(2);
+    const marker = (await db().doc("widget_fanout/c1").get()).data();
+    expect(marker.lastUrgentAt).toBe(NOW);
+    expect(marker.urgentHourCount).toBe(1);
+  });
+
+  it("réservation impossible (transaction en erreur) : l'urgent part quand même", async () => {
+    memoryStore(seed({ "app_config/widgetPush": { enabled: true, urgentGapMs: 300 } }));
+    const firestore = db();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    firestore.runTransaction.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("aborted"), { code: "aborted" });
+    });
+    await fanout.coalescedFanOut(firestore, "c1", { urgent: true });
+    expect(highCount()).toBe(2);
+    expect(warn).toHaveBeenCalledWith("widgetFanout: urgent slot failed", { code: "aborted" });
+    warn.mockRestore();
+  });
+
+  it("réservation : un créneau pris, le suivant attend la fin de l'écart (transaction Firestore en production)", async () => {
+    memoryStore(seed());
+    const firestore = db();
+    const ref = firestore.doc("widget_fanout/c1");
+    const opts = { gapMs: 300, perHour: 60 };
+    expect(await fanout.claimUrgentSlot(firestore, ref, "t1", { ...opts, nowMs: NOW })).toEqual({ action: "send" });
+    expect(await fanout.claimUrgentSlot(firestore, ref, "t2", { ...opts, nowMs: NOW + 100 })).toEqual({ action: "wait", waitMs: 200 });
+    // Le jeton du dernier déclenchement est posé, même en attente.
+    expect((await ref.get()).data().token).toBe("t2");
+    expect(await fanout.claimUrgentSlot(firestore, ref, "t3", { ...opts, nowMs: NOW + 300 })).toEqual({ action: "send" });
   });
 });
