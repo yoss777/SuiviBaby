@@ -23,14 +23,15 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
 **Prérequis supplémentaires avant toute bascule :**
 - `minVersion` est commun aux deux plateformes et son écran n'est qu'un bandeau, l'app
-  reste utilisable : il ne bloque pas les anciennes versions. Retenir le critère des
-  95 % d'adoption, ou rendre ce blocage réel, avec la version en Production sur les
-  deux stores ;
-- `unauthenticated` est traité comme définitif par la file hors ligne : une saisie
-  sans jeton serait marquée en échec après trois essais. À rendre transitoire ;
+  reste utilisable : il ne bloque pas les anciennes versions. Le critère retenu est
+  donc celui des 95 % d'adoption (C2) ;
+- la 1.0.26 garde en file une saisie refusée en `unauthenticated` pour un compte
+  connecté, en ligne comme hors ligne. **Les versions antérieures la perdent en ligne**
+  et n'ont pas de mise à jour à distance : ne pas imposer les fonctions d'événements
+  avant C2 ;
 - `scripts/auditAppCheck.sh` doit distinguer plateforme et version, exiger un volume
   minimal par fonction et échouer si le volume est nul ou tronqué ;
-- `ensureFirebaseAppCheck` doit être attendu avant le premier appel de fonction ;
+- la file attend `ensureFirebaseAppCheck` avant de rejouer (1.0.26, attente bornée) ;
 - `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail` doivent
   journaliser leur état App Check ;
 - après la bascule, suivre aussi les refus 401 : un appel refusé n'écrit pas de ligne
@@ -43,6 +44,12 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
 Le 2026-12-07 reste une date de revue, pas une date de bascule. Les sections
 suivantes sont alignées sur cette mise à jour.
+
+**Décision de Yoss (2026-11-22) :** activer dès la 1.0.26, en commençant par
+`transcribeAudio` et `parseVoiceCommand`, une fois un appel `VERIFIED` constaté sur
+iPhone et la 1.0.26 disponible sur les stores. Ce premier lot n'attend pas C2 : sur une
+version antérieure, seule la voix cesse de fonctionner, sans perte d'événement. Tous
+les autres lots restent soumis à C1 à C4.
 
 ## Contexte
 
@@ -57,8 +64,8 @@ suivantes sont alignées sur cette mise à jour.
 
 **Côté fonctions** (`functions/src/shared/appCheck.js`) :
 - `withAppCheck(options, nom)` (nom = nom d'export déployé, ex. `transcribeAudio`)
-  ajoute `enforceAppCheck: true` si, au déploiement (fonctions v2, lecture de
-  `process.env`), `APPCHECK_ENFORCE=true` (toutes les fonctions) ou si `nom` figure
+  ajoute `enforceAppCheck: true` si, au chargement de l'instance (fonctions v2,
+  lecture de `process.env`), `APPCHECK_ENFORCE=true` (toutes les fonctions) ou si `nom` figure
   dans `APPCHECK_ENFORCE_FUNCTIONS` (liste séparée par des virgules, ex.
   `transcribeAudio,parseVoiceCommand`). Sans variable : surveillance seule ;
 - `monitorAppCheck(request, nom)` journalise `[AppCheck] <fonction>: VERIFIED` ou
@@ -120,7 +127,9 @@ avant de fixer une date :
   version ≥ V_a de leur plateforme (sources 1 ou 2). Relever `minVersion` ne suffit pas : c'est un
   bandeau commun aux deux plateformes, qui ne bloque pas les anciennes versions
   (`services/appUpdateService.ts`).
-- C3. `./scripts/auditAppCheck.sh 7d` affiche `STATUS: READY`.
+- C3. Pour les fonctions du lot concerné, moins de 0,5 % d'appels non vérifiés parmi
+  les versions ≥ V_a, avec un volume suffisant. `scripts/auditAppCheck.sh` doit d'abord
+  être fiabilisé : il ne distingue aujourd'hui ni plateforme ni version.
 - C4. Aucune hausse d'erreurs `unauthenticated` dans Sentry sur les 48 heures
   précédentes.
 
@@ -145,13 +154,13 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    variable doit donc rester dans le fichier d'environnement versionné ou fourni à
    la CI, sinon le prochain déploiement repasse les fonctions en surveillance.
    Les autres fonctions restent non imposées.
-4. Surveillance 48 heures : Sentry (`unauthenticated`), Cloud Logging
-   (`UNVERIFIED` par fonction).
+4. Surveillance 48 heures : Sentry (`unauthenticated`) et refus 401 dans Cloud Logging.
+   Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
 5. Extension : ajouter les autres noms à `APPCHECK_ENFORCE_FUNCTIONS`. Poser
    `APPCHECK_ENFORCE=true` (déploiement complet par la CI `deploy-functions.yml`)
    seulement après la décision explicite sur la suppression de compte, le retrait du
    consentement et `revokeDeviceToken`.
-6. Audit à J+7 : toutes les fonctions à 100 % `VERIFIED` sur les clients récents.
+6. Audit à J+7 : aucun refus 401 inexpliqué sur les clients récents.
 7. Firestore puis Storage : console Firebase → App Check, dans un second temps et
    après un nouveau point de décision. Surveiller les métriques App Check avant de
    passer en application.
@@ -161,8 +170,10 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 **Fonctions appelables** (procédure à vérifier avant la première bascule) :
 1. retirer le nom de la fonction de `APPCHECK_ENFORCE_FUNCTIONS` (ou retirer
    `APPCHECK_ENFORCE=true` / le mettre à `false`) dans `functions/.env.<projet>` ;
-2. redéployer les fonctions concernées (`firebase deploy --only functions:<noms>`, ou
-   la CI `deploy-functions.yml` depuis `main`).
+2. redéployer les fonctions concernées depuis un `main` propre
+   (`firebase deploy --only functions:<noms>`), ou par la CI `deploy-functions.yml` ;
+3. committer ce changement sur `main`, sinon le prochain déploiement réimpose la
+   fonction.
 
 Durée : celle du déploiement, quelques minutes. Ne pas utiliser
 `firebase functions:config:unset appcheck.enforce` : c'est la configuration v1, sans
@@ -183,8 +194,7 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
     fonctions v2 ;
   - `revenueCatWebhook` ne doit pas figurer dans la liste des fonctions à passer en
     `APPCHECK_ENFORCE`.
-- Le suivi S4 (`docs/SUIVI_ACTIONS.md`, ligne 61) doit reprendre cette date et ces
-  critères.
+- Le suivi S4 (`docs/SUIVI_ACTIONS.md`) reprend ces critères.
 - La procédure opérationnelle est reprise dans `docs/RUNBOOK.md`.
 
 ## Actions
@@ -192,9 +202,9 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
 - [ ] Yoss : valider le principe et la revue du 2026-12-07.
 - [ ] Vérifier sur un iPhone en 1.0.26 que les appels sont `VERIFIED` (V_a iOS).
 - [ ] Établir V_a Android et expliquer les 9 échecs.
-- [ ] Rendre `unauthenticated` transitoire dans la file hors ligne quand le jeton App Check manque.
+- [x] Garder en file une saisie refusée en `unauthenticated` pour un compte connecté (1.0.26).
 - [ ] Fiabiliser `scripts/auditAppCheck.sh` (plateforme, version, volume minimal, volume nul ou tronqué).
-- [ ] Attendre `ensureFirebaseAppCheck` avant le premier appel de fonction.
+- [x] Attendre `ensureFirebaseAppCheck` avant le rejeu de la file (1.0.26).
 - [ ] Journaliser l'état App Check de `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail`.
 - [ ] Suivre les refus 401 après la bascule.
 - [ ] Décider du sort de la suppression de compte, du consentement et de `revokeDeviceToken`.

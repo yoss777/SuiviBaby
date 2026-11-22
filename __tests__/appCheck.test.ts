@@ -191,9 +191,59 @@ describe("App Check natif", () => {
     expect(operations).toContain("startupToken");
   });
 
-  it("ignore une erreur réseau explicite", async () => {
+  it("ignore une erreur réseau seulement si le téléphone est hors ligne", async () => {
     await initApp();
-    await failProvider(Object.assign(new Error("réseau"), { code: "appCheck/network-request-failed" }));
+    const failure = Object.assign(new Error("réseau"), { code: "appCheck/network-request-failed" });
+    mockNetInfoFetch.mockResolvedValueOnce({ isConnected: false });
+    await failProvider(failure);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+    await failProvider(failure);
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+  });
+
+  it("remonte la panne si la détection du réseau échoue", async () => {
+    await initApp();
+    mockNetInfoFetch.mockRejectedValueOnce(new Error("netinfo"));
+    await failProvider(new Error("attestation refusée"));
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+  });
+
+  it("ne lance qu'une vérification réseau pour une rafale identique", async () => {
+    await initApp();
+    mockNetInfoFetch.mockClear();
+    const failure = new Error("attestation refusée");
+    mockNativeGetToken.mockRejectedValue(failure);
+    await Promise.allSettled([mockProviderOptions.getToken(), mockProviderOptions.getToken()]);
+    await flush();
+    expect(mockNetInfoFetch).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconnaît « pas prêt » par son seul code", async () => {
+    jest.useFakeTimers();
+    const failure = Object.assign(new Error("x"), { code: "appCheck/provider-not-ready" });
+    mockJsGetToken.mockRejectedValueOnce(failure).mockResolvedValueOnce({ token: "t" });
+    await initApp();
+    await jest.advanceTimersByTimeAsync(2000);
+    await flush();
+    expect(mockJsGetToken).toHaveBeenCalledTimes(2);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+  });
+
+  it("n'attend pas indéfiniment le premier jeton", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockReturnValue(new Promise(() => undefined));
+    await initApp();
+    await jest.advanceTimersByTimeAsync(20000);
+    await flush();
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("startupToken");
+  });
+
+  it("ne charge pas le module natif en développement sans option explicite", async () => {
+    globals.__DEV__ = true;
+    mockSentryEnvironment.mockReturnValue("development");
+    await initApp();
+    expect(mockLoadNative).not.toHaveBeenCalled();
     expect(mockCaptureServiceError).not.toHaveBeenCalled();
   });
 
@@ -203,6 +253,7 @@ describe("App Check natif", () => {
     const context = mockCaptureServiceError.mock.calls[0][1];
     expect(Object.keys(context.extra).sort()).toEqual(["code", "detail", "platform"]);
     expect(context.extra.detail).toBe("refus [masqué] code #");
+    expect(JSON.stringify(mockCaptureServiceError.mock.calls[0])).not.toContain("eyJ");
   });
 
   it("n'alerte pas pendant le délai normal du démarrage", async () => {
@@ -285,7 +336,7 @@ describe("App Check natif", () => {
     });
     await expect(initApp()).resolves.toBeUndefined();
     expect(mockCaptureServiceError).toHaveBeenCalledWith(
-      failure,
+      expect.objectContaining({ message: "App Check initialize: unknown" }),
       expect.objectContaining({ service: "appCheck", operation: "initialize" }),
     );
     warn.mockRestore();
@@ -294,9 +345,16 @@ describe("App Check natif", () => {
 
 describe("configuration iOS", () => {
   it("garde le droit App Attest en production dans la configuration finale", () => {
-    const appJson = jest.requireActual("../app.json");
-    const createConfig = jest.requireActual("../app.config.js");
-    const resolved = (createConfig.default ?? createConfig)({ config: appJson.expo });
-    expect(resolved.ios.entitlements["com.apple.developer.devicecheck.appattest-environment"]).toBe("production");
+    const previousEnv = process.env.APP_ENV;
+    delete process.env.APP_ENV;
+    try {
+      const appJson = jest.requireActual("../app.json");
+      const createConfig = jest.requireActual("../app.config.js");
+      const resolved = (createConfig.default ?? createConfig)({ config: appJson.expo });
+      expect(resolved.ios.entitlements["com.apple.developer.devicecheck.appattest-environment"]).toBe("production");
+    } finally {
+      if (previousEnv === undefined) delete process.env.APP_ENV;
+      else process.env.APP_ENV = previousEnv;
+    }
   });
 });

@@ -295,6 +295,11 @@ async function transcribeAudioFile(audioUri: string): Promise<string> {
       throw new Error(error.message || "Limite de transcriptions atteinte.");
     }
     if (error?.code === "functions/unauthenticated") {
+      // Peut être un refus App Check : à voir dans Sentry une fois la voix imposée.
+      captureServiceError(new Error("Transcription refusée : unauthenticated"), {
+        service: "voice",
+        operation: "transcribeUnauthenticated",
+      });
       throw new Error("Vous devez être connecté pour utiliser la voix.");
     }
     throw error;

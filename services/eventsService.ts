@@ -18,7 +18,7 @@ import { AppState } from "react-native";
 import { auth, db, functions } from "../config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
-import { failureReason, isConflictError, isNetworkError, isNotFoundError, isPermanentError } from "@/utils/networkError";
+import { failureReason, isConflictError, isNetworkError, isNotFoundError, isUnauthenticatedError, isPermanentError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline, mergeIntoQueuedCreate } from "./offlineQueueService";
 import {
@@ -942,6 +942,14 @@ function runCallback(fn: (() => void) | undefined, operation: string) {
 }
 
 /**
+ * Panne réseau, ou refus `unauthenticated` d'un compte connecté (jeton App Check
+ * absent ou expiré) : la saisie est valide, elle part en file au lieu d'être perdue.
+ */
+function shouldQueueFailedWrite(error: unknown): boolean {
+  return isNetworkError(error) || (isUnauthenticatedError(error) && !!auth.currentUser);
+}
+
+/**
  * L'écriture n'a pu ni partir ni être mise en file : la signaler (entrée
  * annulée, message avec le type, Sentry) au lieu de la laisser croire réussie.
  */
@@ -1055,7 +1063,7 @@ export function ajouterEvenementOptimistic(
         );
       }
     } catch (error) {
-      if (isNetworkError(error)) {
+      if (shouldQueueFailedWrite(error)) {
         try {
           const queueId = await enqueueEvent('create', payload);
           markOptimisticQueued(tempId);
@@ -1164,7 +1172,7 @@ export function modifierEvenementOptimistic(
       confirmOptimistic(operationId);
       runCallback(options?.onConfirmed, "onConfirmed");
     } catch (error) {
-      if (isNetworkError(error)) {
+      if (shouldQueueFailedWrite(error)) {
         try {
           await enqueueEvent('update', payload as Record<string, unknown>);
           markOptimisticQueued(operationId);

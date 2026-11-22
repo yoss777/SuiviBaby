@@ -4,13 +4,14 @@ import NetInfo from "@react-native-community/netinfo";
 import { onAuthStateChanged } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { AppState } from "react-native";
-import { auth, functions } from "@/config/firebase";
+import { auth, ensureFirebaseAppCheck, functions } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
 import { captureServiceError } from "@/utils/errorReporting";
 import {
   isConflictError as isConflictCode,
   isNetworkError,
   isNotFoundError,
+  isUnauthenticatedError,
 } from "@/utils/networkError";
 import {
   alreadyRunningNotice,
@@ -90,6 +91,8 @@ const isConflictError = isConflictCode;
  * Même définition que les écritures optimistes (utils/networkError) : une
  * erreur ne peut plus être « réseau » pour l'une et « définitive » pour l'autre.
  */
+const APP_CHECK_WAIT_MS = 5000;
+
 function isTransientError(error: any): boolean {
   return isNetworkError(error);
 }
@@ -216,6 +219,26 @@ let rerunRequested = false;
 const ENQUEUE_RETRY_DELAY_MS = 3000;
 
 /** Lance un cycle sans jamais laisser une erreur remonter en rejet non géré. */
+/**
+ * Au démarrage, la file peut repartir avant qu'App Check soit prêt : l'appel
+ * partirait sans preuve. Attente bornée, un échec n'empêche jamais le rejeu.
+ */
+async function waitForAppCheck(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      ensureFirebaseAppCheck(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, APP_CHECK_WAIT_MS);
+      }),
+    ]);
+  } catch {
+    // App Check signale lui-même ses échecs.
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function runCycle(): void {
   processQueue().catch((error) =>
     captureServiceError(error, { service: "offlineQueue", operation: "runCycle" }),
@@ -487,6 +510,7 @@ export async function processQueue(): Promise<number> {
     const events = await getPendingEvents();
     if (events.length === 0) return 0;
 
+    await waitForAppCheck();
     const database = await getDb();
     let isFirst = true;
 
@@ -615,7 +639,9 @@ export async function processQueue(): Promise<number> {
           error?.message || error?.code || "Erreur inconnue";
         const conflict = isConflictError(error);
         const stale = isStaleCreateError(error);
-        const transient = !stale && isTransientError(error);
+        // `unauthenticated` ici : le compte est bien celui de l'écriture (vérifié
+        // plus haut), le refus peut donc venir d'un jeton App Check manquant.
+        const transient = !stale && (isTransientError(error) || isUnauthenticatedError(error));
         let exhausted = false;
         let reason: "conflict" | "permanent" | "transient-cap" | "stale" = "permanent";
 

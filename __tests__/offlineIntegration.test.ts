@@ -305,6 +305,19 @@ describe("déconnexion pendant le rejeu de la file (revue jalon 6)", () => {
   });
 });
 
+describe("refus App Check pour le compte connecté", () => {
+  it("garde la saisie en file sans consommer de tentative", async () => {
+    await enqueueEvent("create", queuedCreate(100));
+    server.rejectWhen = (name) =>
+      name === "validateAndCreateEvent" ? err("unauthenticated", "functions/unauthenticated") : null;
+    await cycle();
+    expect(fakeDb.rows).toHaveLength(1);
+    expect(fakeDb.rows[0].status).toBe("pending");
+    expect(fakeDb.rows[0].retryCount).toBe(0);
+    server.rejectWhen = () => null;
+  });
+});
+
 describe("saisie hors ligne puis reconnexion", () => {
   it("une création faite hors ligne part une seule fois au retour du réseau", async () => {
     setNetwork(false);

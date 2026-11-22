@@ -30,6 +30,7 @@ const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
 // Au démarrage, le fournisseur natif peut répondre « provider-not-ready ».
 const TOKEN_CHECK_ATTEMPTS = 3;
 const TOKEN_CHECK_DELAY_MS = 2000;
+const TOKEN_CHECK_TIMEOUT_MS = 20000;
 const MAX_REPORTS_PER_OPERATION = 5;
 const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
@@ -100,7 +101,7 @@ function isProviderNotReady(error: unknown): boolean {
 function failureDetail(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
-    .replace(/[A-Za-z0-9_.-]{24,}/g, "[masqué]")
+    .replace(/[A-Za-z0-9_.+/=-]{16,}/g, "[masqué]")
     .replace(/\d+/g, "#")
     .slice(0, 120);
 }
@@ -132,20 +133,25 @@ async function isDeviceOffline(): Promise<boolean> {
 async function reportAppCheckFailure(error: unknown, operation: string): Promise<void> {
   try {
     const code = failureCode(error);
-    if (code.endsWith("network-request-failed") || (await isDeviceOffline())) return;
     const detail = failureDetail(error);
     const key = `${operation}:${code}:${detail}`;
     const operationCount = reportsByOperation.get(operation) ?? 0;
     if (reportedFailures.has(key) || operationCount >= MAX_REPORTS_PER_OPERATION) return;
+    // Réservé avant l'attente réseau : une rafale ne lance qu'une vérification.
     reportedFailures.add(key);
     reportsByOperation.set(operation, operationCount + 1);
+    if (await isDeviceOffline()) {
+      reportedFailures.delete(key);
+      reportsByOperation.set(operation, (reportsByOperation.get(operation) ?? 1) - 1);
+      return;
+    }
     captureServiceError(new Error(`App Check ${operation}: ${code}`), {
       service: "appCheck",
       operation,
       extra: { platform: Platform.OS, code, detail },
     });
   } catch (reportError) {
-    console.warn("[AppCheck] Failure report skipped:", reportError);
+    console.warn("[AppCheck] Failure report skipped:", failureCode(reportError));
   }
 }
 
@@ -153,8 +159,17 @@ async function reportAppCheckFailure(error: unknown, operation: string): Promise
 async function checkNativeToken(appCheck: AppCheck): Promise<void> {
   try {
     for (let attempt = 1; attempt <= TOKEN_CHECK_ATTEMPTS; attempt += 1) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await getJsAppCheckToken(appCheck, false);
+        const result = await Promise.race([
+          getJsAppCheckToken(appCheck, false),
+          new Promise<"timeout">((resolve) => {
+            timer = setTimeout(() => resolve("timeout"), TOKEN_CHECK_TIMEOUT_MS);
+          }),
+        ]);
+        if (result === "timeout") {
+          await reportAppCheckFailure(new Error("Délai dépassé pour le premier jeton"), "startupToken");
+        }
         return;
       } catch (error) {
         // Toute autre erreur passe déjà par le fournisseur (getToken ci-dessous).
@@ -164,6 +179,8 @@ async function checkNativeToken(appCheck: AppCheck): Promise<void> {
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, TOKEN_CHECK_DELAY_MS));
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
   } finally {
@@ -215,7 +232,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   try {
     rnfbAppCheck = await loadNativeAppCheck();
   } catch (error) {
-    console.warn("[AppCheck] Native module unavailable, skipping native App Check:", error);
+    console.warn("[AppCheck] Native module unavailable:", failureCode(error));
     void reportAppCheckFailure(error, "nativeModule");
     return;
   }
@@ -285,8 +302,8 @@ export function ensureFirebaseAppCheck(app: FirebaseApp): Promise<void> {
     appCheckInitializationPromise = initializeForCurrentPlatform(app).catch((error) => {
       // Sans App Check, les Cloud Functions refusent les appels : ne jamais
       // laisser cet échec silencieux en production.
-      console.warn("[AppCheck] Initialization skipped:", error);
-      captureServiceError(error, { service: "appCheck", operation: "initialize" });
+      console.warn("[AppCheck] Initialization skipped:", failureCode(error));
+      return reportAppCheckFailure(error, "initialize");
     });
   }
 
