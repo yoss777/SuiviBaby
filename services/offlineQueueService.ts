@@ -217,23 +217,25 @@ let rerunRequested = false;
 const ENQUEUE_RETRY_DELAY_MS = 3000;
 
 const APP_CHECK_WAIT_MS = 5000;
-let appCheckWaited = false;
+const SESSION_CHECK_TIMEOUT_MS = 6000;
+let appCheckReady = false;
 
 /**
  * Au démarrage, la file peut repartir avant l'initialisation d'App Check.
- * Attente bornée et unique : un échec n'empêche jamais le rejeu.
+ * Attente bornée, reprise au cycle suivant tant qu'il n'est pas prêt : un échec
+ * n'empêche jamais le rejeu.
  */
 async function waitForAppCheck(): Promise<void> {
-  if (appCheckWaited) return;
-  appCheckWaited = true;
+  if (appCheckReady) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
-      ensureFirebaseAppCheck(),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, APP_CHECK_WAIT_MS);
+    const result = await Promise.race([
+      Promise.resolve(ensureFirebaseAppCheck()).then(() => "ready" as const),
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), APP_CHECK_WAIT_MS);
       }),
     ]);
+    appCheckReady = result === "ready";
   } catch {
     // App Check signale lui-même ses échecs.
   } finally {
@@ -246,12 +248,21 @@ async function waitForAppCheck(): Promise<void> {
  * App Check, on rejouera) ou morte (l'écriture suit le chemin des refus définitifs,
  * pour ne pas bloquer la file). Une coupure réseau ne prouve pas une session morte.
  */
-async function isSessionAlive(): Promise<boolean> {
+async function isSessionAlive(uid: string): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await auth.currentUser?.getIdToken(true);
-    return !!auth.currentUser;
+    await Promise.race([
+      auth.currentUser?.getIdToken(true),
+      // Sans réponse : réseau dégradé, ce n'est pas la preuve d'une session morte.
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, SESSION_CHECK_TIMEOUT_MS);
+      }),
+    ]);
+    return auth.currentUser?.uid === uid;
   } catch (error) {
     return isNetworkError(error);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -326,10 +337,15 @@ async function emitState(): Promise<void> {
 export async function enqueueEvent(
   action: QueueAction,
   payload: Record<string, unknown>,
+  /** Compte qui a fait la saisie : jamais rangée sous un autre compte. */
+  expectedUid?: string,
 ): Promise<string> {
   const uid = auth.currentUser?.uid;
   if (!uid) {
     throw new Error("Cannot enqueue event: no authenticated user");
+  }
+  if (expectedUid && uid !== expectedUid) {
+    throw new Error("Cannot enqueue event: account changed");
   }
 
   const database = await getDb();
@@ -660,7 +676,7 @@ export async function processQueue(): Promise<number> {
         // plus haut), le refus peut donc venir d'un jeton App Check manquant.
         const transient =
           !stale &&
-          (isTransientError(error) || (isUnauthenticatedError(error) && (await isSessionAlive())));
+          (isTransientError(error) || (isUnauthenticatedError(error) && (await isSessionAlive(event.uid))));
         let exhausted = false;
         let reason: "conflict" | "permanent" | "transient-cap" | "stale" = "permanent";
 

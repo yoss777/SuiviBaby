@@ -1031,7 +1031,7 @@ export function ajouterEvenementOptimistic(
   void (async () => {
     try {
       if (!(await isOnline())) {
-        const queueId = await enqueueEvent('create', payload);
+        const queueId = await enqueueEvent('create', payload, senderUid);
         markOptimisticQueued(tempId);
         onCreateQueued(tempId, queueId);
         return;
@@ -1068,7 +1068,7 @@ export function ajouterEvenementOptimistic(
     } catch (error) {
       if (shouldQueueFailedWrite(error, senderUid)) {
         try {
-          const queueId = await enqueueEvent('create', payload);
+          const queueId = await enqueueEvent('create', payload, senderUid);
           markOptimisticQueued(tempId);
           onCreateQueued(tempId, queueId);
         } catch (enqueueError) {
@@ -1168,7 +1168,7 @@ export function modifierEvenementOptimistic(
   void (async () => {
     try {
       if (!(await isOnline())) {
-        await enqueueEvent('update', payload as Record<string, unknown>);
+        await enqueueEvent('update', payload as Record<string, unknown>, senderUid);
         markOptimisticQueued(operationId);
         return;
       }
@@ -1179,7 +1179,7 @@ export function modifierEvenementOptimistic(
     } catch (error) {
       if (shouldQueueFailedWrite(error, senderUid)) {
         try {
-          await enqueueEvent('update', payload as Record<string, unknown>);
+          await enqueueEvent('update', payload as Record<string, unknown>, senderUid);
           markOptimisticQueued(operationId);
         } catch (enqueueError) {
           failWrite("update", operationId, enqueueError, eventType, options, true, updateFallback);

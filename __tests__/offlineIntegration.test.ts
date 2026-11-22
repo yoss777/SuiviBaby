@@ -341,6 +341,17 @@ describe("refus App Check pour le compte connecté", () => {
     expect(fakeDb.rows[0].uid).toBe("test-uid");
   });
 
+  it("panne réseau après un changement de compte : rien sous le nouveau compte", async () => {
+    server.rejectWhen = (name) => {
+      if (name !== "validateAndCreateEvent") return null;
+      (auth as any).currentUser = { uid: "autre-parent" };
+      return err("réseau", "functions/unavailable");
+    };
+    ajouterEvenementOptimistic("c1", biberon());
+    await settle();
+    expect(fakeDb.rows).toHaveLength(0);
+  });
+
   it("ne range jamais une saisie sous un autre compte", async () => {
     server.rejectWhen = (name) => {
       if (name !== "validateAndCreateEvent") return null;

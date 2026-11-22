@@ -1,6 +1,6 @@
 # ADR 0002 — Imposer App Check : critères, étapes, retour arrière
 
-- Statut : proposé, en attente de validation (Yoss). Aucune bascule faite.
+- Statut : accepté par Yoss le 2026-11-22. Aucune bascule faite.
 - Date : 2026-11-07
 - Sprint : S13.6 (audit 2026-11, action S4 du suivi)
 - Remplace : la date cible du suivi S4 (2026-11-30, critère « 1.0.6 majoritaire »),
@@ -121,7 +121,9 @@ avant de fixer une date :
 
 ## Critères d'activation
 
-**Fonctions appelables (`onCall` avec `withAppCheck`)**, tous les critères réunis :
+**Fonctions appelables (`onCall` avec `withAppCheck`)**, tous les critères réunis, sauf
+pour le lot voix, qui suit la décision du 2026-11-22 (seul C1 pour iOS, et la 1.0.26
+disponible sur les stores) :
 
 - C1. La première version attestée (V_a) de chaque plateforme est confirmée sur un
   appareil (prérequis ci-dessus).
@@ -148,23 +150,22 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 
 1. Lot voix (décision du 2026-11-22) : constater un appel `VERIFIED` sur iPhone en
    1.0.26 et attendre que la 1.0.26 soit disponible sur les stores.
-2. Lots suivants : traiter leurs prérequis et réunir C1 à C4. Revue : 2026-12-07.
-3. Bascule du lot voix :
+2. Bascule du lot voix :
    `APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio,parseVoiceCommand` dans
    `functions/.env.<projet>` (pas `APPCHECK_ENFORCE=true`, qui vise toutes les
    fonctions). La CI redéploie toutes les fonctions à chaque push sur `main` : la
    variable doit donc rester dans le fichier d'environnement versionné ou fourni à
    la CI, sinon le prochain déploiement repasse les fonctions en surveillance.
    Les autres fonctions restent non imposées.
-4. Surveillance 48 heures : Sentry (`unauthenticated`) et refus 401 dans Cloud Logging.
+3. Surveillance 48 heures : Sentry (`unauthenticated`) et refus 401 dans Cloud Logging.
    Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
-5. Extension, une fois C1 à C4 réunis : ajouter les autres noms à
+4. Extension, une fois les prérequis traités et C1 à C4 réunis (revue : 2026-12-07) : ajouter les autres noms à
    `APPCHECK_ENFORCE_FUNCTIONS`. Poser
    `APPCHECK_ENFORCE=true` (déploiement complet par la CI `deploy-functions.yml`)
    seulement après la décision explicite sur la suppression de compte, le retrait du
    consentement et `revokeDeviceToken`.
-6. Audit à J+7 : aucun refus 401 inexpliqué sur les clients récents.
-7. Firestore puis Storage : console Firebase → App Check, dans un second temps et
+5. Audit à J+7 : aucun refus 401 inexpliqué sur les clients récents.
+6. Firestore puis Storage : console Firebase → App Check, dans un second temps et
    après un nouveau point de décision. Surveiller les métriques App Check avant de
    passer en application.
 
