@@ -130,8 +130,8 @@ jobs:
             exit 1
           fi
           DELEGATE=$(find "$CHECK_DIR/ios" -name AppDelegate.swift | head -1)
-          FACTORY_LINE=$(grep -n 'RNFBAppCheckModule.sharedInstance()' "$DELEGATE" | head -1 | cut -d: -f1)
-          CONFIGURE_LINE=$(grep -n 'FirebaseApp.configure()' "$DELEGATE" | head -1 | cut -d: -f1)
+          FACTORY_LINE=$(grep -n '^[[:space:]]*RNFBAppCheckModule.sharedInstance()' "$DELEGATE" | head -1 | cut -d: -f1)
+          CONFIGURE_LINE=$(grep -n '^[[:space:]]*FirebaseApp.configure()' "$DELEGATE" | head -1 | cut -d: -f1)
           rm -rf "$CHECK_DIR"
           if [ -z "$FACTORY_LINE" ] || [ -z "$CONFIGURE_LINE" ] || [ "$FACTORY_LINE" -ge "$CONFIGURE_LINE" ]; then
             echo "::error::App Check factory must be registered before FirebaseApp.configure()"

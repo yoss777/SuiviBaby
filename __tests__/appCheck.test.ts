@@ -347,6 +347,30 @@ describe("App Check natif", () => {
     expect(mockNativeGetToken.mock.calls.map((call) => call[1])).toEqual([false, true]);
   });
 
+  const shortJwt = (minutes: number) =>
+    `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + minutes * 60 })).toString("base64")}.s`;
+
+  it("ne force qu'un renouvellement par minute et laisse le SDK attendre", async () => {
+    await initApp();
+    const short = shortJwt(4);
+    mockNativeGetToken.mockResolvedValue({ token: short });
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: short }));
+    mockNativeGetToken.mockClear();
+    await expect(mockProviderOptions.getToken()).rejects.toMatchObject({ code: "appCheck/refresh-throttled" });
+    await flush();
+    expect(mockNativeGetToken.mock.calls.map((call) => call[1])).toEqual([false]);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+  });
+
+  it("garde le jeton encore valide si le renouvellement forcé échoue", async () => {
+    await initApp();
+    const short = shortJwt(4);
+    mockNativeGetToken.mockResolvedValueOnce({ token: short }).mockRejectedValueOnce(new Error("attestation refusée"));
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: short }));
+    await flush();
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("forcedRefresh");
+  });
+
   it("garde le jeton natif tant qu'il reste assez de temps", async () => {
     await initApp();
     const token = `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3000 })).toString("base64")}.s`;

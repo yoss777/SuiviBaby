@@ -288,7 +288,12 @@ export async function requestAccountDeletion(
     } catch (error) {
       console.warn("[DELETION] registerAppleRevocation échoué:", error);
       // Exigence App Store : un échec ne doit jamais rester invisible.
-      captureServiceError(error, { service: "accountDeletion", operation: "registerAppleRevocation" });
+      // Message réécrit : jamais de contenu lié au code d'autorisation Apple.
+      const code = String((error as { code?: unknown } | null)?.code ?? "unknown");
+      captureServiceError(new Error(`registerAppleRevocation: ${code}`), {
+        service: "accountDeletion",
+        operation: "registerAppleRevocation",
+      });
     }
   }
 

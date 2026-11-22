@@ -167,69 +167,9 @@ token valide. Voir ADR 0002.
 
 ### Procédure d'activation
 
-> Procédure remplacée par la check-list de `docs/adr/0002-app-check-enforcement.md` (22/11).
-
-**Préreq strict** : tous les builds en prod (≥ 1.0.3) doivent avoir
-l'attestation native App Check active (cf. `config/appCheck.ts`). Sans
-cela, l'activation bloque les clients légitimes.
-
-1. **Audit logs (au moins 7 j)**
-   ```bash
-   ./scripts/auditAppCheck.sh 7d
-   ```
-   Le script doit retourner `STATUS: READY`. Si `NOT READY` : investiguer
-   les CFs > 0.5 % UNVERIFIED avant d'activer.
-
-2. **Activation progressive** — d'abord sur CFs critiques (impact coût) :
-   ```bash
-   # Les fonctions v2 lisent process.env : fichier d'environnement du projet
-   # (functions:config:set est l'ancienne configuration v1, sans effet ici)
-   # (revenueCatWebhook est un onRequest : App Check ne s'y applique pas)
-   echo "APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio,parseVoiceCommand" >> functions/.env.samaye-53723
-   firebase deploy --only functions:transcribeAudio,functions:parseVoiceCommand
-   # La variable doit rester dans le fichier : la CI redéploie toutes les fonctions.
-   ```
-
-3. **Monitoring 24 h** sur Sentry + Cloud Logs :
-   - Aucun pic d'erreurs `unauthenticated` côté client
-   - Aucun pic d'erreurs `App Check token invalid` côté CF
-
-4. **Étendre à toutes les CFs** :
-   ```bash
-   firebase deploy --only functions
-   ```
-
-5. **Re-audit J+7** après l'extension complète :
-   ```bash
-   ./scripts/auditAppCheck.sh 7d
-   ```
-   Doit montrer 100 % VERIFIED.
-
-### Rollback (5 min)
-
-Si on observe un pic d'erreurs côté client après activation :
-```bash
-firebase functions:config:unset appcheck.enforce
-firebase deploy --only functions
-```
-
-Tant que Firebase n'a pas hard-deprecated les builds non-attestés, la
-bascule reste possible dans les deux sens.
-
-### CFs concernées
-
-Toutes les CFs `onCall` du fichier `functions/index.js` qui passent par
-`withAppCheck(...)`. Le webhook RevenuCat (`onRequest`) reste protégé
-indépendamment par son secret Bearer — App Check ne couvre pas ce cas
-par design (les webhooks viennent de fournisseurs externes).
-
-### Audit script
-
-`scripts/auditAppCheck.sh` :
-- requête `gcloud logging` sur la fenêtre demandée
-- agrège VERIFIED / UNVERIFIED par CF
-- exit non-zero si une CF dépasse le seuil de 0,5 %
-- utilisable en CI pour pré-vérifier toute bascule
+La procédure d'activation, de surveillance et de retour arrière est celle de
+`docs/adr/0002-app-check-enforcement.md`. L'ancienne commande
+`functions:config:unset` est sans effet sur les fonctions v2.
 
 ## 9. Sauvegardes, alertes et Sentry (audit A6 / A7, sprint 2)
 

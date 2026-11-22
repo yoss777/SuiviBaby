@@ -54,7 +54,8 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
 - [ ] chemin de remplacement pour `scripts/resolveReport.mjs` (modération) et tout appel
   manuel de `setAdminClaim`, qui n'ont pas de jeton App Check ;
 - [ ] jetons de débogage révoqués dans la console Firebase ;
-- [ ] activation et retour arrière répétés et chronométrés sur staging ;
+- [ ] activation et retour arrière répétés et chronométrés sur staging, avec
+  `APPCHECK_ENFORCE=true` dans `functions/.env.samaye-staging` ;
 - [ ] aucune CI en cours, PR dédiée ne contenant que l'activation.
 
 ## Contexte
@@ -130,17 +131,18 @@ check-list de la mise à jour du 2026-11-22 remplace C2 et C3 ; C1 et C4 restent
 
 - C1. La première version attestée (V_a) de chaque plateforme est confirmée sur un
   appareil (prérequis ci-dessus).
-- C2. Au moins 95 % des utilisateurs actifs des 30 derniers jours sont sur une
+- C2 (remplacé par la décision du 2026-11-22, non exigé). Au moins 95 % des utilisateurs actifs des 30 derniers jours sont sur une
   version ≥ V_a de leur plateforme (sources 1 ou 2). Relever `minVersion` ne suffit pas : c'est un
   bandeau commun aux deux plateformes, qui ne bloque pas les anciennes versions
   (`services/appUpdateService.ts`).
-- C3. Pour les fonctions du lot concerné, moins de 0,5 % d'appels non vérifiés parmi
+- C3 (remplacé par la décision du 2026-11-22, non exigé). Pour les fonctions du lot concerné, moins de 0,5 % d'appels non vérifiés parmi
   les versions ≥ V_a, avec un volume suffisant. `scripts/auditAppCheck.sh` doit d'abord
   être fiabilisé : il ne distingue aujourd'hui ni plateforme ni version.
 - C4. Aucune hausse d'erreurs `unauthenticated` dans Sentry sur les 48 heures
   précédentes.
 
-**Firestore et Storage** (une décision séparée, plus tard) : tous les critères
+**Firestore et Storage** : hors périmètre de la décision du 2026-11-22, à rouvrir seulement
+par Yoss. Pour mémoire : tous les critères
 ci-dessus, plus 100 % des utilisateurs actifs sur une version ≥ V_a pendant 14 jours
 (source 1 ou 2). Ces règles s'appliquent à tous les clients, y compris les anciennes
 versions : une bascule trop tôt coupe l'accès aux données. Vérifier aussi qu'aucun
@@ -160,9 +162,6 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
 4. Bilan à J+7 : aucun refus 401 inexpliqué sur les clients récents, sans s'appuyer sur
    `auditAppCheck.sh`.
-5. Firestore puis Storage : console Firebase → App Check, dans un second temps et
-   après un nouveau point de décision. Surveiller les métriques App Check avant de
-   passer en application.
 
 ## Retour arrière
 
@@ -172,7 +171,8 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    procédure : sans enforcement, les apps rappellent sans jeton, sans mise à jour ;
 2. annuler tout run `deploy-functions.yml` en cours, sinon il réimposerait App Check ;
 3. depuis une copie propre de `main`, retirer `APPCHECK_ENFORCE=true` de
-   `functions/.env.<projet>` et lancer `firebase deploy --only functions --project <projet>` ;
+   `functions/.env.<projet>` et lancer `firebase deploy --only functions --project <projet>`
+   (`<projet>` : `samaye-53723` ou `samaye-staging`) ;
 4. committer aussitôt ce retrait sur `main`, sinon le prochain déploiement réimpose App Check.
 
 La durée sera mesurée lors de la répétition. Ne pas utiliser
@@ -188,13 +188,8 @@ elle bloque des utilisateurs, appliquer d'abord le retour arrière serveur.
 ## Conséquences
 
 - L'activation suit la décision du 2026-11-22 : fonctions seules, avec ses conditions.
-- Correction nécessaire dans `docs/FIREBASE_MONITORING.md` §8 :
-  - la commande de retour arrière (`functions:config:unset`) est fausse pour les
-    fonctions v2 ;
-  - `revenueCatWebhook` ne doit pas figurer dans la liste des fonctions à passer en
-    `APPCHECK_ENFORCE`.
 - Le suivi S4 (`docs/SUIVI_ACTIONS.md`) reprend ces critères.
-- La procédure opérationnelle est reprise dans `docs/RUNBOOK.md`.
+- La procédure opérationnelle est celle de cet ADR.
 
 ## Actions
 
@@ -208,5 +203,5 @@ elle bloque des utilisateurs, appliquer d'abord le retour arrière serveur.
 - [ ] Après l'activation : couvrir les suppressions et écritures non optimistes refusées, fiabiliser `scripts/auditAppCheck.sh`.
 - [ ] Journaliser l'état App Check de `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail`.
 - [x] Suivi des échecs d'attestation par version dans Sentry (1.0.26), à la place de `deviceInfo.appCheck`.
-- [ ] Corriger `docs/FIREBASE_MONITORING.md` §8.
+- [x] Corriger `docs/FIREBASE_MONITORING.md` §8.
 - [ ] Ajouter une requête d'agrégation des versions (Firestore) à la procédure.
