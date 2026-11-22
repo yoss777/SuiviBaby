@@ -13,15 +13,22 @@
 // frameworks); bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
 import { captureServiceError } from "@/utils/errorReporting";
+import { isConnectivityError } from "@/utils/networkError";
+import { loadNativeAppCheck } from "./loadNativeAppCheck";
 import {
   CustomProvider,
   ReCaptchaV3Provider,
+  getToken as getJsAppCheckToken,
   initializeAppCheck,
 } from "firebase/app-check";
+import type { AppCheck } from "firebase/app-check";
 import type { FirebaseApp } from "firebase/app";
 import { Platform } from "react-native";
 
 const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
+// Au démarrage, le fournisseur natif peut répondre « provider-not-ready ».
+const TOKEN_CHECK_ATTEMPTS = 3;
+const TOKEN_CHECK_DELAY_MS = 2000;
 
 type ExpoExtra = {
   appCheck?: {
@@ -31,6 +38,7 @@ type ExpoExtra = {
 
 let appCheckInitializationPromise: Promise<void> | null = null;
 let appCheckInitialized = false;
+const reportedFailures = new Set<string>();
 
 function getAppCheckExtra(): ExpoExtra["appCheck"] {
   return ((Constants.expoConfig?.extra ?? {}) as ExpoExtra).appCheck;
@@ -73,6 +81,49 @@ function getExpireTimeMillis(token: string): number {
   return Date.now() + DEFAULT_TOKEN_TTL_MS;
 }
 
+function failureCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : "unknown";
+}
+
+function isProviderNotReady(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return `${failureCode(error)} ${message}`.includes("provider-not-ready");
+}
+
+// Sans jeton, le SDK appelle quand même la fonction, sans preuve et sans
+// erreur visible : c'est ainsi que la panne iOS est restée inaperçue. Une seule
+// remontée par cause et par lancement (le rafraîchissement automatique réessaie).
+function reportAppCheckFailure(error: unknown, operation: string): void {
+  if (isConnectivityError(error)) return;
+  const code = failureCode(error);
+  const key = `${operation}:${code}`;
+  if (reportedFailures.has(key)) return;
+  reportedFailures.add(key);
+  captureServiceError(error, {
+    service: "appCheck",
+    operation,
+    extra: { platform: Platform.OS, code },
+  });
+}
+
+// Demande un premier jeton pour détecter tout de suite une attestation en échec.
+async function checkNativeToken(appCheck: AppCheck): Promise<void> {
+  for (let attempt = 1; attempt <= TOKEN_CHECK_ATTEMPTS; attempt += 1) {
+    try {
+      await getJsAppCheckToken(appCheck, false);
+      return;
+    } catch (error) {
+      if (!isProviderNotReady(error)) return; // déjà remonté par le fournisseur
+      if (attempt === TOKEN_CHECK_ATTEMPTS) {
+        reportAppCheckFailure(error, "startupToken");
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, TOKEN_CHECK_DELAY_MS));
+    }
+  }
+}
+
 function isNativeAppCheckConfigured(): boolean {
   return getAppCheckExtra()?.nativeConfigured === true;
 }
@@ -107,14 +158,18 @@ async function initializeWebAppCheck(app: FirebaseApp): Promise<void> {
 
 async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   if (!isNativeAppCheckRuntimeEnabled()) {
+    if (!__DEV__) {
+      reportAppCheckFailure(new Error("App Check natif non configuré dans ce build"), "notConfigured");
+    }
     return;
   }
 
   let rnfbAppCheck: typeof import("@react-native-firebase/app-check");
   try {
-    rnfbAppCheck = await import("@react-native-firebase/app-check");
+    rnfbAppCheck = await loadNativeAppCheck();
   } catch (error) {
     console.warn("[AppCheck] Native module unavailable, skipping native App Check:", error);
+    reportAppCheckFailure(error, "nativeModule");
     return;
   }
 
@@ -124,33 +179,41 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   provider.configure({
     android: {
       provider: __DEV__ ? "debug" : "playIntegrity",
-      debugToken: process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID,
+      // Jamais dans un build de production : il permettrait d'obtenir des jetons
+      // sans attestation.
+      debugToken: __DEV__ ? process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID : undefined,
     },
     apple: {
       provider: __DEV__ ? "debug" : "appAttestWithDeviceCheckFallback",
-      debugToken: process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE,
+      debugToken: __DEV__ ? process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE : undefined,
     },
   });
 
-  // Synchrone en v26 : l'initialisation native part en arrière-plan ; le
-  // premier getToken ci-dessous sert de vérification.
+  // Synchrone en v26 : l'initialisation native part en arrière-plan ;
+  // checkNativeToken vérifie ensuite qu'un jeton est bien obtenu.
   const nativeAppCheck = rnfbAppCheck.initializeAppCheck(undefined, {
     provider,
     isTokenAutoRefreshEnabled: true,
   });
 
-  initializeAppCheck(app, {
+  const appCheck = initializeAppCheck(app, {
     provider: new CustomProvider({
       async getToken() {
-        const result = await rnfbAppCheck.getToken(nativeAppCheck, false);
-        return {
-          token: result.token,
-          expireTimeMillis: getExpireTimeMillis(result.token),
-        };
+        try {
+          const result = await rnfbAppCheck.getToken(nativeAppCheck, false);
+          return {
+            token: result.token,
+            expireTimeMillis: getExpireTimeMillis(result.token),
+          };
+        } catch (error) {
+          if (!isProviderNotReady(error)) reportAppCheckFailure(error, "getToken");
+          throw error;
+        }
       },
     }),
     isTokenAutoRefreshEnabled: true,
   });
+  void checkNativeToken(appCheck);
 }
 
 async function initializeForCurrentPlatform(app: FirebaseApp): Promise<void> {

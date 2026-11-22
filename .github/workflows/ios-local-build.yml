@@ -124,6 +124,23 @@ jobs:
             --non-interactive --output "$RUNNER_TEMP/app.ipa"
           ls -l "$RUNNER_TEMP/app.ipa"
 
+      - name: Verify App Attest entitlement
+        # Sans ce droit, App Check échoue sur tous les iPhone, sans erreur visible.
+        if: ${{ inputs.profile == 'production' }}
+        run: |
+          CHECK_DIR="$RUNNER_TEMP/ipa-check"
+          mkdir -p "$CHECK_DIR"
+          unzip -q "$RUNNER_TEMP/app.ipa" -d "$CHECK_DIR"
+          APP=$(ls -d "$CHECK_DIR"/Payload/*.app | head -1)
+          codesign -d --entitlements :- "$APP" 2>/dev/null > "$CHECK_DIR/entitlements.plist"
+          VALUE=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' "$CHECK_DIR/entitlements.plist" 2>/dev/null || true)
+          rm -rf "$CHECK_DIR"
+          if [ "$VALUE" != "production" ]; then
+            echo "::error::App Attest entitlement missing from the signed app"
+            exit 1
+          fi
+          echo "App Attest entitlement: production"
+
       - name: Submit to App Store Connect
         # A development client is never sent to App Store Connect.
         if: ${{ inputs.submit && inputs.profile == 'production' }}

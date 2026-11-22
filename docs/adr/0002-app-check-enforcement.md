@@ -7,6 +7,37 @@
   trop tôt : la 1.0.9 est sortie le 2026-11-06 et l'attestation native n'a pas
   été vérifiée version par version.
 
+## Mise à jour du 2026-11-22
+
+Mesure en production : **aucun appel iOS n'était attesté** (210 sur 210 sans preuve
+depuis le 7/11, tous builds). Il manquait le Team ID dans l'app Firebase (renseigné le
+22/11) et le droit App Attest (ajouté dans la 1.0.26). Android : 145 appels sur 154
+vérifiés depuis le 18/11, 9 échecs à expliquer. V_a n'est donc plus la 1.0.6 : c'est
+au plus tôt la 1.0.26, à confirmer par un appel `VERIFIED` depuis un iPhone.
+
+La 1.0.26 remonte dans Sentry chaque échec d'attestation (`service: appCheck`), par
+version. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
+indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
+
+**Prérequis supplémentaires avant toute bascule :**
+- `minVersion` est commun aux deux plateformes et son écran n'est qu'un bandeau, l'app
+  reste utilisable : il ne bloque pas les anciennes versions. Retenir le critère des
+  95 % d'adoption, ou rendre ce blocage réel, avec la version en Production sur les
+  deux stores ;
+- `unauthenticated` est traité comme définitif par la file hors ligne : une saisie
+  sans jeton serait marquée en échec après trois essais. À rendre transitoire ;
+- `scripts/auditAppCheck.sh` doit distinguer plateforme et version, exiger un volume
+  minimal par fonction et échouer si le volume est nul ou tronqué ;
+- `ensureFirebaseAppCheck` doit être attendu avant le premier appel de fonction ;
+- `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail` doivent
+  journaliser leur état App Check ;
+- après la bascule, suivre aussi les refus 401 : un appel refusé n'écrit pas de ligne
+  `UNVERIFIED` ;
+- ne pas utiliser `APPCHECK_ENFORCE=true` tant que la suppression de compte, le retrait
+  du consentement et `revokeDeviceToken` n'ont pas fait l'objet d'une décision
+  explicite ;
+- révoquer les jetons de débogage enregistrés dans la console Firebase.
+
 ## Contexte
 
 **Côté app.** `config/appCheck.ts` initialise App Check :
