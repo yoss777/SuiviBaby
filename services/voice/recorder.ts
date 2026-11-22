@@ -297,7 +297,7 @@ async function transcribeAudioFile(audioUri: string): Promise<string> {
     if (error?.code === "functions/unauthenticated") {
       // Peut être un refus App Check : à voir dans Sentry une fois la voix imposée.
       captureServiceError(new Error("Transcription refusée : unauthenticated"), {
-        service: "voice",
+        service: "voiceRecorder",
         operation: "transcribeUnauthenticated",
       });
       throw new Error("Vous devez être connecté pour utiliser la voix.");

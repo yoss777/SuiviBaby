@@ -91,8 +91,6 @@ const isConflictError = isConflictCode;
  * Même définition que les écritures optimistes (utils/networkError) : une
  * erreur ne peut plus être « réseau » pour l'une et « définitive » pour l'autre.
  */
-const APP_CHECK_WAIT_MS = 5000;
-
 function isTransientError(error: any): boolean {
   return isNetworkError(error);
 }
@@ -218,12 +216,16 @@ let rerunRequested = false;
 /** Délai avant le rejeu qui suit un enfilement (laisse le réseau/serveur souffler). */
 const ENQUEUE_RETRY_DELAY_MS = 3000;
 
-/** Lance un cycle sans jamais laisser une erreur remonter en rejet non géré. */
+const APP_CHECK_WAIT_MS = 5000;
+let appCheckWaited = false;
+
 /**
- * Au démarrage, la file peut repartir avant qu'App Check soit prêt : l'appel
- * partirait sans preuve. Attente bornée, un échec n'empêche jamais le rejeu.
+ * Au démarrage, la file peut repartir avant l'initialisation d'App Check.
+ * Attente bornée et unique : un échec n'empêche jamais le rejeu.
  */
 async function waitForAppCheck(): Promise<void> {
+  if (appCheckWaited) return;
+  appCheckWaited = true;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -239,6 +241,21 @@ async function waitForAppCheck(): Promise<void> {
   }
 }
 
+/**
+ * Après un refus `unauthenticated` : session encore valide (la cause est alors
+ * App Check, on rejouera) ou morte (l'écriture suit le chemin des refus définitifs,
+ * pour ne pas bloquer la file). Une coupure réseau ne prouve pas une session morte.
+ */
+async function isSessionAlive(): Promise<boolean> {
+  try {
+    await auth.currentUser?.getIdToken(true);
+    return !!auth.currentUser;
+  } catch (error) {
+    return isNetworkError(error);
+  }
+}
+
+/** Lance un cycle sans jamais laisser une erreur remonter en rejet non géré. */
 function runCycle(): void {
   processQueue().catch((error) =>
     captureServiceError(error, { service: "offlineQueue", operation: "runCycle" }),
@@ -641,7 +658,9 @@ export async function processQueue(): Promise<number> {
         const stale = isStaleCreateError(error);
         // `unauthenticated` ici : le compte est bien celui de l'écriture (vérifié
         // plus haut), le refus peut donc venir d'un jeton App Check manquant.
-        const transient = !stale && (isTransientError(error) || isUnauthenticatedError(error));
+        const transient =
+          !stale &&
+          (isTransientError(error) || (isUnauthenticatedError(error) && (await isSessionAlive())));
         let exhausted = false;
         let reason: "conflict" | "permanent" | "transient-cap" | "stale" = "permanent";
 

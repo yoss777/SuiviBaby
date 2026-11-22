@@ -306,15 +306,50 @@ describe("déconnexion pendant le rejeu de la file (revue jalon 6)", () => {
 });
 
 describe("refus App Check pour le compte connecté", () => {
-  it("garde la saisie en file sans consommer de tentative", async () => {
+  const refuse = (name: string) =>
+    name === "validateAndCreateEvent" ? err("unauthenticated", "functions/unauthenticated") : null;
+
+  afterEach(() => {
+    (auth as any).currentUser = { uid: "test-uid" };
+    server.rejectWhen = () => null;
+  });
+
+  it("session valide : garde la saisie en file sans consommer de tentative", async () => {
+    (auth as any).currentUser = { uid: "test-uid", getIdToken: jest.fn().mockResolvedValue("t") };
     await enqueueEvent("create", queuedCreate(100));
-    server.rejectWhen = (name) =>
-      name === "validateAndCreateEvent" ? err("unauthenticated", "functions/unauthenticated") : null;
+    server.rejectWhen = refuse;
     await cycle();
-    expect(fakeDb.rows).toHaveLength(1);
     expect(fakeDb.rows[0].status).toBe("pending");
     expect(fakeDb.rows[0].retryCount).toBe(0);
-    server.rejectWhen = () => null;
+  });
+
+  it("session morte : suit le chemin des refus définitifs", async () => {
+    const expired = Object.assign(new Error("expired"), { code: "auth/user-token-expired" });
+    (auth as any).currentUser = { uid: "test-uid", getIdToken: jest.fn().mockRejectedValue(expired) };
+    await enqueueEvent("create", queuedCreate(100));
+    server.rejectWhen = refuse;
+    await cycle();
+    expect(fakeDb.rows[0].status).toBe("failed");
+    expect(fakeDb.rows[0].retryCount).toBe(1);
+  });
+
+  it("en ligne : garde en file une saisie refusée pour le même compte", async () => {
+    server.rejectWhen = refuse;
+    ajouterEvenementOptimistic("c1", biberon());
+    await settle();
+    expect(fakeDb.rows).toHaveLength(1);
+    expect(fakeDb.rows[0].uid).toBe("test-uid");
+  });
+
+  it("ne range jamais une saisie sous un autre compte", async () => {
+    server.rejectWhen = (name) => {
+      if (name !== "validateAndCreateEvent") return null;
+      (auth as any).currentUser = { uid: "autre-parent" };
+      return err("unauthenticated", "functions/unauthenticated");
+    };
+    ajouterEvenementOptimistic("c1", biberon());
+    await settle();
+    expect(fakeDb.rows).toHaveLength(0);
   });
 });
 

@@ -21,7 +21,7 @@ La 1.0.26 remonte dans Sentry chaque cause distincte d'échec d'attestation
 connexion. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
 indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
-**Prérequis supplémentaires avant toute bascule :**
+**Prérequis des lots autres que la voix :**
 - `minVersion` est commun aux deux plateformes et son écran n'est qu'un bandeau, l'app
   reste utilisable : il ne bloque pas les anciennes versions. Le critère retenu est
   donc celui des 95 % d'adoption (C2) ;
@@ -31,7 +31,10 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
   avant C2 ;
 - `scripts/auditAppCheck.sh` doit distinguer plateforme et version, exiger un volume
   minimal par fonction et échouer si le volume est nul ou tronqué ;
-- la file attend `ensureFirebaseAppCheck` avant de rejouer (1.0.26, attente bornée) ;
+- la file attend l'initialisation d'App Check avant son premier rejeu (1.0.26, attente
+  bornée), mais pas le premier jeton : un rejeu trop tôt est refusé, puis repris ;
+- une suppression ou une écriture non optimiste refusée en ligne échoue visiblement
+  sans passer en file : à traiter avant d'imposer les fonctions d'événements ;
 - `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail` doivent
   journaliser leur état App Check ;
 - après la bascule, suivre aussi les refus 401 : un appel refusé n'écrit pas de ligne
@@ -42,8 +45,7 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 - révoquer les jetons de débogage enregistrés dans la console Firebase ;
 - expliquer les 9 échecs Android.
 
-Le 2026-12-07 reste une date de revue, pas une date de bascule. Les sections
-suivantes sont alignées sur cette mise à jour.
+Le 2026-12-07 reste une date de revue pour ces lots, pas une date de bascule.
 
 **Décision de Yoss (2026-11-22) :** activer dès la 1.0.26, en commençant par
 `transcribeAudio` et `parseVoiceCommand`, une fois un appel `VERIFIED` constaté sur
@@ -144,10 +146,10 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 
 ## Étapes (fonctions appelables)
 
-1. Traiter les prérequis de la mise à jour du 2026-11-22, confirmer V_a et attendre
-   que les critères C1 à C4 soient réunis. Date de revue prévue : 2026-12-07.
-2. Audit : `./scripts/auditAppCheck.sh 7d` doit afficher `READY`.
-3. Bascule partielle sur 2 à 3 fonctions à fort impact (coût ou abus) :
+1. Lot voix (décision du 2026-11-22) : constater un appel `VERIFIED` sur iPhone en
+   1.0.26 et attendre que la 1.0.26 soit disponible sur les stores.
+2. Lots suivants : traiter leurs prérequis et réunir C1 à C4. Revue : 2026-12-07.
+3. Bascule du lot voix :
    `APPCHECK_ENFORCE_FUNCTIONS=transcribeAudio,parseVoiceCommand` dans
    `functions/.env.<projet>` (pas `APPCHECK_ENFORCE=true`, qui vise toutes les
    fonctions). La CI redéploie toutes les fonctions à chaque push sur `main` : la
@@ -156,7 +158,8 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    Les autres fonctions restent non imposées.
 4. Surveillance 48 heures : Sentry (`unauthenticated`) et refus 401 dans Cloud Logging.
    Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
-5. Extension : ajouter les autres noms à `APPCHECK_ENFORCE_FUNCTIONS`. Poser
+5. Extension, une fois C1 à C4 réunis : ajouter les autres noms à
+   `APPCHECK_ENFORCE_FUNCTIONS`. Poser
    `APPCHECK_ENFORCE=true` (déploiement complet par la CI `deploy-functions.yml`)
    seulement après la décision explicite sur la suppression de compte, le retrait du
    consentement et `revokeDeviceToken`.
@@ -188,7 +191,8 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
 
 ## Conséquences
 
-- Aucune bascule avant la revue du 2026-12-07 et les prérequis ci-dessus.
+- Le lot voix suit la décision du 2026-11-22. Aucun autre lot avant la revue du
+  2026-12-07 et ses prérequis.
 - Correction nécessaire dans `docs/FIREBASE_MONITORING.md` §8 :
   - la commande de retour arrière (`functions:config:unset`) est fausse pour les
     fonctions v2 ;
@@ -199,12 +203,15 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
 
 ## Actions
 
-- [ ] Yoss : valider le principe et la revue du 2026-12-07.
+- [x] Yoss : principe validé le 2026-11-22, voix d'abord dès la 1.0.26.
+- [ ] Imposer `transcribeAudio` et `parseVoiceCommand` après l'appel `VERIFIED` sur iPhone.
+- [ ] Revue des lots suivants le 2026-12-07.
 - [ ] Vérifier sur un iPhone en 1.0.26 que les appels sont `VERIFIED` (V_a iOS).
 - [ ] Établir V_a Android et expliquer les 9 échecs.
 - [x] Garder en file une saisie refusée en `unauthenticated` pour un compte connecté (1.0.26).
 - [ ] Fiabiliser `scripts/auditAppCheck.sh` (plateforme, version, volume minimal, volume nul ou tronqué).
-- [x] Attendre `ensureFirebaseAppCheck` avant le rejeu de la file (1.0.26).
+- [x] Attendre l'initialisation d'App Check avant le rejeu de la file (1.0.26).
+- [ ] Couvrir les suppressions et écritures non optimistes refusées en `unauthenticated`.
 - [ ] Journaliser l'état App Check de `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail`.
 - [ ] Suivre les refus 401 après la bascule.
 - [ ] Décider du sort de la suppression de compte, du consentement et de `revokeDeviceToken`.
