@@ -6,8 +6,8 @@
 //     Android that can do real App Attest / Play Integrity attestation.
 //     The JS Firebase SDK does not implement native attestation on RN.
 // The native package is loaded via dynamic import below, gated by
-// nativeAppCheckConfigured (= GoogleService-Info.plist + google-services.json
-// present at build time). app.config.js registers the matching Expo plugins.
+// nativeConfiguredIos / nativeConfiguredAndroid (the Firebase file of that
+// platform present at build time). app.config.js registers the matching Expo plugins.
 // Keep @react-native-firebase on a major tested with the current Expo SDK
 // (58: v26.4 — v27 resolves Firebase through SPM only and needs dynamic
 // frameworks); bump it together with the SDK upgrade, never on its own.
@@ -36,7 +36,8 @@ const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
 type ExpoExtra = {
   appCheck?: {
-    nativeConfigured?: boolean;
+    nativeConfiguredAndroid?: boolean;
+    nativeConfiguredIos?: boolean;
   };
 };
 
@@ -189,7 +190,10 @@ async function checkNativeToken(appCheck: AppCheck): Promise<void> {
 }
 
 function isNativeAppCheckConfigured(): boolean {
-  return getAppCheckExtra()?.nativeConfigured === true;
+  const extra = getAppCheckExtra();
+  if (Platform.OS === "ios") return extra?.nativeConfiguredIos === true;
+  if (Platform.OS === "android") return extra?.nativeConfiguredAndroid === true;
+  return false;
 }
 
 function isNativeAppCheckRuntimeEnabled(): boolean {

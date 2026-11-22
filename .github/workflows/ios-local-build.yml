@@ -124,8 +124,9 @@ jobs:
             --non-interactive --output "$RUNNER_TEMP/app.ipa"
           ls -l "$RUNNER_TEMP/app.ipa"
 
-      - name: Verify App Attest entitlement
-        # Sans ce droit, App Check échoue sur tous les iPhone, sans erreur visible.
+      - name: Verify App Check in the signed app
+        # Sans droit, sans fichier Firebase ou sans drapeau, App Check échoue sur
+        # tous les iPhone, sans erreur visible.
         if: ${{ inputs.profile == 'production' }}
         run: |
           CHECK_DIR="$RUNNER_TEMP/ipa-check"
@@ -139,12 +140,24 @@ jobs:
             exit 1
           fi
           APP_VALUE=$(/usr/libexec/PlistBuddy -c "Print :$KEY" "$CHECK_DIR/entitlements.plist" 2>/dev/null || true)
+          FIREBASE_PLIST=no
+          [ -f "$APP/GoogleService-Info.plist" ] && FIREBASE_PLIST=yes
+          APP_CONFIG=$(find "$APP" -path '*EXConstants.bundle/app.config' -type f | head -1)
+          NATIVE_FLAG=$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(c.extra?.appCheck?.nativeConfiguredIos===true))' "$APP_CONFIG" 2>/dev/null || echo false)
           rm -rf "$CHECK_DIR"
           if [ "$APP_VALUE" != "production" ]; then
             echo "::error::App Attest entitlement missing from the signed app"
             exit 1
           fi
-          echo "App Attest entitlement: production"
+          if [ "$FIREBASE_PLIST" != "yes" ]; then
+            echo "::error::GoogleService-Info.plist missing from the signed app"
+            exit 1
+          fi
+          if [ "$NATIVE_FLAG" != "true" ]; then
+            echo "::error::Native App Check is not enabled in the embedded app config"
+            exit 1
+          fi
+          echo "App Check: entitlement, Firebase file and native flag present"
 
       - name: Submit to App Store Connect
         # A development client is never sent to App Store Connect.

@@ -97,7 +97,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 
 // Mock expo-constants
 jest.mock("expo-constants", () => ({
-  expoConfig: { extra: { appCheck: { nativeConfigured: false } } },
+  expoConfig: { extra: { appCheck: { nativeConfiguredAndroid: false, nativeConfiguredIos: false } } },
 }));
 
 // Mock Sentry

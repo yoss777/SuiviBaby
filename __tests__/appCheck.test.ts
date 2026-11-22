@@ -5,7 +5,9 @@ const mockConfigure = jest.fn();
 const mockLoadNative = jest.fn();
 const mockNetInfoFetch = jest.fn();
 const mockSentryEnvironment = jest.fn();
-const mockExtra: { appCheck: { nativeConfigured: boolean } } = { appCheck: { nativeConfigured: true } };
+const mockExtra: { appCheck: { nativeConfiguredAndroid: boolean; nativeConfiguredIos: boolean } } = {
+  appCheck: { nativeConfiguredAndroid: true, nativeConfiguredIos: true },
+};
 let mockProviderOptions: { getToken: () => Promise<unknown> };
 
 jest.mock("@/utils/errorReporting", () => ({
@@ -40,6 +42,7 @@ jest.mock("@/config/loadNativeAppCheck", () => ({
   loadNativeAppCheck: (...args: unknown[]) => mockLoadNative(...args),
 }));
 
+const { Platform } = jest.requireActual("react-native") as { Platform: { OS: string } };
 const globals = globalThis as unknown as { __DEV__: boolean };
 const nativeModule = {
   ReactNativeFirebaseAppCheckProvider: class {
@@ -73,7 +76,9 @@ describe("App Check natif", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     globals.__DEV__ = false;
-    mockExtra.appCheck.nativeConfigured = true;
+    mockExtra.appCheck.nativeConfiguredAndroid = true;
+    mockExtra.appCheck.nativeConfiguredIos = true;
+    Platform.OS = "ios";
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE = "debug-apple";
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID = "debug-android";
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED;
@@ -308,7 +313,7 @@ describe("App Check natif", () => {
     ["staging", 0],
     ["development", 0],
   ])("build non configuré en %s : %i remontée", async (environment, expected) => {
-    mockExtra.appCheck.nativeConfigured = false;
+    mockExtra.appCheck.nativeConfiguredIos = false;
     mockSentryEnvironment.mockReturnValue(environment);
     await initApp();
     expect(mockLoadNative).not.toHaveBeenCalled();
@@ -316,6 +321,18 @@ describe("App Check natif", () => {
     if (expected) {
       expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("notConfigured");
     }
+  });
+
+  it.each([
+    ["ios", { nativeConfiguredIos: true, nativeConfiguredAndroid: false }, 1],
+    ["android", { nativeConfiguredIos: false, nativeConfiguredAndroid: true }, 1],
+    ["ios", { nativeConfiguredIos: false, nativeConfiguredAndroid: true }, 0],
+    ["android", { nativeConfiguredIos: true, nativeConfiguredAndroid: false }, 0],
+  ])("sur %s, ne dépend que du fichier de sa plateforme (%j)", async (os, flags, loads) => {
+    Platform.OS = os;
+    Object.assign(mockExtra.appCheck, flags);
+    await initApp();
+    expect(mockLoadNative).toHaveBeenCalledTimes(loads);
   });
 
   it("n'initialise qu'une fois", async () => {
@@ -344,6 +361,18 @@ describe("App Check natif", () => {
 });
 
 describe("configuration iOS", () => {
+  it.each([
+    ["ios", undefined, "plist", true],
+    ["ios", "json", undefined, false],
+    ["android", "json", undefined, true],
+    ["android", undefined, "plist", false],
+    [undefined, "json", "plist", true],
+    [undefined, undefined, "plist", false],
+  ])("plugins Firebase pour %s (json=%s, plist=%s) : %s", (platform, json, plist, expected) => {
+    const { shouldApplyNativeFirebase } = jest.requireActual("../app.config.js");
+    expect(shouldApplyNativeFirebase(platform, json, plist)).toBe(expected);
+  });
+
   it("garde le droit App Attest en production dans la configuration finale", () => {
     const previousEnv = process.env.APP_ENV;
     delete process.env.APP_ENV;
