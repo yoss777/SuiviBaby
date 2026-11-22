@@ -351,7 +351,7 @@ const submitContentReportCF = onCall(
 // ============================================
 
 const resolveReport = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["RESEND_API_KEY"] }, "resolveReport"),
+  withAppCheck({ region: "europe-west1", maxInstances: 2, secrets: ["RESEND_API_KEY"] }, "resolveReport"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -367,7 +367,12 @@ const resolveReport = onCall(
     if (!userRecord.customClaims?.admin) {
       throw new HttpsError("permission-denied", "Réservé aux administrateurs.");
     }
+    // Hors App Check (ADR 0002) : borne l'usage d'un compte admin compromis.
+    await checkRateLimit(db, uid, "resolveReport", 30);
 
+    if (adminNote !== undefined && adminNote !== null && (typeof adminNote !== "string" || adminNote.length > 1000)) {
+      throw new HttpsError("invalid-argument", "adminNote doit être un texte de 1000 caractères au plus.");
+    }
     if (!reportId || typeof reportId !== "string") {
       throw new HttpsError("invalid-argument", "reportId est requis.");
     }

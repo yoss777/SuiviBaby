@@ -2,6 +2,7 @@ const admin = require("firebase-admin");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { writeAdminAudit } = require("./audit");
 const { monitorAppCheck, withAppCheck } = require("../shared/appCheck");
+const { checkRateLimit } = require("../shared/rateLimit");
 
 // ============================================
 // ADMIN CLAIM MANAGEMENT (T0.3)
@@ -36,7 +37,7 @@ async function anyAdminExists() {
 }
 
 const setAdminClaim = onCall(
-  withAppCheck({ region: "europe-west1", secrets: ["INITIAL_ADMIN_EMAIL"] }, "setAdminClaim"),
+  withAppCheck({ region: "europe-west1", maxInstances: 2, secrets: ["INITIAL_ADMIN_EMAIL"] }, "setAdminClaim"),
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentification requise.");
@@ -53,8 +54,13 @@ const setAdminClaim = onCall(
     }
 
     const callerUid = request.auth.uid;
+    // Hors App Check (ADR 0002) : débit limité pour tout appelant.
+    await checkRateLimit(admin.firestore(), callerUid, "setAdminClaim", 10);
     const callerEmail = request.auth.token.email || "";
-    const callerIsAdmin = request.auth.token.admin === true;
+    // Le claim du jeton peut dater d'avant une rétrogradation : relu côté Auth.
+    const callerIsAdmin =
+      request.auth.token.admin === true &&
+      (await admin.auth().getUser(callerUid)).customClaims?.admin === true;
     const seedEmail = process.env.INITIAL_ADMIN_EMAIL || "";
 
     const { targetUid, value, reason } = request.data || {};

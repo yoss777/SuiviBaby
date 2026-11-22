@@ -44,8 +44,12 @@ gcloud logging read \
 
 TOTAL="$(jq 'length' "${TMP_FILE}")"
 if [[ "${TOTAL}" -eq 0 ]]; then
-  echo "No App Check log entries found in the window — nothing to audit."
-  exit 0
+  echo "STATUS: UNKNOWN — no App Check log entries in the window."
+  exit 2
+fi
+if [[ "${TOTAL}" -ge 10000 ]]; then
+  echo "STATUS: UNKNOWN — log read truncated at 10000 entries, use a shorter window."
+  exit 2
 fi
 
 echo "Total log entries: ${TOTAL}"
@@ -74,22 +78,24 @@ jq -r '
 }
 END {
   any_warn = 0
+  # Exceptions de ADR 0002 : affichées pour information, hors verdict.
+  exempt["revokeDeviceToken"] = 1; exempt["resolveReport"] = 1; exempt["setAdminClaim"] = 1
   for (fn in totals) {
     v = (verified[fn]   ? verified[fn]   : 0)
     u = (unverified[fn] ? unverified[fn] : 0)
     pct = (totals[fn] > 0) ? (u * 100.0 / totals[fn]) : 0
-    flag = (pct >= 0.5) ? " ⚠" : ""
+    flag = (fn in exempt) ? " (exception)" : ((pct >= 0.5) ? " ⚠" : "")
     printf "%-32s %10d %10d %9.2f%%%s\n", fn, v, u, pct, flag
-    if (pct >= 0.5) any_warn = 1
+    if (pct >= 0.5 && !(fn in exempt)) any_warn = 1
   }
   printf "\n"
   if (any_warn) {
     print "STATUS: NOT READY — at least one function has >= 0.5% UNVERIFIED."
-    print "        Resolve before flipping APPCHECK_ENFORCE=true."
+    print "        Indicative only: see the checklist in docs/adr/0002-app-check-enforcement.md."
     exit 1
   } else {
     print "STATUS: READY — all functions below the 0.5% UNVERIFIED threshold."
-    print "        Safe to deploy with APPCHECK_ENFORCE_FUNCTIONS=<critical CFs> (partial) or APPCHECK_ENFORCE=true (all)."
+    print "        Indicative only: refused calls are not visible here once App Check is enforced."
   }
 }
 '

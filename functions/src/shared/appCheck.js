@@ -7,8 +7,7 @@
  * Enforcement, lu au chargement du module (donc au déploiement, fonctions v2) :
  * - rien de posé (défaut) : surveillance seule, aucun appel n'est bloqué ;
  * - APPCHECK_ENFORCE_FUNCTIONS=a,b : seules les fonctions nommées (nom d'export
- *   exact, séparées par des virgules) imposent App Check. C'est la bascule
- *   partielle de l'ADR 0002 ;
+ *   exact, séparées par des virgules) imposent App Check, hors exceptions ;
  * - APPCHECK_ENFORCE=true : toutes les fonctions appelables, sauf les exceptions
  *   ci-dessous, qui ne sont jamais imposées, même nommées dans la liste.
  *
@@ -30,11 +29,17 @@ const APP_CHECK_EXEMPT_FUNCTIONS = new Set([
   // Sans preuve, un téléphone déconnecté garderait les rappels de l'ancien compte.
   // Protégée par le jeton Expo du téléphone et des limites de débit.
   "revokeDeviceToken",
-  // Appelées hors de l'app (scripts d'administration), donc sans preuve possible.
-  // Protégées par le compte administrateur, vérifié dans chaque fonction.
+  // Actions d'administration, sans écran dans l'app : un outil hors de l'app ne
+  // peut pas fournir de preuve. Compte administrateur vérifié et débit limité.
   "resolveReport",
   "setAdminClaim",
 ]);
+
+for (const name of ENFORCED_FUNCTIONS) {
+  if (APP_CHECK_EXEMPT_FUNCTIONS.has(name)) {
+    console.warn(`[AppCheck] ${name} est une exception : APPCHECK_ENFORCE_FUNCTIONS l'ignore.`);
+  }
+}
 
 function isEnforced(functionName) {
   if (APP_CHECK_EXEMPT_FUNCTIONS.has(functionName)) return false;
@@ -45,9 +50,7 @@ function monitorAppCheck(request, functionName) {
   if (request.app) {
     console.log(`[AppCheck] ${functionName}: VERIFIED (uid: ${request.auth?.uid})`);
   } else {
-    // En mode non-enforce, logger en warn pour pouvoir tracker le ratio
-    // avant d'activer l'enforcement. Vérifier dans Cloud Functions logs
-    // que 100% des requêtes sont VERIFIED avant d'enforcer la fonction.
+    // Sans enforcement, garde la trace des appels sans preuve (voir ADR 0002).
     console.warn(`[AppCheck] ${functionName}: UNVERIFIED (uid: ${request.auth?.uid}) — enforcement=${isEnforced(functionName)}`);
   }
 }

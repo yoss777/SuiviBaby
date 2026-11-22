@@ -49,6 +49,14 @@ describe("withAppCheck", () => {
     },
   );
 
+  it("signale une exception nommée par erreur dans la liste", () => {
+    process.env.APPCHECK_ENFORCE_FUNCTIONS = "resolveReport";
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    load();
+    expect(warn.mock.calls[0][0]).toContain("resolveReport");
+    warn.mockRestore();
+  });
+
   it("la liste des exceptions reste exactement celle décidée", () => {
     const { APP_CHECK_EXEMPT_FUNCTIONS } = load();
     expect([...APP_CHECK_EXEMPT_FUNCTIONS].sort()).toEqual(["resolveReport", "revokeDeviceToken", "setAdminClaim"]);

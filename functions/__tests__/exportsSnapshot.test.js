@@ -121,6 +121,17 @@ describe("exports snapshot (deployed function names, triggers, options)", () => 
     expect(enforced).toEqual(["transcribeAudio"]);
   });
 
+  it("chaque callable est enregistré sous son nom d'export pour App Check", () => {
+    const exempt = ["resolveReport", "revokeDeviceToken", "setAdminClaim"];
+    const names = Object.keys(actual).filter((n) => actual[n].callableOptions).filter((n) => !exempt.includes(n));
+    const listed = snapshotWithEnv({ APPCHECK_ENFORCE_FUNCTIONS: [...names, ...exempt].join(",") });
+    const enforced = Object.entries(listed)
+      .filter(([, e]) => e.callableOptions && e.callableOptions.enforceAppCheck)
+      .map(([n]) => n)
+      .sort();
+    expect(enforced).toEqual([...names].sort());
+  });
+
   it("APPCHECK_ENFORCE=true : tous les callables imposent App Check, sauf les trois exceptions", () => {
     const all = snapshotWithEnv({ APPCHECK_ENFORCE: "true" });
     const callables = Object.entries(all).filter(([, e]) => e.callableOptions);

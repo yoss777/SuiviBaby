@@ -518,6 +518,7 @@
     "region": [
       "europe-west1"
     ],
+    "maxInstances": 2,
     "secretEnvironmentVariables": [
       {
         "key": "RESEND_API_KEY"
@@ -620,6 +621,7 @@
     "region": [
       "europe-west1"
     ],
+    "maxInstances": 2,
     "secretEnvironmentVariables": [
       {
         "key": "INITIAL_ADMIN_EMAIL"

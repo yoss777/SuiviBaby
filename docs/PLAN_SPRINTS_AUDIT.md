@@ -1021,8 +1021,8 @@ Reste pour Yoss (rien n'a été exécuté côté GitHub, GCP ou EAS) :
   frameworks dynamiques), react-native-purchases 10.16 (pod v11 non publié),
   Testing Library 13 (`.npmrc` legacy-peer-deps), règles React Compiler en
   avertissement. Une seule montée (pas de staging, décision 2026-11-06).
-- [x] **13.6** S4 : App Check imposé quand la nouvelle version est
-  majoritaire ; décision `expo-updates` (retour arrière OTA) dans un ADR.
+- [x] **13.6** S4 : critères d'App Check posés (activation suivie dans l'ADR 0002, non
+  encore imposé) ; décision `expo-updates` (retour arrière OTA) dans un ADR.
 - [x] **13.7** Documentation : `docs/README.md` (index), `docs/RUNBOOK.md`,
   `docs/adr/`, `todo_*` de la racine archivés.
 
