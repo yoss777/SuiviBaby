@@ -30,7 +30,8 @@ const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
 // Au démarrage, le fournisseur natif peut répondre « provider-not-ready ».
 const TOKEN_CHECK_ATTEMPTS = 3;
 const TOKEN_CHECK_DELAY_MS = 2000;
-const MAX_REPORTS_PER_LAUNCH = 5;
+const MAX_REPORTS_PER_OPERATION = 5;
+const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
 type ExpoExtra = {
   appCheck?: {
@@ -41,6 +42,7 @@ type ExpoExtra = {
 let appCheckInitializationPromise: Promise<void> | null = null;
 let appCheckInitialized = false;
 const reportedFailures = new Set<string>();
+const reportsByOperation = new Map<string, number>();
 let startupCheckDone = false;
 
 function getAppCheckExtra(): ExpoExtra["appCheck"] {
@@ -103,12 +105,21 @@ function failureDetail(error: unknown): string {
     .slice(0, 120);
 }
 
+// Seul `isConnected` est fiable ici : `isInternetReachable` peut valoir false sur
+// un réseau qui bloque la sonde de NetInfo alors que Firebase répond. Sans réponse
+// à temps, on remonte : mieux vaut une alerte de trop qu'une panne invisible.
 async function isDeviceOffline(): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const state = await NetInfo.fetch();
-    return state.isConnected === false || state.isInternetReachable === false;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), NETWORK_CHECK_TIMEOUT_MS);
+    });
+    const state = await Promise.race([NetInfo.fetch(), timeout]);
+    return state?.isConnected === false;
   } catch {
     return false;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -124,8 +135,10 @@ async function reportAppCheckFailure(error: unknown, operation: string): Promise
     if (code.endsWith("network-request-failed") || (await isDeviceOffline())) return;
     const detail = failureDetail(error);
     const key = `${operation}:${code}:${detail}`;
-    if (reportedFailures.has(key) || reportedFailures.size >= MAX_REPORTS_PER_LAUNCH) return;
+    const operationCount = reportsByOperation.get(operation) ?? 0;
+    if (reportedFailures.has(key) || operationCount >= MAX_REPORTS_PER_OPERATION) return;
     reportedFailures.add(key);
+    reportsByOperation.set(operation, operationCount + 1);
     captureServiceError(new Error(`App Check ${operation}: ${code}`), {
       service: "appCheck",
       operation,
@@ -138,21 +151,24 @@ async function reportAppCheckFailure(error: unknown, operation: string): Promise
 
 // Demande un premier jeton pour détecter tout de suite une attestation en échec.
 async function checkNativeToken(appCheck: AppCheck): Promise<void> {
-  for (let attempt = 1; attempt <= TOKEN_CHECK_ATTEMPTS; attempt += 1) {
-    try {
-      await getJsAppCheckToken(appCheck, false);
-      break;
-    } catch (error) {
-      // Toute autre erreur passe déjà par le fournisseur (getToken ci-dessous).
-      if (!isProviderNotReady(error)) break;
-      if (attempt === TOKEN_CHECK_ATTEMPTS) {
-        await reportAppCheckFailure(error, "startupToken");
-        break;
+  try {
+    for (let attempt = 1; attempt <= TOKEN_CHECK_ATTEMPTS; attempt += 1) {
+      try {
+        await getJsAppCheckToken(appCheck, false);
+        return;
+      } catch (error) {
+        // Toute autre erreur passe déjà par le fournisseur (getToken ci-dessous).
+        if (!isProviderNotReady(error)) return;
+        if (attempt === TOKEN_CHECK_ATTEMPTS) {
+          await reportAppCheckFailure(error, "startupToken");
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, TOKEN_CHECK_DELAY_MS));
       }
-      await new Promise((resolve) => setTimeout(resolve, TOKEN_CHECK_DELAY_MS));
     }
+  } finally {
+    startupCheckDone = true;
   }
-  startupCheckDone = true;
 }
 
 function isNativeAppCheckConfigured(): boolean {

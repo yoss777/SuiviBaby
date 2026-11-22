@@ -12,11 +12,13 @@
 Mesure en production : **aucun appel iOS n'était attesté** (210 sur 210 sans preuve
 depuis le 7/11, tous builds). Il manquait le Team ID dans l'app Firebase (renseigné le
 22/11) et le droit App Attest (ajouté dans la 1.0.26). Android : 145 appels sur 154
-vérifiés depuis le 18/11, 9 échecs à expliquer. V_a n'est donc plus la 1.0.6 : c'est
-au plus tôt la 1.0.26, à confirmer par un appel `VERIFIED` depuis un iPhone.
+vérifiés depuis le 18/11, 9 échecs à expliquer. V_a est désormais propre à chaque plateforme. iOS :
+au plus tôt la 1.0.26, à confirmer par un appel `VERIFIED` depuis un iPhone. Android : à
+établir, car les requêtes Android ne portent pas leur version.
 
-La 1.0.26 remonte dans Sentry chaque échec d'attestation (`service: appCheck`), par
-version. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
+La 1.0.26 remonte dans Sentry chaque cause distincte d'échec d'attestation
+(`service: appCheck`), au plus 5 par opération et par lancement, hors téléphone sans
+connexion. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
 indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
 **Prérequis supplémentaires avant toute bascule :**
@@ -36,7 +38,8 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 - ne pas utiliser `APPCHECK_ENFORCE=true` tant que la suppression de compte, le retrait
   du consentement et `revokeDeviceToken` n'ont pas fait l'objet d'une décision
   explicite ;
-- révoquer les jetons de débogage enregistrés dans la console Firebase.
+- révoquer les jetons de débogage enregistrés dans la console Firebase ;
+- expliquer les 9 échecs Android.
 
 Le 2026-12-07 reste une date de revue, pas une date de bascule. Les sections
 suivantes sont alignées sur cette mise à jour.
@@ -76,13 +79,12 @@ le sont. Il faut donc croiser avec l'adoption des versions.
 
 **Versions en circulation (à la date de l'ADR).**
 - 1.0.6 en ligne sur les deux stores depuis le 2026-11-02 ; `minVersion` = 1.0.6
-  depuis le même jour (mise à jour forcée pour les versions antérieures) ;
+  depuis le même jour (bandeau de mise à jour pour les versions antérieures) ;
 - 1.0.6 à 1.0.9 : Android construit en local (`.aab`, ADR 0001), iOS construit sur
   EAS depuis le Mac. Les deux partent du Mac, où les fichiers Firebase sont présents ;
 - 1.0.9 (`app.json`, build iOS 31, versionCode 12) : sortie le 2026-11-06.
-- Hypothèse à confirmer, pas encore vérifiée : les builds 1.0.6 et suivants sont
-  attestés nativement. Les builds lancés depuis GitHub Actions n'ont pas les fichiers
-  Firebase (cf. ADR 0001) et ne le seraient donc pas.
+- Hypothèse d'origine, réfutée pour iOS le 2026-11-22 : les builds 1.0.6 et suivants
+  seraient attestés nativement. La présence des fichiers Firebase ne suffit pas.
 
 ## Mesurer l'adoption (critère de décision)
 
@@ -112,10 +114,10 @@ avant de fixer une date :
 
 **Fonctions appelables (`onCall` avec `withAppCheck`)**, tous les critères réunis :
 
-- C1. La première version attestée (V_a) est confirmée sur un appareil (prérequis
-  ci-dessus).
+- C1. La première version attestée (V_a) de chaque plateforme est confirmée sur un
+  appareil (prérequis ci-dessus).
 - C2. Au moins 95 % des utilisateurs actifs des 30 derniers jours sont sur une
-  version ≥ V_a (sources 1 ou 2). Relever `minVersion` ne suffit pas : c'est un
+  version ≥ V_a de leur plateforme (sources 1 ou 2). Relever `minVersion` ne suffit pas : c'est un
   bandeau commun aux deux plateformes, qui ne bloque pas les anciennes versions
   (`services/appUpdateService.ts`).
 - C3. `./scripts/auditAppCheck.sh 7d` affiche `STATUS: READY`.
@@ -145,9 +147,10 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    Les autres fonctions restent non imposées.
 4. Surveillance 48 heures : Sentry (`unauthenticated`), Cloud Logging
    (`UNVERIFIED` par fonction).
-5. Extension : ajouter les autres noms à `APPCHECK_ENFORCE_FUNCTIONS`, puis, une fois
-   toutes les `onCall` prêtes, poser `APPCHECK_ENFORCE=true` (déploiement complet par
-   la CI `deploy-functions.yml`).
+5. Extension : ajouter les autres noms à `APPCHECK_ENFORCE_FUNCTIONS`. Poser
+   `APPCHECK_ENFORCE=true` (déploiement complet par la CI `deploy-functions.yml`)
+   seulement après la décision explicite sur la suppression de compte, le retrait du
+   consentement et `revokeDeviceToken`.
 6. Audit à J+7 : toutes les fonctions à 100 % `VERIFIED` sur les clients récents.
 7. Firestore puis Storage : console Firebase → App Check, dans un second temps et
    après un nouveau point de décision. Surveiller les métriques App Check avant de
@@ -187,7 +190,15 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
 ## Actions
 
 - [ ] Yoss : valider le principe et la revue du 2026-12-07.
-- [ ] Vérifier sur un iPhone en 1.0.26 que les appels sont `VERIFIED` (V_a).
+- [ ] Vérifier sur un iPhone en 1.0.26 que les appels sont `VERIFIED` (V_a iOS).
+- [ ] Établir V_a Android et expliquer les 9 échecs.
+- [ ] Rendre `unauthenticated` transitoire dans la file hors ligne quand le jeton App Check manque.
+- [ ] Fiabiliser `scripts/auditAppCheck.sh` (plateforme, version, volume minimal, volume nul ou tronqué).
+- [ ] Attendre `ensureFirebaseAppCheck` avant le premier appel de fonction.
+- [ ] Journaliser l'état App Check de `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail`.
+- [ ] Suivre les refus 401 après la bascule.
+- [ ] Décider du sort de la suppression de compte, du consentement et de `revokeDeviceToken`.
+- [ ] Révoquer les jetons de débogage dans la console Firebase.
 - [x] Suivi des échecs d'attestation par version dans Sentry (1.0.26), à la place de `deviceInfo.appCheck`.
 - [ ] Corriger `docs/FIREBASE_MONITORING.md` §8.
 - [ ] Ajouter une requête d'agrégation des versions (Firestore) à la procédure.

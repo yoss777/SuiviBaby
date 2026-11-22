@@ -105,7 +105,10 @@ describe("App Check natif", () => {
     globals.__DEV__ = true;
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED = "true";
     await initApp();
-    expect(mockConfigure.mock.calls[0][0].apple).toEqual({ provider: "debug", debugToken: "debug-apple" });
+    expect(mockConfigure.mock.calls[0][0]).toEqual({
+      apple: { provider: "debug", debugToken: "debug-apple" },
+      android: { provider: "debug", debugToken: "debug-android" },
+    });
   });
 
   it("remonte une seule fois la même cause et relance l'erreur", async () => {
@@ -153,6 +156,41 @@ describe("App Check natif", () => {
     expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
   });
 
+  it.each([[false], [null]])(
+    "remonte une panne quand le téléphone est connecté et que la sonde Internet vaut %s",
+    async (isInternetReachable) => {
+      await initApp();
+      mockNetInfoFetch.mockResolvedValueOnce({ isConnected: true, isInternetReachable });
+      await failProvider(new Error("attestation refusée"));
+      expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("remonte la panne même si la détection du réseau reste bloquée", async () => {
+    await initApp();
+    jest.useFakeTimers();
+    mockNetInfoFetch.mockReturnValueOnce(new Promise(() => undefined));
+    mockNativeGetToken.mockRejectedValueOnce(new Error("attestation refusée"));
+    await expect(mockProviderOptions.getToken()).rejects.toThrow("attestation refusée");
+    await jest.advanceTimersByTimeAsync(2000);
+    await flush();
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+  });
+
+  it("garde un plafond par opération", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockRejectedValue(notReady());
+    await initApp();
+    for (const cause of ["a", "b", "c", "d", "e", "f"]) {
+      await failProvider(new Error(`cause ${cause}`));
+    }
+    await jest.advanceTimersByTimeAsync(4000);
+    await flush();
+    const operations = mockCaptureServiceError.mock.calls.map(([, context]) => context.operation);
+    expect(operations.filter((operation) => operation === "getToken")).toHaveLength(5);
+    expect(operations).toContain("startupToken");
+  });
+
   it("ignore une erreur réseau explicite", async () => {
     await initApp();
     await failProvider(Object.assign(new Error("réseau"), { code: "appCheck/network-request-failed" }));
@@ -195,6 +233,9 @@ describe("App Check natif", () => {
     await initApp();
     await jest.advanceTimersByTimeAsync(4000);
     expect(mockJsGetToken).toHaveBeenCalledTimes(1);
+    await failProvider(notReady());
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("getToken");
   });
 
   it("alerte sur « pas prêt » après la fin du démarrage", async () => {
@@ -221,5 +262,41 @@ describe("App Check natif", () => {
     await initApp();
     expect(mockLoadNative).not.toHaveBeenCalled();
     expect(mockCaptureServiceError).toHaveBeenCalledTimes(expected);
+    if (expected) {
+      expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("notConfigured");
+    }
+  });
+
+  it("n'initialise qu'une fois", async () => {
+    let ensure!: (app: never) => Promise<void>;
+    jest.isolateModules(() => {
+      ensure = jest.requireActual("@/config/appCheck").ensureFirebaseAppCheck;
+    });
+    await Promise.all([ensure({} as never), ensure({} as never)]);
+    await ensure({} as never);
+    expect(mockConfigure).toHaveBeenCalledTimes(1);
+  });
+
+  it("remonte un échec d'initialisation sans le propager", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    const failure = new Error("init impossible");
+    mockConfigure.mockImplementationOnce(() => {
+      throw failure;
+    });
+    await expect(initApp()).resolves.toBeUndefined();
+    expect(mockCaptureServiceError).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({ service: "appCheck", operation: "initialize" }),
+    );
+    warn.mockRestore();
+  });
+});
+
+describe("configuration iOS", () => {
+  it("garde le droit App Attest en production dans la configuration finale", () => {
+    const appJson = jest.requireActual("../app.json");
+    const createConfig = jest.requireActual("../app.config.js");
+    const resolved = (createConfig.default ?? createConfig)({ config: appJson.expo });
+    expect(resolved.ios.entitlements["com.apple.developer.devicecheck.appattest-environment"]).toBe("production");
   });
 });
