@@ -25,6 +25,7 @@ const ENFORCED_FUNCTIONS = new Set(
 
 // Exceptions décidées le 2026-11-22 (ADR 0002). Liste dans le code, et non dans
 // l'environnement : en retirer ou en ajouter une passe par une revue.
+// Garder synchronisée avec la liste `exempt` de scripts/auditAppCheck.sh.
 const APP_CHECK_EXEMPT_FUNCTIONS = new Set([
   // Sans preuve, un téléphone déconnecté garderait les rappels de l'ancien compte.
   // Protégée par le jeton Expo du téléphone et des limites de débit.
