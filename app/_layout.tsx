@@ -75,14 +75,14 @@ Sentry.init({
 // Configurer le handler de notifications locales (rappels)
 setupNotificationHandler();
 
+// Initialiser App Check avant tout appel Functions, y compris ceux de la file.
+void ensureFirebaseAppCheck();
+
 // Démarrer la synchronisation automatique de la queue offline
 startAutoSync();
 
 // Purge les anciens fichiers d'export (données de santé) restés dans le cache.
 void cleanupStaleExports();
-
-// Initialiser App Check le plus tôt possible pour les appels Functions.
-void ensureFirebaseAppCheck();
 
 export const unstable_settings = {
   anchor: "(drawer)",

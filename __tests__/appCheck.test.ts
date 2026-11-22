@@ -43,6 +43,7 @@ jest.mock("@/config/loadNativeAppCheck", () => ({
 }));
 
 const { Platform } = jest.requireActual("react-native") as { Platform: { OS: string } };
+const originalPlatform = Platform.OS;
 const globals = globalThis as unknown as { __DEV__: boolean };
 const nativeModule = {
   ReactNativeFirebaseAppCheckProvider: class {
@@ -93,6 +94,7 @@ describe("App Check natif", () => {
   });
 
   afterAll(() => {
+    Platform.OS = originalPlatform;
     globals.__DEV__ = true;
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE;
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID;
@@ -335,6 +337,24 @@ describe("App Check natif", () => {
     expect(mockLoadNative).toHaveBeenCalledTimes(loads);
   });
 
+  it("demande un jeton neuf quand le jeton natif arrive en fin de vie", async () => {
+    await initApp();
+    const jwt = (minutes: number) =>
+      `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + minutes * 60 })).toString("base64")}.s`;
+    const fresh = jwt(60);
+    mockNativeGetToken.mockResolvedValueOnce({ token: jwt(4) }).mockResolvedValueOnce({ token: fresh });
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: fresh }));
+    expect(mockNativeGetToken.mock.calls.map((call) => call[1])).toEqual([false, true]);
+  });
+
+  it("garde le jeton natif tant qu'il reste assez de temps", async () => {
+    await initApp();
+    const token = `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3000 })).toString("base64")}.s`;
+    mockNativeGetToken.mockResolvedValueOnce({ token });
+    await mockProviderOptions.getToken();
+    expect(mockNativeGetToken).toHaveBeenCalledTimes(1);
+  });
+
   it("n'initialise qu'une fois", async () => {
     let ensure!: (app: never) => Promise<void>;
     jest.isolateModules(() => {
@@ -361,6 +381,49 @@ describe("App Check natif", () => {
 });
 
 describe("configuration iOS", () => {
+  describe("câblage de app.config.js", () => {
+    const fs = jest.requireActual("fs");
+    const previous = { ...process.env };
+    afterEach(() => {
+      jest.restoreAllMocks();
+      process.env = { ...previous };
+    });
+
+    function resolve(platform: string | undefined, files: string[]) {
+      const original = fs.existsSync;
+      jest.spyOn(fs, "existsSync").mockImplementation((...args: unknown[]) => {
+        const file = String(args[0]);
+        if (/google-services\.json$|GoogleService-Info\.plist$/.test(file)) {
+          return files.some((name) => file.endsWith(name));
+        }
+        return original(file);
+      });
+      delete process.env.APP_ENV;
+      delete process.env.GOOGLE_SERVICES_JSON;
+      delete process.env.GOOGLE_SERVICES_PLIST;
+      delete process.env.GOOGLE_SERVICE_INFO_PLIST;
+      if (platform) process.env.EAS_BUILD_PLATFORM = platform;
+      else delete process.env.EAS_BUILD_PLATFORM;
+      const appJson = jest.requireActual("../app.json");
+      return jest.requireActual("../app.config.js")({ config: appJson.expo });
+    }
+
+    it.each([
+      ["ios", ["GoogleService-Info.plist"], true, true, false],
+      ["android", ["google-services.json"], true, false, true],
+      ["ios", ["google-services.json"], false, false, false],
+      ["android", ["GoogleService-Info.plist"], false, false, false],
+      [undefined, ["GoogleService-Info.plist"], false, false, false],
+      [undefined, ["google-services.json", "GoogleService-Info.plist"], true, true, true],
+    ])("%s avec %j : plugins=%s, iOS=%s, Android=%s", (platform, files, plugins, ios, android) => {
+      const config = resolve(platform, files);
+      expect(config.plugins.includes("@react-native-firebase/app-check")).toBe(plugins);
+      expect(config.plugins.includes("./plugins/withFirebaseAppDelegate")).toBe(plugins);
+      expect(config.extra.appCheck.nativeConfiguredIos).toBe(ios);
+      expect(config.extra.appCheck.nativeConfiguredAndroid).toBe(android);
+    });
+  });
+
   it.each([
     ["ios", undefined, "plist", true],
     ["ios", "json", undefined, false],

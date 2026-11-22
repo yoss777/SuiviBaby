@@ -117,14 +117,15 @@ module.exports = ({ config: expoConfig }) => {
     "GoogleService-Info.plist",
   );
 
+  const buildPlatform = process.env.EAS_BUILD_PLATFORM;
+  const applyNativeFirebase = shouldApplyNativeFirebase(
+    buildPlatform,
+    androidGoogleServicesFile,
+    iosGoogleServicesFile,
+  );
+
   const plugins = [...(expoConfig.plugins || [])];
-  if (
-    shouldApplyNativeFirebase(
-      process.env.EAS_BUILD_PLATFORM,
-      androidGoogleServicesFile,
-      iosGoogleServicesFile,
-    )
-  ) {
+  if (applyNativeFirebase) {
     plugins.push(
       "@react-native-firebase/app",
       "@react-native-firebase/app-check",
@@ -155,8 +156,11 @@ module.exports = ({ config: expoConfig }) => {
       showPreviews: process.env.SHOW_PREVIEWS === "true",
       firebase: resolveFirebaseWebConfig(appEnv),
       appCheck: {
-        nativeConfiguredAndroid: Boolean(androidGoogleServicesFile),
-        nativeConfiguredIos: Boolean(iosGoogleServicesFile),
+        // Même condition que les plugins : jamais de drapeau vrai sans Firebase natif.
+        nativeConfiguredAndroid:
+          applyNativeFirebase && buildPlatform !== "ios" && Boolean(androidGoogleServicesFile),
+        nativeConfiguredIos:
+          applyNativeFirebase && buildPlatform !== "android" && Boolean(iosGoogleServicesFile),
         webSiteKeyConfigured: Boolean(
           process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_WEB_SITE_KEY,
         ),

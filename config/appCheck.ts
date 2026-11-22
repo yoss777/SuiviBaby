@@ -31,6 +31,8 @@ const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
 const TOKEN_CHECK_ATTEMPTS = 3;
 const TOKEN_CHECK_DELAY_MS = 2000;
 const TOKEN_CHECK_TIMEOUT_MS = 20000;
+// En dessous, le rafraîchisseur du SDK JS relance aussitôt : sans jeton neuf, il boucle.
+const TOKEN_MIN_REMAINING_MS = 6 * 60 * 1000;
 const MAX_REPORTS_PER_OPERATION = 5;
 const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
@@ -268,7 +270,10 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     provider: new CustomProvider({
       async getToken() {
         try {
-          const result = await rnfbAppCheck.getToken(nativeAppCheck, false);
+          let result = await rnfbAppCheck.getToken(nativeAppCheck, false);
+          if (getExpireTimeMillis(result.token) - Date.now() < TOKEN_MIN_REMAINING_MS) {
+            result = await rnfbAppCheck.getToken(nativeAppCheck, true);
+          }
           return {
             token: result.token,
             expireTimeMillis: getExpireTimeMillis(result.token),

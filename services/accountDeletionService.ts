@@ -1,4 +1,5 @@
 import { auth, db } from "@/config/firebase";
+import { captureServiceError } from "@/utils/errorReporting";
 import type { User } from "@/types/user";
 import {
   EmailAuthProvider,
@@ -151,6 +152,8 @@ export function mapDeletionError(error: unknown): string {
     case "functions/unavailable":
     case "functions/deadline-exceeded":
       return "Problème de connexion. Vérifiez votre réseau puis réessayez.";
+    case "functions/unauthenticated":
+      return "Vérification de l'application impossible. La suppression n'a pas été programmée. Réessayez dans un instant.";
     case "deletion/child-delete-failed":
       return "La suppression du suivi d'un enfant a échoué. Votre compte n'a pas été supprimé. Réessayez.";
     case "deletion/transfer-failed":
@@ -284,6 +287,8 @@ export async function requestAccountDeletion(
       )({ authorizationCode: appleAuthorizationCode });
     } catch (error) {
       console.warn("[DELETION] registerAppleRevocation échoué:", error);
+      // Exigence App Store : un échec ne doit jamais rester invisible.
+      captureServiceError(error, { service: "accountDeletion", operation: "registerAppleRevocation" });
     }
   }
 

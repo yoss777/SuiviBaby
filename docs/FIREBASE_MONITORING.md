@@ -167,6 +167,8 @@ token valide. Voir ADR 0002.
 
 ### Procédure d'activation
 
+> Procédure remplacée par la check-list de `docs/adr/0002-app-check-enforcement.md` (22/11).
+
 **Préreq strict** : tous les builds en prod (≥ 1.0.3) doivent avoir
 l'attestation native App Check active (cf. `config/appCheck.ts`). Sans
 cela, l'activation bloque les clients légitimes.

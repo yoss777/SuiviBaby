@@ -111,12 +111,42 @@ jobs:
         if: ${{ inputs.show_previews }}
         run: echo "::warning::INTERNAL build with preview screens (SHOW_PREVIEWS=true). TestFlight internal testing only, never submit it for App Store review."
 
+      - name: Preflight native App Check
+        # Avant le build : aucun numéro consommé si Firebase natif n'est pas câblé.
+        if: ${{ inputs.profile == 'production' }}
+        env:
+          EAS_BUILD: "true"
+          EAS_BUILD_PLATFORM: ios
+          CI: "1"
+        run: |
+          CHECK_DIR="$RUNNER_TEMP/prebuild-check"
+          rm -rf "$CHECK_DIR"
+          mkdir -p "$CHECK_DIR"
+          rsync -a --exclude node_modules --exclude .git --exclude /ios --exclude /android ./ "$CHECK_DIR/"
+          ln -s "$PWD/node_modules" "$CHECK_DIR/node_modules"
+          if ! (cd "$CHECK_DIR" && npx expo prebuild --platform ios --no-install > prebuild.log 2>&1); then
+            echo "::error::iOS prebuild failed"
+            tail -30 "$CHECK_DIR/prebuild.log"
+            exit 1
+          fi
+          DELEGATE=$(find "$CHECK_DIR/ios" -name AppDelegate.swift | head -1)
+          FACTORY_LINE=$(grep -n 'RNFBAppCheckModule.sharedInstance()' "$DELEGATE" | head -1 | cut -d: -f1)
+          CONFIGURE_LINE=$(grep -n 'FirebaseApp.configure()' "$DELEGATE" | head -1 | cut -d: -f1)
+          rm -rf "$CHECK_DIR"
+          if [ -z "$FACTORY_LINE" ] || [ -z "$CONFIGURE_LINE" ] || [ "$FACTORY_LINE" -ge "$CONFIGURE_LINE" ]; then
+            echo "::error::App Check factory must be registered before FirebaseApp.configure()"
+            exit 1
+          fi
+          echo "Native App Check wired in AppDelegate"
+
       - name: Build (eas build --local)
         # Dossier de travail sans lien symbolique : sous $TMPDIR (/var → /private/var),
         # le plugin expo-widgets écrit le chemin du layout en /var/… et Metro, qui
         # résout en /private/var/…, ne trouve plus widgets/BebeMaintenant.ios.tsx.
         env:
           EAS_LOCAL_BUILD_WORKINGDIR: ${{ runner.temp }}/eas-build
+          # Toutes les phases (prebuild, Xcode) doivent voir la plateforme.
+          EAS_BUILD_PLATFORM: ios
         run: |
           # eas-cli épinglé (pas @latest) : il tourne avec EXPO_TOKEN et SENTRY_AUTH_TOKEN ;
           # une version compromise ou cassée ne doit pas entrer sans revue.
@@ -143,6 +173,11 @@ jobs:
           FIREBASE_PLIST=no
           [ -f "$APP/GoogleService-Info.plist" ] && FIREBASE_PLIST=yes
           APP_CONFIG=$(find "$APP" -path '*EXConstants.bundle/app.config' -type f | head -1)
+          if [ -z "$APP_CONFIG" ]; then
+            rm -rf "$CHECK_DIR"
+            echo "::error::Embedded app config not found in the signed app"
+            exit 1
+          fi
           NATIVE_FLAG=$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(c.extra?.appCheck?.nativeConfiguredIos===true))' "$APP_CONFIG" 2>/dev/null || echo false)
           rm -rf "$CHECK_DIR"
           if [ "$APP_VALUE" != "production" ]; then
