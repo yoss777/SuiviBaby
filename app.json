@@ -2,7 +2,7 @@
   "expo": {
     "name": "Suivi Baby",
     "slug": "suivibaby",
-    "version": "1.0.25",
+    "version": "1.0.26",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "suivibaby",
@@ -18,6 +18,9 @@
       },
       "bundleIdentifier": "com.tesfa.suivibaby",
       "buildNumber": "32",
+      "entitlements": {
+        "com.apple.developer.devicecheck.appattest-environment": "production"
+      },
       "associatedDomains": [
         "applinks:samaye-53723.firebaseapp.com",
         "applinks:samaye-53723.web.app"

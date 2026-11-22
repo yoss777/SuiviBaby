@@ -20,6 +20,14 @@ export function isNotFoundError(error: unknown): boolean {
   return errorCode(error).endsWith("not-found");
 }
 
+/**
+ * Refus `unauthenticated`. Pour un compte connecté, il peut venir d'un jeton
+ * App Check absent ou expiré : l'écriture reste valide et doit être rejouée.
+ */
+export function isUnauthenticatedError(error: unknown): boolean {
+  return errorCode(error).endsWith("unauthenticated");
+}
+
 const PERMANENT_CODES = [
   "invalid-argument",
   "permission-denied",

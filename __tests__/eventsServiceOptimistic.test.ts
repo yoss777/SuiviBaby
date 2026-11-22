@@ -126,7 +126,7 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     const keys = callable.mock.calls.map(([p]) => p.idempotencyKey);
     expect(new Set(keys).size).toBe(1);
     expect(keys[0]).toMatch(KEY_FORMAT);
-    expect(enqueue).toHaveBeenCalledWith("create", expect.objectContaining({ idempotencyKey: keys[0] }));
+    expect(enqueue).toHaveBeenCalledWith("create", expect.objectContaining({ idempotencyKey: keys[0] }), "user123");
     expect(getOptimisticEntries("c1")[0].status).toBe("queued_offline");
   });
 
@@ -135,7 +135,7 @@ describe("ajouterEvenementOptimistic (6.9)", () => {
     ajouterEvenementOptimistic("c1", data());
     await settle();
     expect(callable).not.toHaveBeenCalled();
-    expect(enqueue).toHaveBeenCalledWith("create", expect.objectContaining({ type: "biberon", childId: "c1" }));
+    expect(enqueue).toHaveBeenCalledWith("create", expect.objectContaining({ type: "biberon", childId: "c1" }), "user123");
     expect(getOptimisticEntries("c1")[0].status).toBe("queued_offline");
   });
 
@@ -247,7 +247,7 @@ describe("modifierEvenementOptimistic (6.9)", () => {
     online.mockResolvedValue(false);
     modifierEvenementOptimistic("c1", "e1", { quantite: 150 } as any, previous);
     await settle();
-    expect(enqueue).toHaveBeenCalledWith("update", expect.objectContaining({ eventId: "e1", quantite: 150 }));
+    expect(enqueue).toHaveBeenCalledWith("update", expect.objectContaining({ eventId: "e1", quantite: 150 }), "user123");
     expect(callable).not.toHaveBeenCalled();
     expect(getOptimisticEntries("c1")[0].status).toBe("queued_offline");
   });

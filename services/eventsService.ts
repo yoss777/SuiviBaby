@@ -18,7 +18,7 @@ import { AppState } from "react-native";
 import { auth, db, functions } from "../config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { generateIdempotencyKey } from "@/utils/idempotencyKey";
-import { failureReason, isConflictError, isNetworkError, isNotFoundError, isPermanentError } from "@/utils/networkError";
+import { failureReason, isConflictError, isNetworkError, isNotFoundError, isUnauthenticatedError, isPermanentError } from "@/utils/networkError";
 import { getTodayTypes } from "@/services/todayEventsCache";
 import { enqueueEvent, isOnline, mergeIntoQueuedCreate } from "./offlineQueueService";
 import {
@@ -942,6 +942,16 @@ function runCallback(fn: (() => void) | undefined, operation: string) {
 }
 
 /**
+ * Panne réseau, ou refus `unauthenticated` alors que le même compte est toujours
+ * connecté (jeton App Check absent ou expiré) : la saisie est valide, elle part en
+ * file. Après un changement de compte, elle n'est jamais rangée sous le nouveau.
+ */
+function shouldQueueFailedWrite(error: unknown, senderUid: string | undefined): boolean {
+  if (isNetworkError(error)) return true;
+  return isUnauthenticatedError(error) && !!senderUid && auth.currentUser?.uid === senderUid;
+}
+
+/**
  * L'écriture n'a pu ni partir ni être mise en file : la signaler (entrée
  * annulée, message avec le type, Sentry) au lieu de la laisser croire réussie.
  */
@@ -1016,11 +1026,12 @@ export function ajouterEvenementOptimistic(
   const createFallback = { childId, retryData: optimisticEvent };
   // En vol : l'entrée n'est pas purgée comme « périmée » pendant les essais.
   setOptimisticInFlight(tempId, true);
+  const senderUid = auth.currentUser?.uid;
 
   void (async () => {
     try {
       if (!(await isOnline())) {
-        const queueId = await enqueueEvent('create', payload);
+        const queueId = await enqueueEvent('create', payload, senderUid);
         markOptimisticQueued(tempId);
         onCreateQueued(tempId, queueId);
         return;
@@ -1055,9 +1066,9 @@ export function ajouterEvenementOptimistic(
         );
       }
     } catch (error) {
-      if (isNetworkError(error)) {
+      if (shouldQueueFailedWrite(error, senderUid)) {
         try {
-          const queueId = await enqueueEvent('create', payload);
+          const queueId = await enqueueEvent('create', payload, senderUid);
           markOptimisticQueued(tempId);
           onCreateQueued(tempId, queueId);
         } catch (enqueueError) {
@@ -1152,10 +1163,12 @@ export function modifierEvenementOptimistic(
   };
   setOptimisticInFlight(operationId, true);
 
+  const senderUid = auth.currentUser?.uid;
+
   void (async () => {
     try {
       if (!(await isOnline())) {
-        await enqueueEvent('update', payload as Record<string, unknown>);
+        await enqueueEvent('update', payload as Record<string, unknown>, senderUid);
         markOptimisticQueued(operationId);
         return;
       }
@@ -1164,9 +1177,9 @@ export function modifierEvenementOptimistic(
       confirmOptimistic(operationId);
       runCallback(options?.onConfirmed, "onConfirmed");
     } catch (error) {
-      if (isNetworkError(error)) {
+      if (shouldQueueFailedWrite(error, senderUid)) {
         try {
-          await enqueueEvent('update', payload as Record<string, unknown>);
+          await enqueueEvent('update', payload as Record<string, unknown>, senderUid);
           markOptimisticQueued(operationId);
         } catch (enqueueError) {
           failWrite("update", operationId, enqueueError, eventType, options, true, updateFallback);
