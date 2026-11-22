@@ -30,8 +30,8 @@ La 1.0.26 remonte dans Sentry chaque cause distincte d'échec d'attestation
 connexion. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
 indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
-**Décision de Yoss (2026-11-22) :** imposer App Check sur **toutes les fonctions**, sans
-Firestore ni Storage, dès la première version attestée, sans attendre 95 % d'adoption. Elle
+**Décision de Yoss (2026-11-22) :** imposer App Check sur **toutes les fonctions sauf
+`revokeDeviceToken`, `resolveReport` et `setAdminClaim`**, sans Firestore ni Storage, dès la première version attestée, sans attendre 95 % d'adoption. Elle
 remplace le plan par lots et les critères C2 et C3 ci-dessous. Conséquence acceptée : les
 versions antérieures ne pourront plus appeler ces fonctions, et une saisie refusée en ligne
 y sera perdue. Cela vaut aussi pour le retrait du consentement et la suppression de compte
@@ -42,17 +42,19 @@ App Check est un **anti-abus**, pas une authentification : au seuil Play Integri
 appareil compromis. L'autorisation reste portée par Firebase Auth et les règles.
 
 **Check-list avant le « go » de Yoss :**
-- [ ] 1.0.27 disponible pour les utilisateurs sur l'App Store et en Production sur Google
-  Play (un test TestFlight ou Alpha ne suffit pas), puis `minVersion` relevé ;
-- [ ] appel `VERIFIED` côté serveur sur iPhone et sur Android, installés depuis les stores ;
-- [ ] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`) ;
+- [x] tous les appareils en 1.0.27 : l'app n'est pas publique (App Store non publié, Google
+  Play en tests fermés), confirmé par Yoss le 22/11. Si elle sort, ce sera avec une version
+  attestée ;
+- [x] appel `VERIFIED` côté serveur sur iPhone (TestFlight) et Samsung (Alpha) en 1.0.27 ;
+- [ ] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`), du
+  2026-11-22 12:45 UTC au 2026-11-24 12:45 UTC, hors appareils de test après un envoi Play ;
 - [ ] suivi des refus en place : `callable-request-verification`, `verifications.app` à
   `MISSING` ou `INVALID`, **niveau DEBUG inclus**, croisé avec l'agent HTTP.
   `auditAppCheck.sh` ne voit plus les refus après la bascule ;
-- [ ] décision sur `revokeDeviceToken` : sans preuve, un téléphone déconnecté hors ligne
-  garderait les rappels de l'ancien compte ;
-- [ ] chemin de remplacement pour `scripts/resolveReport.mjs` (modération) et tout appel
-  manuel de `setAdminClaim`, qui n'ont pas de jeton App Check ;
+- [x] `revokeDeviceToken` exclue : sans preuve, un téléphone déconnecté hors ligne garderait
+  les rappels de l'ancien compte. Elle reste protégée par le jeton Expo et ses limites ;
+- [x] `resolveReport` et `setAdminClaim` exclues : appelées par des scripts sans preuve
+  possible, elles vérifient elles-mêmes le compte administrateur ;
 - [ ] jetons de débogage révoqués dans la console Firebase ;
 - [ ] activation et retour arrière répétés et chronométrés sur staging, avec
   `APPCHECK_ENFORCE=true` dans `functions/.env.samaye-staging` ;

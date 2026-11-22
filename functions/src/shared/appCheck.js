@@ -9,7 +9,8 @@
  * - APPCHECK_ENFORCE_FUNCTIONS=a,b : seules les fonctions nommées (nom d'export
  *   exact, séparées par des virgules) imposent App Check. C'est la bascule
  *   partielle de l'ADR 0002 ;
- * - APPCHECK_ENFORCE=true : toutes les fonctions appelables.
+ * - APPCHECK_ENFORCE=true : toutes les fonctions appelables, sauf les exceptions
+ *   ci-dessous, qui ne sont jamais imposées, même nommées dans la liste.
  *
  * Attention : la CI redéploie toutes les fonctions, donc la variable doit être
  * présente dans functions/.env.<projet> à chaque déploiement.
@@ -23,7 +24,20 @@ const ENFORCED_FUNCTIONS = new Set(
     .filter(Boolean),
 );
 
+// Exceptions décidées le 2026-11-22 (ADR 0002). Liste dans le code, et non dans
+// l'environnement : en retirer ou en ajouter une passe par une revue.
+const APP_CHECK_EXEMPT_FUNCTIONS = new Set([
+  // Sans preuve, un téléphone déconnecté garderait les rappels de l'ancien compte.
+  // Protégée par le jeton Expo du téléphone et des limites de débit.
+  "revokeDeviceToken",
+  // Appelées hors de l'app (scripts d'administration), donc sans preuve possible.
+  // Protégées par le compte administrateur, vérifié dans chaque fonction.
+  "resolveReport",
+  "setAdminClaim",
+]);
+
 function isEnforced(functionName) {
+  if (APP_CHECK_EXEMPT_FUNCTIONS.has(functionName)) return false;
   return ENFORCE_ALL || ENFORCED_FUNCTIONS.has(functionName);
 }
 
@@ -54,6 +68,7 @@ function withAppCheck(options, functionName) {
 }
 
 module.exports = {
+  APP_CHECK_EXEMPT_FUNCTIONS,
   monitorAppCheck,
   withAppCheck,
 };
