@@ -300,7 +300,7 @@ async function transcribeAudioFile(audioUri: string): Promise<string> {
         service: "voiceRecorder",
         operation: "transcribeUnauthenticated",
       });
-      throw new Error("Vous devez être connecté pour utiliser la voix.");
+      throw new Error("Voix non vérifiée. Réessayez, ou reconnectez-vous si cela continue.");
     }
     throw error;
   }

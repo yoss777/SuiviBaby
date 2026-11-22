@@ -63,7 +63,7 @@ export function failureReason(error: unknown): string | undefined {
   if (code.endsWith("permission-denied")) return "Vous n'avez pas le droit de modifier cet enfant.";
   if (code.endsWith("not-found")) return "Cet événement a été supprimé entre-temps.";
   if (code.endsWith("aborted")) return "Il a été modifié entre-temps sur un autre appareil.";
-  if (code.endsWith("unauthenticated")) return "Votre session a expiré, reconnectez-vous.";
+  if (code.endsWith("unauthenticated")) return "Envoi non vérifié. Réessayez, ou reconnectez-vous si cela continue.";
   return undefined;
 }
 
