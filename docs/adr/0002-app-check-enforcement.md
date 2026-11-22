@@ -18,9 +18,8 @@ depuis le 7/11, tous builds). Trois manques se cumulaient :
   désactivé dans ces builds (Sentry SUIVIBABY-Q, build 59 ; preuve `MISSING` dans
   `callable-request-verification`). Corrigé dans la 1.0.27.
 
-V_a est propre à chaque plateforme. iOS : au plus tôt la 1.0.27, à confirmer par un appel
-`VERIFIED` depuis un iPhone. Android : la 1.0.26 est `VERIFIED` sur le Samsung (7 appels
-sur 7). Sur 9 anciens échecs Android, 3 tombent dans les fenêtres de test de Google et 6
+V_a est propre à chaque plateforme. La 1.0.27 est `VERIFIED` sur iPhone (TestFlight) et
+sur le Samsung (Alpha) depuis le 22/11. Sur 9 anciens échecs Android, 3 tombent dans les fenêtres de test de Google et 6
 restent inexpliqués. Les refus Play Integrity observés suivent les envois sur Google Play
 (110 sur 110 dans les 4 heures) et viennent au moins en partie d'émulateurs et d'appareils
 de test (SUIVIBABY-P).
@@ -30,8 +29,8 @@ La 1.0.26 remonte dans Sentry chaque cause distincte d'échec d'attestation
 connexion. Elle remplace le drapeau `deviceInfo.appCheck` prévu plus bas, qui n'aurait
 indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
 
-**Décision de Yoss (2026-11-22) :** imposer App Check sur **toutes les fonctions**, sans
-Firestore ni Storage, dès la première version attestée, sans attendre 95 % d'adoption. Elle
+**Décision de Yoss (2026-11-22) :** imposer App Check sur **toutes les fonctions sauf
+`revokeDeviceToken`, `resolveReport` et `setAdminClaim`**, sans Firestore ni Storage, dès la première version attestée, sans attendre 95 % d'adoption. Elle
 remplace le plan par lots et les critères C2 et C3 ci-dessous. Conséquence acceptée : les
 versions antérieures ne pourront plus appeler ces fonctions, et une saisie refusée en ligne
 y sera perdue. Cela vaut aussi pour le retrait du consentement et la suppression de compte
@@ -42,20 +41,29 @@ App Check est un **anti-abus**, pas une authentification : au seuil Play Integri
 appareil compromis. L'autorisation reste portée par Firebase Auth et les règles.
 
 **Check-list avant le « go » de Yoss :**
-- [ ] 1.0.27 disponible pour les utilisateurs sur l'App Store et en Production sur Google
-  Play (un test TestFlight ou Alpha ne suffit pas), puis `minVersion` relevé ;
-- [ ] appel `VERIFIED` côté serveur sur iPhone et sur Android, installés depuis les stores ;
-- [ ] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`) ;
+- [x] tous les appareils en 1.0.27 : l'app n'est pas publique (App Store non publié, Google
+  Play en tests fermés), confirmé par Yoss le 22/11. Si elle sort, ce sera avec une version
+  attestée ;
+- [x] appel `VERIFIED` côté serveur sur iPhone (TestFlight) et Samsung (Alpha) en 1.0.27 ;
+- [ ] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`) ni hausse de
+  `unauthenticated` (C4), du 2026-11-22 12:45 UTC au 2026-11-24 12:45 UTC. Sont classés à part
+  les appareils de test dans les 4 heures suivant un envoi Play et le Maestro nocturne ;
 - [ ] suivi des refus en place : `callable-request-verification`, `verifications.app` à
-  `MISSING` ou `INVALID`, **niveau DEBUG inclus**, croisé avec l'agent HTTP.
-  `auditAppCheck.sh` ne voit plus les refus après la bascule ;
-- [ ] décision sur `revokeDeviceToken` : sans preuve, un téléphone déconnecté hors ligne
-  garderait les rappels de l'ancien compte ;
-- [ ] chemin de remplacement pour `scripts/resolveReport.mjs` (modération) et tout appel
-  manuel de `setAdminClaim`, qui n'ont pas de jeton App Check ;
-- [ ] jetons de débogage révoqués dans la console Firebase ;
-- [ ] activation et retour arrière répétés et chronométrés sur staging, avec
-  `APPCHECK_ENFORCE=true` dans `functions/.env.samaye-staging` ;
+  `MISSING` ou `INVALID`, **niveau DEBUG inclus**, croisé avec l'agent HTTP, hors fonctions
+  exclues. `auditAppCheck.sh` ne voit plus les refus après la bascule ;
+- [x] `revokeDeviceToken` exclue : sans preuve, un téléphone déconnecté hors ligne garderait
+  les rappels de l'ancien compte. Elle reste protégée par le jeton Expo et ses limites ;
+- [x] `resolveReport` et `setAdminClaim` exclues : actions d'administration sans écran dans
+  l'app, avec compte administrateur vérifié et débit limité. `scripts/resolveReport.mjs`
+  est à vérifier : son jeton n'est sans doute pas un jeton d'utilisateur Firebase ;
+- [ ] Maestro nocturne suspendu ou adapté : son émulateur sans Play Store sera refusé ;
+- [ ] avant toute soumission à un store, vérifier que l'examen reste possible : les appareils
+  non attestés peuvent se connecter mais leurs appels de fonctions sont refusés ;
+- [ ] jetons de débogage révoqués dans la console Firebase, sauf un jeton personnel de
+  développement tant que staging n'existe pas ;
+- [ ] répétition en production sur `parseVoiceCommand` seule (`APPCHECK_ENFORCE_FUNCTIONS`),
+  car staging n'existe pas : appel réel sur iPhone et Samsung, puis retour arrière chronométré.
+  Cette fonction retombe sur l'analyse par règles en cas de refus ;
 - [ ] aucune CI en cours, PR dédiée ne contenant que l'activation.
 
 ## Contexte
@@ -72,17 +80,17 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
 **Côté fonctions** (`functions/src/shared/appCheck.js`) :
 - `withAppCheck(options, nom)` (nom = nom d'export déployé, ex. `transcribeAudio`)
   ajoute `enforceAppCheck: true` si, au chargement de l'instance (fonctions v2,
-  lecture de `process.env`), `APPCHECK_ENFORCE=true` (toutes les fonctions) ou si `nom` figure
+  lecture de `process.env`), `APPCHECK_ENFORCE=true` (toutes les fonctions, sauf les trois exceptions) ou si `nom` figure
   dans `APPCHECK_ENFORCE_FUNCTIONS` (liste séparée par des virgules, ex.
   `transcribeAudio,parseVoiceCommand`). Sans variable : surveillance seule ;
 - `monitorAppCheck(request, nom)` journalise `[AppCheck] <fonction>: VERIFIED` ou
   `UNVERIFIED` pour chaque appel ; la ligne `UNVERIFIED` indique aussi
   `enforcement=true|false`. C'est la seule
   mesure disponible aujourd'hui ; `scripts/auditAppCheck.sh` la lit dans
-  Cloud Logging (seuil : moins de 0,5 % UNVERIFIED par fonction).
+  Cloud Logging, à titre indicatif.
 
-**Hors champ.** `revenueCatWebhook` est un `onRequest` protégé par son secret
-Bearer : App Check ne s'applique pas à ce type de déclencheur.
+**Hors champ.** `revenueCatWebhook` (protégé par son secret Bearer) et `unsubscribeRecap` sont
+des `onRequest` : App Check ne s'applique pas à ce type de déclencheur.
 
 **Règles.** Aucune règle Firestore ni Storage n'exige aujourd'hui App Check
 (`request.app` absent de `firestore.rules` et `storage.rules`).
@@ -119,8 +127,7 @@ Sources, par ordre de préférence :
 
 **Ce qui manque : savoir si une version est attestée.** Deux prérequis, à faire
 avant de fixer une date :
-- confirmer sur un appareil réel, avec un build 1.0.27 : une requête Cloud Functions
-  affiche `[AppCheck] … VERIFIED` (et non `UNVERIFIED`) ;
+- confirmé le 22/11 sur iPhone et Samsung en 1.0.27 : appels `[AppCheck] … VERIFIED` ;
 - suivre les échecs d'attestation par version dans Sentry (`service: appCheck`,
   depuis la 1.0.26). Ce suivi remplace le drapeau `deviceInfo.appCheck` d'abord prévu.
 
@@ -165,14 +172,14 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 
 ## Retour arrière
 
-**Fonctions appelables** (à répéter sur staging avant la bascule) :
-1. seuil : au moins 3 utilisateurs distincts en échec sur une version attestée en
-   15 minutes, ou échec sur un appareil témoin. Une panne Apple ou Google relève de cette
+**Fonctions appelables** (à répéter avant la bascule) :
+1. seuil : échec d'un appel réel sur un appareil témoin (iPhone ou Samsung installés depuis
+   TestFlight ou Google Play), hors appareils de test après un envoi Play. Une panne Apple ou Google relève de cette
    procédure : sans enforcement, les apps rappellent sans jeton, sans mise à jour ;
 2. annuler tout run `deploy-functions.yml` en cours, sinon il réimposerait App Check ;
-3. depuis une copie propre de `main`, retirer `APPCHECK_ENFORCE=true` de
-   `functions/.env.<projet>` et lancer `firebase deploy --only functions --project <projet>`
-   (`<projet>` : `samaye-53723` ou `samaye-staging`) ;
+3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer
+   `APPCHECK_ENFORCE=true` de `functions/.env.samaye-53723`, puis, à la racine,
+   `firebase deploy --only functions --project samaye-53723` ;
 4. committer aussitôt ce retrait sur `main`, sinon le prochain déploiement réimpose App Check.
 
 La durée sera mesurée lors de la répétition. Ne pas utiliser
@@ -193,14 +200,13 @@ elle bloque des utilisateurs, appliquer d'abord le retour arrière serveur.
 
 ## Actions
 
-- [x] Yoss : décision du 2026-11-22, toutes les fonctions, sans Firestore ni Storage.
+- [x] Yoss : décision du 2026-11-22, toutes les fonctions sauf trois exceptions, sans Firestore ni Storage.
 - [ ] Imposer App Check sur toutes les fonctions après la check-list.
-- [ ] Vérifier sur un iPhone en 1.0.27 que les appels sont `VERIFIED` (V_a iOS).
-- [x] Android 1.0.26 `VERIFIED` sur le Samsung.
+- [x] iPhone et Samsung en 1.0.27 `VERIFIED` (22/11).
 - [ ] Expliquer les 6 anciens échecs Android restants grâce à Sentry.
 - [x] Garder en file une saisie refusée en `unauthenticated` pour un compte connecté (1.0.26).
 - [x] Attendre l'initialisation d'App Check avant le rejeu de la file (1.0.26).
-- [ ] Après l'activation : couvrir les suppressions et écritures non optimistes refusées, fiabiliser `scripts/auditAppCheck.sh`.
+- [ ] Après l'activation : couvrir les suppressions et écritures non optimistes refusées.
 - [ ] Journaliser l'état App Check de `ensureReferralCode`, `validateReferralCode` et `sendDeletionRequestEmail`.
 - [x] Suivi des échecs d'attestation par version dans Sentry (1.0.26), à la place de `deviceInfo.appCheck`.
 - [x] Corriger `docs/FIREBASE_MONITORING.md` §8.

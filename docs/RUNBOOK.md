@@ -113,7 +113,8 @@ Mettre à jour `app_config/latest_version` (bannière de mise à jour, `minVersi
   en CI, il utilise le service account JSON (`GCP_SA_KEY`). Aucune clé d'écriture à
   fournir à la main.
 
-`minVersion` **force** la mise à jour : ne la relever qu'après publication effective
+`minVersion` affiche un bandeau de mise à jour sans fermeture, mais l'app reste utilisable :
+ne la relever qu'après publication effective
 (la version minimale est aujourd'hui 1.0.6, fixée le 2026-11-02 par décision de Yoss ;
 SUIVI 1.6).
 
@@ -214,7 +215,7 @@ l'alerte `webhook_5xx`. Procédure dans FIREBASE_MONITORING §6.4.
 | Local, non versionné | `.env`, dossier `secrets/` (clé Play) |
 
 Les clés Firebase web (`EXPO_PUBLIC_FIREBASE_*`) ne sont pas des secrets au sens
-strict : leur sécurité repose sur les règles et App Check.
+strict : leur sécurité repose sur les règles. App Check ne couvre pas Firestore ni Storage.
 
 ### 5.2 Procédure de rotation (générique, à valider au premier usage)
 
@@ -377,7 +378,8 @@ Retour arrière : redéployer la version précédente de `firestore.rules` (aucu
 | Date | Action | Référence |
 |---|---|---|
 | 2026-12-02 | Bascule finale : retirer `LEGACY_STORAGE_BUCKET` et les miroirs | SUIVI 1.8 |
-| 2026-12-07 | Revue des règles de transition ; App Check : voir la check-list de l'ADR 0002 | PLAN 12.7, ADR 0002 |
+| 2026-12-07 | Revue des règles de transition | PLAN 12.7 |
+| 2026-11-24 | Fin de l'observation App Check, puis check-list de l'ADR 0002 | ADR 0002 |
 | 2026-12-16 | Supprimer le bucket US (après purge des orphelins) | SUIVI 1.9 (action irréversible de Yoss) |
 | 2027-01-15 | Réévaluation d'`expo-updates` (au plus tôt à la fin de S13.5) | ADR 0003 |
 

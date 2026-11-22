@@ -189,7 +189,7 @@ PREMIUM :
 - [ ] Préparer réponses aux questions de review Apple
 - [ ] Vérifier Sentry après première vague d'installations
 - [ ] Configurer budgets Firebase (voir docs/FIREBASE_MONITORING.md)
-- [ ] Activer App Check enforcement après 7 jours de monitoring
+- [ ] Activer App Check selon la check-list de `docs/adr/0002-app-check-enforcement.md`
 
 ---
 

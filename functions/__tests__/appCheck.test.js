@@ -39,6 +39,29 @@ describe("withAppCheck", () => {
     expect(withAppCheck({ region: "r" }, "b").enforceAppCheck).toBe(true);
   });
 
+  it.each(["revokeDeviceToken", "resolveReport", "setAdminClaim"])(
+    "%s n'est jamais imposée, même avec l'activation globale ou nommée",
+    (name) => {
+      process.env.APPCHECK_ENFORCE = "true";
+      process.env.APPCHECK_ENFORCE_FUNCTIONS = name;
+      const { withAppCheck } = load();
+      expect(withAppCheck({ region: "r" }, name)).toEqual({ region: "r" });
+    },
+  );
+
+  it("signale une exception nommée par erreur dans la liste", () => {
+    process.env.APPCHECK_ENFORCE_FUNCTIONS = "resolveReport";
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    load();
+    expect(warn.mock.calls[0][0]).toContain("resolveReport");
+    warn.mockRestore();
+  });
+
+  it("la liste des exceptions reste exactement celle décidée", () => {
+    const { APP_CHECK_EXEMPT_FUNCTIONS } = load();
+    expect([...APP_CHECK_EXEMPT_FUNCTIONS].sort()).toEqual(["resolveReport", "revokeDeviceToken", "setAdminClaim"]);
+  });
+
   it("APPCHECK_ENFORCE_FUNCTIONS n'impose que les fonctions listées", () => {
     process.env.APPCHECK_ENFORCE_FUNCTIONS = "transcribeAudio, parseVoiceCommand";
     const { withAppCheck } = load();

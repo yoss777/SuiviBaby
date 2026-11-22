@@ -160,7 +160,7 @@
 Les Cloud Functions wrappées par `withAppCheck()` participent à App Check.
 L'enforcement est piloté par deux variables d'env : `APPCHECK_ENFORCE_FUNCTIONS`
 (noms d'export séparés par des virgules : seules ces fonctions imposent App
-Check) et `APPCHECK_ENFORCE=true` (toutes les fonctions appelables). Sans
+Check) et `APPCHECK_ENFORCE=true` (toutes, sauf les trois exceptions de l'ADR). Sans
 variable (défaut), les requêtes sans token App Check sont acceptées mais
 loguées en `UNVERIFIED`. Une fonction imposée rejette toute requête sans
 token valide. Voir ADR 0002.
