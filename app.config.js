@@ -89,6 +89,14 @@ function dedupePlugins(plugins) {
   });
 }
 
+// Un build ne porte que le fichier Firebase de sa plateforme (le runner iOS n'a
+// pas google-services.json). Exiger les deux y désactivait App Check en silence.
+function shouldApplyNativeFirebase(buildPlatform, androidFile, iosFile) {
+  if (buildPlatform === "ios") return Boolean(iosFile);
+  if (buildPlatform === "android") return Boolean(androidFile);
+  return Boolean(androidFile && iosFile);
+}
+
 module.exports = ({ config: expoConfig }) => {
   const appEnv = resolveAppEnv();
 
@@ -108,12 +116,16 @@ module.exports = ({ config: expoConfig }) => {
     process.env.GOOGLE_SERVICE_INFO_PLIST,
     "GoogleService-Info.plist",
   );
-  const nativeAppCheckConfigured = Boolean(
-    androidGoogleServicesFile && iosGoogleServicesFile,
+
+  const buildPlatform = process.env.EAS_BUILD_PLATFORM;
+  const applyNativeFirebase = shouldApplyNativeFirebase(
+    buildPlatform,
+    androidGoogleServicesFile,
+    iosGoogleServicesFile,
   );
 
   const plugins = [...(expoConfig.plugins || [])];
-  if (nativeAppCheckConfigured) {
+  if (applyNativeFirebase) {
     plugins.push(
       "@react-native-firebase/app",
       "@react-native-firebase/app-check",
@@ -144,7 +156,11 @@ module.exports = ({ config: expoConfig }) => {
       showPreviews: process.env.SHOW_PREVIEWS === "true",
       firebase: resolveFirebaseWebConfig(appEnv),
       appCheck: {
-        nativeConfigured: nativeAppCheckConfigured,
+        // Même condition que les plugins : jamais de drapeau vrai sans Firebase natif.
+        nativeConfiguredAndroid:
+          applyNativeFirebase && buildPlatform !== "ios" && Boolean(androidGoogleServicesFile),
+        nativeConfiguredIos:
+          applyNativeFirebase && buildPlatform !== "android" && Boolean(iosGoogleServicesFile),
         webSiteKeyConfigured: Boolean(
           process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_WEB_SITE_KEY,
         ),
@@ -152,3 +168,5 @@ module.exports = ({ config: expoConfig }) => {
     },
   };
 };
+
+module.exports.shouldApplyNativeFirebase = shouldApplyNativeFirebase;

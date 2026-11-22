@@ -5,7 +5,9 @@ const mockConfigure = jest.fn();
 const mockLoadNative = jest.fn();
 const mockNetInfoFetch = jest.fn();
 const mockSentryEnvironment = jest.fn();
-const mockExtra: { appCheck: { nativeConfigured: boolean } } = { appCheck: { nativeConfigured: true } };
+const mockExtra: { appCheck: { nativeConfiguredAndroid: boolean; nativeConfiguredIos: boolean } } = {
+  appCheck: { nativeConfiguredAndroid: true, nativeConfiguredIos: true },
+};
 let mockProviderOptions: { getToken: () => Promise<unknown> };
 
 jest.mock("@/utils/errorReporting", () => ({
@@ -40,6 +42,8 @@ jest.mock("@/config/loadNativeAppCheck", () => ({
   loadNativeAppCheck: (...args: unknown[]) => mockLoadNative(...args),
 }));
 
+const { Platform } = jest.requireActual("react-native") as { Platform: { OS: string } };
+const originalPlatform = Platform.OS;
 const globals = globalThis as unknown as { __DEV__: boolean };
 const nativeModule = {
   ReactNativeFirebaseAppCheckProvider: class {
@@ -73,7 +77,9 @@ describe("App Check natif", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     globals.__DEV__ = false;
-    mockExtra.appCheck.nativeConfigured = true;
+    mockExtra.appCheck.nativeConfiguredAndroid = true;
+    mockExtra.appCheck.nativeConfiguredIos = true;
+    Platform.OS = "ios";
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE = "debug-apple";
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID = "debug-android";
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED;
@@ -88,6 +94,7 @@ describe("App Check natif", () => {
   });
 
   afterAll(() => {
+    Platform.OS = originalPlatform;
     globals.__DEV__ = true;
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE;
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID;
@@ -308,7 +315,7 @@ describe("App Check natif", () => {
     ["staging", 0],
     ["development", 0],
   ])("build non configuré en %s : %i remontée", async (environment, expected) => {
-    mockExtra.appCheck.nativeConfigured = false;
+    mockExtra.appCheck.nativeConfiguredIos = false;
     mockSentryEnvironment.mockReturnValue(environment);
     await initApp();
     expect(mockLoadNative).not.toHaveBeenCalled();
@@ -316,6 +323,60 @@ describe("App Check natif", () => {
     if (expected) {
       expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("notConfigured");
     }
+  });
+
+  it.each([
+    ["ios", { nativeConfiguredIos: true, nativeConfiguredAndroid: false }, 1],
+    ["android", { nativeConfiguredIos: false, nativeConfiguredAndroid: true }, 1],
+    ["ios", { nativeConfiguredIos: false, nativeConfiguredAndroid: true }, 0],
+    ["android", { nativeConfiguredIos: true, nativeConfiguredAndroid: false }, 0],
+  ])("sur %s, ne dépend que du fichier de sa plateforme (%j)", async (os, flags, loads) => {
+    Platform.OS = os;
+    Object.assign(mockExtra.appCheck, flags);
+    await initApp();
+    expect(mockLoadNative).toHaveBeenCalledTimes(loads);
+  });
+
+  it("demande un jeton neuf quand le jeton natif arrive en fin de vie", async () => {
+    await initApp();
+    const jwt = (minutes: number) =>
+      `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + minutes * 60 })).toString("base64")}.s`;
+    const fresh = jwt(60);
+    mockNativeGetToken.mockResolvedValueOnce({ token: jwt(4) }).mockResolvedValueOnce({ token: fresh });
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: fresh }));
+    expect(mockNativeGetToken.mock.calls.map((call) => call[1])).toEqual([false, true]);
+  });
+
+  const shortJwt = (minutes: number) =>
+    `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + minutes * 60 })).toString("base64")}.s`;
+
+  it("ne force qu'un renouvellement par minute et laisse le SDK attendre", async () => {
+    await initApp();
+    const short = shortJwt(4);
+    mockNativeGetToken.mockResolvedValue({ token: short });
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: short }));
+    mockNativeGetToken.mockClear();
+    await expect(mockProviderOptions.getToken()).rejects.toMatchObject({ code: "appCheck/refresh-throttled" });
+    await flush();
+    expect(mockNativeGetToken.mock.calls.map((call) => call[1])).toEqual([false]);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+  });
+
+  it("garde le jeton encore valide si le renouvellement forcé échoue", async () => {
+    await initApp();
+    const short = shortJwt(4);
+    mockNativeGetToken.mockResolvedValueOnce({ token: short }).mockRejectedValueOnce(new Error("attestation refusée"));
+    await expect(mockProviderOptions.getToken()).resolves.toEqual(expect.objectContaining({ token: short }));
+    await flush();
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("forcedRefresh");
+  });
+
+  it("garde le jeton natif tant qu'il reste assez de temps", async () => {
+    await initApp();
+    const token = `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3000 })).toString("base64")}.s`;
+    mockNativeGetToken.mockResolvedValueOnce({ token });
+    await mockProviderOptions.getToken();
+    expect(mockNativeGetToken).toHaveBeenCalledTimes(1);
   });
 
   it("n'initialise qu'une fois", async () => {
@@ -344,6 +405,61 @@ describe("App Check natif", () => {
 });
 
 describe("configuration iOS", () => {
+  describe("câblage de app.config.js", () => {
+    const fs = jest.requireActual("fs");
+    const previous = { ...process.env };
+    afterEach(() => {
+      jest.restoreAllMocks();
+      process.env = { ...previous };
+    });
+
+    function resolve(platform: string | undefined, files: string[]) {
+      const original = fs.existsSync;
+      jest.spyOn(fs, "existsSync").mockImplementation((...args: unknown[]) => {
+        const file = String(args[0]);
+        if (/google-services\.json$|GoogleService-Info\.plist$/.test(file)) {
+          return files.some((name) => file.endsWith(name));
+        }
+        return original(file);
+      });
+      delete process.env.APP_ENV;
+      delete process.env.GOOGLE_SERVICES_JSON;
+      delete process.env.GOOGLE_SERVICES_PLIST;
+      delete process.env.GOOGLE_SERVICE_INFO_PLIST;
+      if (platform) process.env.EAS_BUILD_PLATFORM = platform;
+      else delete process.env.EAS_BUILD_PLATFORM;
+      const appJson = jest.requireActual("../app.json");
+      return jest.requireActual("../app.config.js")({ config: appJson.expo });
+    }
+
+    it.each([
+      ["ios", ["GoogleService-Info.plist"], true, true, false],
+      ["android", ["google-services.json"], true, false, true],
+      ["ios", ["google-services.json"], false, false, false],
+      ["android", ["GoogleService-Info.plist"], false, false, false],
+      [undefined, ["GoogleService-Info.plist"], false, false, false],
+      [undefined, ["google-services.json", "GoogleService-Info.plist"], true, true, true],
+    ])("%s avec %j : plugins=%s, iOS=%s, Android=%s", (platform, files, plugins, ios, android) => {
+      const config = resolve(platform, files);
+      expect(config.plugins.includes("@react-native-firebase/app-check")).toBe(plugins);
+      expect(config.plugins.includes("./plugins/withFirebaseAppDelegate")).toBe(plugins);
+      expect(config.extra.appCheck.nativeConfiguredIos).toBe(ios);
+      expect(config.extra.appCheck.nativeConfiguredAndroid).toBe(android);
+    });
+  });
+
+  it.each([
+    ["ios", undefined, "plist", true],
+    ["ios", "json", undefined, false],
+    ["android", "json", undefined, true],
+    ["android", undefined, "plist", false],
+    [undefined, "json", "plist", true],
+    [undefined, undefined, "plist", false],
+  ])("plugins Firebase pour %s (json=%s, plist=%s) : %s", (platform, json, plist, expected) => {
+    const { shouldApplyNativeFirebase } = jest.requireActual("../app.config.js");
+    expect(shouldApplyNativeFirebase(platform, json, plist)).toBe(expected);
+  });
+
   it("garde le droit App Attest en production dans la configuration finale", () => {
     const previousEnv = process.env.APP_ENV;
     delete process.env.APP_ENV;

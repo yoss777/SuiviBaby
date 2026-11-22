@@ -324,7 +324,7 @@ ou une session `gcloud`.
 | Chaque semaine | `scripts/backfillLastEventAt.js` | `node scripts/backfillLastEventAt.js --apply --recompute --project=samaye-53723` | D'abord sans `--apply` pour voir le nombre de corrections. `--project` obligatoire avec `--apply` (ENVIRONMENTS, maintenance). |
 | Chaque semaine, jusqu'à 1.9 | `scripts/migratePhotosToEu.mjs` | `node scripts/migratePhotosToEu.mjs` | Attendu : « 0 à copier ». Sinon relancer avec `--apply` (SUIVI 1.5). |
 | Une fois (à vérifier) | `scripts/backfillRetention.js` | `node scripts/backfillRetention.js` puis `--apply` | Renseigne `expireAt` sur les historiques anciens (TTL). Mode simulation par défaut. Statut d'exécution non noté : à vérifier avant de relancer. |
-| Pendant la transition App Check | `scripts/auditAppCheck.sh` | `./scripts/auditAppCheck.sh 7d` | Doit afficher `READY` (ADR 0002). |
+| Pendant la transition App Check | `scripts/auditAppCheck.sh` | `./scripts/auditAppCheck.sh 7d` | Indicatif : suivre la check-list de l'ADR 0002, ce script ne voit pas les refus après activation. |
 | Avant tout nouvel envoi de fiches | `scripts/compareTipsWithSeed.mjs` | `node scripts/compareTipsWithSeed.mjs` | Lecture seule. Le re-semis (`scripts/seedViaFirestore.mjs`) seulement sur accord. |
 | Lundi | (pas de script) | relire `docs/SUIVI_ACTIONS.md` | Le document demande une relecture chaque lundi. |
 
@@ -377,7 +377,7 @@ Retour arrière : redéployer la version précédente de `firestore.rules` (aucu
 | Date | Action | Référence |
 |---|---|---|
 | 2026-12-02 | Bascule finale : retirer `LEGACY_STORAGE_BUCKET` et les miroirs | SUIVI 1.8 |
-| 2026-12-07 | Revue des règles de transition et décision App Check | PLAN 12.7, ADR 0002 |
+| 2026-12-07 | Revue des règles de transition ; App Check : voir la check-list de l'ADR 0002 | PLAN 12.7, ADR 0002 |
 | 2026-12-16 | Supprimer le bucket US (après purge des orphelins) | SUIVI 1.9 (action irréversible de Yoss) |
 | 2027-01-15 | Réévaluation d'`expo-updates` (au plus tôt à la fin de S13.5) | ADR 0003 |
 

@@ -25,6 +25,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { captureServiceError } from "@/utils/errorReporting";
+import { isUnauthenticatedError } from "@/utils/networkError";
 
 const COLLECTED_DATA =
   "repas, sommeil, croissance, couches, symptômes, température, médicaments, vaccins, allergies, notes libres, photos et notes vocales";
@@ -66,10 +68,13 @@ export default function HealthConsentScreen() {
       trackOnboardingEvent("health_consent_granted");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/boot");
-    } catch {
+    } catch (error) {
+      captureServiceError(error, { service: "healthConsent", operation: "record" });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setErrorMessage(
-        "Impossible d'enregistrer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
+        isUnauthenticatedError(error)
+          ? "Vérification de l'application impossible pour le moment. Réessayez dans un instant."
+          : "Impossible d'enregistrer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
       );
       setIsAccepting(false);
     }

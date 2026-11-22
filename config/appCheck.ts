@@ -6,8 +6,8 @@
 //     Android that can do real App Attest / Play Integrity attestation.
 //     The JS Firebase SDK does not implement native attestation on RN.
 // The native package is loaded via dynamic import below, gated by
-// nativeAppCheckConfigured (= GoogleService-Info.plist + google-services.json
-// present at build time). app.config.js registers the matching Expo plugins.
+// nativeConfiguredIos / nativeConfiguredAndroid (the Firebase file of that
+// platform present at build time). app.config.js registers the matching Expo plugins.
 // Keep @react-native-firebase on a major tested with the current Expo SDK
 // (58: v26.4 — v27 resolves Firebase through SPM only and needs dynamic
 // frameworks); bump it together with the SDK upgrade, never on its own.
@@ -31,12 +31,18 @@ const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
 const TOKEN_CHECK_ATTEMPTS = 3;
 const TOKEN_CHECK_DELAY_MS = 2000;
 const TOKEN_CHECK_TIMEOUT_MS = 20000;
+// En dessous, le rafraîchisseur du SDK JS relance aussitôt : sans jeton neuf, il boucle.
+const TOKEN_MIN_REMAINING_MS = 6 * 60 * 1000;
+// Chaque renouvellement forcé coûte une attestation Apple ou Google.
+const FORCED_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
+const REFRESH_THROTTLED_CODE = "appCheck/refresh-throttled";
 const MAX_REPORTS_PER_OPERATION = 5;
 const NETWORK_CHECK_TIMEOUT_MS = 2000;
 
 type ExpoExtra = {
   appCheck?: {
-    nativeConfigured?: boolean;
+    nativeConfiguredAndroid?: boolean;
+    nativeConfiguredIos?: boolean;
   };
 };
 
@@ -45,6 +51,7 @@ let appCheckInitialized = false;
 const reportedFailures = new Set<string>();
 const reportsByOperation = new Map<string, number>();
 let startupCheckDone = false;
+let lastForcedRefreshAt = 0;
 
 function getAppCheckExtra(): ExpoExtra["appCheck"] {
   return ((Constants.expoConfig?.extra ?? {}) as ExpoExtra).appCheck;
@@ -188,8 +195,35 @@ async function checkNativeToken(appCheck: AppCheck): Promise<void> {
   }
 }
 
+// Jeton natif en fin de vie : un renouvellement au plus par minute. Le refus levé
+// entre-temps laisse le SDK JS appliquer son délai, au lieu de boucler sans attendre.
+async function renewShortLivedToken<T extends { token: string }>(
+  current: T,
+  forceRefresh: () => Promise<T>,
+): Promise<T> {
+  const now = Date.now();
+  if (getExpireTimeMillis(current.token) - now >= TOKEN_MIN_REMAINING_MS) return current;
+  if (now - lastForcedRefreshAt < FORCED_REFRESH_MIN_INTERVAL_MS) {
+    throw Object.assign(new Error("Renouvellement du jeton différé"), { code: REFRESH_THROTTLED_CODE });
+  }
+  lastForcedRefreshAt = now;
+  try {
+    return await forceRefresh();
+  } catch (error) {
+    // Le jeton obtenu reste utilisable tant qu'il n'a pas expiré.
+    if (getExpireTimeMillis(current.token) > Date.now()) {
+      void reportAppCheckFailure(error, "forcedRefresh");
+      return current;
+    }
+    throw error;
+  }
+}
+
 function isNativeAppCheckConfigured(): boolean {
-  return getAppCheckExtra()?.nativeConfigured === true;
+  const extra = getAppCheckExtra();
+  if (Platform.OS === "ios") return extra?.nativeConfiguredIos === true;
+  if (Platform.OS === "android") return extra?.nativeConfiguredAndroid === true;
+  return false;
 }
 
 function isNativeAppCheckRuntimeEnabled(): boolean {
@@ -264,13 +298,17 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     provider: new CustomProvider({
       async getToken() {
         try {
-          const result = await rnfbAppCheck.getToken(nativeAppCheck, false);
+          const result = await renewShortLivedToken(
+            await rnfbAppCheck.getToken(nativeAppCheck, false),
+            () => rnfbAppCheck.getToken(nativeAppCheck, true),
+          );
           return {
             token: result.token,
             expireTimeMillis: getExpireTimeMillis(result.token),
           };
         } catch (error) {
           // Normal pendant le démarrage ; anormal ensuite.
+          if (failureCode(error) === REFRESH_THROTTLED_CODE) throw error;
           if (startupCheckDone || !isProviderNotReady(error)) {
             void reportAppCheckFailure(error, "getToken");
           }

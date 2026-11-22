@@ -58,6 +58,8 @@ import { withdrawHealthConsent } from "@/services/healthConsentService";
 import { clearNowWidget } from "@/services/widgetSync";
 import { useAccountDeletionFlow } from "@/hooks/useAccountDeletionFlow";
 import { useHiddenPhotos } from "@/hooks/useHiddenPhotos";
+import { captureServiceError } from "@/utils/errorReporting";
+import { isUnauthenticatedError } from "@/utils/networkError";
 
 interface SettingItem {
   id: string;
@@ -276,13 +278,15 @@ export default function SettingsScreen() {
       clearNowWidget({ suspend: true });
       setShowWithdrawConsentModal(false);
       router.replace("/boot");
-    } catch {
+    } catch (error) {
+      captureServiceError(error, { service: "healthConsent", operation: "withdraw" });
       setShowWithdrawConsentModal(false);
       setModalConfig({
         visible: true,
         title: "Erreur",
-        message:
-          "Impossible de retirer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
+        message: isUnauthenticatedError(error)
+          ? "Vérification de l'application impossible pour le moment. Réessayez dans un instant."
+          : "Impossible de retirer votre consentement pour le moment. Vérifiez votre connexion puis réessayez.",
       });
     } finally {
       setIsWithdrawingConsent(false);
