@@ -93,11 +93,30 @@ Samsung, 1.0.24 (versionCode 33) installée depuis Google Play (Tests fermés �
 | 38 | « Sombre la nuit » de nuit, thème Clair | ✅ 21/11 (Yoss, 1.0.24) | À 2 h 57, thème Clair réglé, l'app est en sombre. |
 | 39 | Chrono arrêté : durée enregistrée = minutes affichées (R12) | ✅ 21/11 (Yoss, 1.0.24) | Arrêté à 7 min 50 s : enregistré « 7 min » (avant : arrondi à 8). |
 
-À faire : iPhone 15 et 13 Pro Max (mêmes tests) ; de nuit : clavier et alertes sombres, message unique ; notifications avec deux téléphones ; abonnement test annulé.
+À faire : de nuit, clavier et alertes sombres, message unique ; notifications avec deux téléphones ; abonnement test annulé. Les tests iPhone sont repris en 1.0.25 ci-dessous.
 
 ## Défauts trouvés pendant la recette 1.0.24 (20/11)
 
-- P3 — police ×2 : dans la feuille « Ajouter un événement » (bouton + › Plus), la croix de fermeture chevauche la fin du titre (« événem×ent »).
+- P3 — police ×2 : dans la feuille « Ajouter un événement » (bouton + › Plus), la croix de fermeture chevauche la fin du titre (« événem×ent »). Corrigé en 1.0.25, vérifié sur iPhone (test 42).
+
+## Version 1.0.25 (R14, R22, grande police, invitations) : recette iPhone les 21 et 22/11, Samsung à faire
+
+iPhone 15 et iPhone 13 Pro Max, 1.0.25 (build 57) installée depuis TestFlight, pilotés par WebDriverAgent. Aucune saisie créée. Police remise à sa valeur d'origine après les tests.
+
+| # | Test | Statut | Notes |
+|---|------|--------|-------|
+| 40 | Lancement en mode avion puis retour du réseau sans appui | ✅ 21/11 iPhone 15 et 13 Pro Max | Accueil chargé seul après le retour du réseau : 13 s sur l'iPhone 15, 12 s sur le 13 Pro Max. Aucune déconnexion. |
+| 41 | Police au maximum : fenêtre « Déconnexion » | ✅ 21/11 iPhone 15 et 13 Pro Max | Fenêtre lisible, fermée sans se déconnecter. |
+| 42 | Police au maximum : titre de « Ajouter un événement » | ✅ 21/11 iPhone 15 et 13 Pro Max | La croix ne chevauche plus le titre. Voir le P3 ci-dessous sur les cartes de la liste. |
+| 43 | Police au maximum : formulaire Température | ✅ 21/11 iPhone 15 et 13 Pro Max | Formulaire correct, fermé sans rien enregistrer. |
+| 44 | Déconnexion en mode avion puis retour du réseau : jeton révoqué (R22) | ✅ 22/11 iPhone 13 Pro Max | Écran de connexion atteint hors ligne. Réseau rétabli à 00:02:47 (Paris), `revokeDeviceToken` a journalisé `revoked: true` à 00:02:51, en un seul appel. Aucun vrai rappel envoyé pour constater son absence. Yoss se reconnecte sur ce téléphone. |
+
+À faire : recette 1.0.25 sur Samsung ; de nuit, clavier et alertes sombres, message unique ; tétée partagée entre deux téléphones (R14).
+
+## Défauts trouvés pendant la recette 1.0.25 (21/11)
+
+- P3 — police au maximum sur iPhone : dans la liste « Ajouter un événement », « Repas solide » et « Nettoyage nez » débordent de leur carte.
+- À surveiller — App Check : l'appel de révocation du test 44 est arrivé sans preuve App Check. Depuis le 15/11, 233 des 479 appels journalisés sont dans ce cas (voir R4 et S4 dans `docs/SUIVI_ACTIONS.md`).
 
 ## Après les tests
 
