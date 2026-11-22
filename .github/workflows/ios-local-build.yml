@@ -132,10 +132,15 @@ jobs:
           mkdir -p "$CHECK_DIR"
           unzip -q "$RUNNER_TEMP/app.ipa" -d "$CHECK_DIR"
           APP=$(ls -d "$CHECK_DIR"/Payload/*.app | head -1)
-          codesign -d --entitlements :- "$APP" 2>/dev/null > "$CHECK_DIR/entitlements.plist"
-          VALUE=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' "$CHECK_DIR/entitlements.plist" 2>/dev/null || true)
+          KEY=com.apple.developer.devicecheck.appattest-environment
+          if ! codesign -d --entitlements :- "$APP" > "$CHECK_DIR/entitlements.plist" 2> "$CHECK_DIR/codesign.err"; then
+            echo "::error::Cannot read the entitlements of the signed app"
+            cat "$CHECK_DIR/codesign.err"
+            exit 1
+          fi
+          APP_VALUE=$(/usr/libexec/PlistBuddy -c "Print :$KEY" "$CHECK_DIR/entitlements.plist" 2>/dev/null || true)
           rm -rf "$CHECK_DIR"
-          if [ "$VALUE" != "production" ]; then
+          if [ "$APP_VALUE" != "production" ]; then
             echo "::error::App Attest entitlement missing from the signed app"
             exit 1
           fi

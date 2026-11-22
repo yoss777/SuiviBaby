@@ -13,7 +13,8 @@
 // frameworks); bump it together with the SDK upgrade, never on its own.
 import Constants from "expo-constants";
 import { captureServiceError } from "@/utils/errorReporting";
-import { isConnectivityError } from "@/utils/networkError";
+import NetInfo from "@react-native-community/netinfo";
+import { getSentryEnvironment } from "./firebaseEnv";
 import { loadNativeAppCheck } from "./loadNativeAppCheck";
 import {
   CustomProvider,
@@ -29,6 +30,7 @@ const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000;
 // Au démarrage, le fournisseur natif peut répondre « provider-not-ready ».
 const TOKEN_CHECK_ATTEMPTS = 3;
 const TOKEN_CHECK_DELAY_MS = 2000;
+const MAX_REPORTS_PER_LAUNCH = 5;
 
 type ExpoExtra = {
   appCheck?: {
@@ -39,6 +41,7 @@ type ExpoExtra = {
 let appCheckInitializationPromise: Promise<void> | null = null;
 let appCheckInitialized = false;
 const reportedFailures = new Set<string>();
+let startupCheckDone = false;
 
 function getAppCheckExtra(): ExpoExtra["appCheck"] {
   return ((Constants.expoConfig?.extra ?? {}) as ExpoExtra).appCheck;
@@ -91,20 +94,46 @@ function isProviderNotReady(error: unknown): boolean {
   return `${failureCode(error)} ${message}`.includes("provider-not-ready");
 }
 
+// Message sans valeur variable ni suite ressemblant à un jeton.
+function failureDetail(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message
+    .replace(/[A-Za-z0-9_.-]{24,}/g, "[masqué]")
+    .replace(/\d+/g, "#")
+    .slice(0, 120);
+}
+
+async function isDeviceOffline(): Promise<boolean> {
+  try {
+    const state = await NetInfo.fetch();
+    return state.isConnected === false || state.isInternetReachable === false;
+  } catch {
+    return false;
+  }
+}
+
 // Sans jeton, le SDK appelle quand même la fonction, sans preuve et sans
-// erreur visible : c'est ainsi que la panne iOS est restée inaperçue. Une seule
+// erreur visible : c'est ainsi que la panne iOS est restée inaperçue. Une
 // remontée par cause et par lancement (le rafraîchissement automatique réessaie).
-function reportAppCheckFailure(error: unknown, operation: string): void {
-  if (isConnectivityError(error)) return;
-  const code = failureCode(error);
-  const key = `${operation}:${code}`;
-  if (reportedFailures.has(key)) return;
-  reportedFailures.add(key);
-  captureServiceError(error, {
-    service: "appCheck",
-    operation,
-    extra: { platform: Platform.OS, code },
-  });
+// L'erreur est réécrite : le filtre « connexion » de captureServiceError classe
+// tout code `unavailable` comme une coupure, ce qui masquerait une vraie panne
+// d'attestation. Seul un téléphone réellement hors ligne est ignoré.
+async function reportAppCheckFailure(error: unknown, operation: string): Promise<void> {
+  try {
+    const code = failureCode(error);
+    if (code.endsWith("network-request-failed") || (await isDeviceOffline())) return;
+    const detail = failureDetail(error);
+    const key = `${operation}:${code}:${detail}`;
+    if (reportedFailures.has(key) || reportedFailures.size >= MAX_REPORTS_PER_LAUNCH) return;
+    reportedFailures.add(key);
+    captureServiceError(new Error(`App Check ${operation}: ${code}`), {
+      service: "appCheck",
+      operation,
+      extra: { platform: Platform.OS, code, detail },
+    });
+  } catch (reportError) {
+    console.warn("[AppCheck] Failure report skipped:", reportError);
+  }
 }
 
 // Demande un premier jeton pour détecter tout de suite une attestation en échec.
@@ -112,16 +141,18 @@ async function checkNativeToken(appCheck: AppCheck): Promise<void> {
   for (let attempt = 1; attempt <= TOKEN_CHECK_ATTEMPTS; attempt += 1) {
     try {
       await getJsAppCheckToken(appCheck, false);
-      return;
+      break;
     } catch (error) {
-      if (!isProviderNotReady(error)) return; // déjà remonté par le fournisseur
+      // Toute autre erreur passe déjà par le fournisseur (getToken ci-dessous).
+      if (!isProviderNotReady(error)) break;
       if (attempt === TOKEN_CHECK_ATTEMPTS) {
-        reportAppCheckFailure(error, "startupToken");
-        return;
+        await reportAppCheckFailure(error, "startupToken");
+        break;
       }
       await new Promise((resolve) => setTimeout(resolve, TOKEN_CHECK_DELAY_MS));
     }
   }
+  startupCheckDone = true;
 }
 
 function isNativeAppCheckConfigured(): boolean {
@@ -158,8 +189,8 @@ async function initializeWebAppCheck(app: FirebaseApp): Promise<void> {
 
 async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
   if (!isNativeAppCheckRuntimeEnabled()) {
-    if (!__DEV__) {
-      reportAppCheckFailure(new Error("App Check natif non configuré dans ce build"), "notConfigured");
+    if (getSentryEnvironment(__DEV__) === "production") {
+      void reportAppCheckFailure(new Error("App Check natif non configuré dans ce build"), "notConfigured");
     }
     return;
   }
@@ -169,7 +200,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     rnfbAppCheck = await loadNativeAppCheck();
   } catch (error) {
     console.warn("[AppCheck] Native module unavailable, skipping native App Check:", error);
-    reportAppCheckFailure(error, "nativeModule");
+    void reportAppCheckFailure(error, "nativeModule");
     return;
   }
 
@@ -206,7 +237,10 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
             expireTimeMillis: getExpireTimeMillis(result.token),
           };
         } catch (error) {
-          if (!isProviderNotReady(error)) reportAppCheckFailure(error, "getToken");
+          // Normal pendant le démarrage ; anormal ensuite.
+          if (startupCheckDone || !isProviderNotReady(error)) {
+            void reportAppCheckFailure(error, "getToken");
+          }
           throw error;
         }
       },

@@ -2,14 +2,29 @@ const mockCaptureServiceError = jest.fn();
 const mockJsGetToken = jest.fn();
 const mockNativeGetToken = jest.fn();
 const mockConfigure = jest.fn();
+const mockLoadNative = jest.fn();
+const mockNetInfoFetch = jest.fn();
+const mockSentryEnvironment = jest.fn();
+const mockExtra: { appCheck: { nativeConfigured: boolean } } = { appCheck: { nativeConfigured: true } };
 let mockProviderOptions: { getToken: () => Promise<unknown> };
 
 jest.mock("@/utils/errorReporting", () => ({
   captureServiceError: (...args: unknown[]) => mockCaptureServiceError(...args),
 }));
+jest.mock("@react-native-community/netinfo", () => ({
+  __esModule: true,
+  default: { fetch: (...args: unknown[]) => mockNetInfoFetch(...args) },
+}));
+jest.mock("@/config/firebaseEnv", () => ({
+  getSentryEnvironment: (...args: unknown[]) => mockSentryEnvironment(...args),
+}));
 jest.mock("expo-constants", () => ({
   __esModule: true,
-  default: { expoConfig: { extra: { appCheck: { nativeConfigured: true } } } },
+  default: {
+    get expoConfig() {
+      return { extra: mockExtra };
+    },
+  },
 }));
 jest.mock("firebase/app-check", () => ({
   CustomProvider: class {
@@ -22,16 +37,22 @@ jest.mock("firebase/app-check", () => ({
   getToken: (...args: unknown[]) => mockJsGetToken(...args),
 }));
 jest.mock("@/config/loadNativeAppCheck", () => ({
-  loadNativeAppCheck: async () => ({
-    ReactNativeFirebaseAppCheckProvider: class {
-      configure = mockConfigure;
-    },
-    initializeAppCheck: jest.fn(() => ({ id: "native" })),
-    getToken: (...args: unknown[]) => mockNativeGetToken(...args),
-  }),
+  loadNativeAppCheck: (...args: unknown[]) => mockLoadNative(...args),
 }));
 
 const globals = globalThis as unknown as { __DEV__: boolean };
+const nativeModule = {
+  ReactNativeFirebaseAppCheckProvider: class {
+    configure = mockConfigure;
+  },
+  initializeAppCheck: jest.fn(() => ({ id: "native" })),
+  getToken: (...args: unknown[]) => mockNativeGetToken(...args),
+};
+const notReady = () => new Error("[appCheck/provider-not-ready] pas prêt");
+
+async function flush() {
+  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+}
 
 async function initApp() {
   let ensure!: (app: never) => Promise<void>;
@@ -39,15 +60,31 @@ async function initApp() {
     ensure = jest.requireActual("@/config/appCheck").ensureFirebaseAppCheck;
   });
   await ensure({} as never);
+  await flush();
+}
+
+async function failProvider(error: Error) {
+  mockNativeGetToken.mockRejectedValueOnce(error);
+  await expect(mockProviderOptions.getToken()).rejects.toBe(error);
+  await flush();
 }
 
 describe("App Check natif", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     globals.__DEV__ = false;
+    mockExtra.appCheck.nativeConfigured = true;
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_APPLE = "debug-apple";
     process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID = "debug-android";
+    delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED;
     mockJsGetToken.mockResolvedValue({ token: "t" });
+    mockLoadNative.mockResolvedValue(nativeModule);
+    mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    mockSentryEnvironment.mockReturnValue("production");
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   afterAll(() => {
@@ -56,39 +93,133 @@ describe("App Check natif", () => {
     delete process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN_ANDROID;
   });
 
-  it("n'embarque aucun jeton de débogage en production", async () => {
+  it("utilise la vraie attestation sans jeton de débogage en production", async () => {
     await initApp();
-    const options = mockConfigure.mock.calls[0][0];
-    expect(options.apple).toEqual(expect.objectContaining({ debugToken: undefined }));
-    expect(options.android).toEqual(expect.objectContaining({ debugToken: undefined }));
+    expect(mockConfigure.mock.calls[0][0]).toEqual({
+      android: { provider: "playIntegrity", debugToken: undefined },
+      apple: { provider: "appAttestWithDeviceCheckFallback", debugToken: undefined },
+    });
   });
 
-  it("remonte une seule fois un échec d'attestation et le relance", async () => {
+  it("garde le fournisseur de débogage en développement", async () => {
+    globals.__DEV__ = true;
+    process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_NATIVE_DEV_ENABLED = "true";
+    await initApp();
+    expect(mockConfigure.mock.calls[0][0].apple).toEqual({ provider: "debug", debugToken: "debug-apple" });
+  });
+
+  it("remonte une seule fois la même cause et relance l'erreur", async () => {
     await initApp();
     const failure = Object.assign(new Error("attestation refusée"), { code: "appCheck/unknown" });
-    mockNativeGetToken.mockRejectedValue(failure);
-    await expect(mockProviderOptions.getToken()).rejects.toBe(failure);
-    await expect(mockProviderOptions.getToken()).rejects.toBe(failure);
+    await failProvider(failure);
+    await failProvider(failure);
     expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
     expect(mockCaptureServiceError).toHaveBeenCalledWith(
-      failure,
+      expect.objectContaining({ message: "App Check getToken: appCheck/unknown" }),
       expect.objectContaining({ service: "appCheck", operation: "getToken" }),
     );
   });
 
-  it("ne remonte pas le délai normal du fournisseur au démarrage", async () => {
+  it("distingue deux causes qui partagent le même code", async () => {
     await initApp();
-    const failure = new Error("[appCheck/provider-not-ready] pas prêt");
-    mockNativeGetToken.mockRejectedValue(failure);
-    await expect(mockProviderOptions.getToken()).rejects.toBe(failure);
+    await failProvider(Object.assign(new Error("droit absent"), { code: "appCheck/unknown" }));
+    await failProvider(Object.assign(new Error("clé rejetée"), { code: "appCheck/unknown" }));
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(2);
+  });
+
+  it("plafonne les remontées par lancement", async () => {
+    await initApp();
+    for (const cause of ["a", "b", "c", "d", "e", "f", "g"]) {
+      await failProvider(new Error(`cause ${cause}`));
+    }
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(5);
+  });
+
+  it("ne classe pas une panne `unavailable` comme une coupure quand le réseau est là", async () => {
+    await initApp();
+    await failProvider(Object.assign(new Error("service indisponible"), { code: "appCheck/unavailable" }));
+    const [reported] = mockCaptureServiceError.mock.calls[0];
+    expect(reported.code).toBeUndefined();
+    expect(reported.message).toBe("App Check getToken: appCheck/unavailable");
+  });
+
+  it("ignore un échec hors ligne, puis remonte la même cause une fois en ligne", async () => {
+    await initApp();
+    const failure = new Error("token-error");
+    mockNetInfoFetch.mockResolvedValueOnce({ isConnected: false, isInternetReachable: false });
+    await failProvider(failure);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+    await failProvider(failure);
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignore une erreur réseau explicite", async () => {
+    await initApp();
+    await failProvider(Object.assign(new Error("réseau"), { code: "appCheck/network-request-failed" }));
     expect(mockCaptureServiceError).not.toHaveBeenCalled();
   });
 
-  it("n'expose jamais le jeton dans la remontée", async () => {
+  it("masque toute valeur ressemblant à un jeton", async () => {
     await initApp();
-    mockNativeGetToken.mockRejectedValue(new Error("échec"));
-    await expect(mockProviderOptions.getToken()).rejects.toThrow("échec");
+    await failProvider(new Error("refus eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.payload code 403"));
     const context = mockCaptureServiceError.mock.calls[0][1];
-    expect(Object.keys(context.extra).sort()).toEqual(["code", "platform"]);
+    expect(Object.keys(context.extra).sort()).toEqual(["code", "detail", "platform"]);
+    expect(context.extra.detail).toBe("refus [masqué] code #");
+  });
+
+  it("n'alerte pas pendant le délai normal du démarrage", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockRejectedValueOnce(notReady()).mockResolvedValueOnce({ token: "t" });
+    await initApp();
+    await failProvider(notReady());
+    await jest.advanceTimersByTimeAsync(2000);
+    await flush();
+    expect(mockJsGetToken).toHaveBeenCalledTimes(2);
+    expect(mockCaptureServiceError).not.toHaveBeenCalled();
+  });
+
+  it("alerte si le fournisseur n'est toujours pas prêt après trois essais", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockRejectedValue(notReady());
+    await initApp();
+    await jest.advanceTimersByTimeAsync(4000);
+    await flush();
+    expect(mockJsGetToken).toHaveBeenCalledTimes(3);
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("startupToken");
+  });
+
+  it("n'insiste pas au démarrage sur une autre erreur", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockRejectedValue(new Error("attestation refusée"));
+    await initApp();
+    await jest.advanceTimersByTimeAsync(4000);
+    expect(mockJsGetToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("alerte sur « pas prêt » après la fin du démarrage", async () => {
+    await initApp();
+    await failProvider(notReady());
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("getToken");
+  });
+
+  it("remonte l'échec de chargement du module natif sans planter", async () => {
+    mockLoadNative.mockRejectedValue(new Error("module absent"));
+    await initApp();
+    expect(mockConfigure).not.toHaveBeenCalled();
+    expect(mockCaptureServiceError.mock.calls[0][1].operation).toBe("nativeModule");
+  });
+
+  it.each([
+    ["production", 1],
+    ["staging", 0],
+    ["development", 0],
+  ])("build non configuré en %s : %i remontée", async (environment, expected) => {
+    mockExtra.appCheck.nativeConfigured = false;
+    mockSentryEnvironment.mockReturnValue(environment);
+    await initApp();
+    expect(mockLoadNative).not.toHaveBeenCalled();
+    expect(mockCaptureServiceError).toHaveBeenCalledTimes(expected);
   });
 });

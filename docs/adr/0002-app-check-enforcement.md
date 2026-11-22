@@ -38,6 +38,9 @@ indiqué que la présence des fichiers Firebase, pas l'obtention d'un jeton.
   explicite ;
 - révoquer les jetons de débogage enregistrés dans la console Firebase.
 
+Le 2026-12-07 reste une date de revue, pas une date de bascule. Les sections
+suivantes sont alignées sur cette mise à jour.
+
 ## Contexte
 
 **Côté app.** `config/appCheck.ts` initialise App Check :
@@ -100,13 +103,10 @@ Sources, par ordre de préférence :
 
 **Ce qui manque : savoir si une version est attestée.** Deux prérequis, à faire
 avant de fixer une date :
-- confirmer sur un appareil réel, avec un build 1.0.6 : une requête Cloud Functions
+- confirmer sur un appareil réel, avec un build 1.0.26 : une requête Cloud Functions
   affiche `[AppCheck] … VERIFIED` (et non `UNVERIFIED`) ;
-- ajouter le drapeau au journal de connexion : `deviceInfo.appCheck` =
-  `Constants.expoConfig.extra.appCheck.nativeConfigured`, dans
-  `updateLastLogin`. Petite modification de l'app, pour la prochaine version (1.0.10).
-  Sans elle, le critère « part des utilisateurs sur une version attestée » reste une
-  estimation.
+- suivre les échecs d'attestation par version dans Sentry (`service: appCheck`,
+  depuis la 1.0.26). Ce suivi remplace le drapeau `deviceInfo.appCheck` d'abord prévu.
 
 ## Critères d'activation
 
@@ -114,11 +114,10 @@ avant de fixer une date :
 
 - C1. La première version attestée (V_a) est confirmée sur un appareil (prérequis
   ci-dessus).
-- C2. `minVersion` dans `app_config/latest_version` est au moins égal à V_a. Les
-  versions non attestées sont alors bloquées par l'écran de mise à jour forcée
-  (`services/appUpdateService.ts`). Alternative si la mise à jour forcée est jugée
-  trop brutale : au moins 95 % des utilisateurs actifs des 30 derniers jours sur une
-  version ≥ V_a (sources 1 ou 2).
+- C2. Au moins 95 % des utilisateurs actifs des 30 derniers jours sont sur une
+  version ≥ V_a (sources 1 ou 2). Relever `minVersion` ne suffit pas : c'est un
+  bandeau commun aux deux plateformes, qui ne bloque pas les anciennes versions
+  (`services/appUpdateService.ts`).
 - C3. `./scripts/auditAppCheck.sh 7d` affiche `STATUS: READY`.
 - C4. Aucune hausse d'erreurs `unauthenticated` dans Sentry sur les 48 heures
   précédentes.
@@ -134,7 +133,7 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 
 ## Étapes (fonctions appelables)
 
-1. Activer le prérequis (confirmation V_a, drapeau `deviceInfo.appCheck`) et attendre
+1. Traiter les prérequis de la mise à jour du 2026-11-22, confirmer V_a et attendre
    que les critères C1 à C4 soient réunis. Date de revue prévue : 2026-12-07.
 2. Audit : `./scripts/auditAppCheck.sh 7d` doit afficher `READY`.
 3. Bascule partielle sur 2 à 3 fonctions à fort impact (coût ou abus) :
@@ -188,7 +187,7 @@ mise à jour forcée ou d'un correctif de build, pas d'un retour arrière serveu
 ## Actions
 
 - [ ] Yoss : valider le principe et la revue du 2026-12-07.
-- [ ] Vérifier sur un appareil 1.0.6 que les appels sont `VERIFIED` (V_a).
-- [ ] Ajouter `deviceInfo.appCheck` à `updateLastLogin` dans la prochaine version.
+- [ ] Vérifier sur un iPhone en 1.0.26 que les appels sont `VERIFIED` (V_a).
+- [x] Suivi des échecs d'attestation par version dans Sentry (1.0.26), à la place de `deviceInfo.appCheck`.
 - [ ] Corriger `docs/FIREBASE_MONITORING.md` §8.
 - [ ] Ajouter une requête d'agrégation des versions (Firestore) à la procédure.
