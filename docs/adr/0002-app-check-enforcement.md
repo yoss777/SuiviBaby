@@ -184,8 +184,9 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    TestFlight ou Google Play), hors appareils de test après un envoi Play. Une panne Apple ou Google relève de cette
    procédure : sans enforcement, les apps rappellent sans jeton, sans mise à jour ;
 2. annuler tout run `deploy-functions.yml` en cours, sinon il réimposerait App Check ;
-3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer
-   `APPCHECK_ENFORCE=true` de `functions/.env.samaye-53723`, puis, à la racine,
+3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer de
+   `functions/.env.samaye-53723` la variable posée (`APPCHECK_ENFORCE=true` ou
+   `APPCHECK_ENFORCE_FUNCTIONS=…`, celle de la répétition), puis, à la racine,
    `firebase deploy --only functions --project samaye-53723` ;
 4. committer aussitôt ce retrait sur `main`, sinon le prochain déploiement réimpose App Check.
 
