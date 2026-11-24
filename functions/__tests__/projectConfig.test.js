@@ -33,11 +33,15 @@ describe("projectConfig, production", () => {
     expect(cfg().functionsBaseUrl()).toBe("https://europe-west1-samaye-53723.cloudfunctions.net");
   });
 
-  it(".env.samaye-53723 holds exactly the production buckets", () => {
-    expect(readEnvFile("samaye-53723")).toEqual({
+  it(".env.samaye-53723 holds the production buckets, plus only the App Check switches", () => {
+    // Les interrupteurs App Check (ADR 0002) sont les seules autres clés admises.
+    const { APPCHECK_ENFORCE, APPCHECK_ENFORCE_FUNCTIONS, ...buckets } = readEnvFile("samaye-53723");
+    expect(buckets).toEqual({
       PHOTOS_BUCKET: "samaye-53723-photos-eu",
       LEGACY_PHOTOS_BUCKET: "samaye-53723.firebasestorage.app",
     });
+    if (APPCHECK_ENFORCE !== undefined) expect(APPCHECK_ENFORCE).toBe("true");
+    if (APPCHECK_ENFORCE_FUNCTIONS !== undefined) expect(APPCHECK_ENFORCE_FUNCTIONS).toMatch(/^[A-Za-z]+(,[A-Za-z]+)*$/);
   });
 
   it(".env.samaye-staging targets the staging project only", () => {
