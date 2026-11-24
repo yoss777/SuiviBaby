@@ -21,9 +21,13 @@ name: Maestro nightly
 # code. It fails when the latest finished build is older than 14 days and prints
 # the commit it was built from.
 
+# Nightly schedule suspended on 2026-11-24 (ADR 0002): once App Check is
+# enforced, the emulator (no Play Store, no Play Integrity) is refused by the
+# callable functions. Manual dispatch stays available. Restore the schedule
+# when staging exists (S12.1) or the job uses an App Check debug token there.
 on:
-  schedule:
-    - cron: "30 2 * * *" # 02:30 UTC every night
+  # schedule:
+  #   - cron: "30 2 * * *" # 02:30 UTC every night
   workflow_dispatch:
     inputs:
       build_profile:

@@ -45,9 +45,14 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
   Play en tests fermés), confirmé par Yoss le 22/11. Si elle sort, ce sera avec une version
   attestée ;
 - [x] appel `VERIFIED` côté serveur sur iPhone (TestFlight) et Samsung (Alpha) en 1.0.27 ;
-- [ ] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`) ni hausse de
+- [x] 48 heures sans cause nouvelle ou répétée dans Sentry (`service: appCheck`) ni hausse de
   `unauthenticated` (C4), du 2026-11-22 12:45 UTC au 2026-11-24 12:45 UTC. Sont classés à part
-  les appareils de test dans les 4 heures suivant un envoi Play et le Maestro nocturne ;
+  les appareils de test dans les 4 heures suivant un envoi Play et le Maestro nocturne.
+  Bilan du 2026-11-24 : 105 appels sur 105 `VALID` (99 Android, 6 iOS), aucun `MISSING` ni
+  `INVALID`, aucune réponse HTTP ≥ 400 ; échanges App Attest (11) et Play Integrity (28) tous
+  acceptés ; aucun appel aux fonctions exclues. Sentry : 0 `unauthenticated` (0 aussi les
+  48 heures précédentes), 2 `appCheck/token-error` le 22/11 à 20:06 UTC sur un Samsung sans
+  réseau (« connection abort », hôte introuvable), pas un refus d'attestation ;
 - [ ] suivi des refus en place : `callable-request-verification`, `verifications.app` à
   `MISSING` ou `INVALID`, **niveau DEBUG inclus**, croisé avec l'agent HTTP, hors fonctions
   exclues. `auditAppCheck.sh` ne voit plus les refus après la bascule ;
@@ -56,7 +61,9 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
 - [x] `resolveReport` et `setAdminClaim` exclues : actions d'administration sans écran dans
   l'app, avec compte administrateur vérifié et débit limité. `scripts/resolveReport.mjs`
   est à vérifier : son jeton n'est sans doute pas un jeton d'utilisateur Firebase ;
-- [ ] Maestro nocturne suspendu ou adapté : son émulateur sans Play Store sera refusé ;
+- [x] Maestro nocturne suspendu le 2026-11-24 (déclenchement manuel conservé) : son émulateur
+  sans Play Store sera refusé. Il échouait déjà au téléchargement du build EAS et n'a appelé
+  aucune fonction pendant les 48 heures ;
 - [ ] avant toute soumission à un store, vérifier que l'examen reste possible : les appareils
   non attestés peuvent se connecter mais leurs appels de fonctions sont refusés ;
 - [ ] jetons de débogage révoqués dans la console Firebase, sauf un jeton personnel de
@@ -177,8 +184,9 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    TestFlight ou Google Play), hors appareils de test après un envoi Play. Une panne Apple ou Google relève de cette
    procédure : sans enforcement, les apps rappellent sans jeton, sans mise à jour ;
 2. annuler tout run `deploy-functions.yml` en cours, sinon il réimposerait App Check ;
-3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer
-   `APPCHECK_ENFORCE=true` de `functions/.env.samaye-53723`, puis, à la racine,
+3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer de
+   `functions/.env.samaye-53723` la variable posée (`APPCHECK_ENFORCE=true` ou
+   `APPCHECK_ENFORCE_FUNCTIONS=…`, celle de la répétition), puis, à la racine,
    `firebase deploy --only functions --project samaye-53723` ;
 4. committer aussitôt ce retrait sur `main`, sinon le prochain déploiement réimpose App Check.
 
