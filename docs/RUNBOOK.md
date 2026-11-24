@@ -326,6 +326,7 @@ ou une session `gcloud`.
 | Chaque semaine, jusqu'à 1.9 | `scripts/migratePhotosToEu.mjs` | `node scripts/migratePhotosToEu.mjs` | Attendu : « 0 à copier ». Sinon relancer avec `--apply` (SUIVI 1.5). |
 | Une fois (à vérifier) | `scripts/backfillRetention.js` | `node scripts/backfillRetention.js` puis `--apply` | Renseigne `expireAt` sur les historiques anciens (TTL). Mode simulation par défaut. Statut d'exécution non noté : à vérifier avant de relancer. |
 | Pendant la transition App Check | `scripts/auditAppCheck.sh` | `./scripts/auditAppCheck.sh 7d` | Indicatif : suivre la check-list de l'ADR 0002, ce script ne voit pas les refus après activation. |
+| Après l'activation d'App Check : 2 h, 48 h, J+7 | `scripts/appCheckRefusals.mjs` | `node scripts/appCheckRefusals.mjs 2h` | Lecture seule. Sortie 1 : appels non vérifiés, donc refusés ; voir le retour arrière de l'ADR 0002. |
 | Avant tout nouvel envoi de fiches | `scripts/compareTipsWithSeed.mjs` | `node scripts/compareTipsWithSeed.mjs` | Lecture seule. Le re-semis (`scripts/seedViaFirestore.mjs`) seulement sur accord. |
 | Lundi | (pas de script) | relire `docs/SUIVI_ACTIONS.md` | Le document demande une relecture chaque lundi. |
 

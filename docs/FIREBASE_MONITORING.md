@@ -171,6 +171,14 @@ La procédure d'activation, de surveillance et de retour arrière est celle de
 `docs/adr/0002-app-check-enforcement.md`. L'ancienne commande
 `functions:config:unset` est sans effet sur les fonctions v2.
 
+### Suivi des refus
+
+`node scripts/appCheckRefusals.mjs 24h` (fenêtres `2h` à `30d`, gcloud via la variable
+`GCLOUD` ou le PATH) compte par fonction et par plateforme les appels `VALID`, `MISSING` et
+`INVALID`, et les réponses 401 refusées par App Check. Il reste valable après l'activation,
+contrairement à `scripts/auditAppCheck.sh`. Sortie 0 : tout est vérifié ; 1 : au moins un
+appel non vérifié ou un 401 inexpliqué ; 2 : lecture impossible, vide ou tronquée.
+
 ## 9. Sauvegardes, alertes et Sentry (audit A6 / A7, sprint 2)
 
 À lancer une fois, avec un compte propriétaire du projet

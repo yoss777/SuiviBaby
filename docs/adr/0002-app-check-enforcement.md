@@ -53,9 +53,11 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
   acceptés ; aucun appel aux fonctions exclues. Sentry : 0 `unauthenticated` (0 aussi les
   48 heures précédentes), 2 `appCheck/token-error` le 22/11 à 20:06 UTC sur un Samsung sans
   réseau (« connection abort », hôte introuvable), pas un refus d'attestation ;
-- [ ] suivi des refus en place : `callable-request-verification`, `verifications.app` à
-  `MISSING` ou `INVALID`, **niveau DEBUG inclus**, croisé avec l'agent HTTP, hors fonctions
-  exclues. `auditAppCheck.sh` ne voit plus les refus après la bascule ;
+- [x] suivi des refus en place : `node scripts/appCheckRefusals.mjs 2h` (ou `24h`, `7d`) lit
+  `callable-request-verification`, `verifications.app` à `MISSING` ou `INVALID`, **niveau
+  DEBUG inclus**, le croise par trace avec la requête HTTP (code 401, agent HTTP, donc
+  plateforme), hors fonctions exclues. Sortie 1 dès qu'un appel n'est pas vérifié, 2 si la
+  lecture est vide ou tronquée. `auditAppCheck.sh` ne voit plus les refus après la bascule ;
 - [x] `revokeDeviceToken` exclue : sans preuve, un téléphone déconnecté hors ligne garderait
   les rappels de l'ancien compte. Elle reste protégée par le jeton Expo et ses limites ;
 - [x] `resolveReport` et `setAdminClaim` exclues : actions d'administration sans écran dans
@@ -68,9 +70,12 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
   non attestés peuvent se connecter mais leurs appels de fonctions sont refusés ;
 - [ ] jetons de débogage révoqués dans la console Firebase, sauf un jeton personnel de
   développement tant que staging n'existe pas ;
-- [ ] répétition en production sur `parseVoiceCommand` seule (`APPCHECK_ENFORCE_FUNCTIONS`),
+- [x] répétition en production sur `parseVoiceCommand` seule (`APPCHECK_ENFORCE_FUNCTIONS`),
   car staging n'existe pas : appel réel sur iPhone et Samsung, puis retour arrière chronométré.
-  Cette fonction retombe sur l'analyse par règles en cas de refus ;
+  Cette fonction retombe sur l'analyse par règles en cas de refus. Faite le 2026-11-24
+  (PR #137, déployée à 20:50 UTC) : iPhone à 21:17 et Samsung à 21:18, réponse 200 avec
+  `verifications.app` à `VALID` et analyse par l'IA. Retour arrière local en 2 min 58 s
+  (fonction libérée 1 min 57 s après le début), retrait committé sur `main` (2d8237b) ;
 - [ ] aucune CI en cours, PR dédiée ne contenant que l'activation.
 
 ## Contexte
@@ -172,10 +177,11 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    PR dédiée (fichier versionné : la CI redéploie toutes les fonctions à chaque push sur
    `main`).
 3. Surveillance rapprochée 2 heures, puis 48 heures : Sentry (`unauthenticated`), refus 401
-   et `callable-request-verification` (`VALID`, `INVALID`, `MISSING`, niveau DEBUG inclus).
+   et `callable-request-verification` (`VALID`, `INVALID`, `MISSING`, niveau DEBUG inclus),
+   avec `node scripts/appCheckRefusals.mjs 2h`, puis `24h`.
    Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
-4. Bilan à J+7 : aucun refus 401 inexpliqué sur les clients récents, sans s'appuyer sur
-   `auditAppCheck.sh`.
+4. Bilan à J+7 : aucun refus 401 inexpliqué sur les clients récents
+   (`node scripts/appCheckRefusals.mjs 7d`), sans s'appuyer sur `auditAppCheck.sh`.
 
 ## Retour arrière
 
@@ -190,7 +196,9 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    `firebase deploy --only functions --project samaye-53723` ;
 4. committer aussitôt ce retrait sur `main`, sinon le prochain déploiement réimpose App Check.
 
-La durée sera mesurée lors de la répétition. Ne pas utiliser
+Durée mesurée lors de la répétition du 2026-11-24 : 2 min 58 s du début de la procédure à la
+fin du déploiement, fonction libérée au bout de 1 min 57 s (dépendances déjà installées dans
+une copie propre : prévoir une à deux minutes de plus sinon). Ne pas utiliser
 `firebase functions:config:unset appcheck.enforce` : c'est la configuration v1, sans effet
 sur les fonctions v2.
 
