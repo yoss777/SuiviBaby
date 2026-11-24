@@ -14,14 +14,30 @@
 const EXEMPT_FUNCTIONS = new Set(["revokedevicetoken", "resolvereport", "setadminclaim"]);
 
 const WINDOW = /^(\d+)([hd])$/;
+// Les journaux arrivent avec quelques secondes à quelques minutes de retard : la
+// fenêtre s'arrête 2 minutes avant maintenant.
+const INGESTION_MARGIN_MS = 2 * 60e3;
+// La ligne de vérification est écrite au début de l'appel, la requête HTTP à la
+// fin : les vérifications sont lues 2 minutes avant le début de la fenêtre pour
+// rapprocher un appel commencé juste avant.
+const VERIFICATION_LEAD_MS = 2 * 60e3;
 
-/** "24h" ou "7d" → { start, end } en ISO. Lève une erreur si le format est invalide. */
+/**
+ * "24h" ou "7d" → { start, end, verificationStart } en ISO. Lève une erreur si
+ * le format est invalide.
+ */
 function windowToRange(window, now = new Date()) {
   const m = WINDOW.exec(String(window || ""));
   if (!m) throw new Error(`Fenêtre invalide : "${window}" (attendu par exemple 24h ou 7d)`);
   const hours = Number(m[1]) * (m[2] === "d" ? 24 : 1);
   if (hours <= 0 || hours > 30 * 24) throw new Error("Fenêtre hors bornes (1h à 30d)");
-  return { start: new Date(now.getTime() - hours * 3600e3).toISOString(), end: now.toISOString() };
+  const end = now.getTime() - INGESTION_MARGIN_MS;
+  const start = end - hours * 3600e3;
+  return {
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
+    verificationStart: new Date(start - VERIFICATION_LEAD_MS).toISOString(),
+  };
 }
 
 /** Agent HTTP → ios | android | autre. */
@@ -40,11 +56,20 @@ function functionOf(entry) {
 }
 
 /**
+ * `responses401` : toutes les réponses 401 de la fenêtre, tous services confondus
+ * (par défaut, celles de `requests`). `start` : début de la fenêtre ; les
+ * vérifications plus anciennes (lues en avance) ne servent qu'au rapprochement.
+ *
  * Rapproche vérifications et requêtes par trace et compte, par fonction et
  * plateforme, les appels VALID / MISSING / INVALID et les 401.
  * Les fonctions exclues sont comptées à part, hors verdict.
  */
-function summarize(verifications, requests) {
+function summarize(
+  verifications,
+  requests,
+  responses401 = requests.filter((r) => r.httpRequest && r.httpRequest.status === 401),
+  { start } = {},
+) {
   const byTrace = new Map();
   for (const r of requests) if (r.trace) byTrace.set(r.trace, r);
 
@@ -59,6 +84,8 @@ function summarize(verifications, requests) {
     const auth = (v.jsonPayload && v.jsonPayload.verifications && v.jsonPayload.verifications.auth) || "?";
     const req = v.trace ? byTrace.get(v.trace) : undefined;
     if (v.trace) verifiedTraces.add(v.trace);
+    // Vérification lue en avance : gardée seulement si sa requête tombe dans la fenêtre.
+    if (start && String(v.timestamp) < start && !(req && String(req.timestamp) >= start)) continue;
     const http = req && req.httpRequest ? req.httpRequest : {};
     const status = http.status || null;
     const platform = platformOf(http.userAgent);
@@ -84,13 +111,12 @@ function summarize(verifications, requests) {
     }
   }
 
-  // 401 sur une fonction appelable sans ligne de vérification : refus en amont
-  // du SDK (rare), à examiner.
-  const callableServices = new Set(verifications.map(functionOf));
-  const orphan401 = requests.filter((r) => {
-    const status = r.httpRequest && r.httpRequest.status;
-    return status === 401 && !verifiedTraces.has(r.trace) && callableServices.has(functionOf(r)) && !EXEMPT_FUNCTIONS.has(functionOf(r));
-  }).length;
+  // 401 de n'importe quel service sans ligne de vérification rapprochée : refus
+  // en amont du SDK, fonction sans aucun appel vérifié, trace absente… à examiner.
+  // Les fonctions exclues restent hors verdict.
+  const orphan401 = responses401.filter(
+    (r) => !(r.trace && verifiedTraces.has(r.trace)) && !EXEMPT_FUNCTIONS.has(functionOf(r)),
+  ).length;
 
   notVerified.sort((a, b) => String(b.t).localeCompare(String(a.t)));
   const table = [...rows.values()].sort((a, b) => a.fn.localeCompare(b.fn) || a.platform.localeCompare(b.platform));
@@ -98,7 +124,7 @@ function summarize(verifications, requests) {
   return { table, notVerified, exempt, orphan401, total };
 }
 
-/** Code de sortie : 0 tout vérifié, 1 au moins un appel non vérifié ou un 401 orphelin. */
+/** Code de sortie : 0 aucun appel non vérifié observé, 1 au moins un appel non vérifié ou un 401 orphelin. */
 function exitCodeOf(summary) {
   return summary.notVerified.length > 0 || summary.orphan401 > 0 ? 1 : 0;
 }

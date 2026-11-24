@@ -160,7 +160,7 @@
 Les Cloud Functions wrappées par `withAppCheck()` participent à App Check.
 L'enforcement est piloté par deux variables d'env : `APPCHECK_ENFORCE_FUNCTIONS`
 (noms d'export séparés par des virgules : seules ces fonctions imposent App
-Check) et `APPCHECK_ENFORCE=true` (toutes, sauf les trois exceptions de l'ADR). Sans
+Check, hors les trois exceptions) et `APPCHECK_ENFORCE=true` (toutes, sauf les trois exceptions de l'ADR). Sans
 variable (défaut), les requêtes sans token App Check sont acceptées mais
 loguées en `UNVERIFIED`. Une fonction imposée rejette toute requête sans
 token valide. Voir ADR 0002.
@@ -168,16 +168,19 @@ token valide. Voir ADR 0002.
 ### Procédure d'activation
 
 La procédure d'activation, de surveillance et de retour arrière est celle de
-`docs/adr/0002-app-check-enforcement.md`. L'ancienne commande
-`functions:config:unset` est sans effet sur les fonctions v2.
+`docs/adr/0002-app-check-enforcement.md`. Ne pas utiliser
+`firebase functions:config:unset appcheck.enforce` (configuration v1, sans effet sur les
+fonctions v2).
 
 ### Suivi des refus
 
-`node scripts/appCheckRefusals.mjs 24h` (fenêtres `2h` à `30d`, gcloud via la variable
+`node scripts/appCheckRefusals.mjs 24h` (fenêtres `1h` à `30d`, défaut `24h`, gcloud via la variable
 `GCLOUD` ou le PATH) compte par fonction et par plateforme les appels `VALID`, `MISSING` et
 `INVALID`, et les réponses 401 refusées par App Check. Il reste valable après l'activation,
-contrairement à `scripts/auditAppCheck.sh`. Sortie 0 : tout est vérifié ; 1 : au moins un
-appel non vérifié ou un 401 inexpliqué ; 2 : lecture impossible, vide ou tronquée.
+contrairement à `scripts/auditAppCheck.sh`. Sortie 0 : aucun appel non vérifié observé ;
+1 : au moins un appel non vérifié ou un 401 inexpliqué ; 2 : fenêtre invalide, lecture
+impossible, vide ou tronquée. Limite : un appel rejeté avant la vérification (requête mal
+formée, pré-vol CORS) n'écrit aucune ligne et n'est pas vu.
 
 ## 9. Sauvegardes, alertes et Sentry (audit A6 / A7, sprint 2)
 

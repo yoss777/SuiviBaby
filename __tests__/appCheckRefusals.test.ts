@@ -1,6 +1,10 @@
 // Suivi des refus App Check (ADR 0002) : fonctions pures de scripts/appCheckRefusals.mjs.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { windowToRange, platformOf, summarize, exitCodeOf } = require("../scripts/lib/appCheckRefusals.js");
+const { EXEMPT_FUNCTIONS, windowToRange, platformOf, summarize, exitCodeOf } = require("../scripts/lib/appCheckRefusals.js");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fs = require("node:fs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const path = require("node:path");
 
 const verif = (fn: string, app: string, trace: string, auth = "VALID") => ({
   timestamp: `2026-11-24T21:00:${trace.padStart(2, "0")}Z`,
@@ -9,8 +13,9 @@ const verif = (fn: string, app: string, trace: string, auth = "VALID") => ({
   resource: { labels: { service_name: fn } },
   jsonPayload: { verifications: { app, auth } },
 });
-const req = (fn: string, status: number, ua: string, trace: string) => ({
+const req = (fn: string, status: number, ua: string, trace?: string, timestamp = "2026-11-24T21:00:30Z") => ({
   trace,
+  timestamp,
   resource: { labels: { service_name: fn } },
   httpRequest: { status, userAgent: ua },
 });
@@ -19,10 +24,13 @@ const ANDROID = "okhttp/4.12.0";
 
 describe("windowToRange", () => {
   const now = new Date("2026-11-24T12:00:00Z");
-  it("reads hours and days", () => {
-    expect(windowToRange("2h", now).start).toBe("2026-11-24T10:00:00.000Z");
-    expect(windowToRange("7d", now).start).toBe("2026-11-17T12:00:00.000Z");
-    expect(windowToRange("7d", now).end).toBe(now.toISOString());
+  it("reads hours and days, ending 2 minutes ago, verifications read 2 minutes earlier", () => {
+    expect(windowToRange("2h", now)).toEqual({
+      start: "2026-11-24T09:58:00.000Z",
+      end: "2026-11-24T11:58:00.000Z",
+      verificationStart: "2026-11-24T09:56:00.000Z",
+    });
+    expect(windowToRange("7d", now).start).toBe("2026-11-17T11:58:00.000Z");
   });
   it("rejects bad or out-of-range windows", () => {
     expect(() => windowToRange("2x", now)).toThrow(/invalide/);
@@ -93,6 +101,39 @@ describe("summarize", () => {
     const s = summarize([verif("parseVoiceCommand", "VALID", "1")], [req("parsevoicecommand", 200, IOS, "1"), req("parsevoicecommand", 401, IOS, "9")]);
     expect(s.orphan401).toBe(1);
     expect(exitCodeOf(s)).toBe(1);
+  });
+
+  it("flags any 401 without a matched verification, whatever the service, except exempt ones", () => {
+    const all401 = [
+      req("validateandcreateevent", 401, ANDROID, "x1"), // fonction sans aucun appel vérifié
+      req("parsevoicecommand", 401, IOS, undefined), // trace absente
+      req("resolvereport", 401, IOS, "x3"), // exception : hors verdict
+    ];
+    const s = summarize([verif("parseVoiceCommand", "VALID", "1")], [req("parsevoicecommand", 200, IOS, "1")], all401);
+    expect(s.orphan401).toBe(2);
+    expect(exitCodeOf(s)).toBe(1);
+  });
+
+  it("uses verifications read before the window only to match a request inside it", () => {
+    const early = { ...verif("parseVoiceCommand", "MISSING", "1"), timestamp: "2026-11-24T20:59:00Z" };
+    const earlyOutside = { ...verif("parseVoiceCommand", "MISSING", "2"), timestamp: "2026-11-24T20:58:00Z" };
+    const s = summarize(
+      [early, earlyOutside],
+      [req("parsevoicecommand", 401, IOS, "1", "2026-11-24T21:00:05Z"), req("parsevoicecommand", 401, IOS, "2", "2026-11-24T20:58:10Z")],
+      [req("parsevoicecommand", 401, IOS, "1", "2026-11-24T21:00:05Z")],
+      { start: "2026-11-24T21:00:00Z" },
+    );
+    expect(s.total).toBe(1);
+    expect(s.table[0]).toMatchObject({ MISSING: 1, refused401: 1 });
+    expect(s.orphan401).toBe(0);
+  });
+
+  it("matches the exemptions declared in functions/src/shared/appCheck.js", () => {
+    const src = fs.readFileSync(path.join(__dirname, "..", "functions", "src", "shared", "appCheck.js"), "utf8");
+    const declared = /APP_CHECK_EXEMPT_FUNCTIONS = new Set\(\[([^\]]+)\]/.exec(src);
+    expect(declared).not.toBeNull();
+    const names = [...declared![1].matchAll(/"([^"]+)"/g)].map((m) => m[1].toLowerCase()).sort();
+    expect(names).toEqual([...EXEMPT_FUNCTIONS].sort());
   });
 
   it("marks the platform unknown when the request line is missing", () => {

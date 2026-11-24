@@ -178,7 +178,7 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
    `main`).
 3. Surveillance rapprochée 2 heures, puis 48 heures : Sentry (`unauthenticated`), refus 401
    et `callable-request-verification` (`VALID`, `INVALID`, `MISSING`, niveau DEBUG inclus),
-   avec `node scripts/appCheckRefusals.mjs 2h`, puis `24h`.
+   avec `node scripts/appCheckRefusals.mjs 2h`, puis `48h`.
    Un appel refusé n'atteint pas la fonction et n'écrit donc aucune ligne `UNVERIFIED`.
 4. Bilan à J+7 : aucun refus 401 inexpliqué sur les clients récents
    (`node scripts/appCheckRefusals.mjs 7d`), sans s'appuyer sur `auditAppCheck.sh`.
@@ -187,8 +187,9 @@ Les Cloud Functions utilisent le SDK Admin, qui ne passe pas par App Check : les
 
 **Fonctions appelables** (à répéter avant la bascule) :
 1. seuil : échec d'un appel réel sur un appareil témoin (iPhone ou Samsung installés depuis
-   TestFlight ou Google Play), hors appareils de test après un envoi Play. Une panne Apple ou Google relève de cette
-   procédure : sans enforcement, les apps rappellent sans jeton, sans mise à jour ;
+   TestFlight ou Google Play), hors appareils de test après un envoi Play. Une panne d'Apple ou de Google (attestation
+   indisponible) justifie aussi ce retour arrière : sans enforcement, les apps peuvent appeler
+   les fonctions sans jeton, sans attendre de mise à jour ;
 2. annuler tout run `deploy-functions.yml` en cours, sinon il réimposerait App Check ;
 3. depuis une copie propre de `main`, lancer `cd functions && npm ci`, retirer de
    `functions/.env.samaye-53723` la variable posée (`APPCHECK_ENFORCE=true` ou
@@ -203,7 +204,7 @@ une copie propre : prévoir une à deux minutes de plus sinon). Ne pas utiliser
 sur les fonctions v2.
 
 **Firestore / Storage** : repasser en non appliqué dans la console Firebase. L'effet
-est attendu en quelques minutes (à vérifier lors d'un essai hors production).
+est attendu en quelques minutes (non testé : pas de staging).
 
 **Client** : une attestation en échec sur une version précise se corrige par un build ; si
 elle bloque des utilisateurs, appliquer d'abord le retour arrière serveur.

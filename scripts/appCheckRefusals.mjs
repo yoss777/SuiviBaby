@@ -14,32 +14,48 @@
 // bascule : un appel refusé écrit encore sa ligne de vérification (MISSING ou
 // INVALID) avant la réponse 401.
 //
-// Sortie : 0 tous les appels vérifiés ; 1 au moins un appel non vérifié (refusé
-// si App Check est imposé) ou un 401 inexpliqué ; 2 lecture impossible, vide ou
-// tronquée.
+// Sortie : 0 aucun appel non vérifié observé ; 1 au moins un appel non vérifié
+// (refusé si App Check est imposé) ou un 401 inexpliqué ; 2 fenêtre invalide,
+// lecture impossible, vide ou tronquée.
+//
+// Limites : un appel rejeté avant la vérification (requête mal formée, 400,
+// pré-vol CORS) n'écrit aucune ligne de vérification et n'est pas vu ici.
+// La fenêtre s'arrête 2 minutes avant maintenant (retard d'ingestion).
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { windowToRange, summarize, exitCodeOf } = require("./lib/appCheckRefusals.js");
+const { windowToRange, functionOf, summarize, exitCodeOf } = require("./lib/appCheckRefusals.js");
 
 const PROJECT = process.env.SUIVIBABY_PROJECT_ID || "samaye-53723";
 const GCLOUD = process.env.GCLOUD || "gcloud";
 const LIMIT = 20000;
 
-function read(filter) {
-  try {
-    const out = execFileSync(
-      GCLOUD,
-      ["logging", "read", filter, `--project=${PROJECT}`, `--limit=${LIMIT}`, "--format=json"],
-      { encoding: "utf8", maxBuffer: 512 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    return JSON.parse(out || "[]");
-  } catch (e) {
-    console.error(`STATUS: UNKNOWN — lecture Cloud Logging impossible (${String(e.message).split("\n")[0]})`);
-    process.exit(2);
+function unknown(message) {
+  console.log(`STATUS: UNKNOWN — ${message}`);
+  process.exit(2);
+}
+
+/** Lit Cloud Logging ; `truncated` vaut true si la limite est atteinte. */
+function read(label, filter) {
+  const res = spawnSync(
+    GCLOUD,
+    ["logging", "read", filter, `--project=${PROJECT}`, `--limit=${LIMIT}`, "--format=json"],
+    { encoding: "utf8", maxBuffer: 512 * 1024 * 1024 },
+  );
+  const stderr = String(res.stderr || "").trim();
+  if (res.error || res.status !== 0) {
+    unknown(`lecture ${label} impossible (${String((res.error && res.error.message) || stderr).split("\n")[0]})`);
   }
+  if (stderr) console.error(`Avertissement gcloud (${label}) : ${stderr.split("\n")[0]}`);
+  let entries;
+  try {
+    entries = JSON.parse(res.stdout || "[]");
+  } catch {
+    unknown(`réponse ${label} illisible`);
+  }
+  return { entries, truncated: entries.length >= LIMIT };
 }
 
 let range;
@@ -50,20 +66,26 @@ try {
   process.exit(2);
 }
 const time = `timestamp>="${range.start}" AND timestamp<"${range.end}"`;
+const requestsLog = `logName="projects/${PROJECT}/logs/run.googleapis.com%2Frequests"`;
 
-const verifications = read(`${time} AND labels."firebase-log-type"="callable-request-verification"`);
-const requests = read(`${time} AND logName="projects/${PROJECT}/logs/run.googleapis.com%2Frequests" AND httpRequest.requestMethod="POST"`);
+const v = read("des vérifications", `timestamp>="${range.verificationStart}" AND timestamp<"${range.end}" AND labels."firebase-log-type"="callable-request-verification"`);
+if (v.truncated) unknown(`vérifications tronquées à ${LIMIT} lignes, prendre une fenêtre plus courte.`);
+if (v.entries.length === 0) unknown("aucun appel de fonction appelable dans la fenêtre.");
 
-if (verifications.length >= LIMIT || requests.length >= LIMIT) {
-  console.log(`STATUS: UNKNOWN — lecture tronquée à ${LIMIT} lignes, prendre une fenêtre plus courte.`);
-  process.exit(2);
-}
-if (verifications.length === 0) {
-  console.log("STATUS: UNKNOWN — aucun appel de fonction appelable dans la fenêtre.");
-  process.exit(2);
-}
+// Toutes les réponses 401 du projet, quel que soit le service.
+const r401 = read("des réponses 401", `${time} AND ${requestsLog} AND httpRequest.status=401`);
+if (r401.truncated) unknown(`réponses 401 tronquées à ${LIMIT} lignes : à examiner tout de suite.`);
 
-const s = summarize(verifications, requests);
+// Requêtes des seules fonctions appelables vues : code et plateforme de chaque appel.
+const services = [...new Set(v.entries.map(functionOf))].filter((n) => /^[a-z0-9-]+$/.test(n));
+const req = read(
+  "des requêtes",
+  `timestamp>="${range.verificationStart}" AND timestamp<"${range.end}" AND ${requestsLog} AND resource.labels.service_name=(${services.map((n) => `"${n}"`).join(" OR ")})`,
+);
+if (req.entries.length === 0) unknown("aucune requête HTTP rapprochable des vérifications.");
+if (req.truncated) console.error("Avertissement : requêtes tronquées, plateformes et codes HTTP incomplets pour les appels les plus anciens.");
+
+const s = summarize(v.entries, req.entries, r401.entries, { start: range.start });
 console.log(`Projet ${PROJECT}, du ${range.start} au ${range.end}`);
 console.log(`${s.total} appels (hors exceptions), ${s.exempt.total} appels aux fonctions exclues dont ${s.exempt.notValid} non vérifiés (hors verdict)\n`);
 
@@ -79,10 +101,12 @@ if (s.notVerified.length) {
     console.log(`  ${n.t}  ${n.fn}  ${n.platform}  app=${n.app} auth=${n.auth} http=${n.status ?? "?"}  ${n.ua}`);
   }
 }
-if (s.orphan401) console.log(`\n${s.orphan401} réponse(s) 401 sans ligne de vérification : à examiner.`);
+if (s.orphan401) console.log(`\n${s.orphan401} réponse(s) 401 sans ligne de vérification rapprochée : à examiner.`);
+const other401 = s.table.reduce((n, r) => n + r.other401, 0);
+if (other401) console.log(`\n${other401} réponse(s) 401 avec preuve App Check valide : refus d'authentification, pas d'App Check (hors verdict).`);
 
 const code = exitCodeOf(s);
 console.log(code === 0
-  ? "\nSTATUS: OK — tous les appels portent une preuve App Check valide."
+  ? "\nSTATUS: OK — aucun appel sans preuve App Check valide observé (voir les limites en tête du script)."
   : "\nSTATUS: ALERTE — appels non vérifiés : refusés si App Check est imposé. Voir l'ADR 0002, § Retour arrière.");
 process.exit(code);
