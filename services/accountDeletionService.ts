@@ -297,7 +297,8 @@ export async function requestAccountDeletion(
         await registerRevocation({ authorizationCode: appleAuthorizationCode });
       }
     } catch (error) {
-      console.warn("[DELETION] registerAppleRevocation échoué:", error);
+      // Code d'erreur seulement : jamais l'objet brut (lié au code d'autorisation Apple).
+      console.warn("[DELETION] registerAppleRevocation échoué:", (error as { code?: unknown } | null)?.code ?? "unknown");
       // Exigence App Store : un échec ne doit jamais rester invisible.
       // Message réécrit : jamais de contenu lié au code d'autorisation Apple.
       const code = String((error as { code?: unknown } | null)?.code ?? "unknown");

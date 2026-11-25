@@ -21,6 +21,8 @@ export type VoiceInputStatus = "idle" | "recording" | "processing" | "confirming
 
 /** A press shorter than this starts a hands-free recording, stopped by a second tap. */
 export const TAP_TO_TOGGLE_MAX_MS = 350;
+// Au-delà, la vérification du quota vocal est abandonnée et l'enregistrement autorisé.
+const VOICE_QUOTA_CHECK_TIMEOUT_MS = 2500;
 /** Recordings are sent automatically after this duration (forgotten hands-free mic). */
 export const MAX_RECORDING_SECONDS = 60;
 
@@ -58,6 +60,8 @@ export function useVoiceInput() {
   const pressStartedAtRef = useRef(0);
   // Set when a press stopped a hands-free recording, so its release is ignored.
   const pressConsumedRef = useRef(false);
+  // Identifiant de la pression en cours : changé quand elle est annulée avant le démarrage.
+  const pressIdRef = useRef(0);
   // Latest voice API for listeners registered once (AppState, child change).
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
@@ -115,13 +119,22 @@ export function useVoiceInput() {
   const checkVoiceLimit = useCallback(async (): Promise<boolean> => {
     // Premium is capped too (50 a day): always ask the server.
     let quota: Awaited<ReturnType<typeof getVoiceUsageStatus>>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      quota = await getVoiceUsageStatus();
+      // Vérification courte : au-delà, on laisse enregistrer (le serveur tranche).
+      quota = await Promise.race([
+        getVoiceUsageStatus(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("voice quota check timeout")), VOICE_QUOTA_CHECK_TIMEOUT_MS);
+        }),
+      ]);
     } catch (error) {
       // Refus passager (App Check, réseau) : on laisse enregistrer, transcribeAudio
       // réserve le quota côté serveur et reste la source de vérité.
       captureServiceError(error, { service: "voiceInput", operation: "checkVoiceLimit" });
       return true;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     if (quota.isUnlimited) return true;
     if (!quota.allowed || (quota.remaining ?? 0) <= 0) {
@@ -141,6 +154,9 @@ export function useVoiceInput() {
   const onPressIn = async () => {
     pressStartedAtRef.current = Date.now();
     pressConsumedRef.current = false;
+    const pressId = ++pressIdRef.current;
+    // Doigt relâché pendant une vérification (quota, avis) : ne pas démarrer après coup.
+    const released = () => pressIdRef.current !== pressId;
     if (voice.isProcessing || voice.testMode) return;
 
     if (voice.isRecording && isHandsFree) {
@@ -161,6 +177,7 @@ export function useVoiceInput() {
       setVoiceNoticeVisible(true);
       return;
     }
+    if (released()) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     voice.startVoiceCommand();
   };
@@ -168,11 +185,18 @@ export function useVoiceInput() {
   /** @param releasedOutside the finger left the bar: cancel instead of sending. */
   const onPressOut = (releasedOutside = false) => {
     if (voice.isProcessing || voice.testMode || pressConsumedRef.current) return;
+    const heldMs = Date.now() - pressStartedAtRef.current;
     if (releasedOutside) {
+      pressIdRef.current += 1; // annule un démarrage encore en attente
       cancel();
       return;
     }
-    const heldMs = Date.now() - pressStartedAtRef.current;
+    // Appui long relâché avant que l'enregistrement ait démarré (vérification du
+    // quota encore en cours) : ne pas démarrer après coup, micro ouvert sans doigt.
+    if (!voice.isRecording && heldMs >= TAP_TO_TOGGLE_MAX_MS) {
+      pressIdRef.current += 1;
+      return;
+    }
     if (heldMs < TAP_TO_TOGGLE_MAX_MS) {
       // Short tap: keep listening until the next tap (accessibility, one-handed use).
       setIsHandsFree(true);

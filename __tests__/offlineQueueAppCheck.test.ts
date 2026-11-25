@@ -78,6 +78,38 @@ function servePendingRowOnce() {
 const sqlCalls = () => mockDb.runAsync.mock.calls.map(([sql]: [string]) => sql);
 
 describe("file hors ligne et App Check (1.0.28)", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("App Check sans jeton : un nouveau cycle est reprogrammé (backoff)", async () => {
+    jest.useFakeTimers();
+    mockWaitForAppCheckReady.mockResolvedValue(false);
+    const queue = loadQueue();
+    servePendingRowOnce();
+    const timeoutSpy = jest.spyOn(global, "setTimeout");
+
+    await queue.processQueue();
+
+    expect(timeoutSpy.mock.calls.some(([, delay]) => typeof delay === "number" && delay >= 2500)).toBe(true);
+    timeoutSpy.mockRestore();
+    queue.stopAutoSync();
+  });
+
+  it("au-delà de MAX_APP_CHECK_DEFERRALS reports, le refus reprend le chemin plafonné", async () => {
+    mockWaitForAppCheckReady.mockResolvedValue(false);
+    const queue = loadQueue();
+    for (let i = 0; i < queue.MAX_APP_CHECK_DEFERRALS; i += 1) {
+      servePendingRowOnce();
+      await queue.processQueue();
+    }
+    expect(sqlCalls().some((sql: string) => /transientFailures/.test(sql))).toBe(false);
+    servePendingRowOnce();
+    await queue.processQueue();
+    queue.stopAutoSync();
+    expect(sqlCalls().some((sql: string) => /transientFailures = transientFailures \+ 1/.test(sql))).toBe(true);
+  });
+
   it("App Check sans jeton : l'écriture repasse en attente sans consommer d'essai", async () => {
     mockWaitForAppCheckReady.mockResolvedValue(false);
     const queue = loadQueue();

@@ -358,7 +358,8 @@ export function ensureFirebaseAppCheck(app: FirebaseApp): Promise<void> {
       // Pas de mise en cache de l'échec : le prochain appel retentera.
       appCheckInitializationPromise = null;
       resolveFirstToken();
-      return reportAppCheckFailure(error, "initialize");
+      // Sans attendre le rapport (vérification réseau) : les appels n'ont pas à le payer.
+      void reportAppCheckFailure(error, "initialize");
     });
   }
 

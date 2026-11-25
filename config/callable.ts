@@ -23,13 +23,20 @@ export function httpsCallable<RequestData = unknown, ResponseData = unknown, Str
     options === undefined
       ? firebaseHttpsCallable<RequestData, ResponseData, StreamData>(functionsInstance, name)
       : firebaseHttpsCallable<RequestData, ResponseData, StreamData>(functionsInstance, name, options);
-  const wrapped = async (data?: RequestData | null) => {
-    await waitForAppCheckReady(functionsInstance.app);
-    return callable(data);
-  };
-  wrapped.stream = async (data?: RequestData | null, streamOptions?: HttpsCallableStreamOptions) => {
-    await waitForAppCheckReady(functionsInstance.app);
-    return callable.stream(data, streamOptions);
-  };
-  return wrapped as HttpsCallable<RequestData, ResponseData, StreamData>;
+  const ready = () =>
+    // Sans app Firebase (tests avec un Functions simulé) : rien à attendre.
+    functionsInstance?.app ? waitForAppCheckReady(functionsInstance.app) : Promise.resolve(false);
+  const wrapped = Object.assign(
+    async (data?: RequestData | null) => {
+      await ready();
+      return callable(data);
+    },
+    {
+      stream: async (data?: RequestData | null, streamOptions?: HttpsCallableStreamOptions) => {
+        await ready();
+        return callable.stream(data, streamOptions);
+      },
+    },
+  ) satisfies HttpsCallable<RequestData, ResponseData, StreamData>;
+  return wrapped;
 }
