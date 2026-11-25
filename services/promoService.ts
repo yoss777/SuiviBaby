@@ -14,7 +14,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 import type { Promotion, UserPromos } from "@/types/promo";

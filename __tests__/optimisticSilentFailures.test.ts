@@ -194,7 +194,18 @@ describe("M1 : supprimerEvenement idempotent", () => {
   it("les autres erreurs restent propagées", async () => {
     callable.mockRejectedValue(err("Refusé", "functions/permission-denied"));
     await expect(supprimerEvenement("c1", "e1")).rejects.toThrow("Refusé");
+    expect(enqueue).not.toHaveBeenCalledWith("delete", expect.anything(), expect.anything());
+  });
+
+  it("une coupure réseau en ligne met la suppression en file (1.0.28)", async () => {
     callable.mockRejectedValue(err("network request failed", "functions/unavailable"));
-    await expect(supprimerEvenement("c1", "e1")).rejects.toThrow("network");
+    await expect(supprimerEvenement("c1", "e1")).resolves.toBe("queued");
+    expect(enqueue).toHaveBeenCalledWith("delete", { childId: "c1", eventId: "e1" }, "user123");
+  });
+
+  it("un refus App Check, même compte connecté, met la suppression en file (1.0.28)", async () => {
+    callable.mockRejectedValue(err("Unauthenticated", "functions/unauthenticated"));
+    await expect(supprimerEvenement("c1", "e1")).resolves.toBe("queued");
+    expect(enqueue).toHaveBeenCalledWith("delete", { childId: "c1", eventId: "e1" }, "user123");
   });
 });

@@ -16,6 +16,8 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
+// Appel direct, sans attendre App Check : revokeDeviceToken en est exclue (ADR 0002)
+// et ne doit pas retarder la déconnexion.
 import { httpsCallable } from "firebase/functions";
 
 import { db, functions } from "@/config/firebase";

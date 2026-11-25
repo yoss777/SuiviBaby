@@ -150,6 +150,42 @@ describe("useVoiceInput gestures", () => {
     expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("still records when the quota check is refused (App Check, network): the server keeps the quota (1.0.28)", async () => {
+    const premiumUsage = jest.requireMock("@/services/premiumUsageService");
+    premiumUsage.getVoiceUsageStatus.mockRejectedValueOnce(
+      Object.assign(new Error("Unauthenticated"), { code: "functions/unauthenticated" }),
+    );
+    const { result } = renderHook(() => useVoiceInput());
+    await act(async () => {
+      await result.current.onPressIn();
+    });
+    expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start recording after a long press was released during the quota check (1.0.28)", async () => {
+    let releaseQuota!: (v: unknown) => void;
+    const premiumUsage = jest.requireMock("@/services/premiumUsageService");
+    premiumUsage.getVoiceUsageStatus.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        releaseQuota = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useVoiceInput());
+    let pressIn!: Promise<void>;
+    act(() => {
+      pressIn = result.current.onPressIn();
+    });
+    now += 1_000; // long press (> TAP_TO_TOGGLE_MAX_MS), finger lifted
+    act(() => {
+      result.current.onPressOut();
+    });
+    await act(async () => {
+      releaseQuota({ allowed: true, remaining: 3 });
+      await pressIn;
+    });
+    expect(mockVoice.startVoiceCommand).not.toHaveBeenCalled();
+  });
+
   it("shows the Premium cap (not the paywall) when a Premium user used their 50", async () => {
     mockHasUnlimitedVoice = true;
     mockQuota = { allowed: false, remaining: 0 };

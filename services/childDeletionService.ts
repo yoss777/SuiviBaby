@@ -2,7 +2,7 @@
 // Wrapper client pour les Cloud Functions de suppression/transfert d'enfant.
 
 import { functions } from "@/config/firebase";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 
 // ============================================
 // TYPES

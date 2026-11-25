@@ -52,6 +52,7 @@ import { validateNickname } from "@/utils/nickname";
 import { getConsentErrorMessage, nextConsentErrorMessage } from "@/utils/consentMessage";
 import { auth } from "../../config/firebase";
 import { configureLayoutAnimation } from "@/utils/motion";
+import { captureServiceError } from "@/utils/errorReporting";
 import type { ScrollViewInstance } from "react-native";
 import { useExitOnBack } from "@/hooks/useExitOnBack";
 
@@ -470,6 +471,8 @@ export default function LoginScreen() {
           trackOnboardingEvent("health_consent_granted");
         } catch (consentError) {
           console.warn("[LOGIN] recordHealthConsent échoué:", consentError);
+          // Redemandé au démarrage, mais l'échec doit rester visible.
+          captureServiceError(consentError, { service: "login", operation: "recordHealthConsent" });
         }
         trackOnboardingEvent("signup_completed");
 

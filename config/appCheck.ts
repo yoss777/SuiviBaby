@@ -38,6 +38,9 @@ const FORCED_REFRESH_MIN_INTERVAL_MS = 60 * 1000;
 const REFRESH_THROTTLED_CODE = "appCheck/refresh-throttled";
 const MAX_REPORTS_PER_OPERATION = 5;
 const NETWORK_CHECK_TIMEOUT_MS = 2000;
+// Attente maximale du premier jeton avant un appel de fonction : au-delà, l'appel
+// part quand même (le serveur tranche, la file hors ligne rejouera).
+const APP_CHECK_READY_TIMEOUT_MS = 8000;
 
 type ExpoExtra = {
   appCheck?: {
@@ -51,6 +54,13 @@ let appCheckInitialized = false;
 const reportedFailures = new Set<string>();
 const reportsByOperation = new Map<string, number>();
 let startupCheckDone = false;
+// Premier jeton natif obtenu (ou vérification abandonnée) : les appels de
+// fonctions l'attendent, bornés par APP_CHECK_READY_TIMEOUT_MS.
+let nativeTokenCheckStarted = false;
+let resolveFirstToken: () => void = () => {};
+let firstTokenPromise = new Promise<void>((resolve) => {
+  resolveFirstToken = resolve;
+});
 let lastForcedRefreshAt = 0;
 
 function getAppCheckExtra(): ExpoExtra["appCheck"] {
@@ -192,6 +202,7 @@ async function checkNativeToken(appCheck: AppCheck): Promise<void> {
     }
   } finally {
     startupCheckDone = true;
+    resolveFirstToken();
   }
 }
 
@@ -318,6 +329,7 @@ async function initializeNativeAppCheck(app: FirebaseApp): Promise<void> {
     }),
     isTokenAutoRefreshEnabled: true,
   });
+  nativeTokenCheckStarted = true;
   void checkNativeToken(appCheck);
 }
 
@@ -333,6 +345,8 @@ async function initializeForCurrentPlatform(app: FirebaseApp): Promise<void> {
   }
 
   appCheckInitialized = true;
+  // Web, développement ou module natif absent : pas de premier jeton natif à attendre.
+  if (!nativeTokenCheckStarted) resolveFirstToken();
 }
 
 export function ensureFirebaseAppCheck(app: FirebaseApp): Promise<void> {
@@ -341,9 +355,41 @@ export function ensureFirebaseAppCheck(app: FirebaseApp): Promise<void> {
       // Sans App Check, les Cloud Functions refusent les appels : ne jamais
       // laisser cet échec silencieux en production.
       console.warn("[AppCheck] Initialization skipped:", failureCode(error));
-      return reportAppCheckFailure(error, "initialize");
+      // Pas de mise en cache de l'échec : le prochain appel retentera.
+      appCheckInitializationPromise = null;
+      resolveFirstToken();
+      // Sans attendre le rapport (vérification réseau) : les appels n'ont pas à le payer.
+      void reportAppCheckFailure(error, "initialize");
     });
   }
 
   return appCheckInitializationPromise;
 }
+
+/**
+ * Attend, au plus `timeoutMs`, qu'App Check soit initialisé et que le premier
+ * jeton natif soit obtenu (ou sa vérification abandonnée). Ne lève jamais :
+ * renvoie false si l'attente a expiré ou si l'initialisation a échoué.
+ */
+export async function waitForAppCheckReady(
+  app: FirebaseApp,
+  timeoutMs: number = APP_CHECK_READY_TIMEOUT_MS,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      ensureFirebaseAppCheck(app)
+        .then(() => firstTokenPromise)
+        .then(() => "ready" as const),
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), timeoutMs);
+      }),
+    ]);
+    return result === "ready" && appCheckInitialized;
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+

@@ -79,6 +79,12 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
   (PR #137, déployée à 20:50 UTC) : iPhone à 21:17 et Samsung à 21:18, réponse 200 avec
   `verifications.app` à `VALID` et analyse par l'IA. Retour arrière local en 2 min 58 s
   (fonction libérée 1 min 57 s après le début), retrait committé sur `main` (2d8237b) ;
+- [ ] 1.0.28 installée sur les appareils de test (décision de Yoss du 2026-11-25, après la revue
+  ECC de la PR d'activation) : les appels de fonctions attendent le premier jeton App Check
+  (au plus 8 s, `config/callable.ts`), un échec d'initialisation n'est plus mis en cache, la file
+  hors ligne ne consomme aucun essai tant qu'App Check n'a pas de jeton, une suppression refusée
+  part en file, le quota vocal laisse enregistrer si sa vérification est refusée, la révocation
+  Apple est retentée une fois ;
 - [ ] aucune CI en cours, PR dédiée ne contenant que l'activation.
 
 ## Contexte

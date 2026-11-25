@@ -1,5 +1,5 @@
 import { functions } from "@/config/firebase";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 
 export type UsageFeature = "voice" | "export" | "sharing";
 

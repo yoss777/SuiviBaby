@@ -13,7 +13,7 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { AppState } from "react-native";
 import { auth, db, functions } from "../config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
@@ -559,12 +559,20 @@ export async function supprimerEvenement(
     { success: boolean; deleted: { event: number; likes: number; comments: number } }
   >(functions, "deleteEventCascade");
 
+  const senderUid = auth.currentUser?.uid;
   try {
     await deleteEvent({ childId, eventId: id });
   } catch (error) {
     // Suppression idempotente : « introuvable » = l'événement n'existe plus
     // (un envoi précédent a abouti, ou un autre appareil l'a supprimé).
-    if (!isNotFoundError(error)) throw error;
+    if (isNotFoundError(error)) return "deleted";
+    // Panne réseau ou refus App Check passager, même compte : comme pour les
+    // ajouts et modifications, la suppression part en file au lieu d'échouer.
+    if (shouldQueueFailedWrite(error, senderUid)) {
+      await enqueueEvent("delete", { childId, eventId: id }, senderUid);
+      return "queued";
+    }
+    throw error;
   }
   return "deleted";
 }

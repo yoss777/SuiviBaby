@@ -474,3 +474,86 @@ describe("configuration iOS", () => {
     }
   });
 });
+
+describe("waitForAppCheckReady (1.0.28)", () => {
+  function loadModule() {
+    let mod!: typeof import("@/config/appCheck");
+    jest.isolateModules(() => {
+      mod = jest.requireActual("@/config/appCheck");
+    });
+    return mod;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    globals.__DEV__ = false;
+    mockExtra.appCheck.nativeConfiguredAndroid = true;
+    mockExtra.appCheck.nativeConfiguredIos = true;
+    Platform.OS = "ios";
+    mockLoadNative.mockResolvedValue(nativeModule);
+    mockNetInfoFetch.mockResolvedValue({ isConnected: true, isInternetReachable: true });
+    mockSentryEnvironment.mockReturnValue("production");
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  afterAll(() => {
+    Platform.OS = originalPlatform;
+    globals.__DEV__ = true;
+  });
+
+  it("résout true une fois le premier jeton natif obtenu", async () => {
+    mockJsGetToken.mockResolvedValue({ token: "t" });
+    await expect(loadModule().waitForAppCheckReady({} as never, 1000)).resolves.toBe(true);
+  });
+
+  it("attend le premier jeton pendant le « provider-not-ready » du démarrage", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockRejectedValueOnce(notReady()).mockResolvedValue({ token: "t" });
+    let settled: boolean | undefined;
+    void loadModule()
+      .waitForAppCheckReady({} as never, 8000)
+      .then((v) => {
+        settled = v;
+      });
+    await flush();
+    expect(settled).toBeUndefined(); // toujours en attente du jeton
+    await jest.advanceTimersByTimeAsync(2000); // nouvel essai de checkNativeToken
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it("rend la main (false) au bout du délai si aucun jeton n'arrive", async () => {
+    jest.useFakeTimers();
+    mockJsGetToken.mockReturnValue(new Promise(() => {}));
+    let settled: boolean | undefined;
+    void loadModule()
+      .waitForAppCheckReady({} as never, 8000)
+      .then((v) => {
+        settled = v;
+      });
+    await jest.advanceTimersByTimeAsync(8000);
+    await flush();
+    expect(settled).toBe(false);
+  });
+
+  it("n'attend pas de jeton natif quand App Check natif n'est pas actif (développement)", async () => {
+    globals.__DEV__ = true;
+    await expect(loadModule().waitForAppCheckReady({} as never, 1000)).resolves.toBe(true);
+    expect(mockLoadNative).not.toHaveBeenCalled();
+  });
+
+  it("ne met pas en cache un échec d'initialisation : l'appel suivant retente", async () => {
+    const { initializeAppCheck } = jest.requireMock("firebase/app-check") as { initializeAppCheck: jest.Mock };
+    initializeAppCheck.mockImplementationOnce(() => {
+      throw new Error("init cassée");
+    });
+    mockJsGetToken.mockResolvedValue({ token: "t" });
+    const mod = loadModule();
+    await expect(mod.waitForAppCheckReady({} as never, 1000)).resolves.toBe(false);
+    await mod.ensureFirebaseAppCheck({} as never);
+    expect(initializeAppCheck).toHaveBeenCalledTimes(2);
+  });
+});

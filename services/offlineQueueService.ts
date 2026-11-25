@@ -2,11 +2,11 @@
 // Queue de synchronisation offline avec SQLite
 import NetInfo from "@react-native-community/netinfo";
 import { onAuthStateChanged } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { AppState } from "react-native";
-import { auth, ensureFirebaseAppCheck, functions } from "@/config/firebase";
+import { auth, functions, waitForFirebaseAppCheckReady } from "@/config/firebase";
 import * as SQLite from "expo-sqlite";
-import { captureServiceError } from "@/utils/errorReporting";
+import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import {
   isConflictError as isConflictCode,
   isNetworkError,
@@ -58,6 +58,15 @@ export const MAX_RETRIES = 3;
  * file passe à la suivante.
  */
 export const MAX_TRANSIENT_FAILURES = 8;
+
+/**
+ * Refus `unauthenticated` reportés sans consommer d'essai tant qu'App Check n'a
+ * pas de jeton (1.0.28). Au-delà de ce nombre de reports dans le processus, le
+ * refus reprend le chemin normal (8 essais, puis « échec » visible) : un appareil
+ * qui ne s'atteste jamais ne garde pas ses saisies en attente sans fin.
+ */
+export const MAX_APP_CHECK_DEFERRALS = 10;
+let appCheckDeferrals = 0;
 
 /**
  * Âge maximal d'une création en file. Le serveur évite de ressusciter un
@@ -227,19 +236,12 @@ let appCheckReady = false;
  */
 async function waitForAppCheck(): Promise<void> {
   if (appCheckReady) return;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await Promise.race([
-      Promise.resolve(ensureFirebaseAppCheck()).then(() => "ready" as const),
-      new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), APP_CHECK_WAIT_MS);
-      }),
-    ]);
-    appCheckReady = result === "ready";
+    // Prêt seulement si App Check est initialisé et le premier jeton obtenu : un
+    // échec d'initialisation n'est plus pris pour un succès.
+    appCheckReady = await waitForFirebaseAppCheckReady(APP_CHECK_WAIT_MS);
   } catch {
     // App Check signale lui-même ses échecs.
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }
 
@@ -663,6 +665,28 @@ export async function processQueue(): Promise<number> {
       // pas un échec de cette écriture (ni tentative consommée, ni bannière).
       if (auth.currentUser?.uid !== event.uid) {
         await restorePending(database, event.id);
+        break;
+      }
+
+      // Refus pendant qu'App Check n'a pas encore de jeton (démarrage, attestation
+      // indisponible) : l'écriture attend le cycle suivant sans consommer d'essai,
+      // pour ne pas épuiser ses 8 essais avant que l'attestation revienne.
+      if (
+        !appCheckReady &&
+        appCheckDeferrals < MAX_APP_CHECK_DEFERRALS &&
+        isUnauthenticatedError(sendError) &&
+        (await isSessionAlive(event.uid))
+      ) {
+        appCheckDeferrals += 1;
+        addBreadcrumb("offlineQueue", "rejeu reporté : App Check sans jeton", { deferrals: appCheckDeferrals }, "warning");
+        if (appCheckDeferrals === 1) {
+          captureServiceError(new Error("Rejeu reporté : App Check sans jeton"), {
+            service: "offlineQueue",
+            operation: "appCheckDeferral",
+          });
+        }
+        await restorePending(database, event.id);
+        hitTransient = true; // nouveau cycle avec backoff (5 s à 5 min)
         break;
       }
 

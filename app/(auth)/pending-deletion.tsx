@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   cancelAccountDeletion,
+  cancelDeletionErrorMessage,
   formatPendingDeletionDate,
   getPendingDeletionDateFromUser,
   hasPendingDeletion,
@@ -77,9 +78,9 @@ export default function PendingDeletionScreen() {
       await refreshUser();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/boot");
-    } catch {
+    } catch (error) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showError("Impossible d'annuler la suppression du compte pour le moment.");
+      showError(cancelDeletionErrorMessage(error));
     } finally {
       setIsCancelling(false);
     }

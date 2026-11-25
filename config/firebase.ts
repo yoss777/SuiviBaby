@@ -7,7 +7,7 @@ import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ensureFirebaseAppCheck as ensureAppCheckForApp } from "./appCheck";
+import { ensureFirebaseAppCheck as ensureAppCheckForApp, waitForAppCheckReady } from "./appCheck";
 import { getFirebaseWebConfig } from "./firebaseEnv";
 
 // Web config of the environment chosen at build time by APP_ENV (production by
@@ -56,4 +56,9 @@ if (functionsEmulatorHost) {
 
 export function ensureFirebaseAppCheck() {
   return ensureAppCheckForApp(app);
+}
+
+/** App Check initialisé et premier jeton obtenu, attente bornée (voir config/appCheck.ts). */
+export function waitForFirebaseAppCheckReady(timeoutMs?: number) {
+  return waitForAppCheckReady(app, timeoutMs);
 }
