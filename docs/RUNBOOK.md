@@ -13,7 +13,7 @@ les détails de configuration sont dans les documents liés, à ne pas recopier 
 | Plan des sprints et ce qui reste | [PLAN_SPRINTS_AUDIT.md](PLAN_SPRINTS_AUDIT.md) |
 
 Projets : production `samaye-53723` (alias `default` dans `.firebaserc`) ; staging
-`samaye-staging` (alias `staging`, **pas encore créé** au 2026-11-07, en attente du
+`samaye-staging` (alias `staging`, **pas encore créé** au 2026-11-24, en attente du
 go de Yoss, voir ENVIRONMENTS §1).
 
 ---
@@ -325,7 +325,8 @@ ou une session `gcloud`.
 | Chaque semaine | `scripts/backfillLastEventAt.js` | `node scripts/backfillLastEventAt.js --apply --recompute --project=samaye-53723` | D'abord sans `--apply` pour voir le nombre de corrections. `--project` obligatoire avec `--apply` (ENVIRONMENTS, maintenance). |
 | Chaque semaine, jusqu'à 1.9 | `scripts/migratePhotosToEu.mjs` | `node scripts/migratePhotosToEu.mjs` | Attendu : « 0 à copier ». Sinon relancer avec `--apply` (SUIVI 1.5). |
 | Une fois (à vérifier) | `scripts/backfillRetention.js` | `node scripts/backfillRetention.js` puis `--apply` | Renseigne `expireAt` sur les historiques anciens (TTL). Mode simulation par défaut. Statut d'exécution non noté : à vérifier avant de relancer. |
-| Pendant la transition App Check | `scripts/auditAppCheck.sh` | `./scripts/auditAppCheck.sh 7d` | Indicatif : suivre la check-list de l'ADR 0002, ce script ne voit pas les refus après activation. |
+| Avant la bascule App Check | `scripts/auditAppCheck.sh` | `./scripts/auditAppCheck.sh 7d` | Indicatif : suivre la check-list de l'ADR 0002, ce script ne voit pas les refus après activation. |
+| Après l'activation d'App Check : 2 h, 48 h, J+7 | `scripts/appCheckRefusals.mjs` | `node scripts/appCheckRefusals.mjs 2h`, puis `48h`, puis `7d` | Lecture seule. Sortie 1 : appels non vérifiés, donc refusés ; voir le retour arrière de l'ADR 0002. |
 | Avant tout nouvel envoi de fiches | `scripts/compareTipsWithSeed.mjs` | `node scripts/compareTipsWithSeed.mjs` | Lecture seule. Le re-semis (`scripts/seedViaFirestore.mjs`) seulement sur accord. |
 | Lundi | (pas de script) | relire `docs/SUIVI_ACTIONS.md` | Le document demande une relecture chaque lundi. |
 
@@ -379,7 +380,7 @@ Retour arrière : redéployer la version précédente de `firestore.rules` (aucu
 |---|---|---|
 | 2026-12-02 | Bascule finale : retirer `LEGACY_STORAGE_BUCKET` et les miroirs | SUIVI 1.8 |
 | 2026-12-07 | Revue des règles de transition | PLAN 12.7 |
-| 2026-11-24 | Fin de l'observation App Check, puis check-list de l'ADR 0002 | ADR 0002 |
+| 2026-11-24 | App Check : 48 h d'observation et répétition faites ; reste la check-list de l'ADR 0002 | ADR 0002 |
 | 2026-12-16 | Supprimer le bucket US (après purge des orphelins) | SUIVI 1.9 (action irréversible de Yoss) |
 | 2027-01-15 | Réévaluation d'`expo-updates` (au plus tôt à la fin de S13.5) | ADR 0003 |
 

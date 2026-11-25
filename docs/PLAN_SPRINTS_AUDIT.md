@@ -1042,7 +1042,8 @@ Notes S13 (2026-11-07) :
   faits dans l'ancienne todo, jamais affichés), `OfflineBanner`,
   `usePromos`, `BoundedNumberInput` ; dépendances `expo-symbols` et
   `expo-web-browser` inutilisées (retrait au prochain build natif).
-- 13.6 : ADR 0002 (App Check : pas encore, revue 2026-12-07) et 0003
+- 13.6 : ADR 0002 (App Check : pas encore, revue 2026-12-07 ; remplacé le 2026-11-24 par la
+  décision du 22/11 et sa check-list, voir l'ADR) et 0003
   (`expo-updates` : pas maintenant, revue 2027-01-15).
 - 13.7 : `docs/README.md`, `docs/RUNBOOK.md`, `todo_*` archivés dans
   `docs/archive/`. Erreurs repérées dans `FIREBASE_MONITORING.md` et
@@ -1082,7 +1083,8 @@ activités…) après décision produit sur les drapeaux historiques ; le mode
 `reset` des repas sort aussi les jours récents de la fenêtre (comportement
 historique conservé) ; le bouton « Ajouter » reste visible pour un Proche (les
 règles refusent l'écriture) ; `React.memo` de la ligne non fait (la ligne est un
-rendu local, pas un composant) ; décision `deviceInfo.appCheck` (ADR 0002).
+rendu local, pas un composant) ; décision `deviceInfo.appCheck` (ADR 0002, dépassée par la
+décision du 2026-11-22 : App Check imposé sur les fonctions, voir l'ADR).
 
 ## Correspondance audit → sprints
 
