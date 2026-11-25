@@ -4,7 +4,7 @@
 // Les données sont anonymisées avant envoi via dataAnonymizationService.
 
 import { functions } from "@/config/firebase";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { captureServiceError } from "@/utils/errorReporting";
 import { toDate as toJsDate } from "@/utils/date";
 import { anonymizeChildData, anonymizeEvent, stripPII } from "@/services/dataAnonymizationService";

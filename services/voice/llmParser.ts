@@ -7,7 +7,7 @@
 // same way, which makes client and server deployable in any order.
 
 import NetInfo from "@react-native-community/netinfo";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { functions } from "@/config/firebase";
 import { addBreadcrumb, captureServiceError } from "@/utils/errorReporting";
 import { parseMultipleCommandsWithMeta, type ParseCommandsResult } from "./commandParser";

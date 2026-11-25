@@ -150,6 +150,18 @@ describe("useVoiceInput gestures", () => {
     expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("still records when the quota check is refused (App Check, network): the server keeps the quota (1.0.28)", async () => {
+    const premiumUsage = jest.requireMock("@/services/premiumUsageService");
+    premiumUsage.getVoiceUsageStatus.mockRejectedValueOnce(
+      Object.assign(new Error("Unauthenticated"), { code: "functions/unauthenticated" }),
+    );
+    const { result } = renderHook(() => useVoiceInput());
+    await act(async () => {
+      await result.current.onPressIn();
+    });
+    expect(mockVoice.startVoiceCommand).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the Premium cap (not the paywall) when a Premium user used their 50", async () => {
     mockHasUnlimitedVoice = true;
     mockQuota = { allowed: false, remaining: 0 };

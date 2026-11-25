@@ -15,7 +15,7 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { revokeChildAccess } from "@/services/accessRepository";
 import { captureServiceError } from "@/utils/errorReporting";
 import { createEmailNotVerifiedError, isEmailNotVerifiedError } from "@/utils/emailVerification";

@@ -2,7 +2,7 @@
 // Health data consent (GDPR art. 9). The proof is written server-side by the
 // `recordHealthConsent` callable; the client only reads the result.
 import { doc, getDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { Platform } from "react-native";
 import { db, functions } from "@/config/firebase";
 

@@ -1,5 +1,5 @@
 import { auth, functions } from "@/config/firebase";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { extractStoragePath } from "@/utils/photoStorage";
 
 export type ContentReportReason =

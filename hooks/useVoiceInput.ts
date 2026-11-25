@@ -15,6 +15,7 @@ import { usePremium } from "@/contexts/PremiumContext";
 import { useVoiceCommand } from "@/hooks/useVoiceCommand";
 import { getVoiceUsageStatus } from "@/services/premiumUsageService";
 import { hasSeenVoiceNotice, markVoiceNoticeSeen } from "@/services/voiceNoticeService";
+import { captureServiceError } from "@/utils/errorReporting";
 
 export type VoiceInputStatus = "idle" | "recording" | "processing" | "confirming";
 
@@ -113,7 +114,15 @@ export function useVoiceInput() {
 
   const checkVoiceLimit = useCallback(async (): Promise<boolean> => {
     // Premium is capped too (50 a day): always ask the server.
-    const quota = await getVoiceUsageStatus();
+    let quota: Awaited<ReturnType<typeof getVoiceUsageStatus>>;
+    try {
+      quota = await getVoiceUsageStatus();
+    } catch (error) {
+      // Refus passager (App Check, réseau) : on laisse enregistrer, transcribeAudio
+      // réserve le quota côté serveur et reste la source de vérité.
+      captureServiceError(error, { service: "voiceInput", operation: "checkVoiceLimit" });
+      return true;
+    }
     if (quota.isUnlimited) return true;
     if (!quota.allowed || (quota.remaining ?? 0) <= 0) {
       setVoiceLimitReached(checkFeatureAccess("unlimited_voice") ? "premium" : "free");

@@ -43,6 +43,7 @@ import { themeSummaryLabel } from "@/utils/themeResolution";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
   cancelAccountDeletion,
+  cancelDeletionErrorMessage,
   formatPendingDeletionDate,
   getPendingDeletionDateFromUser,
   getDeletionAuthMethod,
@@ -803,11 +804,11 @@ export default function SettingsScreen() {
                     title: "Annulation confirmée",
                     message: "La suppression de votre compte a été annulée.",
                   });
-                } catch {
+                } catch (error) {
                   setModalConfig({
                     visible: true,
                     title: "Erreur",
-                    message: "Impossible d'annuler la suppression.",
+                    message: cancelDeletionErrorMessage(error),
                   });
                 } finally {
                   setIsCancellingDeletion(false);

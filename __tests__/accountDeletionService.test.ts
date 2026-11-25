@@ -2,6 +2,7 @@ import { getIdToken, reauthenticateWithCredential } from "firebase/auth";
 import {
   getDeletionAuthMethod,
   cancelAccountDeletion,
+  cancelDeletionErrorMessage,
   getOwnershipBlockers,
   deletionEmailNotice,
   mapDeletionError,
@@ -256,6 +257,27 @@ describe("accountDeletionService", () => {
       expect(callable("requestAccountDeletion")).toHaveBeenCalledTimes(1);
     });
 
+    it("apple: retries the revocation once after a passing App Check refusal (1.0.28)", async () => {
+      setUser(["apple.com"]);
+      (getAppleCredential as jest.Mock).mockResolvedValue({ credential: {}, authorizationCode: "c" });
+      callable("registerAppleRevocation")
+        .mockRejectedValueOnce(Object.assign(new Error("Unauthenticated"), { code: "functions/unauthenticated" }))
+        .mockResolvedValueOnce({ data: { stored: true } });
+      await requestAccountDeletion();
+      expect(callable("registerAppleRevocation")).toHaveBeenCalledTimes(2);
+      expect(callable("requestAccountDeletion")).toHaveBeenCalledTimes(1);
+    });
+
+    it("apple: does not retry a definitive refusal", async () => {
+      setUser(["apple.com"]);
+      (getAppleCredential as jest.Mock).mockResolvedValue({ credential: {}, authorizationCode: "c" });
+      callable("registerAppleRevocation").mockRejectedValue(
+        Object.assign(new Error("bad code"), { code: "functions/invalid-argument" }),
+      );
+      await requestAccountDeletion();
+      expect(callable("registerAppleRevocation")).toHaveBeenCalledTimes(1);
+    });
+
     it("apple: skips revocation when there is no authorization code", async () => {
       setUser(["apple.com"]);
       (getAppleCredential as jest.Mock).mockResolvedValue({ credential: {}, authorizationCode: null });
@@ -346,6 +368,15 @@ describe("accountDeletionService", () => {
     });
     it("rejects when unauthenticated", async () => {
       await expect(cancelAccountDeletion()).rejects.toThrow("non authentifié");
+    });
+    it("tells a passing failure (network, App Check) apart from another one (1.0.28)", () => {
+      const passing = cancelDeletionErrorMessage(
+        Object.assign(new Error("x"), { code: "functions/unauthenticated" }),
+      );
+      expect(passing).toMatch(/Vérifiez votre connexion/);
+      expect(cancelDeletionErrorMessage(Object.assign(new Error("x"), { code: "functions/permission-denied" }))).toBe(
+        "Impossible d'annuler la suppression du compte pour le moment.",
+      );
     });
   });
 

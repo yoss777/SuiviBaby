@@ -6,7 +6,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { auth, db, functions } from "../config/firebase";
 import { captureServiceError } from "@/utils/errorReporting";
 

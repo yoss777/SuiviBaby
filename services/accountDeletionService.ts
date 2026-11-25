@@ -8,7 +8,7 @@ import {
   type AuthCredential,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { functions } from "@/config/firebase";
 import {
   getQueueSize,
@@ -19,8 +19,10 @@ import {
   getAppleCredential,
   getGoogleCredential,
 } from "@/services/socialAuthService";
+import { isNetworkError, isUnauthenticatedError } from "@/utils/networkError";
 
 const QUEUE_SYNC_TIMEOUT_MS = 5000;
+const APPLE_REVOCATION_RETRY_DELAY_MS = 2000;
 
 /** True when the offline queue is empty (after a sync attempt bounded by a timeout). */
 async function flushOfflineQueue(): Promise<boolean> {
@@ -280,11 +282,20 @@ export async function requestAccountDeletion(
   // Apple token revocation must be registered BEFORE scheduling (the server
   // needs the code at deletion time). Best effort: never block the deletion.
   if (method === "apple" && appleAuthorizationCode) {
+    const registerRevocation = httpsCallable<{ authorizationCode: string }, { stored: boolean }>(
+      functions,
+      "registerAppleRevocation",
+    );
     try {
-      await httpsCallable<{ authorizationCode: string }, { stored: boolean }>(
-        functions,
-        "registerAppleRevocation",
-      )({ authorizationCode: appleAuthorizationCode });
+      try {
+        await registerRevocation({ authorizationCode: appleAuthorizationCode });
+      } catch (firstError) {
+        // Refus passager (réseau, App Check) : un second essai après 2 s, pour ne
+        // pas sauter la révocation exigée par l'App Store.
+        if (!isNetworkError(firstError) && !isUnauthenticatedError(firstError)) throw firstError;
+        await new Promise((resolve) => setTimeout(resolve, APPLE_REVOCATION_RETRY_DELAY_MS));
+        await registerRevocation({ authorizationCode: appleAuthorizationCode });
+      }
     } catch (error) {
       console.warn("[DELETION] registerAppleRevocation échoué:", error);
       // Exigence App Store : un échec ne doit jamais rester invisible.
@@ -365,10 +376,23 @@ export async function cancelAccountDeletion() {
     throw new Error("Utilisateur non authentifié.");
   }
 
-  await httpsCallable<Record<string, never>, { success: boolean }>(
-    functions,
-    "cancelAccountDeletion",
-  )({});
+  try {
+    await httpsCallable<Record<string, never>, { success: boolean }>(
+      functions,
+      "cancelAccountDeletion",
+    )({});
+  } catch (error) {
+    // Un échec d'annulation doit rester visible (le compte serait supprimé).
+    captureServiceError(error, { service: "accountDeletion", operation: "cancelAccountDeletion" });
+    throw error;
+  }
+}
+
+/** Message d'échec d'annulation : passager (réseau, vérification) ou non. */
+export function cancelDeletionErrorMessage(error: unknown): string {
+  return isNetworkError(error) || isUnauthenticatedError(error)
+    ? "Impossible d'annuler la suppression pour le moment. Vérifiez votre connexion, puis réessayez dans quelques instants."
+    : "Impossible d'annuler la suppression du compte pour le moment.";
 }
 
 /**

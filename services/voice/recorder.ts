@@ -9,7 +9,7 @@ import {
   type RecordingOptions,
 } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable } from "@/config/callable";
 import { Platform } from "react-native";
 import { captureServiceError } from "@/utils/errorReporting";
 
