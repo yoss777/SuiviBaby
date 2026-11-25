@@ -189,7 +189,7 @@ PREMIUM :
 - [ ] Préparer réponses aux questions de review Apple
 - [ ] Vérifier Sentry après première vague d'installations
 - [ ] Configurer budgets Firebase (voir docs/FIREBASE_MONITORING.md)
-- [ ] Activer App Check selon la check-list de `docs/adr/0002-app-check-enforcement.md`
+- [ ] App Check : activé sur les fonctions (ADR 0002). Avant la première soumission, vérifier que l'examen reste possible : les appareils d'examen non attestés peuvent se connecter, mais leurs appels de fonctions sont refusés (enregistrer un jeton de débogage ou un parcours de démonstration, à décider avec Yoss)
 
 ---
 

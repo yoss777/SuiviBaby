@@ -66,10 +66,13 @@ appareil compromis. L'autorisation reste portée par Firebase Auth et les règle
 - [x] Maestro nocturne suspendu le 2026-11-24 (déclenchement manuel conservé) : son émulateur
   sans Play Store sera refusé. Il échouait déjà au téléchargement du build EAS et n'a appelé
   aucune fonction pendant les 48 heures ;
-- [ ] avant toute soumission à un store, vérifier que l'examen reste possible : les appareils
-  non attestés peuvent se connecter mais leurs appels de fonctions sont refusés ;
-- [ ] jetons de débogage révoqués dans la console Firebase, sauf un jeton personnel de
-  développement tant que staging n'existe pas ;
+- [x] examen des stores : les appareils d'examen non attestés pourront se connecter mais leurs
+  appels de fonctions seront refusés. Aucune soumission publique n'est prévue : décision de
+  Yoss du 2026-11-25, c'est une **condition à vérifier avant la première soumission** (App
+  Store ou production Google Play), pas un blocage de l'activation ;
+- [x] jetons de débogage : vérifiés le 2026-11-25 par l'API App Check (`debugTokens`), aucun
+  jeton sur les 9 apps du projet, donc rien à révoquer. Un build de développement contre la
+  production demandera d'en créer un, à révoquer ensuite ;
 - [x] répétition en production sur `parseVoiceCommand` seule (`APPCHECK_ENFORCE_FUNCTIONS`),
   car staging n'existe pas : appel réel sur iPhone et Samsung, puis retour arrière chronométré.
   Cette fonction retombe sur l'analyse par règles en cas de refus. Faite le 2026-11-24
